@@ -1,48 +1,65 @@
-# Rattle — 초기 프로젝트 파일
+# Rattle
 
-## 파일 복사 방법
+소규모 식당/카페 사장님을 위한 모바일 관리 앱
 
-`npx create-expo-app rattle --template blank-typescript` 로 프로젝트 생성 후,
-아래 파일들을 rattle 폴더에 복사하세요.
+## 주요 기능
 
-### 폴더 구조
-```
-rattle/
-├── app/
-│   ├── _layout.tsx           # 루트 레이아웃
-│   ├── (auth)/
-│   │   ├── _layout.tsx       # 인증 레이아웃
-│   │   ├── login.tsx         # 로그인 화면
-│   │   └── select-store.tsx  # 매장 선택 화면
-│   └── (tabs)/
-│       ├── _layout.tsx       # 탭 네비게이션
-│       ├── index.tsx         # 홈 대시보드
-│       ├── orders.tsx        # 발주
-│       ├── stock.tsx         # 재고
-│       └── recipes.tsx       # 레시피
-├── constants/
-│   └── colors.ts             # 브랜드 컬러
-├── lib/
-│   └── supabase.ts           # Supabase 클라이언트
-├── types/
-│   └── index.ts              # TypeScript 타입 정의
-├── supabase/
-│   └── schema.sql            # DB 스키마 (SQL Editor에서 실행)
-├── .env.example              # 환경변수 템플릿
-└── README.md
-```
+- **발주 관리** — 거래처별 발주 등록 및 상태 추적
+- **재고 관리** — 식자재 재고 현황 및 품절 임박 알림
+- **레시피 관리** — 레시피별 원가/마진율 자동 계산
+- **대시보드** — 매장 현황 한눈에 보기
 
-### 환경변수 설정
-1. `.env.example`을 `.env`로 복사
-2. Supabase 프로젝트의 URL과 anon key를 입력
-3. `.gitignore`에 `.env` 추가 확인
+## 기술 스택
 
-### DB 세팅
-1. Supabase 대시보드 → SQL Editor
-2. `supabase/schema.sql` 내용을 붙여넣고 실행
-3. 테이블 7개 + RLS 정책 자동 생성됨
+- [Expo](https://expo.dev) SDK 55 + Expo Router
+- React Native 0.83 / React 19
+- TypeScript
+- [Supabase](https://supabase.com) (Auth + PostgreSQL + RLS)
 
-### 실행
+## 시작하기
+
+### 1. 의존성 설치
+
 ```bash
-npx expo start
+npm install
 ```
+
+### 2. 환경변수 설정
+
+`.env` 파일 생성:
+
+```
+EXPO_PUBLIC_SUPABASE_URL=your_supabase_url
+EXPO_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+```
+
+### 3. DB 스키마 적용
+
+Supabase SQL Editor에서 `supabase/schema.sql` 실행
+
+### 4. 앱 실행
+
+```bash
+npm start        # Expo dev server
+npm run ios      # iOS 시뮬레이터
+npm run android  # Android 에뮬레이터
+```
+
+## 프로젝트 구조
+
+```
+app/          # 라우트 (expo-router)
+├── (auth)/   # 로그인, 매장 선택
+└── (tabs)/   # 홈, 발주, 재고, 레시피
+lib/
+├── contexts/ # AuthContext
+├── hooks/    # 도메인별 커스텀 훅
+├── services/ # Supabase DB 접근 레이어
+└── components/
+types/        # 전역 타입 정의
+supabase/     # DB 스키마
+```
+
+## 개발 가이드
+
+[CLAUDE.md](./CLAUDE.md) 참고
