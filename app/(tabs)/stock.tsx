@@ -9,6 +9,7 @@ import {
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { router } from 'expo-router';
 import { Colors } from '../../constants/colors';
 import { useIngredients } from '../../lib/hooks/useIngredients';
 import { LoadingSpinner } from '../../lib/components/LoadingSpinner';
@@ -96,10 +97,15 @@ export default function StockScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>재고</Text>
-        {data.length > 0 && (
-          <Text style={styles.subtitle}>{data.length}개 품목</Text>
-        )}
+        <View>
+          <Text style={styles.title}>재고</Text>
+          {data.length > 0 && (
+            <Text style={styles.subtitle}>{data.length}개 품목</Text>
+          )}
+        </View>
+        <TouchableOpacity style={styles.addButton} onPress={() => router.push('/stock/new')}>
+          <Text style={styles.addText}>+ 식자재</Text>
+        </TouchableOpacity>
       </View>
 
       {data.length === 0 ? (
@@ -138,7 +144,14 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
   },
   title: { fontSize: 22, fontWeight: '800', color: Colors.black },
-  subtitle: { fontSize: 14, color: Colors.gray500 },
+  subtitle: { fontSize: 14, color: Colors.gray500, marginTop: 2 },
+  addButton: {
+    backgroundColor: Colors.primary,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 10,
+  },
+  addText: { color: Colors.white, fontSize: 14, fontWeight: '700' },
   listContent: { paddingHorizontal: 16, paddingBottom: 24 },
   row: {
     flexDirection: 'row',
