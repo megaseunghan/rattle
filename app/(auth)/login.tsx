@@ -36,7 +36,11 @@ export default function LoginScreen() {
         // AuthContext의 onAuthStateChange가 라우팅을 처리함
       }
     } catch (error: any) {
-      Alert.alert('오류', error.message);
+      console.error('Auth error:', error);
+      const message = isSignUp
+        ? '회원가입에 실패했습니다. 다시 시도해주세요.'
+        : '이메일 또는 비밀번호가 올바르지 않습니다.';
+      Alert.alert('오류', message);
     } finally {
       setLoading(false);
     }
