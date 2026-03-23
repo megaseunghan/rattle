@@ -12,7 +12,10 @@
   },
   "jest": {
     "preset": "jest-expo",
-    "testPathIgnorePatterns": ["/node_modules/", "/__tests__/setup\\.ts"],
+    "testPathIgnorePatterns": [
+      "/node_modules/",
+      "/__tests__/setup\\.ts"
+    ],
     "transformIgnorePatterns": [
       "node_modules/(?!((jest-)?react-native|@react-native(-community)?)|expo(nent)?|@expo(nent)?/.*|react-navigation|@react-navigation/.*|@supabase/.*)"
     ]
@@ -39,6 +42,7 @@
   },
   "devDependencies": {
     "@testing-library/react-native": "^13.3.3",
+    "@types/jest": "^30.0.0",
     "@types/react": "~19.2.2",
     "jest": "^29.7.0",
     "jest-expo": "^55.0.11",
