@@ -105,6 +105,11 @@ CREATE POLICY "Users can update own stores"
   ON stores FOR UPDATE
   USING (owner_id = auth.uid());
 
+-- NOTE: 매장 삭제는 의도적으로 비허용 (데이터 보호)
+CREATE POLICY "Users cannot delete stores"
+  ON stores FOR DELETE
+  USING (false);
+
 -- ingredients: 본인 매장의 재료만
 CREATE POLICY "Users can manage own ingredients"
   ON ingredients FOR ALL
@@ -175,6 +180,13 @@ DECLARE
   v_subtotal NUMERIC;
   v_total NUMERIC := 0;
 BEGIN
+  -- 호출자가 해당 매장의 owner인지 검증
+  IF NOT EXISTS (
+    SELECT 1 FROM stores WHERE id = p_store_id AND owner_id = auth.uid()
+  ) THEN
+    RAISE EXCEPTION 'Unauthorized: store not found or access denied';
+  END IF;
+
   -- orders 레코드 삽입
   INSERT INTO orders (store_id, supplier_name, order_date, status)
   VALUES (p_store_id, p_supplier_name, p_order_date, 'pending')
@@ -223,6 +235,13 @@ DECLARE
   v_margin_rate NUMERIC := 0;
   v_last_price NUMERIC;
 BEGIN
+  -- 호출자가 해당 매장의 owner인지 검증
+  IF NOT EXISTS (
+    SELECT 1 FROM stores WHERE id = p_store_id AND owner_id = auth.uid()
+  ) THEN
+    RAISE EXCEPTION 'Unauthorized: store not found or access denied';
+  END IF;
+
   -- recipes 레코드 삽입
   INSERT INTO recipes (store_id, name, category, selling_price, cost, margin_rate)
   VALUES (p_store_id, p_name, p_category, p_selling_price, 0, 0)
@@ -270,6 +289,15 @@ AS $$
 DECLARE
   v_item RECORD;
 BEGIN
+  -- 호출자가 해당 발주의 매장 owner인지 검증
+  IF NOT EXISTS (
+    SELECT 1 FROM orders o
+    JOIN stores s ON s.id = o.store_id
+    WHERE o.id = p_order_id AND s.owner_id = auth.uid()
+  ) THEN
+    RAISE EXCEPTION 'Unauthorized: order not found or access denied';
+  END IF;
+
   -- 발주 상태를 delivered로 변경
   UPDATE orders SET status = 'delivered' WHERE id = p_order_id;
 
