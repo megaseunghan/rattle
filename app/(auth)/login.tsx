@@ -27,7 +27,11 @@ export default function LoginScreen() {
     setLoading(true);
     try {
       if (isSignUp) {
-        const { error } = await supabase.auth.signUp({ email, password });
+        const { error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: { emailRedirectTo: 'rattle://' },
+        });
         if (error) throw error;
         Alert.alert('가입 완료', '이메일을 확인해주세요!');
       } else {
