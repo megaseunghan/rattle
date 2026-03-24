@@ -11,11 +11,16 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import * as DocumentPicker from 'expo-document-picker';
+import Papa from 'papaparse';
 import { Colors } from '../../constants/colors';
+import { useAuth } from '../../lib/contexts/AuthContext';
 import { useIngredients } from '../../lib/hooks/useIngredients';
 import { LoadingSpinner } from '../../lib/components/LoadingSpinner';
 import { ErrorMessage } from '../../lib/components/ErrorMessage';
 import { Ingredient } from '../../types';
+
+const VALID_CATEGORIES = ['주류', '식자재', '비품소모품'];
 
 function IngredientRow({
   item,
@@ -86,10 +91,95 @@ function IngredientRow({
 }
 
 export default function StockScreen() {
-  const { data, loading, error, refetch, update, remove } = useIngredients();
+  const { store } = useAuth();
+  const { data, loading, error, refetch, update, remove, bulkCreate } = useIngredients();
+  const [csvUploading, setCsvUploading] = useState(false);
 
   async function handleUpdateStock(id: string, stock: number) {
     await update(id, { current_stock: stock });
+  }
+
+  async function handleCsvUpload() {
+    const result = await DocumentPicker.getDocumentAsync({
+      type: ['text/csv', 'text/comma-separated-values', 'text/plain'],
+      copyToCacheDirectory: true,
+    });
+    if (result.canceled) return;
+
+    const uri = result.assets[0].uri;
+    let text: string;
+    try {
+      const response = await fetch(uri);
+      text = await response.text();
+    } catch {
+      Alert.alert('오류', '파일을 읽을 수 없어요.');
+      return;
+    }
+
+    const parsed = Papa.parse<Record<string, string>>(text, {
+      header: true,
+      skipEmptyLines: true,
+    });
+
+    const valid: Omit<Ingredient, 'id' | 'updated_at' | 'created_at'>[] = [];
+    const errors: string[] = [];
+
+    parsed.data.forEach((row, i) => {
+      const name = row.name?.trim();
+      const unit = row.unit?.trim();
+      const category = row.category?.trim();
+
+      if (!name || !unit) {
+        errors.push(`${i + 2}행: name, unit 필수`);
+        return;
+      }
+      if (category && !VALID_CATEGORIES.includes(category)) {
+        errors.push(`${i + 2}행: category는 주류/식자재/비품소모품 중 하나여야 해요`);
+        return;
+      }
+
+      valid.push({
+        store_id: store!.id,
+        name,
+        category: category || '기타',
+        unit,
+        current_stock: parseFloat(row.current_stock) || 0,
+        min_stock: parseFloat(row.min_stock) || 0,
+        last_price: parseFloat(row.last_price) || 0,
+      });
+    });
+
+    if (valid.length === 0) {
+      Alert.alert('유효한 데이터 없음', errors.join('\n') || 'CSV 형식을 확인해주세요.');
+      return;
+    }
+
+    const summary = [
+      `총 ${valid.length}개 항목을 등록합니다.`,
+      ...VALID_CATEGORIES.map(c => {
+        const count = valid.filter(v => v.category === c).length;
+        return count > 0 ? `${c}: ${count}개` : null;
+      }).filter(Boolean),
+      errors.length > 0 ? `\n건너뜀: ${errors.length}개` : null,
+    ].filter(Boolean).join('\n');
+
+    Alert.alert('CSV 업로드 확인', summary, [
+      { text: '취소', style: 'cancel' },
+      {
+        text: '등록',
+        onPress: async () => {
+          setCsvUploading(true);
+          try {
+            const count = await bulkCreate(valid);
+            Alert.alert('완료', `${count}개 항목이 등록되었어요.`);
+          } catch (e: any) {
+            Alert.alert('오류', e.message);
+          } finally {
+            setCsvUploading(false);
+          }
+        },
+      },
+    ]);
   }
 
   if (loading) return <LoadingSpinner />;
@@ -104,9 +194,19 @@ export default function StockScreen() {
             <Text style={styles.subtitle}>{data.length}개 품목</Text>
           )}
         </View>
-        <TouchableOpacity style={styles.addButton} onPress={() => router.push('/stock/new')}>
-          <Text style={styles.addText}>+ 식자재</Text>
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          <TouchableOpacity
+            style={styles.csvButton}
+            onPress={handleCsvUpload}
+            disabled={csvUploading}
+          >
+            <Ionicons name="cloud-upload-outline" size={16} color={Colors.primary} />
+            <Text style={styles.csvText}>CSV</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.addButton} onPress={() => router.push('/stock/new')}>
+            <Text style={styles.addText}>+ 식자재</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {data.length === 0 ? (
@@ -146,6 +246,18 @@ const styles = StyleSheet.create({
   },
   title: { fontSize: 22, fontWeight: '800', color: Colors.black },
   subtitle: { fontSize: 14, color: Colors.gray500, marginTop: 2 },
+  headerActions: { flexDirection: 'row', gap: 8, alignItems: 'center' },
+  csvButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Colors.primary,
+  },
+  csvText: { color: Colors.primary, fontSize: 14, fontWeight: '700' },
   addButton: {
     backgroundColor: Colors.primary,
     paddingHorizontal: 16,

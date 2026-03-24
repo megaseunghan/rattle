@@ -5,6 +5,7 @@ import {
   createIngredient,
   updateIngredient,
   deleteIngredient,
+  bulkCreateIngredients,
 } from '../services/ingredients';
 import { Ingredient } from '../../types';
 
@@ -16,6 +17,7 @@ interface UseIngredientsResult {
   create: (data: Omit<Ingredient, 'id' | 'updated_at' | 'created_at'>) => Promise<void>;
   update: (id: string, data: Partial<Pick<Ingredient, 'name' | 'category' | 'current_stock' | 'unit' | 'min_stock' | 'last_price'>>) => Promise<void>;
   remove: (id: string) => Promise<void>;
+  bulkCreate: (items: Omit<Ingredient, 'id' | 'updated_at' | 'created_at'>[]) => Promise<number>;
 }
 
 export function useIngredients(): UseIngredientsResult {
@@ -65,5 +67,11 @@ export function useIngredients(): UseIngredientsResult {
     }
   }
 
-  return { data, loading, error, refetch, create, update, remove };
+  async function bulkCreate(items: Omit<Ingredient, 'id' | 'updated_at' | 'created_at'>[]) {
+    const count = await bulkCreateIngredients(items);
+    await refetch();
+    return count;
+  }
+
+  return { data, loading, error, refetch, create, update, remove, bulkCreate };
 }
