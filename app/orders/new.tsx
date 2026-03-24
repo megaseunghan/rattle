@@ -217,8 +217,12 @@ export default function NewOrderScreen() {
 
       {/* 식자재 선택 모달 */}
       <Modal visible={showPicker} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalSheet}>
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => { setShowPicker(false); setShowQuickAdd(false); }}
+        >
+          <TouchableOpacity activeOpacity={1} onPress={() => {}} style={styles.modalSheet}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>식자재 선택</Text>
               <TouchableOpacity onPress={() => { setShowPicker(false); setShowQuickAdd(false); }}>
@@ -314,8 +318,8 @@ export default function NewOrderScreen() {
                 </TouchableOpacity>
               </>
             )}
-          </View>
-        </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
       </Modal>
     </SafeAreaView>
   );
