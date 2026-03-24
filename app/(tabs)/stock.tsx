@@ -9,6 +9,7 @@ import {
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Colors } from '../../constants/colors';
 import { useIngredients } from '../../lib/hooks/useIngredients';
@@ -110,7 +111,7 @@ export default function StockScreen() {
 
       {data.length === 0 ? (
         <View style={styles.emptyState}>
-          <Text style={styles.emptyEmoji}>📊</Text>
+          <Ionicons name="bar-chart-outline" size={48} color={Colors.gray300} style={styles.emptyIcon} />
           <Text style={styles.emptyText}>재고 데이터가 없어요</Text>
           <Text style={styles.emptySubtext}>
             발주를 등록하면 재고가 자동으로 관리돼요
@@ -194,7 +195,7 @@ const styles = StyleSheet.create({
   deleteBtn: { padding: 4 },
   deleteBtnText: { fontSize: 14, color: Colors.gray400 },
   emptyState: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 32 },
-  emptyEmoji: { fontSize: 48, marginBottom: 16 },
+  emptyIcon: { marginBottom: 16 },
   emptyText: { fontSize: 18, fontWeight: '700', color: Colors.gray700, marginBottom: 8 },
   emptySubtext: { fontSize: 14, color: Colors.gray400, textAlign: 'center' },
 });

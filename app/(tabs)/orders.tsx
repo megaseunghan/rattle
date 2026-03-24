@@ -1,5 +1,6 @@
 import { View, Text, StyleSheet, TouchableOpacity, FlatList, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Colors } from '../../constants/colors';
 import { useOrders } from '../../lib/hooks/useOrders';
@@ -93,13 +94,13 @@ export default function OrdersScreen() {
 
       {data.length === 0 ? (
         <View style={styles.emptyState}>
-          <Text style={styles.emptyEmoji}>📋</Text>
+          <Ionicons name="document-text-outline" size={48} color={Colors.gray300} style={styles.emptyIcon} />
           <Text style={styles.emptyText}>발주 내역이 없어요</Text>
           <Text style={styles.emptySubtext}>
             새 발주를 등록하면{'\n'}재고가 자동으로 관리돼요
           </Text>
           <TouchableOpacity style={styles.cameraButton} onPress={() => router.push('/orders/new')}>
-            <Text style={styles.cameraText}>➕ 발주 등록하기</Text>
+            <Text style={styles.cameraText}>발주 등록하기</Text>
           </TouchableOpacity>
         </View>
       ) : (
@@ -174,7 +175,7 @@ const styles = StyleSheet.create({
   },
   deleteButtonText: { color: Colors.gray600, fontSize: 12, fontWeight: '600' },
   emptyState: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 32 },
-  emptyEmoji: { fontSize: 48, marginBottom: 16 },
+  emptyIcon: { marginBottom: 16 },
   emptyText: { fontSize: 18, fontWeight: '700', color: Colors.gray700, marginBottom: 8 },
   emptySubtext: {
     fontSize: 14,

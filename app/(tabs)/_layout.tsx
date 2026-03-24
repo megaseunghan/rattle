@@ -1,20 +1,28 @@
 import { Tabs } from 'expo-router';
 import { View, Text, StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../constants/colors';
 
-function TabIcon({ name, focused }: { name: string; focused: boolean }) {
-  const icons: Record<string, string> = {
-    '홈': '🏠',
-    '발주': '📋',
-    '재고': '📊',
-    '레시피': '🍳',
-  };
+type TabIconName = 'home' | 'orders' | 'stock' | 'recipes';
 
+const TAB_ICONS: Record<TabIconName, { active: keyof typeof Ionicons.glyphMap; inactive: keyof typeof Ionicons.glyphMap; label: string }> = {
+  home:    { active: 'home',          inactive: 'home-outline',          label: '홈' },
+  orders:  { active: 'document-text', inactive: 'document-text-outline', label: '발주' },
+  stock:   { active: 'bar-chart',     inactive: 'bar-chart-outline',     label: '재고' },
+  recipes: { active: 'restaurant',    inactive: 'restaurant-outline',    label: '레시피' },
+};
+
+function TabIcon({ tab, focused }: { tab: TabIconName; focused: boolean }) {
+  const { active, inactive, label } = TAB_ICONS[tab];
   return (
     <View style={styles.tabIconWrap}>
-      <Text style={styles.tabEmoji}>{icons[name] || '📌'}</Text>
+      <Ionicons
+        name={focused ? active : inactive}
+        size={22}
+        color={focused ? Colors.primary : Colors.gray400}
+      />
       <Text style={[styles.tabLabel, focused && styles.tabLabelActive]}>
-        {name}
+        {label}
       </Text>
     </View>
   );
@@ -34,25 +42,25 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          tabBarIcon: ({ focused }) => <TabIcon name="홈" focused={focused} />,
+          tabBarIcon: ({ focused }) => <TabIcon tab="home" focused={focused} />,
         }}
       />
       <Tabs.Screen
         name="orders"
         options={{
-          tabBarIcon: ({ focused }) => <TabIcon name="발주" focused={focused} />,
+          tabBarIcon: ({ focused }) => <TabIcon tab="orders" focused={focused} />,
         }}
       />
       <Tabs.Screen
         name="stock"
         options={{
-          tabBarIcon: ({ focused }) => <TabIcon name="재고" focused={focused} />,
+          tabBarIcon: ({ focused }) => <TabIcon tab="stock" focused={focused} />,
         }}
       />
       <Tabs.Screen
         name="recipes"
         options={{
-          tabBarIcon: ({ focused }) => <TabIcon name="레시피" focused={focused} />,
+          tabBarIcon: ({ focused }) => <TabIcon tab="recipes" focused={focused} />,
         }}
       />
     </Tabs>
@@ -70,9 +78,6 @@ const styles = StyleSheet.create({
   tabIconWrap: {
     alignItems: 'center',
     gap: 2,
-  },
-  tabEmoji: {
-    fontSize: 22,
   },
   tabLabel: {
     fontSize: 11,

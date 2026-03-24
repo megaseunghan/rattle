@@ -1,5 +1,6 @@
 import { View, Text, StyleSheet, TouchableOpacity, FlatList, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Colors } from '../../constants/colors';
 import { useRecipes } from '../../lib/hooks/useRecipes';
@@ -76,7 +77,7 @@ export default function RecipesScreen() {
 
       {data.length === 0 ? (
         <View style={styles.emptyState}>
-          <Text style={styles.emptyEmoji}>🍳</Text>
+          <Ionicons name="restaurant-outline" size={48} color={Colors.gray300} style={styles.emptyIcon} />
           <Text style={styles.emptyText}>레시피가 없어요</Text>
           <Text style={styles.emptySubtext}>
             레시피를 등록하면 원가와{'\n'}마진율을 자동으로 계산해드려요
@@ -144,7 +145,7 @@ const styles = StyleSheet.create({
   recipeStatLabel: { fontSize: 11, color: Colors.gray500, marginBottom: 4 },
   recipeStatValue: { fontSize: 14, fontWeight: '700', color: Colors.black },
   emptyState: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 32 },
-  emptyEmoji: { fontSize: 48, marginBottom: 16 },
+  emptyIcon: { marginBottom: 16 },
   emptyText: { fontSize: 18, fontWeight: '700', color: Colors.gray700, marginBottom: 8 },
   emptySubtext: {
     fontSize: 14,
