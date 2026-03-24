@@ -46,6 +46,7 @@ export default function NewOrderScreen() {
   const [activeCategory, setActiveCategory] = useState('전체');
   const [selectedIngredients, setSelectedIngredients] = useState<Set<string>>(new Set());
 
+  // 새 식자재 빠른 등록 상태
   const [showQuickAdd, setShowQuickAdd] = useState(false);
   const [quickName, setQuickName] = useState('');
   const [quickCategory, setQuickCategory] = useState('식자재');
@@ -255,6 +256,7 @@ export default function NewOrderScreen() {
         </ScrollView>
       </KeyboardAvoidingView>
 
+      {/* 식자재 선택 모달 */}
       <Modal visible={showPicker} animationType="slide" transparent>
         <TouchableOpacity
           style={styles.modalOverlay}
