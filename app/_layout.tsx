@@ -21,7 +21,7 @@ function RootNavigator() {
     if (!user) {
       if (!inAuth) router.replace('/(auth)/login');
     } else if (!store) {
-      if (segments[1] !== 'select-store') router.replace('/(auth)/select-store');
+      if ((segments as string[])[1] !== 'select-store') router.replace('/(auth)/select-store');
     } else {
       if (inAuth) router.replace('/(tabs)');
     }
