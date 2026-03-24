@@ -32,7 +32,23 @@ function OrderCard({
   onDelete: (id: string) => void;
 }) {
   function handleDeliver() {
-    Alert.alert('입고 처리', '발주를 입고 완료로 처리하면 재고가 자동으로 업데이트됩니다.', [
+    const priceChanges = order.order_items
+      .filter(item => item.ingredient && item.ingredient.last_price > 0)
+      .filter(item => item.unit_price !== item.ingredient!.last_price)
+      .map(item => {
+        const prev = item.ingredient!.last_price;
+        const next = item.unit_price;
+        const diff = next - prev;
+        const pct = ((diff / prev) * 100).toFixed(1);
+        const sign = diff > 0 ? '+' : '';
+        return `• ${item.ingredient!.name}: ${prev.toLocaleString('ko-KR')}원 → ${next.toLocaleString('ko-KR')}원 (${sign}${pct}%)`;
+      });
+
+    const message = priceChanges.length > 0
+      ? `⚠️ 가격 변동 감지\n${priceChanges.join('\n')}\n\n입고 시 위 단가로 재고 단가가 업데이트됩니다.`
+      : '발주를 입고 완료로 처리하면 재고가 자동으로 업데이트됩니다.';
+
+    Alert.alert('입고 처리', message, [
       { text: '취소', style: 'cancel' },
       { text: '입고 처리', onPress: () => onDeliver(order.id) },
     ]);
