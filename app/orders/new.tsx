@@ -15,9 +15,13 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Colors } from '../../constants/colors';
+import { useAuth } from '../../lib/contexts/AuthContext';
 import { useOrders } from '../../lib/hooks/useOrders';
 import { useIngredients } from '../../lib/hooks/useIngredients';
 import { Ingredient } from '../../types';
+
+const CATEGORIES = ['식자재', '주류', '비품소모품', '기타'];
+const COMMON_UNITS = ['g', 'kg', 'ml', 'L', '개', '병', '봉', '박스'];
 
 interface OrderItemForm {
   ingredient: Ingredient;
@@ -26,14 +30,53 @@ interface OrderItemForm {
 }
 
 export default function NewOrderScreen() {
+  const { store } = useAuth();
   const { create } = useOrders();
-  const { data: ingredients } = useIngredients();
+  const { data: ingredients, create: createIngredient } = useIngredients();
 
   const [supplierName, setSupplierName] = useState('');
   const [orderDate, setOrderDate] = useState(new Date().toISOString().split('T')[0]);
   const [items, setItems] = useState<OrderItemForm[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [showPicker, setShowPicker] = useState(false);
+
+  // 새 식자재 빠른 등록 상태
+  const [showQuickAdd, setShowQuickAdd] = useState(false);
+  const [quickName, setQuickName] = useState('');
+  const [quickCategory, setQuickCategory] = useState('식자재');
+  const [quickUnit, setQuickUnit] = useState('g');
+  const [quickAdding, setQuickAdding] = useState(false);
+
+  async function handleQuickAdd() {
+    if (!quickName.trim()) {
+      Alert.alert('입력 오류', '품목명을 입력해주세요.');
+      return;
+    }
+    if (!store) return;
+    setQuickAdding(true);
+    try {
+      await createIngredient({
+        store_id: store.id,
+        name: quickName.trim(),
+        category: quickCategory,
+        unit: quickUnit,
+        current_stock: 0,
+        min_stock: 0,
+        last_price: 0,
+      });
+      // 새로 추가된 재료는 useIngredients refetch 후 ingredients에 반영됨
+      // 이름으로 찾아서 발주 항목에 추가
+      setShowQuickAdd(false);
+      setQuickName('');
+      setQuickCategory('식자재');
+      setQuickUnit('g');
+      Alert.alert('등록 완료', `"${quickName.trim()}"이(가) 재고에 추가되었어요.\n목록에서 선택해주세요.`);
+    } catch (e: any) {
+      Alert.alert('오류', e.message);
+    } finally {
+      setQuickAdding(false);
+    }
+  }
 
   function addIngredient(ingredient: Ingredient) {
     const alreadyAdded = items.some(i => i.ingredient.id === ingredient.id);
@@ -172,39 +215,104 @@ export default function NewOrderScreen() {
         </ScrollView>
       </KeyboardAvoidingView>
 
+      {/* 식자재 선택 모달 */}
       <Modal visible={showPicker} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
           <View style={styles.modalSheet}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>식자재 선택</Text>
-              <TouchableOpacity onPress={() => setShowPicker(false)}>
+              <TouchableOpacity onPress={() => { setShowPicker(false); setShowQuickAdd(false); }}>
                 <Text style={styles.modalClose}>닫기</Text>
               </TouchableOpacity>
             </View>
-            {ingredients.length === 0 ? (
-              <View style={styles.emptyItems}>
-                <Text style={styles.emptyItemsText}>등록된 식자재가 없습니다</Text>
-              </View>
-            ) : (
-              <FlatList
-                data={ingredients}
-                keyExtractor={i => i.id}
-                renderItem={({ item }) => {
-                  const already = items.some(o => o.ingredient.id === item.id);
-                  return (
+
+            {showQuickAdd ? (
+              <ScrollView contentContainerStyle={styles.quickAddForm}>
+                <Text style={styles.quickAddTitle}>새 식자재 등록</Text>
+
+                <Text style={styles.quickLabel}>품목명</Text>
+                <TextInput
+                  style={styles.quickInput}
+                  value={quickName}
+                  onChangeText={setQuickName}
+                  placeholder="예: 삼겹살 500g"
+                  placeholderTextColor={Colors.gray400}
+                  autoFocus
+                />
+
+                <Text style={styles.quickLabel}>카테고리</Text>
+                <View style={styles.chipRow}>
+                  {CATEGORIES.map(c => (
                     <TouchableOpacity
-                      style={[styles.pickerRow, already && styles.pickerRowAdded]}
-                      onPress={() => addIngredient(item)}
-                      disabled={already}
+                      key={c}
+                      style={[styles.chip, quickCategory === c && styles.chipActive]}
+                      onPress={() => setQuickCategory(c)}
                     >
-                      <Text style={[styles.pickerName, already && styles.pickerNameAdded]}>
-                        {item.name}
-                      </Text>
-                      <Text style={styles.pickerUnit}>{item.unit}</Text>
+                      <Text style={[styles.chipText, quickCategory === c && styles.chipTextActive]}>{c}</Text>
                     </TouchableOpacity>
-                  );
-                }}
-              />
+                  ))}
+                </View>
+
+                <Text style={styles.quickLabel}>단위</Text>
+                <View style={styles.chipRow}>
+                  {COMMON_UNITS.map(u => (
+                    <TouchableOpacity
+                      key={u}
+                      style={[styles.chip, quickUnit === u && styles.chipActive]}
+                      onPress={() => setQuickUnit(u)}
+                    >
+                      <Text style={[styles.chipText, quickUnit === u && styles.chipTextActive]}>{u}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                <View style={styles.quickActions}>
+                  <TouchableOpacity style={styles.quickCancelBtn} onPress={() => setShowQuickAdd(false)}>
+                    <Text style={styles.quickCancelText}>취소</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.quickSubmitBtn, quickAdding && { opacity: 0.5 }]}
+                    onPress={handleQuickAdd}
+                    disabled={quickAdding}
+                  >
+                    <Text style={styles.quickSubmitText}>{quickAdding ? '등록 중...' : '재고에 추가'}</Text>
+                  </TouchableOpacity>
+                </View>
+              </ScrollView>
+            ) : (
+              <>
+                {ingredients.length === 0 ? (
+                  <View style={styles.emptyItems}>
+                    <Text style={styles.emptyItemsText}>등록된 식자재가 없어요</Text>
+                  </View>
+                ) : (
+                  <FlatList
+                    data={ingredients}
+                    keyExtractor={i => i.id}
+                    renderItem={({ item }) => {
+                      const already = items.some(o => o.ingredient.id === item.id);
+                      return (
+                        <TouchableOpacity
+                          style={[styles.pickerRow, already && styles.pickerRowAdded]}
+                          onPress={() => addIngredient(item)}
+                          disabled={already}
+                        >
+                          <View>
+                            <Text style={[styles.pickerName, already && styles.pickerNameAdded]}>
+                              {item.name}
+                            </Text>
+                            <Text style={styles.pickerCategory}>{item.category}</Text>
+                          </View>
+                          <Text style={styles.pickerUnit}>{item.unit}</Text>
+                        </TouchableOpacity>
+                      );
+                    }}
+                  />
+                )}
+                <TouchableOpacity style={styles.quickAddTrigger} onPress={() => setShowQuickAdd(true)}>
+                  <Text style={styles.quickAddTriggerText}>+ 재고에 없는 품목 바로 추가</Text>
+                </TouchableOpacity>
+              </>
             )}
           </View>
         </View>
@@ -331,5 +439,56 @@ const styles = StyleSheet.create({
   pickerRowAdded: { opacity: 0.4 },
   pickerName: { fontSize: 15, color: Colors.black, fontWeight: '500' },
   pickerNameAdded: { color: Colors.gray400 },
+  pickerCategory: { fontSize: 12, color: Colors.gray400, marginTop: 2 },
   pickerUnit: { fontSize: 13, color: Colors.gray500 },
+  quickAddTrigger: {
+    padding: 16,
+    alignItems: 'center',
+    borderTopWidth: 1,
+    borderTopColor: Colors.gray100,
+  },
+  quickAddTriggerText: { fontSize: 14, color: Colors.primary, fontWeight: '700' },
+  quickAddForm: { padding: 20, paddingBottom: 40 },
+  quickAddTitle: { fontSize: 16, fontWeight: '700', color: Colors.black, marginBottom: 16 },
+  quickLabel: { fontSize: 13, fontWeight: '600', color: Colors.gray700, marginBottom: 8, marginTop: 14 },
+  quickInput: {
+    backgroundColor: Colors.gray50,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Colors.gray200,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    fontSize: 15,
+    color: Colors.black,
+  },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  chip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: Colors.gray200,
+    backgroundColor: Colors.white,
+  },
+  chipActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
+  chipText: { fontSize: 13, color: Colors.gray600, fontWeight: '600' },
+  chipTextActive: { color: Colors.white },
+  quickActions: { flexDirection: 'row', gap: 10, marginTop: 24 },
+  quickCancelBtn: {
+    flex: 1,
+    paddingVertical: 13,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Colors.gray200,
+    alignItems: 'center',
+  },
+  quickCancelText: { fontSize: 14, color: Colors.gray600, fontWeight: '600' },
+  quickSubmitBtn: {
+    flex: 2,
+    paddingVertical: 13,
+    borderRadius: 10,
+    backgroundColor: Colors.primary,
+    alignItems: 'center',
+  },
+  quickSubmitText: { fontSize: 14, color: Colors.white, fontWeight: '700' },
 });
