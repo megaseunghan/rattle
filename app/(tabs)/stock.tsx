@@ -114,6 +114,8 @@ export default function StockScreen() {
       return aLow - bLow || a.name.localeCompare(b.name);
     });
 
+  useFocusEffect(useCallback(() => { refetch(); }, []));
+
   async function handleUpdateStock(id: string, stock: number) {
     await update(id, { current_stock: stock });
   }
