@@ -1,27 +1,31 @@
-import { Redirect, Stack } from 'expo-router';
+import { SplashScreen, Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { ActivityIndicator, View } from 'react-native';
+import { useEffect } from 'react';
 import { AuthProvider, useAuth } from '../lib/contexts/AuthContext';
 import { Colors } from '../constants/colors';
 
+SplashScreen.preventAutoHideAsync();
+
 function RootNavigator() {
   const { user, store, loading } = useAuth();
+  const router = useRouter();
+  const segments = useSegments();
 
-  if (loading) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: Colors.white }}>
-        <ActivityIndicator size="large" color={Colors.primary} />
-      </View>
-    );
-  }
+  useEffect(() => {
+    if (loading) return;
 
-  if (!user) {
-    return <Redirect href="/(auth)/login" />;
-  }
+    SplashScreen.hideAsync();
 
-  if (!store) {
-    return <Redirect href="/(auth)/select-store" />;
-  }
+    const inAuth = segments[0] === '(auth)';
+
+    if (!user) {
+      if (!inAuth) router.replace('/(auth)/login');
+    } else if (!store) {
+      if ((segments as string[])[1] !== 'select-store') router.replace('/(auth)/select-store');
+    } else {
+      if (inAuth) router.replace('/(tabs)');
+    }
+  }, [loading, user, store]);
 
   return (
     <Stack

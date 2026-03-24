@@ -1,25 +1,27 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import { Colors } from '../../constants/colors';
 import { useAuth } from '../../lib/contexts/AuthContext';
 import { useDashboard } from '../../lib/hooks/useDashboard';
 import { LoadingSpinner } from '../../lib/components/LoadingSpinner';
 import { ErrorMessage } from '../../lib/components/ErrorMessage';
 
-function StatCard({ emoji, label, value }: { emoji: string; label: string; value: string }) {
+function StatCard({ icon, label, value }: { icon: keyof typeof Ionicons.glyphMap; label: string; value: string }) {
   return (
     <View style={styles.statCard}>
-      <Text style={styles.statEmoji}>{emoji}</Text>
+      <Ionicons name={icon} size={22} color={Colors.primary} style={styles.statIcon} />
       <Text style={styles.statValue}>{value}</Text>
       <Text style={styles.statLabel}>{label}</Text>
     </View>
   );
 }
 
-function QuickAction({ emoji, label, onPress }: { emoji: string; label: string; onPress?: () => void }) {
+function QuickAction({ icon, label, onPress }: { icon: keyof typeof Ionicons.glyphMap; label: string; onPress?: () => void }) {
   return (
     <TouchableOpacity style={styles.quickAction} onPress={onPress}>
-      <Text style={styles.quickEmoji}>{emoji}</Text>
+      <Ionicons name={icon} size={26} color={Colors.primary} style={styles.quickIcon} />
       <Text style={styles.quickLabel}>{label}</Text>
     </TouchableOpacity>
   );
@@ -47,7 +49,10 @@ export default function HomeScreen() {
         {/* 헤더 */}
         <View style={styles.header}>
           <View>
-            <Text style={styles.greeting}>안녕하세요 👋</Text>
+            <View style={styles.greetingRow}>
+              <Text style={styles.greeting}>안녕하세요</Text>
+              <Ionicons name="hand-right-outline" size={14} color={Colors.gray500} />
+            </View>
             <Text style={styles.storeName}>{store?.name ?? '매장 이름'}</Text>
           </View>
           <View style={styles.logoDot} />
@@ -55,13 +60,13 @@ export default function HomeScreen() {
 
         {/* 요약 카드 */}
         <View style={styles.statRow}>
-          <StatCard emoji="📋" label="이번 달 발주" value={`${monthlyOrderCount}건`} />
-          <StatCard emoji="⚠️" label="품절 임박" value={`${lowStockCount}개`} />
+          <StatCard icon="document-text-outline" label="이번 달 발주" value={`${monthlyOrderCount}건`} />
+          <StatCard icon="warning-outline" label="품절 임박" value={`${lowStockCount}개`} />
         </View>
         <View style={styles.statRow}>
-          <StatCard emoji="🍳" label="레시피" value={`${recipeCount}개`} />
+          <StatCard icon="restaurant-outline" label="레시피" value={`${recipeCount}개`} />
           <StatCard
-            emoji="💰"
+            icon="cash-outline"
             label="평균 마진율"
             value={recipeCount > 0 ? `${avgMarginRate}%` : '-%'}
           />
@@ -70,17 +75,17 @@ export default function HomeScreen() {
         {/* 빠른 실행 */}
         <Text style={styles.sectionTitle}>빠른 실행</Text>
         <View style={styles.quickRow}>
-          <QuickAction emoji="📸" label="영수증 촬영" />
-          <QuickAction emoji="➕" label="발주 추가" />
-          <QuickAction emoji="📊" label="재고 확인" />
-          <QuickAction emoji="🔗" label="POS 연동" />
+          <QuickAction icon="camera-outline" label="영수증 촬영" />
+          <QuickAction icon="add-circle-outline" label="발주 추가" onPress={() => router.push('/orders/new')} />
+          <QuickAction icon="bar-chart-outline" label="재고 확인" onPress={() => router.push('/(tabs)/stock')} />
+          <QuickAction icon="link-outline" label="POS 연동" />
         </View>
 
         {/* 최근 활동 */}
         <Text style={styles.sectionTitle}>최근 활동</Text>
         {recentActivity.length === 0 ? (
           <View style={styles.emptyState}>
-            <Text style={styles.emptyEmoji}>📭</Text>
+            <Ionicons name="mail-open-outline" size={40} color={Colors.gray400} style={styles.emptyIcon} />
             <Text style={styles.emptyText}>아직 활동이 없어요</Text>
             <Text style={styles.emptySubtext}>
               영수증을 촬영하거나 발주를 추가해보세요
@@ -90,9 +95,12 @@ export default function HomeScreen() {
           <View style={styles.activityList}>
             {recentActivity.map(activity => (
               <View key={activity.id} style={styles.activityItem}>
-                <Text style={styles.activityEmoji}>
-                  {activity.type === 'order' ? '📋' : '🥬'}
-                </Text>
+                <Ionicons
+                  name={activity.type === 'order' ? 'document-text-outline' : 'leaf-outline'}
+                  size={20}
+                  color={Colors.gray500}
+                  style={styles.activityIcon}
+                />
                 <View style={styles.activityContent}>
                   <Text style={styles.activityLabel}>{activity.label}</Text>
                   <Text style={styles.activityDate}>
@@ -123,10 +131,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 24,
   },
+  greetingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginBottom: 2,
+  },
   greeting: {
     fontSize: 14,
     color: Colors.gray500,
-    marginBottom: 2,
   },
   storeName: {
     fontSize: 22,
@@ -152,8 +165,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.gray100,
   },
-  statEmoji: {
-    fontSize: 20,
+  statIcon: {
     marginBottom: 8,
   },
   statValue: {
@@ -186,8 +198,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.gray100,
   },
-  quickEmoji: {
-    fontSize: 24,
+  quickIcon: {
     marginBottom: 6,
   },
   quickLabel: {
@@ -203,8 +214,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.gray100,
   },
-  emptyEmoji: {
-    fontSize: 40,
+  emptyIcon: {
     marginBottom: 12,
   },
   emptyText: {
@@ -232,8 +242,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: Colors.gray100,
   },
-  activityEmoji: {
-    fontSize: 20,
+  activityIcon: {
     marginRight: 12,
   },
   activityContent: {
