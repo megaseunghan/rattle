@@ -59,3 +59,15 @@ export async function deleteIngredient(id: string): Promise<void> {
 
   if (error) throw new Error(error.message);
 }
+
+export async function bulkCreateIngredients(
+  items: Omit<Ingredient, 'id' | 'updated_at' | 'created_at'>[]
+): Promise<number> {
+  const { data, error } = await supabase
+    .from('ingredients')
+    .insert(items)
+    .select('id');
+
+  if (error) throw new Error(error.message);
+  return (data ?? []).length;
+}
