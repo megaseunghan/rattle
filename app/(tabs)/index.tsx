@@ -1,7 +1,8 @@
+import { useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { Colors } from '../../constants/colors';
 import { useAuth } from '../../lib/contexts/AuthContext';
 import { useDashboard } from '../../lib/hooks/useDashboard';
@@ -39,6 +40,7 @@ export default function HomeScreen() {
     error,
     refetch,
   } = useDashboard();
+  useFocusEffect(useCallback(() => { refetch(); }, []));
 
   if (loading) return <LoadingSpinner />;
   if (error) return <ErrorMessage message={error} onRetry={refetch} />;

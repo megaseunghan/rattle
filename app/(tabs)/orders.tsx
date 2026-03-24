@@ -1,7 +1,8 @@
+import { useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, FlatList, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { Colors } from '../../constants/colors';
 import { useOrders } from '../../lib/hooks/useOrders';
 import { LoadingSpinner } from '../../lib/components/LoadingSpinner';
@@ -79,6 +80,7 @@ function OrderCard({
 
 export default function OrdersScreen() {
   const { data, loading, error, refetch, deliver, remove } = useOrders();
+  useFocusEffect(useCallback(() => { refetch(); }, []));
 
   if (loading) return <LoadingSpinner />;
   if (error) return <ErrorMessage message={error} onRetry={refetch} />;

@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
+import { useFocusEffect } from 'expo-router';
 import {
   View,
   Text,
@@ -94,6 +95,8 @@ export default function StockScreen() {
   const { store } = useAuth();
   const { data, loading, error, refetch, update, remove, bulkCreate } = useIngredients();
   const [csvUploading, setCsvUploading] = useState(false);
+
+  useFocusEffect(useCallback(() => { refetch(); }, []));
 
   async function handleUpdateStock(id: string, stock: number) {
     await update(id, { current_stock: stock });
