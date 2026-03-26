@@ -1,4 +1,3 @@
-// Rattle 브랜드 컬러 시스템
 export const Colors = {
   primary: '#1D9E75',
   dark: '#0F6E56',
@@ -9,7 +8,6 @@ export const Colors = {
   black: '#111111',
   white: '#FFFFFF',
 
-  // UI 컬러
   gray50: '#F9FAFB',
   gray100: '#F3F4F6',
   gray200: '#E5E7EB',
@@ -21,7 +19,8 @@ export const Colors = {
   gray800: '#1F2937',
   gray900: '#111827',
 
-  // 상태 컬러
+  overlay: 'rgba(0,0,0,0.4)',
+
   success: '#10B981',
   warning: '#F59E0B',
   danger: '#EF4444',

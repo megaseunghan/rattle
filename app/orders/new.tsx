@@ -21,6 +21,7 @@ import { useIngredients } from '../../lib/hooks/useIngredients';
 import { Ingredient } from '../../types';
 
 const CATEGORIES = ['식자재', '주류', '비품소모품', '기타'];
+const FILTER_CATEGORIES = ['전체', ...CATEGORIES];
 const COMMON_UNITS = ['g', 'kg', 'ml', 'L', '개', '병', '봉', '박스'];
 
 interface OrderItemForm {
@@ -40,12 +41,23 @@ export default function NewOrderScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [showPicker, setShowPicker] = useState(false);
 
-  // 새 식자재 빠른 등록 상태
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeCategory, setActiveCategory] = useState('전체');
+  const [selectedIngredients, setSelectedIngredients] = useState<Set<string>>(new Set());
+
   const [showQuickAdd, setShowQuickAdd] = useState(false);
   const [quickName, setQuickName] = useState('');
   const [quickCategory, setQuickCategory] = useState('식자재');
   const [quickUnit, setQuickUnit] = useState('g');
   const [quickAdding, setQuickAdding] = useState(false);
+
+  function closePicker() {
+    setShowPicker(false);
+    setShowQuickAdd(false);
+    setSearchQuery('');
+    setActiveCategory('전체');
+    setSelectedIngredients(new Set());
+  }
 
   async function handleQuickAdd() {
     if (!quickName.trim()) {
@@ -64,8 +76,6 @@ export default function NewOrderScreen() {
         min_stock: 0,
         last_price: 0,
       });
-      // 새로 추가된 재료는 useIngredients refetch 후 ingredients에 반영됨
-      // 이름으로 찾아서 발주 항목에 추가
       setShowQuickAdd(false);
       setQuickName('');
       setQuickCategory('식자재');
@@ -86,11 +96,32 @@ export default function NewOrderScreen() {
         {
           ingredient,
           quantity: '1',
-          unit_price: ingredient.last_price != null ? String(ingredient.last_price) : '0',
+          unit_price: String(ingredient.last_price ?? 0),
         },
       ]);
     }
-    setShowPicker(false);
+  }
+
+  function toggleIngredient(ingredient: Ingredient) {
+    const already = items.some(i => i.ingredient.id === ingredient.id);
+    if (already) return;
+    setSelectedIngredients(prev => {
+      const next = new Set(prev);
+      if (next.has(ingredient.id)) {
+        next.delete(ingredient.id);
+      } else {
+        next.add(ingredient.id);
+      }
+      return next;
+    });
+  }
+
+  function handleBulkAdd() {
+    const toAdd = ingredients.filter(
+      ing => selectedIngredients.has(ing.id) && !items.some(i => i.ingredient.id === ing.id)
+    );
+    toAdd.forEach(ing => addIngredient(ing));
+    closePicker();
   }
 
   function removeItem(ingredientId: string) {
@@ -132,6 +163,12 @@ export default function NewOrderScreen() {
       setSubmitting(false);
     }
   }
+
+  const filteredIngredients = ingredients.filter(item => {
+    const matchSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchCategory = activeCategory === '전체' || item.category === activeCategory;
+    return matchSearch && matchCategory;
+  });
 
   return (
     <SafeAreaView style={styles.container}>
@@ -215,17 +252,16 @@ export default function NewOrderScreen() {
         </ScrollView>
       </KeyboardAvoidingView>
 
-      {/* 식자재 선택 모달 */}
       <Modal visible={showPicker} animationType="slide" transparent>
         <TouchableOpacity
           style={styles.modalOverlay}
           activeOpacity={1}
-          onPress={() => { setShowPicker(false); setShowQuickAdd(false); }}
+          onPress={closePicker}
         >
           <TouchableOpacity activeOpacity={1} onPress={() => {}} style={styles.modalSheet}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>식자재 선택</Text>
-              <TouchableOpacity onPress={() => { setShowPicker(false); setShowQuickAdd(false); }}>
+              <TouchableOpacity onPress={closePicker}>
                 <Text style={styles.modalClose}>닫기</Text>
               </TouchableOpacity>
             </View>
@@ -285,37 +321,81 @@ export default function NewOrderScreen() {
               </ScrollView>
             ) : (
               <>
-                {ingredients.length === 0 ? (
+                <View style={styles.searchContainer}>
+                  <TextInput
+                    style={styles.searchInput}
+                    value={searchQuery}
+                    onChangeText={setSearchQuery}
+                    placeholder="식자재 검색..."
+                    placeholderTextColor={Colors.gray400}
+                  />
+                </View>
+
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.filterTabsContent}
+                  style={styles.filterTabsContainer}
+                >
+                  {FILTER_CATEGORIES.map(cat => (
+                    <TouchableOpacity
+                      key={cat}
+                      style={[styles.filterTab, activeCategory === cat && styles.filterTabActive]}
+                      onPress={() => setActiveCategory(cat)}
+                    >
+                      <Text style={[styles.filterTabText, activeCategory === cat && styles.filterTabTextActive]}>
+                        {cat}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+
+                {filteredIngredients.length === 0 ? (
                   <View style={styles.emptyItems}>
-                    <Text style={styles.emptyItemsText}>등록된 식자재가 없어요</Text>
+                    <Text style={styles.emptyItemsText}>
+                      {ingredients.length === 0 ? '등록된 식자재가 없어요' : '검색 결과가 없어요'}
+                    </Text>
                   </View>
                 ) : (
                   <FlatList
-                    data={ingredients}
+                    data={filteredIngredients}
                     keyExtractor={i => i.id}
                     renderItem={({ item }) => {
                       const already = items.some(o => o.ingredient.id === item.id);
+                      const checked = selectedIngredients.has(item.id);
                       return (
                         <TouchableOpacity
                           style={[styles.pickerRow, already && styles.pickerRowAdded]}
-                          onPress={() => addIngredient(item)}
+                          onPress={() => toggleIngredient(item)}
                           disabled={already}
                         >
-                          <View>
+                          <View style={styles.pickerRowLeft}>
                             <Text style={[styles.pickerName, already && styles.pickerNameAdded]}>
                               {item.name}
                             </Text>
                             <Text style={styles.pickerCategory}>{item.category}</Text>
                           </View>
-                          <Text style={styles.pickerUnit}>{item.unit}</Text>
+                          <View style={styles.pickerRowRight}>
+                            <Text style={styles.pickerUnit}>{item.unit}</Text>
+                            {checked && !already && (
+                              <Text style={styles.checkMark}>✓</Text>
+                            )}
+                          </View>
                         </TouchableOpacity>
                       );
                     }}
                   />
                 )}
+
                 <TouchableOpacity style={styles.quickAddTrigger} onPress={() => setShowQuickAdd(true)}>
                   <Text style={styles.quickAddTriggerText}>+ 재고에 없는 품목 바로 추가</Text>
                 </TouchableOpacity>
+
+                {selectedIngredients.size > 0 && (
+                  <TouchableOpacity style={styles.bulkAddBtn} onPress={handleBulkAdd}>
+                    <Text style={styles.bulkAddText}>{selectedIngredients.size}개 추가</Text>
+                  </TouchableOpacity>
+                )}
               </>
             )}
           </TouchableOpacity>
@@ -414,12 +494,12 @@ const styles = StyleSheet.create({
     color: Colors.black,
     textAlign: 'right',
   },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
+  modalOverlay: { flex: 1, backgroundColor: Colors.overlay, justifyContent: 'flex-end' },
   modalSheet: {
     backgroundColor: Colors.white,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    maxHeight: '70%',
+    maxHeight: '80%',
   },
   modalHeader: {
     flexDirection: 'row',
@@ -431,6 +511,45 @@ const styles = StyleSheet.create({
   },
   modalTitle: { fontSize: 17, fontWeight: '700', color: Colors.black },
   modalClose: { fontSize: 15, color: Colors.primary, fontWeight: '600' },
+  searchContainer: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.gray100,
+  },
+  searchInput: {
+    backgroundColor: Colors.gray50,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Colors.gray200,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: Colors.black,
+  },
+  filterTabsContainer: {
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.gray100,
+  },
+  filterTabsContent: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    gap: 6,
+  },
+  filterTab: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: Colors.gray200,
+    backgroundColor: Colors.white,
+  },
+  filterTabActive: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+  },
+  filterTabText: { fontSize: 13, color: Colors.gray600, fontWeight: '600' },
+  filterTabTextActive: { color: Colors.white },
   pickerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -441,10 +560,17 @@ const styles = StyleSheet.create({
     borderBottomColor: Colors.gray100,
   },
   pickerRowAdded: { opacity: 0.4 },
+  pickerRowLeft: { flex: 1 },
+  pickerRowRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   pickerName: { fontSize: 15, color: Colors.black, fontWeight: '500' },
   pickerNameAdded: { color: Colors.gray400 },
   pickerCategory: { fontSize: 12, color: Colors.gray400, marginTop: 2 },
   pickerUnit: { fontSize: 13, color: Colors.gray500 },
+  checkMark: { fontSize: 16, color: Colors.primary, fontWeight: '700' },
   quickAddTrigger: {
     padding: 16,
     alignItems: 'center',
@@ -452,6 +578,15 @@ const styles = StyleSheet.create({
     borderTopColor: Colors.gray100,
   },
   quickAddTriggerText: { fontSize: 14, color: Colors.primary, fontWeight: '700' },
+  bulkAddBtn: {
+    margin: 12,
+    marginTop: 0,
+    backgroundColor: Colors.primary,
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  bulkAddText: { fontSize: 15, color: Colors.white, fontWeight: '700' },
   quickAddForm: { padding: 20, paddingBottom: 40 },
   quickAddTitle: { fontSize: 16, fontWeight: '700', color: Colors.black, marginBottom: 16 },
   quickLabel: { fontSize: 13, fontWeight: '600', color: Colors.gray700, marginBottom: 8, marginTop: 14 },
