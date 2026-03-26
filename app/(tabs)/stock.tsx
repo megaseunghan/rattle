@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
+import { useFocusEffect } from 'expo-router';
 import {
   View,
   Text,
@@ -21,6 +22,8 @@ import { ErrorMessage } from '../../lib/components/ErrorMessage';
 import { Ingredient } from '../../types';
 
 const VALID_CATEGORIES = ['주류', '식자재', '비품소모품'];
+const FILTER_TABS = ['전체', '식자재', '주류', '비품소모품'] as const;
+type FilterTab = typeof FILTER_TABS[number];
 
 function IngredientRow({
   item,
@@ -61,7 +64,9 @@ function IngredientRow({
             </View>
           )}
         </View>
-        <Text style={styles.rowCategory}>{item.category}</Text>
+        <Text style={styles.rowCategory}>
+          {item.category}{item.min_stock > 0 ? ` · 최소 ${item.min_stock}${item.unit}` : ''}
+        </Text>
       </View>
 
       <View style={styles.rowRight}>
@@ -94,6 +99,17 @@ export default function StockScreen() {
   const { store } = useAuth();
   const { data, loading, error, refetch, update, remove, bulkCreate } = useIngredients();
   const [csvUploading, setCsvUploading] = useState(false);
+  const [activeTab, setActiveTab] = useState<FilterTab>('전체');
+
+  useFocusEffect(useCallback(() => { refetch(); }, []));
+
+  const filtered = data
+    .filter(item => activeTab === '전체' || item.category === activeTab)
+    .sort((a, b) => {
+      const aLow = a.current_stock <= a.min_stock ? 0 : 1;
+      const bLow = b.current_stock <= b.min_stock ? 0 : 1;
+      return aLow - bLow || a.name.localeCompare(b.name);
+    });
 
   async function handleUpdateStock(id: string, stock: number) {
     await update(id, { current_stock: stock });
@@ -209,6 +225,26 @@ export default function StockScreen() {
         </View>
       </View>
 
+      {/* 카테고리 필터 탭 */}
+      <View style={styles.tabBar}>
+        {FILTER_TABS.map(tab => {
+          const count = tab === '전체'
+            ? data.length
+            : data.filter(i => i.category === tab).length;
+          return (
+            <TouchableOpacity
+              key={tab}
+              style={[styles.tab, activeTab === tab && styles.tabActive]}
+              onPress={() => setActiveTab(tab)}
+            >
+              <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
+                {tab}{count > 0 ? ` ${count}` : ''}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
       {data.length === 0 ? (
         <View style={styles.emptyState}>
           <Ionicons name="bar-chart-outline" size={48} color={Colors.gray300} style={styles.emptyIcon} />
@@ -217,9 +253,13 @@ export default function StockScreen() {
             발주를 등록하면 재고가 자동으로 관리돼요
           </Text>
         </View>
+      ) : filtered.length === 0 ? (
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyText}>{activeTab} 품목이 없어요</Text>
+        </View>
       ) : (
         <FlatList
-          data={data}
+          data={filtered}
           keyExtractor={item => item.id}
           contentContainerStyle={styles.listContent}
           renderItem={({ item }) => (
@@ -265,6 +305,26 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   addText: { color: Colors.white, fontSize: 14, fontWeight: '700' },
+  tabBar: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+    gap: 6,
+  },
+  tab: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: Colors.gray200,
+    backgroundColor: Colors.white,
+  },
+  tabActive: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+  },
+  tabText: { fontSize: 13, fontWeight: '600', color: Colors.gray500 },
+  tabTextActive: { color: Colors.white },
   listContent: { paddingHorizontal: 16, paddingBottom: 24 },
   row: {
     flexDirection: 'row',
