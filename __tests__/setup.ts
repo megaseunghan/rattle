@@ -10,5 +10,8 @@ jest.mock('../lib/supabase', () => ({
       signUp: jest.fn(),
       signOut: jest.fn(),
     },
+    functions: {
+      invoke: jest.fn(),
+    },
   },
 }));

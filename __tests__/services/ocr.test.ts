@@ -1,6 +1,14 @@
 import { clovaTextToLineItems, callOcrEdgeFunction } from '../../lib/services/ocr';
 import { Ingredient } from '../../types';
 
+jest.mock('../../lib/supabase', () => ({
+  supabase: {
+    functions: {
+      invoke: jest.fn(),
+    },
+  },
+}));
+
 const mockIngredients: Ingredient[] = [
   {
     id: 'ing-1', store_id: 's1', name: '소주', category: '주류',
@@ -75,32 +83,29 @@ describe('clovaTextToLineItems', () => {
 });
 
 describe('callOcrEdgeFunction', () => {
+  const mockInvoke = require('../../lib/supabase').supabase.functions.invoke as jest.Mock;
+
   beforeEach(() => {
-    global.fetch = jest.fn();
+    mockInvoke.mockReset();
   });
 
-  it('base64 이미지를 Edge Function에 전송하고 text를 반환한다', async () => {
-    (global.fetch as jest.Mock).mockResolvedValue({
-      ok: true,
-      json: async () => ({ text: '소주 10병 1800', fields: [] }),
+  it('Edge Function을 호출하고 text를 반환한다', async () => {
+    mockInvoke.mockResolvedValue({
+      data: { text: '소주 10병 1800' },
+      error: null,
     });
 
-    const result = await callOcrEdgeFunction('base64data', 'https://example.supabase.co', 'anon-key');
+    const result = await callOcrEdgeFunction('base64data');
     expect(result).toBe('소주 10병 1800');
-    expect(global.fetch).toHaveBeenCalledWith(
-      'https://example.supabase.co/functions/v1/ocr',
-      expect.objectContaining({ method: 'POST' })
-    );
+    expect(mockInvoke).toHaveBeenCalledWith('ocr', { body: { image_base64: 'base64data' } });
   });
 
   it('Edge Function 오류 시 예외를 던진다', async () => {
-    (global.fetch as jest.Mock).mockResolvedValue({
-      ok: false,
-      status: 500,
+    mockInvoke.mockResolvedValue({
+      data: null,
+      error: { message: '서버 오류' },
     });
 
-    await expect(
-      callOcrEdgeFunction('base64data', 'https://example.supabase.co', 'anon-key')
-    ).rejects.toThrow('OCR 서버 오류: 500');
+    await expect(callOcrEdgeFunction('base64data')).rejects.toThrow('OCR 서버 오류: 서버 오류');
   });
 });

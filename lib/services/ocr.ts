@@ -1,4 +1,5 @@
 import { Ingredient, OcrLineItem } from '../../types';
+import { supabase } from '../supabase';
 
 const LINE_PATTERN = /^(.+?)\s+(\d+(?:\.\d+)?)\s*(개|병|캔|팩|봉|박스|kg|g|L|ml|장|묶음)?\s+(\d[\d,]*)$/;
 
@@ -55,25 +56,12 @@ export function clovaTextToLineItems(
   });
 }
 
-export async function callOcrEdgeFunction(
-  imageBase64: string,
-  supabaseUrl: string,
-  supabaseAnonKey: string
-): Promise<string> {
-  const res = await fetch(`${supabaseUrl}/functions/v1/ocr`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${supabaseAnonKey}`,
-    },
-    body: JSON.stringify({ image_base64: imageBase64 }),
+export async function callOcrEdgeFunction(imageBase64: string): Promise<string> {
+  const { data, error } = await supabase.functions.invoke('ocr', {
+    body: { image_base64: imageBase64 },
   });
 
-  if (!res.ok) {
-    throw new Error(`OCR 서버 오류: ${res.status}`);
-  }
-
-  const data = await res.json();
-  if (data.error) throw new Error(data.error);
-  return data.text as string;
+  if (error) throw new Error(`OCR 서버 오류: ${error.message}`);
+  if (typeof data?.text !== 'string') throw new Error('OCR 응답에 텍스트가 없습니다');
+  return data.text;
 }
