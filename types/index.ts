@@ -83,6 +83,7 @@ export interface OcrParsedItem {
   price: number;
 }
 
+// OCR 라인 아이템 (리뷰 화면용)
 export interface OcrLineItem {
   raw: string;                          // Clova 원본 텍스트 줄
   name: string;                         // 파싱된 품목명
