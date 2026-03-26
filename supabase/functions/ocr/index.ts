@@ -3,6 +3,7 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
 serve(async (req: Request) => {
@@ -12,6 +13,13 @@ serve(async (req: Request) => {
 
   try {
     const { image_base64 } = await req.json();
+
+    if (!image_base64) {
+      return new Response(JSON.stringify({ error: 'image_base64 is required' }), {
+        status: 400,
+        headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+      });
+    }
 
     const clovaUrl = Deno.env.get('CLOVA_OCR_URL');
     const clovaKey = Deno.env.get('CLOVA_OCR_API_KEY');
