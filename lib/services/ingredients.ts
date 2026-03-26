@@ -63,11 +63,34 @@ export async function deleteIngredient(id: string): Promise<void> {
 export async function bulkCreateIngredients(
   items: Omit<Ingredient, 'id' | 'updated_at' | 'created_at'>[]
 ): Promise<number> {
-  const { data, error } = await supabase
-    .from('ingredients')
-    .insert(items)
-    .select('id');
+  if (items.length === 0) return 0;
 
-  if (error) throw new Error(error.message);
-  return (data ?? []).length;
+  const storeId = items[0].store_id;
+  const existing = await getIngredients(storeId);
+  const existingByName = new Map(existing.map((e) => [e.name, e]));
+
+  const toInsert = items.filter((item) => !existingByName.has(item.name));
+  const toUpdate = items.filter((item) => existingByName.has(item.name));
+
+  const updates = toUpdate.map((item) => {
+    const found = existingByName.get(item.name)!;
+    return supabase
+      .from('ingredients')
+      .update({
+        current_stock: found.current_stock + item.current_stock,
+        min_stock: item.min_stock,
+        last_price: item.last_price,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', found.id);
+  });
+
+  await Promise.all(updates);
+
+  if (toInsert.length > 0) {
+    const { error } = await supabase.from('ingredients').insert(toInsert);
+    if (error) throw new Error(error.message);
+  }
+
+  return toInsert.length + toUpdate.length;
 }
