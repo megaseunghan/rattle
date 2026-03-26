@@ -13,6 +13,8 @@ import { useIngredients } from '../../lib/hooks/useIngredients';
 import { clovaTextToLineItems } from '../../lib/services/ocr';
 import { OcrLineItem } from '../../types';
 
+type ReviewItem = OcrLineItem & { _key: string };
+
 const UNITS = ['개', '병', '캔', '팩', '봉', '박스', 'kg', 'g', 'L', 'ml', '장', '묶음'];
 
 export default function OcrReviewScreen() {
@@ -23,8 +25,11 @@ export default function OcrReviewScreen() {
 
   const [supplierName, setSupplierName] = useState('');
   const [orderDate] = useState(new Date().toISOString().split('T')[0]);
-  const [items, setItems] = useState<OcrLineItem[]>(() =>
-    clovaTextToLineItems(ocrText ?? '', ingredients)
+  const [items, setItems] = useState<ReviewItem[]>(() =>
+    clovaTextToLineItems(ocrText ?? '', ingredients).map(item => ({
+      ...item,
+      _key: Math.random().toString(36).slice(2),
+    }))
   );
   const [imageExpanded, setImageExpanded] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -33,7 +38,7 @@ export default function OcrReviewScreen() {
   function updateItem(index: number, patch: Partial<OcrLineItem>) {
     setItems(prev =>
       prev.map((item, i) =>
-        i === index ? { ...item, ...patch, confidence: 'high' } : item
+        i === index ? { ...item, ...patch } : item
       )
     );
   }
@@ -43,14 +48,18 @@ export default function OcrReviewScreen() {
   }
 
   function addItem() {
-    setItems(prev => [
-      ...prev,
-      {
-        raw: '', name: '', quantity: 1, unit: '개', unit_price: 0,
-        confidence: 'low', matched_ingredient: null, match_candidates: [], prev_price: null,
-      },
-    ]);
-    setEditingIndex(items.length);
+    setItems(prev => {
+      const next = [
+        ...prev,
+        {
+          raw: '', name: '', quantity: 1, unit: '개', unit_price: 0,
+          confidence: 'low' as const, matched_ingredient: null, match_candidates: [], prev_price: null,
+          _key: Math.random().toString(36).slice(2),
+        },
+      ];
+      setEditingIndex(next.length - 1);
+      return next;
+    });
   }
 
   async function handleSubmit() {
@@ -133,7 +142,7 @@ export default function OcrReviewScreen() {
 
         {items.map((item, index) => (
           <OcrItemRow
-            key={index}
+            key={item._key}
             item={item}
             isEditing={editingIndex === index}
             onEdit={() => setEditingIndex(index)}
@@ -190,7 +199,7 @@ function OcrItemRow({
           <TextInput
             style={styles.itemInput}
             value={item.name}
-            onChangeText={name => onChange({ name })}
+            onChangeText={name => onChange({ name, confidence: 'high' })}
             onBlur={onBlur}
             autoFocus
             placeholder="품목명"
