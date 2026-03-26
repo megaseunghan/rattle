@@ -54,6 +54,7 @@ function RootNavigator() {
           headerStyle: { backgroundColor: Colors.white },
         }}
       />
+      <Stack.Screen name="orders/ocr-review" options={{ headerShown: false }} />
     </Stack>
   );
 }

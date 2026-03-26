@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TextInput,
   TouchableOpacity, Image, Alert, ActivityIndicator,
@@ -21,7 +21,7 @@ export default function OcrReviewScreen() {
   const { imageUri, ocrText } = useLocalSearchParams<{ imageUri: string; ocrText: string }>();
   const { store } = useAuth();
   const { create } = useOrders();
-  const { data: ingredients } = useIngredients();
+  const { data: ingredients, loading: ingredientsLoading } = useIngredients();
 
   const [supplierName, setSupplierName] = useState('');
   const [orderDate] = useState(new Date().toISOString().split('T')[0]);
@@ -34,6 +34,27 @@ export default function OcrReviewScreen() {
   const [imageExpanded, setImageExpanded] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (ingredientsLoading || ingredients.length === 0) return;
+    setItems(prev =>
+      prev.map(item => {
+        const candidates = ingredients.filter(
+          ing => ing.name.includes(item.name) || item.name.includes(ing.name)
+        );
+        const matched = candidates.length === 1 ? candidates[0] : null;
+        const matchedForPrice = matched ?? candidates[0] ?? null;
+        const prev_price = matchedForPrice && matchedForPrice.last_price > 0
+          ? matchedForPrice.last_price : null;
+        return {
+          ...item,
+          matched_ingredient: matched,
+          match_candidates: candidates.length > 1 ? candidates : [],
+          prev_price,
+        };
+      })
+    );
+  }, [ingredientsLoading]);
 
   function updateItem(index: number, patch: Partial<OcrLineItem>) {
     setItems(prev =>
@@ -63,6 +84,10 @@ export default function OcrReviewScreen() {
   }
 
   async function handleSubmit() {
+    if (!supplierName.trim()) {
+      Alert.alert('거래처 필요', '거래처명을 입력해주세요.');
+      return;
+    }
     const validItems = items.filter(item => item.name.trim() && item.matched_ingredient);
     if (validItems.length === 0) {
       Alert.alert('등록 실패', '재고와 연결된 품목이 없어요. 품목을 선택하거나 재고에 먼저 추가해주세요.');
@@ -216,9 +241,24 @@ function OcrItemRow({
             <Text style={styles.matchBadgeText}>✓ {item.matched_ingredient.name}</Text>
           </View>
         ) : item.match_candidates.length > 0 ? (
-          <View style={styles.candidateBadge}>
-            <Text style={styles.candidateBadgeText}>후보 {item.match_candidates.length}개</Text>
-          </View>
+          <TouchableOpacity
+            style={styles.candidateBadge}
+            onPress={() => {
+              Alert.alert(
+                '재고 선택',
+                '어느 재고 항목과 연결할까요?',
+                [
+                  ...item.match_candidates.map(c => ({
+                    text: c.name,
+                    onPress: () => onChange({ matched_ingredient: c, match_candidates: [] }),
+                  })),
+                  { text: '취소', style: 'cancel' as const },
+                ]
+              );
+            }}
+          >
+            <Text style={styles.candidateBadgeText}>후보 {item.match_candidates.length}개 ▾</Text>
+          </TouchableOpacity>
         ) : (
           <View style={styles.newBadge}>
             <Text style={styles.newBadgeText}>신규</Text>
