@@ -9,20 +9,21 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
-  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Colors } from '../../constants/colors';
 import { useIngredients } from '../../lib/hooks/useIngredients';
 import { Ingredient } from '../../types';
+import { LoadingSpinner } from '../../lib/components/LoadingSpinner';
+import { ErrorMessage } from '../../lib/components/ErrorMessage';
 
 const UNIT_PRESETS = ['g', 'kg', '개', 'L', 'mL', '봉', '팩', '병'];
 const CONTAINER_UNIT_PRESETS = ['통', '박스', '봉', '팩'];
 
 export default function EditIngredientScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { data, update } = useIngredients();
+  const { data, loading, error, update } = useIngredients();
 
   const ingredient = data.find(i => i.id === id);
 
@@ -49,17 +50,17 @@ export default function EditIngredientScreen() {
     }
   }, [ingredient?.id]);
 
-  if (!ingredient) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <ActivityIndicator style={{ flex: 1 }} color={Colors.primary} />
-      </SafeAreaView>
-    );
-  }
+  if (loading) return <SafeAreaView style={styles.container}><LoadingSpinner /></SafeAreaView>;
+  if (error) return <SafeAreaView style={styles.container}><ErrorMessage message={error} /></SafeAreaView>;
+  if (!ingredient) return <SafeAreaView style={styles.container}><ErrorMessage message="식자재를 찾을 수 없습니다." /></SafeAreaView>;
 
   async function handleSubmit() {
     if (!name.trim()) {
       Alert.alert('입력 오류', '식자재명을 입력해주세요.');
+      return;
+    }
+    if (!unit.trim()) {
+      Alert.alert('입력 오류', '단위를 입력해주세요.');
       return;
     }
     if (containerUnit.trim() && !containerSize) {
