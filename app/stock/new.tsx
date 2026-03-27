@@ -28,6 +28,8 @@ export default function NewIngredientScreen() {
   const [currentStock, setCurrentStock] = useState('0');
   const [minStock, setMinStock] = useState('0');
   const [lastPrice, setLastPrice] = useState('0');
+  const [containerUnit, setContainerUnit] = useState('');
+  const [containerSize, setContainerSize] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   async function handleSubmit() {
@@ -51,8 +53,8 @@ export default function NewIngredientScreen() {
         current_stock: parseFloat(currentStock) || 0,
         min_stock: parseFloat(minStock) || 0,
         last_price: parseFloat(lastPrice) || 0,
-        container_unit: null,
-        container_size: null,
+        container_unit: containerUnit.trim() || null,
+        container_size: containerSize ? parseFloat(containerSize) : null,
       });
       router.back();
     } catch (e: any) {
@@ -155,6 +157,36 @@ export default function NewIngredientScreen() {
             placeholderTextColor={Colors.gray400}
           />
 
+          <View style={styles.containerSection}>
+            <Text style={styles.containerSectionTitle}>컨테이너 단위 설정</Text>
+            <Text style={styles.containerHint}>
+              💡 설정하면 발주·재고를 통/박스 단위로 표시할 수 있어요
+            </Text>
+            <View style={styles.row}>
+              <View style={styles.halfField}>
+                <Text style={styles.label}>컨테이너 단위</Text>
+                <TextInput
+                  style={styles.input}
+                  value={containerUnit}
+                  onChangeText={setContainerUnit}
+                  placeholder="예) 통, 박스, 봉"
+                  placeholderTextColor={Colors.gray400}
+                />
+              </View>
+              <View style={styles.halfField}>
+                <Text style={styles.label}>1{containerUnit || '단위'} = ({unit})</Text>
+                <TextInput
+                  style={styles.input}
+                  value={containerSize}
+                  onChangeText={setContainerSize}
+                  keyboardType="numeric"
+                  placeholder="예) 5000"
+                  placeholderTextColor={Colors.gray400}
+                />
+              </View>
+            </View>
+          </View>
+
           <View style={styles.hint}>
             <Text style={styles.hintText}>
               현재 재고가 품절 임박 기준 이하일 때 재고 탭에서 경고가 표시됩니다
@@ -222,4 +254,22 @@ const styles = StyleSheet.create({
     padding: 14,
   },
   hintText: { fontSize: 13, color: Colors.dark, lineHeight: 18 },
+  containerSection: {
+    marginTop: 24,
+    backgroundColor: Colors.bg,
+    borderRadius: 12,
+    padding: 14,
+  },
+  containerSectionTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: Colors.dark,
+    marginBottom: 4,
+  },
+  containerHint: {
+    fontSize: 13,
+    color: Colors.dark,
+    marginBottom: 12,
+    lineHeight: 18,
+  },
 });
