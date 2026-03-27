@@ -51,6 +51,8 @@ export default function NewIngredientScreen() {
         current_stock: parseFloat(currentStock) || 0,
         min_stock: parseFloat(minStock) || 0,
         last_price: parseFloat(lastPrice) || 0,
+        container_unit: null,
+        container_size: null,
       });
       router.back();
     } catch (e: any) {

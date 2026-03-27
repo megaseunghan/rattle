@@ -162,6 +162,8 @@ export default function StockScreen() {
         current_stock: parseFloat(row.current_stock) || 0,
         min_stock: parseFloat(row.min_stock) || 0,
         last_price: parseFloat(row.last_price) || 0,
+        container_unit: null,
+        container_size: null,
       });
     });
 

@@ -75,6 +75,8 @@ export default function NewOrderScreen() {
         current_stock: 0,
         min_stock: 0,
         last_price: 0,
+        container_unit: null,
+        container_size: null,
       });
       setShowQuickAdd(false);
       setQuickName('');
