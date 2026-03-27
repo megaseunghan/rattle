@@ -85,7 +85,7 @@ export interface OcrParsedItem {
 
 // OCR 라인 아이템 (리뷰 화면용)
 export interface OcrLineItem {
-  raw: string;                          // Clova 원본 텍스트 줄
+  raw: string;                          // Gemini 응답 원본 아이템 (JSON.stringify된 문자열)
   name: string;                         // 파싱된 품목명
   quantity: number;
   unit: string;
