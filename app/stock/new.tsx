@@ -43,6 +43,17 @@ export default function NewIngredientScreen() {
     }
     if (!store) return;
 
+    if (containerUnit.trim() && !containerSize) {
+      Alert.alert('입력 오류', '컨테이너 단위를 설정하려면 크기도 입력해주세요.');
+      return;
+    }
+
+    const parsedSize = containerSize ? parseFloat(containerSize) : null;
+    if (parsedSize !== null && (isNaN(parsedSize) || parsedSize <= 0)) {
+      Alert.alert('입력 오류', '컨테이너 크기는 0보다 큰 숫자여야 합니다.');
+      return;
+    }
+
     setSubmitting(true);
     try {
       await create({
@@ -54,7 +65,7 @@ export default function NewIngredientScreen() {
         min_stock: parseFloat(minStock) || 0,
         last_price: parseFloat(lastPrice) || 0,
         container_unit: containerUnit.trim() || null,
-        container_size: containerSize ? parseFloat(containerSize) : null,
+        container_size: parsedSize,
       });
       router.back();
     } catch (e: any) {
