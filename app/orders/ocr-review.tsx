@@ -10,7 +10,7 @@ import { Colors } from '../../constants/colors';
 import { useAuth } from '../../lib/contexts/AuthContext';
 import { useOrders } from '../../lib/hooks/useOrders';
 import { useIngredients } from '../../lib/hooks/useIngredients';
-import { clovaTextToLineItems } from '../../lib/services/ocr';
+import { parseOcrItems } from '../../lib/services/ocr';
 import { OcrLineItem } from '../../types';
 
 type ReviewItem = OcrLineItem & { _key: string };
@@ -26,7 +26,7 @@ export default function OcrReviewScreen() {
   const [supplierName, setSupplierName] = useState('');
   const [orderDate] = useState(new Date().toISOString().split('T')[0]);
   const [items, setItems] = useState<ReviewItem[]>(() =>
-    clovaTextToLineItems(ocrText ?? '', ingredients).map(item => ({
+    parseOcrItems(ocrText ?? '', ingredients).map(item => ({
       ...item,
       _key: Math.random().toString(36).slice(2),
     }))

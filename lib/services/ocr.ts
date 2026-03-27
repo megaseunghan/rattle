@@ -1,41 +1,36 @@
 import { Ingredient, OcrLineItem } from '../../types';
 import { supabase } from '../supabase';
 
-const LINE_PATTERN = /^(.+?)\s+(\d+(?:\.\d+)?)\s*(개|병|캔|팩|봉|박스|kg|g|L|ml|장|묶음)?\s+(\d[\d,]*)$/;
+interface GeminiOcrItem {
+  name: string;
+  quantity: number;
+  unit: string;
+  unit_price: number;
+}
 
-export function clovaTextToLineItems(
-  text: string,
+export function parseOcrItems(
+  ocrText: string,
   ingredients: Ingredient[]
 ): OcrLineItem[] {
-  const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+  let rawItems: GeminiOcrItem[] = [];
+  try {
+    rawItems = JSON.parse(ocrText);
+  } catch {
+    return [];
+  }
 
-  return lines.map((raw): OcrLineItem => {
-    const match = raw.match(LINE_PATTERN);
+  if (!Array.isArray(rawItems)) return [];
 
-    if (!match) {
-      return {
-        raw,
-        name: raw,
-        quantity: 1,
-        unit: '개',
-        unit_price: 0,
-        confidence: 'low',
-        matched_ingredient: null,
-        match_candidates: [],
-        prev_price: null,
-      };
-    }
-
-    const name = match[1].trim();
-    const quantity = parseFloat(match[2]);
-    const unit = match[3] ?? '개';
-    const unit_price = parseInt(match[4].replace(/,/g, ''), 10);
+  return rawItems.map((raw): OcrLineItem => {
+    const name = raw.name ?? '';
+    const quantity = typeof raw.quantity === 'number' ? raw.quantity : 1;
+    const unit = raw.unit ?? '개';
+    const unit_price = typeof raw.unit_price === 'number' ? raw.unit_price : 0;
 
     const candidates = ingredients.filter(
       ing => ing.name.includes(name) || name.includes(ing.name)
     );
     const matched = candidates.length === 1 ? candidates[0] : null;
-
     const matchedForPrice = matched ?? candidates[0] ?? null;
     const prev_price =
       matchedForPrice && matchedForPrice.last_price > 0
@@ -43,12 +38,12 @@ export function clovaTextToLineItems(
         : null;
 
     return {
-      raw,
+      raw: JSON.stringify(raw),
       name,
       quantity,
       unit,
       unit_price,
-      confidence: 'high',
+      confidence: name && quantity > 0 ? 'high' : 'low',
       matched_ingredient: matched,
       match_candidates: candidates.length > 1 ? candidates : [],
       prev_price,
@@ -62,6 +57,8 @@ export async function callOcrEdgeFunction(imageBase64: string): Promise<string> 
   });
 
   if (error) throw new Error(`OCR 서버 오류: ${error.message}`);
-  if (typeof data?.text !== 'string') throw new Error('OCR 응답에 텍스트가 없습니다');
-  return data.text;
+  if (!Array.isArray(data?.items)) throw new Error('OCR 응답에 items가 없습니다');
+
+  // JSON 문자열로 반환 — 라우트 파라미터(ocrText)로 전달하기 위함
+  return JSON.stringify(data.items);
 }
