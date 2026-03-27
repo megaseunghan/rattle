@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TextInput,
-  TouchableOpacity, Image, Alert, ActivityIndicator,
+  TouchableOpacity, Image, Alert, ActivityIndicator, Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -16,15 +16,16 @@ import { OcrLineItem } from '../../types';
 type ReviewItem = OcrLineItem & { _key: string };
 
 const UNITS = ['개', '병', '캔', '팩', '봉', '박스', 'kg', 'g', 'L', 'ml', '장', '묶음'];
+const CATEGORIES = ['식자재', '주류', '비품소모품', '기타'];
 
 export default function OcrReviewScreen() {
   const { imageUri, ocrText } = useLocalSearchParams<{ imageUri: string; ocrText: string }>();
   const { store } = useAuth();
   const { create } = useOrders();
-  const { data: ingredients, loading: ingredientsLoading } = useIngredients();
+  const { data: ingredients, loading: ingredientsLoading, create: createIngredient } = useIngredients();
 
   const [supplierName, setSupplierName] = useState('');
-  const [orderDate] = useState(new Date().toISOString().split('T')[0]);
+  const [orderDate, setOrderDate] = useState(new Date().toISOString().split('T')[0]);
   const [items, setItems] = useState<ReviewItem[]>(() =>
     parseOcrItems(ocrText ?? '', ingredients).map(item => ({
       ...item,
@@ -34,6 +35,13 @@ export default function OcrReviewScreen() {
   const [imageExpanded, setImageExpanded] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
+
+  // 신규 등록 모달
+  const [quickAddTarget, setQuickAddTarget] = useState<number | null>(null);
+  const [quickName, setQuickName] = useState('');
+  const [quickCategory, setQuickCategory] = useState('식자재');
+  const [quickUnit, setQuickUnit] = useState('개');
+  const [quickAdding, setQuickAdding] = useState(false);
 
   useEffect(() => {
     if (ingredientsLoading || ingredients.length === 0) return;
@@ -81,6 +89,54 @@ export default function OcrReviewScreen() {
       setEditingIndex(next.length - 1);
       return next;
     });
+  }
+
+  function openQuickAdd(index: number) {
+    setQuickName(items[index].name);
+    setQuickUnit(items[index].unit || '개');
+    setQuickCategory('식자재');
+    setQuickAddTarget(index);
+  }
+
+  function closeQuickAdd() {
+    setQuickAddTarget(null);
+    setQuickName('');
+    setQuickCategory('식자재');
+    setQuickUnit('개');
+  }
+
+  async function handleQuickAdd() {
+    if (!quickName.trim()) {
+      Alert.alert('입력 오류', '품목명을 입력해주세요.');
+      return;
+    }
+    if (!store || quickAddTarget === null) return;
+    setQuickAdding(true);
+    try {
+      await createIngredient({
+        store_id: store.id,
+        name: quickName.trim(),
+        category: quickCategory,
+        unit: quickUnit,
+        current_stock: 0,
+        min_stock: 0,
+        last_price: 0,
+        container_unit: null,
+        container_size: null,
+      });
+      // ingredients가 리프레시되면 useEffect에서 자동 매칭됨
+      // 이름이 완전 일치할 경우를 위해 미리 수동 매칭
+      const newIngredient = ingredients.find(i => i.name === quickName.trim());
+      if (newIngredient) {
+        updateItem(quickAddTarget, { matched_ingredient: newIngredient, match_candidates: [] });
+      }
+      Alert.alert('등록 완료', `"${quickName.trim()}"이(가) 재고에 추가되었어요.`);
+      closeQuickAdd();
+    } catch (e: any) {
+      Alert.alert('오류', e.message);
+    } finally {
+      setQuickAdding(false);
+    }
   }
 
   async function handleSubmit() {
@@ -153,7 +209,14 @@ export default function OcrReviewScreen() {
             placeholderTextColor={Colors.gray400}
           />
           <Text style={styles.label}>발주일</Text>
-          <Text style={styles.dateText}>{orderDate}</Text>
+          <TextInput
+            style={styles.input}
+            value={orderDate}
+            onChangeText={setOrderDate}
+            placeholder="YYYY-MM-DD"
+            placeholderTextColor={Colors.gray400}
+            keyboardType="numbers-and-punctuation"
+          />
         </View>
 
         {unmatchedCount > 0 && (
@@ -174,6 +237,7 @@ export default function OcrReviewScreen() {
             onBlur={() => setEditingIndex(null)}
             onChange={patch => updateItem(index, patch)}
             onRemove={() => removeItem(index)}
+            onQuickAdd={() => openQuickAdd(index)}
           />
         ))}
 
@@ -197,12 +261,77 @@ export default function OcrReviewScreen() {
           )}
         </TouchableOpacity>
       </View>
+
+      {/* 신규 재고 등록 모달 */}
+      <Modal visible={quickAddTarget !== null} animationType="slide" transparent>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={closeQuickAdd}>
+          <TouchableOpacity activeOpacity={1} style={styles.modalSheet}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>재고 신규 등록</Text>
+              <TouchableOpacity onPress={closeQuickAdd}>
+                <Text style={styles.modalClose}>닫기</Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView contentContainerStyle={styles.modalBody}>
+              <Text style={styles.modalLabel}>품목명</Text>
+              <TextInput
+                style={styles.modalInput}
+                value={quickName}
+                onChangeText={setQuickName}
+                placeholder="품목명 입력"
+                placeholderTextColor={Colors.gray400}
+                autoFocus
+              />
+
+              <Text style={styles.modalLabel}>카테고리</Text>
+              <View style={styles.chipRow}>
+                {CATEGORIES.map(c => (
+                  <TouchableOpacity
+                    key={c}
+                    style={[styles.chip, quickCategory === c && styles.chipActive]}
+                    onPress={() => setQuickCategory(c)}
+                  >
+                    <Text style={[styles.chipText, quickCategory === c && styles.chipTextActive]}>{c}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Text style={styles.modalLabel}>단위</Text>
+              <View style={styles.chipRow}>
+                {UNITS.map(u => (
+                  <TouchableOpacity
+                    key={u}
+                    style={[styles.chip, quickUnit === u && styles.chipActive]}
+                    onPress={() => setQuickUnit(u)}
+                  >
+                    <Text style={[styles.chipText, quickUnit === u && styles.chipTextActive]}>{u}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <View style={styles.modalActions}>
+                <TouchableOpacity style={styles.cancelBtn} onPress={closeQuickAdd}>
+                  <Text style={styles.cancelText}>취소</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.confirmBtn, quickAdding && { opacity: 0.5 }]}
+                  onPress={handleQuickAdd}
+                  disabled={quickAdding}
+                >
+                  <Text style={styles.confirmText}>{quickAdding ? '등록 중...' : '재고에 추가'}</Text>
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </SafeAreaView>
   );
 }
 
 function OcrItemRow({
-  item, isEditing, onEdit, onBlur, onChange, onRemove,
+  item, isEditing, onEdit, onBlur, onChange, onRemove, onQuickAdd,
 }: {
   item: OcrLineItem;
   isEditing: boolean;
@@ -210,6 +339,7 @@ function OcrItemRow({
   onBlur: () => void;
   onChange: (patch: Partial<OcrLineItem>) => void;
   onRemove: () => void;
+  onQuickAdd: () => void;
 }) {
   const isLowConfidence = item.confidence === 'low';
   const hasPriceChange = item.prev_price !== null && item.prev_price !== item.unit_price;
@@ -260,9 +390,9 @@ function OcrItemRow({
             <Text style={styles.candidateBadgeText}>후보 {item.match_candidates.length}개 ▾</Text>
           </TouchableOpacity>
         ) : (
-          <View style={styles.newBadge}>
-            <Text style={styles.newBadgeText}>신규</Text>
-          </View>
+          <TouchableOpacity style={styles.newBadge} onPress={onQuickAdd}>
+            <Text style={styles.newBadgeText}>+ 신규 등록</Text>
+          </TouchableOpacity>
         )}
 
         <TouchableOpacity onPress={onRemove} style={styles.removeBtn}>
@@ -338,7 +468,6 @@ const styles = StyleSheet.create({
     fontSize: 15, color: Colors.black, borderBottomWidth: 1,
     borderBottomColor: Colors.gray200, paddingVertical: 6,
   },
-  dateText: { fontSize: 15, color: Colors.gray700, paddingVertical: 6 },
   warningBanner: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
     backgroundColor: Colors.warning + '15', borderRadius: 10, padding: 12, marginBottom: 12,
@@ -365,9 +494,9 @@ const styles = StyleSheet.create({
   },
   candidateBadgeText: { fontSize: 11, fontWeight: '700', color: Colors.warning },
   newBadge: {
-    backgroundColor: Colors.gray100, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6,
+    backgroundColor: Colors.primary + '15', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6,
   },
-  newBadgeText: { fontSize: 11, fontWeight: '600', color: Colors.gray500 },
+  newBadgeText: { fontSize: 11, fontWeight: '700', color: Colors.primary },
   removeBtn: { padding: 4 },
   removeBtnText: { fontSize: 14, color: Colors.gray400 },
   itemDetails: { flexDirection: 'row', alignItems: 'center', gap: 8 },
@@ -400,4 +529,39 @@ const styles = StyleSheet.create({
   },
   submitButtonDisabled: { opacity: 0.6 },
   submitText: { color: Colors.white, fontSize: 16, fontWeight: '700' },
+  modalOverlay: { flex: 1, backgroundColor: Colors.overlay, justifyContent: 'flex-end' },
+  modalSheet: {
+    backgroundColor: Colors.white, borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '75%',
+  },
+  modalHeader: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    padding: 20, borderBottomWidth: 1, borderBottomColor: Colors.gray100,
+  },
+  modalTitle: { fontSize: 17, fontWeight: '700', color: Colors.black },
+  modalClose: { fontSize: 15, color: Colors.primary, fontWeight: '600' },
+  modalBody: { padding: 20, paddingBottom: 40 },
+  modalLabel: { fontSize: 13, fontWeight: '600', color: Colors.gray700, marginBottom: 8, marginTop: 14 },
+  modalInput: {
+    backgroundColor: Colors.gray50, borderRadius: 10, borderWidth: 1, borderColor: Colors.gray200,
+    paddingHorizontal: 14, paddingVertical: 11, fontSize: 15, color: Colors.black,
+  },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  chip: {
+    paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20,
+    borderWidth: 1, borderColor: Colors.gray200, backgroundColor: Colors.white,
+  },
+  chipActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
+  chipText: { fontSize: 13, color: Colors.gray600, fontWeight: '600' },
+  chipTextActive: { color: Colors.white },
+  modalActions: { flexDirection: 'row', gap: 10, marginTop: 24 },
+  cancelBtn: {
+    flex: 1, paddingVertical: 13, borderRadius: 10,
+    borderWidth: 1, borderColor: Colors.gray200, alignItems: 'center',
+  },
+  cancelText: { fontSize: 14, color: Colors.gray600, fontWeight: '600' },
+  confirmBtn: {
+    flex: 2, paddingVertical: 13, borderRadius: 10,
+    backgroundColor: Colors.primary, alignItems: 'center',
+  },
+  confirmText: { fontSize: 14, color: Colors.white, fontWeight: '700' },
 });
