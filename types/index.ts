@@ -38,6 +38,8 @@ export interface Ingredient {
   unit: string;
   min_stock: number;  // 품절 임박 기준
   last_price: number;
+  container_unit: string | null;
+  container_size: number | null;
   updated_at: string;
   created_at: string;
 }

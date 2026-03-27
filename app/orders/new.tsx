@@ -19,6 +19,7 @@ import { useAuth } from '../../lib/contexts/AuthContext';
 import { useOrders } from '../../lib/hooks/useOrders';
 import { useIngredients } from '../../lib/hooks/useIngredients';
 import { Ingredient } from '../../types';
+import { stockUnit } from '../../lib/utils/unit';
 
 const CATEGORIES = ['식자재', '주류', '비품소모품', '기타'];
 const FILTER_CATEGORIES = ['전체', ...CATEGORIES];
@@ -75,6 +76,8 @@ export default function NewOrderScreen() {
         current_stock: 0,
         min_stock: 0,
         last_price: 0,
+        container_unit: null,
+        container_size: null,
       });
       setShowQuickAdd(false);
       setQuickName('');
@@ -152,7 +155,7 @@ export default function NewOrderScreen() {
         items.map(i => ({
           ingredient_id: i.ingredient.id,
           quantity: parseFloat(i.quantity) || 0,
-          unit: i.ingredient.unit,
+          unit: i.ingredient.container_unit ?? i.ingredient.unit,
           unit_price: parseFloat(i.unit_price) || 0,
         }))
       );
@@ -228,7 +231,7 @@ export default function NewOrderScreen() {
                 </View>
                 <View style={styles.orderItemInputs}>
                   <View style={styles.inputGroup}>
-                    <Text style={styles.inputLabel}>수량 ({item.ingredient.unit})</Text>
+                    <Text style={styles.inputLabel}>수량 ({stockUnit(item.ingredient)})</Text>
                     <TextInput
                       style={styles.smallInput}
                       value={item.quantity}

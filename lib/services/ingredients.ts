@@ -38,7 +38,7 @@ export async function createIngredient(
 
 export async function updateIngredient(
   id: string,
-  data: Partial<Pick<Ingredient, 'name' | 'category' | 'current_stock' | 'unit' | 'min_stock' | 'last_price'>>
+  data: Partial<Pick<Ingredient, 'name' | 'category' | 'current_stock' | 'unit' | 'min_stock' | 'last_price' | 'container_unit' | 'container_size'>>
 ): Promise<Ingredient> {
   const { data: result, error } = await supabase
     .from('ingredients')
@@ -80,6 +80,8 @@ export async function bulkCreateIngredients(
         current_stock: found.current_stock + item.current_stock,
         min_stock: item.min_stock,
         last_price: item.last_price,
+        container_unit: item.container_unit,
+        container_size: item.container_size,
         updated_at: new Date().toISOString(),
       })
       .eq('id', found.id);

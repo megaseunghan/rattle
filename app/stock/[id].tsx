@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -11,16 +11,24 @@ import {
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { Colors } from '../../constants/colors';
 import { useIngredients } from '../../lib/hooks/useIngredients';
-import { useAuth } from '../../lib/contexts/AuthContext';
+import { getIngredientById } from '../../lib/services/ingredients';
+import { Ingredient } from '../../types';
+import { LoadingSpinner } from '../../lib/components/LoadingSpinner';
+import { ErrorMessage } from '../../lib/components/ErrorMessage';
 
 const UNIT_PRESETS = ['g', 'kg', '개', 'L', 'mL', '봉', '팩', '병'];
+const CONTAINER_UNIT_PRESETS = ['통', '박스', '봉', '팩'];
 
-export default function NewIngredientScreen() {
-  const { store } = useAuth();
-  const { create } = useIngredients();
+export default function EditIngredientScreen() {
+  const { id } = useLocalSearchParams<{ id: string }>();
+  const { update } = useIngredients();
+
+  const [ingredient, setIngredient] = useState<Ingredient | null>(null);
+  const [fetchLoading, setFetchLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
   const [name, setName] = useState('');
   const [category, setCategory] = useState('');
@@ -32,6 +40,29 @@ export default function NewIngredientScreen() {
   const [containerSize, setContainerSize] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
+  useEffect(() => {
+    if (!id) return;
+    setFetchLoading(true);
+    getIngredientById(id)
+      .then((item) => {
+        setIngredient(item);
+        setName(item.name);
+        setCategory(item.category);
+        setUnit(item.unit);
+        setCurrentStock(String(item.current_stock));
+        setMinStock(String(item.min_stock));
+        setLastPrice(String(item.last_price));
+        setContainerUnit(item.container_unit ?? '');
+        setContainerSize(item.container_size ? String(item.container_size) : '');
+      })
+      .catch((e) => setFetchError(e.message ?? '식자재를 불러오지 못했습니다.'))
+      .finally(() => setFetchLoading(false));
+  }, [id]);
+
+  if (fetchLoading) return <SafeAreaView style={styles.container}><LoadingSpinner /></SafeAreaView>;
+  if (fetchError) return <SafeAreaView style={styles.container}><ErrorMessage message={fetchError} /></SafeAreaView>;
+  if (!ingredient) return <SafeAreaView style={styles.container}><ErrorMessage message="식자재를 찾을 수 없습니다." /></SafeAreaView>;
+
   async function handleSubmit() {
     if (!name.trim()) {
       Alert.alert('입력 오류', '식자재명을 입력해주세요.');
@@ -41,23 +72,18 @@ export default function NewIngredientScreen() {
       Alert.alert('입력 오류', '단위를 입력해주세요.');
       return;
     }
-    if (!store) return;
-
     if (containerUnit.trim() && !containerSize) {
       Alert.alert('입력 오류', '컨테이너 단위를 설정하려면 크기도 입력해주세요.');
       return;
     }
-
     const parsedSize = containerSize ? parseFloat(containerSize) : null;
     if (parsedSize !== null && (isNaN(parsedSize) || parsedSize <= 0)) {
       Alert.alert('입력 오류', '컨테이너 크기는 0보다 큰 숫자여야 합니다.');
       return;
     }
-
     setSubmitting(true);
     try {
-      await create({
-        store_id: store.id,
+      await update(id!, {
         name: name.trim(),
         category: category.trim() || '기타',
         unit: unit.trim(),
@@ -69,7 +95,7 @@ export default function NewIngredientScreen() {
       });
       router.back();
     } catch (e: any) {
-      Alert.alert('오류', e.message ?? '식자재 등록에 실패했습니다.');
+      Alert.alert('오류', e.message ?? '수정에 실패했습니다.');
     } finally {
       setSubmitting(false);
     }
@@ -81,13 +107,13 @@ export default function NewIngredientScreen() {
         <TouchableOpacity onPress={() => router.back()}>
           <Text style={styles.back}>← 뒤로</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>새 식자재</Text>
+        <Text style={styles.title}>식자재 수정</Text>
         <TouchableOpacity
           style={[styles.submitBtn, submitting && styles.submitBtnDisabled]}
           onPress={handleSubmit}
           disabled={submitting}
         >
-          <Text style={styles.submitText}>{submitting ? '등록 중...' : '등록'}</Text>
+          <Text style={styles.submitText}>{submitting ? '저장 중...' : '저장'}</Text>
         </TouchableOpacity>
       </View>
 
@@ -119,9 +145,7 @@ export default function NewIngredientScreen() {
                 style={[styles.unitChip, unit === u && styles.unitChipActive]}
                 onPress={() => setUnit(u)}
               >
-                <Text style={[styles.unitChipText, unit === u && styles.unitChipTextActive]}>
-                  {u}
-                </Text>
+                <Text style={[styles.unitChipText, unit === u && styles.unitChipTextActive]}>{u}</Text>
               </TouchableOpacity>
             ))}
           </View>
@@ -173,6 +197,17 @@ export default function NewIngredientScreen() {
             <Text style={styles.containerHint}>
               💡 설정하면 발주·재고를 통/박스 단위로 표시할 수 있어요
             </Text>
+            <View style={styles.unitPresets}>
+              {CONTAINER_UNIT_PRESETS.map(u => (
+                <TouchableOpacity
+                  key={u}
+                  style={[styles.unitChip, containerUnit === u && styles.unitChipActive]}
+                  onPress={() => setContainerUnit(containerUnit === u ? '' : u)}
+                >
+                  <Text style={[styles.unitChipText, containerUnit === u && styles.unitChipTextActive]}>{u}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
             <View style={styles.row}>
               <View style={styles.halfField}>
                 <Text style={styles.label}>컨테이너 단위</Text>
@@ -196,12 +231,6 @@ export default function NewIngredientScreen() {
                 />
               </View>
             </View>
-          </View>
-
-          <View style={styles.hint}>
-            <Text style={styles.hintText}>
-              현재 재고가 품절 임박 기준 이하일 때 재고 탭에서 경고가 표시됩니다
-            </Text>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -258,13 +287,6 @@ const styles = StyleSheet.create({
   unitInput: { marginTop: 0 },
   row: { flexDirection: 'row', gap: 12 },
   halfField: { flex: 1 },
-  hint: {
-    marginTop: 24,
-    backgroundColor: Colors.bg,
-    borderRadius: 10,
-    padding: 14,
-  },
-  hintText: { fontSize: 13, color: Colors.dark, lineHeight: 18 },
   containerSection: {
     marginTop: 24,
     backgroundColor: Colors.bg,
