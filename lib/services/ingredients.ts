@@ -80,6 +80,8 @@ export async function bulkCreateIngredients(
         current_stock: found.current_stock + item.current_stock,
         min_stock: item.min_stock,
         last_price: item.last_price,
+        container_unit: item.container_unit,
+        container_size: item.container_size,
         updated_at: new Date().toISOString(),
       })
       .eq('id', found.id);

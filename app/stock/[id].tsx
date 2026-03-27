@@ -14,6 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Colors } from '../../constants/colors';
 import { useIngredients } from '../../lib/hooks/useIngredients';
+import { getIngredientById } from '../../lib/services/ingredients';
 import { Ingredient } from '../../types';
 import { LoadingSpinner } from '../../lib/components/LoadingSpinner';
 import { ErrorMessage } from '../../lib/components/ErrorMessage';
@@ -23,9 +24,11 @@ const CONTAINER_UNIT_PRESETS = ['통', '박스', '봉', '팩'];
 
 export default function EditIngredientScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { data, loading, error, update } = useIngredients();
+  const { update } = useIngredients();
 
-  const ingredient = data.find(i => i.id === id);
+  const [ingredient, setIngredient] = useState<Ingredient | null>(null);
+  const [fetchLoading, setFetchLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
   const [name, setName] = useState('');
   const [category, setCategory] = useState('');
@@ -38,20 +41,26 @@ export default function EditIngredientScreen() {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    if (ingredient) {
-      setName(ingredient.name);
-      setCategory(ingredient.category);
-      setUnit(ingredient.unit);
-      setCurrentStock(String(ingredient.current_stock));
-      setMinStock(String(ingredient.min_stock));
-      setLastPrice(String(ingredient.last_price));
-      setContainerUnit(ingredient.container_unit ?? '');
-      setContainerSize(ingredient.container_size ? String(ingredient.container_size) : '');
-    }
-  }, [ingredient?.id]);
+    if (!id) return;
+    setFetchLoading(true);
+    getIngredientById(id)
+      .then((item) => {
+        setIngredient(item);
+        setName(item.name);
+        setCategory(item.category);
+        setUnit(item.unit);
+        setCurrentStock(String(item.current_stock));
+        setMinStock(String(item.min_stock));
+        setLastPrice(String(item.last_price));
+        setContainerUnit(item.container_unit ?? '');
+        setContainerSize(item.container_size ? String(item.container_size) : '');
+      })
+      .catch((e) => setFetchError(e.message ?? '식자재를 불러오지 못했습니다.'))
+      .finally(() => setFetchLoading(false));
+  }, [id]);
 
-  if (loading) return <SafeAreaView style={styles.container}><LoadingSpinner /></SafeAreaView>;
-  if (error) return <SafeAreaView style={styles.container}><ErrorMessage message={error} /></SafeAreaView>;
+  if (fetchLoading) return <SafeAreaView style={styles.container}><LoadingSpinner /></SafeAreaView>;
+  if (fetchError) return <SafeAreaView style={styles.container}><ErrorMessage message={fetchError} /></SafeAreaView>;
   if (!ingredient) return <SafeAreaView style={styles.container}><ErrorMessage message="식자재를 찾을 수 없습니다." /></SafeAreaView>;
 
   async function handleSubmit() {
