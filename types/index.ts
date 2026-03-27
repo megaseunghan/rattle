@@ -82,3 +82,16 @@ export interface OcrParsedItem {
   unit: string;
   price: number;
 }
+
+// OCR 라인 아이템 (리뷰 화면용)
+export interface OcrLineItem {
+  raw: string;                          // Gemini 응답 원본 아이템 (JSON.stringify된 문자열)
+  name: string;                         // 파싱된 품목명
+  quantity: number;
+  unit: string;
+  unit_price: number;
+  confidence: 'high' | 'low';           // low = 주황색 하이라이트
+  matched_ingredient: Ingredient | null; // 재고 자동 매칭 결과
+  match_candidates: Ingredient[];        // 후보 2개 이상일 때
+  prev_price: number | null;            // 이전 발주 단가 (변동 표시용)
+}

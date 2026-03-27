@@ -1,5 +1,7 @@
-import { useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { useCallback, useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
+import { callOcrEdgeFunction } from '../../lib/services/ocr';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
@@ -42,6 +44,37 @@ export default function HomeScreen() {
   } = useDashboard();
   useFocusEffect(useCallback(() => { refetch(); }, []));
 
+  const [scanning, setScanning] = useState(false);
+
+  async function handleScanReceipt() {
+    const permission = await ImagePicker.requestCameraPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert('권한 필요', '카메라 권한이 필요합니다. 설정에서 허용해주세요.');
+      return;
+    }
+
+    const result = await ImagePicker.launchCameraAsync({
+      base64: true,
+      quality: 0.8,
+    });
+
+    if (result.canceled || !result.assets[0].base64) return;
+
+    const { uri, base64 } = result.assets[0];
+    setScanning(true);
+    try {
+      const ocrText = await callOcrEdgeFunction(base64);
+      router.push({
+        pathname: '/orders/ocr-review',
+        params: { imageUri: uri, ocrText },
+      });
+    } catch (e: any) {
+      Alert.alert('OCR 오류', e.message);
+    } finally {
+      setScanning(false);
+    }
+  }
+
   if (loading) return <LoadingSpinner />;
   if (error) return <ErrorMessage message={error} onRetry={refetch} />;
 
@@ -77,7 +110,11 @@ export default function HomeScreen() {
         {/* 빠른 실행 */}
         <Text style={styles.sectionTitle}>빠른 실행</Text>
         <View style={styles.quickRow}>
-          <QuickAction icon="camera-outline" label="영수증 촬영" />
+          <QuickAction
+            icon={scanning ? 'hourglass-outline' : 'camera-outline'}
+            label={scanning ? '분석 중...' : '영수증 촬영'}
+            onPress={handleScanReceipt}
+          />
           <QuickAction icon="add-circle-outline" label="발주 추가" onPress={() => router.push('/orders/new')} />
           <QuickAction icon="bar-chart-outline" label="재고 확인" onPress={() => router.push('/(tabs)/stock')} />
           <QuickAction icon="link-outline" label="POS 연동" />
