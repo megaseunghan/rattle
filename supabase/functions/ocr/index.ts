@@ -6,6 +6,13 @@ const CORS_HEADERS = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
+const PROMPT = `이 납품서/영수증 이미지에서 품목 정보를 추출하세요.
+반드시 다음 JSON 형식으로만 응답하세요:
+{"items":[{"name":"품목명","quantity":숫자,"unit":"단위","unit_price":숫자}]}
+- unit은 개/병/캔/팩/봉/박스/kg/g/L/ml/장/묶음 중 하나
+- unit_price를 모르면 0
+- 다른 설명 없이 JSON만 출력`;
+
 serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: CORS_HEADERS });
@@ -21,40 +28,44 @@ serve(async (req: Request) => {
       });
     }
 
-    const clovaUrl = Deno.env.get('CLOVA_OCR_URL');
-    const clovaKey = Deno.env.get('CLOVA_OCR_API_KEY');
-
-    if (!clovaUrl || !clovaKey) {
-      throw new Error('CLOVA_OCR_URL 또는 CLOVA_OCR_API_KEY 환경변수가 설정되지 않았습니다.');
+    const apiKey = Deno.env.get('GEMINI_FLASH_API_KEY');
+    if (!apiKey) {
+      throw new Error('GEMINI_FLASH_API_KEY 환경변수가 설정되지 않았습니다.');
     }
 
-    const body = {
-      version: 'V2',
-      requestId: crypto.randomUUID(),
-      timestamp: Date.now(),
-      images: [{ format: 'jpg', name: 'receipt', data: image_base64 }],
-    };
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 
-    const clovaRes = await fetch(clovaUrl, {
+    const geminiRes = await fetch(url, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-OCR-SECRET': clovaKey,
-      },
-      body: JSON.stringify(body),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{
+          parts: [
+            { inline_data: { mime_type: 'image/jpeg', data: image_base64 } },
+            { text: PROMPT },
+          ],
+        }],
+        generationConfig: { response_mime_type: 'application/json' },
+      }),
     });
 
-    if (!clovaRes.ok) {
-      throw new Error(`Clova OCR 오류: ${clovaRes.status}`);
+    if (!geminiRes.ok) {
+      const errText = await geminiRes.text();
+      throw new Error(`Gemini API 오류: ${geminiRes.status} ${errText}`);
     }
 
-    const clovaData = await clovaRes.json();
+    const geminiData = await geminiRes.json();
+    const rawText = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text ?? '{"items":[]}';
 
-    // 텍스트 원본만 추출하여 반환 (파싱은 앱에서 처리)
-    const fields = clovaData?.images?.[0]?.fields ?? [];
-    const text = fields.map((f: { inferText: string }) => f.inferText).join('\n');
+    let items: unknown[] = [];
+    try {
+      const parsed = JSON.parse(rawText);
+      items = Array.isArray(parsed.items) ? parsed.items : [];
+    } catch {
+      items = [];
+    }
 
-    return new Response(JSON.stringify({ text, fields }), {
+    return new Response(JSON.stringify({ items }), {
       headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
     });
   } catch (err) {
