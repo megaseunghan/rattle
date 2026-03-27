@@ -1,0 +1,298 @@
+import { useState, useEffect } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TextInput,
+  TouchableOpacity,
+  ScrollView,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  ActivityIndicator,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { router, useLocalSearchParams } from 'expo-router';
+import { Colors } from '../../constants/colors';
+import { useIngredients } from '../../lib/hooks/useIngredients';
+import { Ingredient } from '../../types';
+
+const UNIT_PRESETS = ['g', 'kg', '개', 'L', 'mL', '봉', '팩', '병'];
+const CONTAINER_UNIT_PRESETS = ['통', '박스', '봉', '팩'];
+
+export default function EditIngredientScreen() {
+  const { id } = useLocalSearchParams<{ id: string }>();
+  const { data, update } = useIngredients();
+
+  const ingredient = data.find(i => i.id === id);
+
+  const [name, setName] = useState('');
+  const [category, setCategory] = useState('');
+  const [unit, setUnit] = useState('g');
+  const [currentStock, setCurrentStock] = useState('0');
+  const [minStock, setMinStock] = useState('0');
+  const [lastPrice, setLastPrice] = useState('0');
+  const [containerUnit, setContainerUnit] = useState('');
+  const [containerSize, setContainerSize] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (ingredient) {
+      setName(ingredient.name);
+      setCategory(ingredient.category);
+      setUnit(ingredient.unit);
+      setCurrentStock(String(ingredient.current_stock));
+      setMinStock(String(ingredient.min_stock));
+      setLastPrice(String(ingredient.last_price));
+      setContainerUnit(ingredient.container_unit ?? '');
+      setContainerSize(ingredient.container_size ? String(ingredient.container_size) : '');
+    }
+  }, [ingredient?.id]);
+
+  if (!ingredient) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <ActivityIndicator style={{ flex: 1 }} color={Colors.primary} />
+      </SafeAreaView>
+    );
+  }
+
+  async function handleSubmit() {
+    if (!name.trim()) {
+      Alert.alert('입력 오류', '식자재명을 입력해주세요.');
+      return;
+    }
+    if (containerUnit.trim() && !containerSize) {
+      Alert.alert('입력 오류', '컨테이너 단위를 설정하려면 크기도 입력해주세요.');
+      return;
+    }
+    const parsedSize = containerSize ? parseFloat(containerSize) : null;
+    if (parsedSize !== null && (isNaN(parsedSize) || parsedSize <= 0)) {
+      Alert.alert('입력 오류', '컨테이너 크기는 0보다 큰 숫자여야 합니다.');
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await update(id!, {
+        name: name.trim(),
+        category: category.trim() || '기타',
+        unit: unit.trim(),
+        current_stock: parseFloat(currentStock) || 0,
+        min_stock: parseFloat(minStock) || 0,
+        last_price: parseFloat(lastPrice) || 0,
+        container_unit: containerUnit.trim() || null,
+        container_size: parsedSize,
+      });
+      router.back();
+    } catch (e: any) {
+      Alert.alert('오류', e.message ?? '수정에 실패했습니다.');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => router.back()}>
+          <Text style={styles.back}>← 뒤로</Text>
+        </TouchableOpacity>
+        <Text style={styles.title}>식자재 수정</Text>
+        <TouchableOpacity
+          style={[styles.submitBtn, submitting && styles.submitBtnDisabled]}
+          onPress={handleSubmit}
+          disabled={submitting}
+        >
+          <Text style={styles.submitText}>{submitting ? '저장 중...' : '저장'}</Text>
+        </TouchableOpacity>
+      </View>
+
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+        <ScrollView contentContainerStyle={styles.content}>
+          <Text style={styles.label}>식자재명 *</Text>
+          <TextInput
+            style={styles.input}
+            value={name}
+            onChangeText={setName}
+            placeholder="예) 원두, 우유, 설탕"
+            placeholderTextColor={Colors.gray400}
+          />
+
+          <Text style={styles.label}>카테고리</Text>
+          <TextInput
+            style={styles.input}
+            value={category}
+            onChangeText={setCategory}
+            placeholder="예) 음료재료, 식품, 소모품"
+            placeholderTextColor={Colors.gray400}
+          />
+
+          <Text style={styles.label}>단위 *</Text>
+          <View style={styles.unitPresets}>
+            {UNIT_PRESETS.map(u => (
+              <TouchableOpacity
+                key={u}
+                style={[styles.unitChip, unit === u && styles.unitChipActive]}
+                onPress={() => setUnit(u)}
+              >
+                <Text style={[styles.unitChipText, unit === u && styles.unitChipTextActive]}>{u}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          <TextInput
+            style={[styles.input, styles.unitInput]}
+            value={unit}
+            onChangeText={setUnit}
+            placeholder="직접 입력"
+            placeholderTextColor={Colors.gray400}
+          />
+
+          <View style={styles.row}>
+            <View style={styles.halfField}>
+              <Text style={styles.label}>현재 재고</Text>
+              <TextInput
+                style={styles.input}
+                value={currentStock}
+                onChangeText={setCurrentStock}
+                keyboardType="numeric"
+                placeholder="0"
+                placeholderTextColor={Colors.gray400}
+              />
+            </View>
+            <View style={styles.halfField}>
+              <Text style={styles.label}>품절 임박 기준</Text>
+              <TextInput
+                style={styles.input}
+                value={minStock}
+                onChangeText={setMinStock}
+                keyboardType="numeric"
+                placeholder="0"
+                placeholderTextColor={Colors.gray400}
+              />
+            </View>
+          </View>
+
+          <Text style={styles.label}>최근 단가 (원/{unit || '단위'})</Text>
+          <TextInput
+            style={styles.input}
+            value={lastPrice}
+            onChangeText={setLastPrice}
+            keyboardType="numeric"
+            placeholder="0"
+            placeholderTextColor={Colors.gray400}
+          />
+
+          <View style={styles.containerSection}>
+            <Text style={styles.containerSectionTitle}>컨테이너 단위 설정</Text>
+            <Text style={styles.containerHint}>
+              💡 설정하면 발주·재고를 통/박스 단위로 표시할 수 있어요
+            </Text>
+            <View style={styles.unitPresets}>
+              {CONTAINER_UNIT_PRESETS.map(u => (
+                <TouchableOpacity
+                  key={u}
+                  style={[styles.unitChip, containerUnit === u && styles.unitChipActive]}
+                  onPress={() => setContainerUnit(containerUnit === u ? '' : u)}
+                >
+                  <Text style={[styles.unitChipText, containerUnit === u && styles.unitChipTextActive]}>{u}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <View style={styles.row}>
+              <View style={styles.halfField}>
+                <Text style={styles.label}>컨테이너 단위</Text>
+                <TextInput
+                  style={styles.input}
+                  value={containerUnit}
+                  onChangeText={setContainerUnit}
+                  placeholder="예) 통, 박스, 봉"
+                  placeholderTextColor={Colors.gray400}
+                />
+              </View>
+              <View style={styles.halfField}>
+                <Text style={styles.label}>1{containerUnit || '단위'} = ({unit})</Text>
+                <TextInput
+                  style={styles.input}
+                  value={containerSize}
+                  onChangeText={setContainerSize}
+                  keyboardType="numeric"
+                  placeholder="예) 5000"
+                  placeholderTextColor={Colors.gray400}
+                />
+              </View>
+            </View>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: Colors.gray50 },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    backgroundColor: Colors.white,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.gray100,
+  },
+  back: { fontSize: 15, color: Colors.primary, fontWeight: '600' },
+  title: { fontSize: 17, fontWeight: '700', color: Colors.black },
+  submitBtn: {
+    backgroundColor: Colors.primary,
+    paddingHorizontal: 16,
+    paddingVertical: 7,
+    borderRadius: 9,
+  },
+  submitBtnDisabled: { opacity: 0.5 },
+  submitText: { color: Colors.white, fontSize: 14, fontWeight: '700' },
+  content: { padding: 20, paddingBottom: 40 },
+  label: { fontSize: 14, fontWeight: '600', color: Colors.gray700, marginBottom: 6, marginTop: 16 },
+  input: {
+    backgroundColor: Colors.white,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Colors.gray200,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 15,
+    color: Colors.black,
+  },
+  unitPresets: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 },
+  unitChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: Colors.gray200,
+    backgroundColor: Colors.white,
+  },
+  unitChipActive: { borderColor: Colors.primary, backgroundColor: Colors.bg },
+  unitChipText: { fontSize: 14, color: Colors.gray600 },
+  unitChipTextActive: { color: Colors.primary, fontWeight: '700' },
+  unitInput: { marginTop: 0 },
+  row: { flexDirection: 'row', gap: 12 },
+  halfField: { flex: 1 },
+  containerSection: {
+    marginTop: 24,
+    backgroundColor: Colors.bg,
+    borderRadius: 12,
+    padding: 14,
+  },
+  containerSectionTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: Colors.dark,
+    marginBottom: 4,
+  },
+  containerHint: {
+    fontSize: 13,
+    color: Colors.dark,
+    marginBottom: 12,
+    lineHeight: 18,
+  },
+});
