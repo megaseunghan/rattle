@@ -23,8 +23,8 @@ CREATE TABLE ingredients (
   last_price NUMERIC DEFAULT 0,
   container_unit TEXT,
   container_size NUMERIC,
-  updated_at TIMESTAMPTZ DEFAULT NOW(),
-  created_at TIMESTAMPTZ DEFAULT NOW()
+  updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
 );
 
 -- 3. 발주 테이블
