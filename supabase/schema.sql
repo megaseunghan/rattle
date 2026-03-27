@@ -21,8 +21,10 @@ CREATE TABLE ingredients (
   unit TEXT DEFAULT 'g',
   min_stock NUMERIC DEFAULT 0,
   last_price NUMERIC DEFAULT 0,
-  updated_at TIMESTAMPTZ DEFAULT now() NOT NULL,
-  created_at TIMESTAMPTZ DEFAULT now() NOT NULL
+  container_unit TEXT,
+  container_size NUMERIC,
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- 3. 발주 테이블
@@ -303,13 +305,14 @@ BEGIN
 
   -- 각 발주 항목의 재고 증가 + 최근 단가 업데이트
   FOR v_item IN
-    SELECT ingredient_id, quantity, unit_price
-    FROM order_items
-    WHERE order_id = p_order_id AND ingredient_id IS NOT NULL
+    SELECT oi.ingredient_id, oi.quantity, oi.unit_price, i.container_size
+    FROM order_items oi
+    LEFT JOIN ingredients i ON i.id = oi.ingredient_id
+    WHERE oi.order_id = p_order_id AND oi.ingredient_id IS NOT NULL
   LOOP
     UPDATE ingredients
     SET
-      current_stock = current_stock + v_item.quantity,
+      current_stock = current_stock + v_item.quantity * COALESCE(v_item.container_size, 1),
       last_price = v_item.unit_price,
       updated_at = now()
     WHERE id = v_item.ingredient_id;
