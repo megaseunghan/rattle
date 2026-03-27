@@ -15,6 +15,7 @@ import { router } from 'expo-router';
 import * as DocumentPicker from 'expo-document-picker';
 import Papa from 'papaparse';
 import { Colors } from '../../constants/colors';
+import { formatStock } from '../../lib/utils/unit';
 import { useAuth } from '../../lib/contexts/AuthContext';
 import { useIngredients } from '../../lib/hooks/useIngredients';
 import { LoadingSpinner } from '../../lib/components/LoadingSpinner';
@@ -29,10 +30,12 @@ function IngredientRow({
   item,
   onUpdateStock,
   onDelete,
+  onEdit,
 }: {
   item: Ingredient;
   onUpdateStock: (id: string, stock: number) => void;
   onDelete: (id: string) => void;
+  onEdit: (id: string) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [stockValue, setStockValue] = useState(String(item.current_stock));
@@ -56,14 +59,14 @@ function IngredientRow({
   return (
     <View style={[styles.row, isLowStock && styles.rowLowStock]}>
       <View style={styles.rowLeft}>
-        <View style={styles.rowNameRow}>
+        <TouchableOpacity onPress={() => onEdit(item.id)} style={styles.rowNameRow}>
           <Text style={styles.rowName}>{item.name}</Text>
           {isLowStock && (
             <View style={styles.lowStockBadge}>
               <Text style={styles.lowStockText}>품절 임박</Text>
             </View>
           )}
-        </View>
+        </TouchableOpacity>
         <Text style={styles.rowCategory}>
           {item.category}{item.min_stock > 0 ? ` · 최소 ${item.min_stock}${item.unit}` : ''}
         </Text>
@@ -83,7 +86,7 @@ function IngredientRow({
         ) : (
           <TouchableOpacity onPress={() => setEditing(true)}>
             <Text style={[styles.stockValue, isLowStock && styles.stockValueLow]}>
-              {item.current_stock}{item.unit}
+              {formatStock(item.current_stock, item)}
             </Text>
           </TouchableOpacity>
         )}
@@ -267,8 +270,9 @@ export default function StockScreen() {
           renderItem={({ item }) => (
             <IngredientRow
               item={item}
-              onUpdateStock={handleUpdateStock}
+              onUpdateStock={(id, stock) => update(id, { current_stock: stock })}
               onDelete={remove}
+              onEdit={(id) => router.push(`/stock/${id}`)}
             />
           )}
         />
