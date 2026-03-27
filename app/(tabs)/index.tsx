@@ -47,20 +47,40 @@ export default function HomeScreen() {
   const [scanning, setScanning] = useState(false);
 
   async function handleScanReceipt() {
-    const permission = await ImagePicker.requestCameraPermissionsAsync();
-    if (!permission.granted) {
-      Alert.alert('권한 필요', '카메라 권한이 필요합니다. 설정에서 허용해주세요.');
-      return;
-    }
+    Alert.alert('납품서 스캔', '이미지를 어떻게 가져올까요?', [
+      {
+        text: '카메라로 촬영',
+        onPress: async () => {
+          const permission = await ImagePicker.requestCameraPermissionsAsync();
+          if (!permission.granted) {
+            Alert.alert('권한 필요', '카메라 권한이 필요합니다. 설정에서 허용해주세요.');
+            return;
+          }
+          const result = await ImagePicker.launchCameraAsync({ base64: true, quality: 0.8 });
+          if (!result.canceled && result.assets[0].base64) {
+            await processImage(result.assets[0].uri, result.assets[0].base64);
+          }
+        },
+      },
+      {
+        text: '앨범에서 선택',
+        onPress: async () => {
+          const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+          if (!permission.granted) {
+            Alert.alert('권한 필요', '사진 접근 권한이 필요합니다. 설정에서 허용해주세요.');
+            return;
+          }
+          const result = await ImagePicker.launchImageLibraryAsync({ base64: true, quality: 0.8 });
+          if (!result.canceled && result.assets[0].base64) {
+            await processImage(result.assets[0].uri, result.assets[0].base64);
+          }
+        },
+      },
+      { text: '취소', style: 'cancel' },
+    ]);
+  }
 
-    const result = await ImagePicker.launchCameraAsync({
-      base64: true,
-      quality: 0.8,
-    });
-
-    if (result.canceled || !result.assets[0].base64) return;
-
-    const { uri, base64 } = result.assets[0];
+  async function processImage(uri: string, base64: string) {
     setScanning(true);
     try {
       const ocrText = await callOcrEdgeFunction(base64);
