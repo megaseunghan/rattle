@@ -56,7 +56,10 @@ export async function callOcrEdgeFunction(imageBase64: string): Promise<string> 
     body: { image_base64: imageBase64 },
   });
 
-  if (error) throw new Error(`OCR 서버 오류: ${error.message}`);
+  if (error) {
+    const body = await (error as any).context?.json().catch(() => null);
+    throw new Error(body?.error ?? `OCR 서버 오류: ${error.message}`);
+  }
   if (!Array.isArray(data?.items)) throw new Error('OCR 응답에 items가 없습니다');
 
   // JSON 문자열로 반환 — 라우트 파라미터(ocrText)로 전달하기 위함
