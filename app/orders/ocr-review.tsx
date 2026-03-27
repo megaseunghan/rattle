@@ -54,7 +54,7 @@ export default function OcrReviewScreen() {
         };
       })
     );
-  }, [ingredientsLoading]);
+  }, [ingredientsLoading, ingredients]);
 
   function updateItem(index: number, patch: Partial<OcrLineItem>) {
     setItems(prev =>
