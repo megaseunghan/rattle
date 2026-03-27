@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import * as ImageManipulator from 'expo-image-manipulator';
 import { callOcrEdgeFunction } from '../../lib/services/ocr';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -80,10 +81,15 @@ export default function HomeScreen() {
     ]);
   }
 
-  async function processImage(uri: string, base64: string) {
+  async function processImage(uri: string, _base64: string) {
     setScanning(true);
     try {
-      const ocrText = await callOcrEdgeFunction(base64);
+      const manipulated = await ImageManipulator.manipulateAsync(
+        uri,
+        [{ resize: { width: 1200 } }],
+        { compress: 0.6, format: ImageManipulator.SaveFormat.JPEG, base64: true }
+      );
+      const ocrText = await callOcrEdgeFunction(manipulated.base64!);
       router.push({
         pathname: '/orders/ocr-review',
         params: { imageUri: uri, ocrText },
