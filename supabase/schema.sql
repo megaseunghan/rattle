@@ -176,6 +176,7 @@ CREATE OR REPLACE FUNCTION create_order_with_items(
 RETURNS UUID
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = public
 AS $$
 DECLARE
   v_order_id UUID;
@@ -230,6 +231,7 @@ CREATE OR REPLACE FUNCTION create_recipe_with_ingredients(
 RETURNS UUID
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = public
 AS $$
 DECLARE
   v_recipe_id UUID;
@@ -288,6 +290,7 @@ CREATE OR REPLACE FUNCTION deliver_order(
 RETURNS VOID
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = public
 AS $$
 DECLARE
   v_item RECORD;
