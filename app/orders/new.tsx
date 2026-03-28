@@ -174,7 +174,7 @@ export default function NewOrderScreen() {
   }
 
   const filteredIngredients = ingredients.filter(item => {
-    const matchSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchSearch = !searchQuery || item.name.toLowerCase().startsWith(searchQuery.toLowerCase());
     const matchCategory = activeCategory === '전체' || item.category === activeCategory;
     return matchSearch && matchCategory;
   });
