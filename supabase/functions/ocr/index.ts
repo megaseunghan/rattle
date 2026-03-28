@@ -1,10 +1,13 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
+
+const MAX_BASE64_SIZE = 10 * 1024 * 1024; // 10MB
 
 const PROMPT = `이 납품서/영수증 이미지에서 품목 정보를 추출하세요.
 반드시 다음 JSON 형식으로만 응답하세요:
@@ -18,12 +21,42 @@ serve(async (req: Request) => {
     return new Response('ok', { headers: CORS_HEADERS });
   }
 
+  // 인증 확인: Authorization 헤더로 호출자 검증
+  const authHeader = req.headers.get('Authorization');
+  if (!authHeader) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      status: 401,
+      headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+    });
+  }
+
+  const supabase = createClient(
+    Deno.env.get('SUPABASE_URL')!,
+    Deno.env.get('SUPABASE_ANON_KEY')!,
+    { global: { headers: { Authorization: authHeader } } },
+  );
+
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (authError || !user) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      status: 401,
+      headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+    });
+  }
+
   try {
     const { image_base64 } = await req.json();
 
     if (!image_base64) {
       return new Response(JSON.stringify({ error: 'image_base64 is required' }), {
         status: 400,
+        headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (image_base64.length > MAX_BASE64_SIZE) {
+      return new Response(JSON.stringify({ error: '이미지 크기가 너무 큽니다 (최대 10MB)' }), {
+        status: 413,
         headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
       });
     }

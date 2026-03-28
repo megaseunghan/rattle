@@ -51,7 +51,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // onAuthStateChange는 마운트 시 현재 세션을 즉시 emit — getSession() 중복 불필요
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        console.log('[Auth] event:', event, '| user:', session?.user?.email ?? 'null');
+        if (__DEV__) console.log('[Auth] event:', event);
         setSession(session);
         setUser(session?.user ?? null);
         if (session?.user) {
@@ -59,7 +59,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } else {
           setStore(null);
         }
-        console.log('[Auth] loading -> false');
         setLoading(false);
       }
     );

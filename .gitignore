@@ -44,6 +44,10 @@ yarn-error.*
 /ios
 /android
 
+# Supabase local temp (contains project-ref, pooler URL — do not commit)
+supabase/.temp/
+supabase/supabase/
+
 # Claude Code
 .claude/
 .omc/
