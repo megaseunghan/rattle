@@ -21,11 +21,15 @@ const CATEGORIES = ['식자재', '주류', '비품소모품', '기타'];
 export default function OcrReviewScreen() {
   const { imageUri, ocrText } = useLocalSearchParams<{ imageUri: string; ocrText: string }>();
   const { store } = useAuth();
-  const { create } = useOrders();
+  const orders = useOrders();
+  const { create } = orders;
   const { data: ingredients, loading: ingredientsLoading, create: createIngredient } = useIngredients();
 
   const [supplierName, setSupplierName] = useState('');
   const [orderDate, setOrderDate] = useState(new Date().toISOString().split('T')[0]);
+  const [showSupplierPicker, setShowSupplierPicker] = useState(false);
+
+  const existingSuppliers = [...new Set(orders.data.map(o => o.supplier_name).filter(Boolean))];
   const [items, setItems] = useState<ReviewItem[]>(() =>
     parseOcrItems(ocrText ?? '', ingredients).map(item => ({
       ...item,
@@ -201,13 +205,23 @@ export default function OcrReviewScreen() {
 
         <View style={styles.section}>
           <Text style={styles.label}>거래처</Text>
-          <TextInput
-            style={styles.input}
-            value={supplierName}
-            onChangeText={setSupplierName}
-            placeholder="거래처명 입력"
-            placeholderTextColor={Colors.gray400}
-          />
+          <View style={styles.supplierRow}>
+            <TextInput
+              style={[styles.input, { flex: 1 }]}
+              value={supplierName}
+              onChangeText={setSupplierName}
+              placeholder="거래처명 입력"
+              placeholderTextColor={Colors.gray400}
+            />
+            {existingSuppliers.length > 0 && (
+              <TouchableOpacity
+                style={styles.supplierPickerBtn}
+                onPress={() => setShowSupplierPicker(true)}
+              >
+                <Text style={styles.supplierPickerBtnText}>목록</Text>
+              </TouchableOpacity>
+            )}
+          </View>
           <Text style={styles.label}>발주일</Text>
           <TextInput
             style={styles.input}
@@ -261,6 +275,30 @@ export default function OcrReviewScreen() {
           )}
         </TouchableOpacity>
       </View>
+
+      {/* 거래처 선택 모달 */}
+      <Modal visible={showSupplierPicker} animationType="slide" transparent>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowSupplierPicker(false)}>
+          <TouchableOpacity activeOpacity={1} style={styles.modalSheet}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>거래처 선택</Text>
+              <TouchableOpacity onPress={() => setShowSupplierPicker(false)}>
+                <Text style={styles.modalClose}>닫기</Text>
+              </TouchableOpacity>
+            </View>
+            {existingSuppliers.map(name => (
+              <TouchableOpacity
+                key={name}
+                style={styles.supplierRow2}
+                onPress={() => { setSupplierName(name); setShowSupplierPicker(false); }}
+              >
+                <Text style={styles.supplierRowText}>{name}</Text>
+                {supplierName === name && <Text style={styles.supplierRowCheck}>✓</Text>}
+              </TouchableOpacity>
+            ))}
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
 
       {/* 신규 재고 등록 모달 */}
       <Modal visible={quickAddTarget !== null} animationType="slide" transparent>
@@ -564,4 +602,17 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary, alignItems: 'center',
   },
   confirmText: { fontSize: 14, color: Colors.white, fontWeight: '700' },
+  supplierRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  supplierPickerBtn: {
+    paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8,
+    backgroundColor: Colors.bg, borderWidth: 1, borderColor: Colors.pale,
+  },
+  supplierPickerBtnText: { fontSize: 13, color: Colors.dark, fontWeight: '600' },
+  supplierRow2: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 20, paddingVertical: 16,
+    borderBottomWidth: 1, borderBottomColor: Colors.gray100,
+  },
+  supplierRowText: { fontSize: 15, color: Colors.black },
+  supplierRowCheck: { fontSize: 16, color: Colors.primary, fontWeight: '700' },
 });
