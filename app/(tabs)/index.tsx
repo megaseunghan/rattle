@@ -9,6 +9,7 @@ import { router, useFocusEffect } from 'expo-router';
 import { Colors } from '../../constants/colors';
 import { useAuth } from '../../lib/contexts/AuthContext';
 import { useDashboard } from '../../lib/hooks/useDashboard';
+import { useTossSync } from '../../lib/hooks/useTossSync';
 import { LoadingSpinner } from '../../lib/components/LoadingSpinner';
 import { ErrorMessage } from '../../lib/components/ErrorMessage';
 
@@ -43,7 +44,8 @@ export default function HomeScreen() {
     error,
     refetch,
   } = useDashboard();
-  useFocusEffect(useCallback(() => { refetch(); }, []));
+  const { todaySales, todayOrderCount, loadTodaySales } = useTossSync();
+  useFocusEffect(useCallback(() => { refetch(); loadTodaySales(); }, []));
 
   const [scanning, setScanning] = useState(false);
 
@@ -132,6 +134,16 @@ export default function HomeScreen() {
             value={recipeCount > 0 ? `${avgMarginRate}%` : '-%'}
           />
         </View>
+        {todayOrderCount > 0 && (
+          <View style={styles.statRow}>
+            <StatCard
+              icon="stats-chart-outline"
+              label="오늘 매출 (POS)"
+              value={`${todaySales.toLocaleString('ko-KR')}원`}
+            />
+            <StatCard icon="receipt-outline" label="오늘 주문 (POS)" value={`${todayOrderCount}건`} />
+          </View>
+        )}
 
         {/* 빠른 실행 */}
         <Text style={styles.sectionTitle}>빠른 실행</Text>
@@ -143,7 +155,7 @@ export default function HomeScreen() {
           />
           <QuickAction icon="add-circle-outline" label="발주 추가" onPress={() => router.push('/orders/new')} />
           <QuickAction icon="bar-chart-outline" label="재고 확인" onPress={() => router.push('/(tabs)/stock')} />
-          <QuickAction icon="link-outline" label="POS 연동" />
+          <QuickAction icon="link-outline" label="POS 연동" onPress={() => router.push('/settings/pos-sync')} />
         </View>
 
         {/* 최근 활동 */}

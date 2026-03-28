@@ -8,6 +8,9 @@ CREATE TABLE stores (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   owner_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
   name TEXT NOT NULL,
+  toss_merchant_id TEXT,
+  toss_access_key TEXT,
+  toss_secret_key TEXT,
   created_at TIMESTAMPTZ DEFAULT now() NOT NULL
 );
 
@@ -82,6 +85,18 @@ CREATE TABLE ocr_results (
   created_at TIMESTAMPTZ DEFAULT now() NOT NULL
 );
 
+-- 8. Toss Place 매출 테이블
+CREATE TABLE toss_sales (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  store_id UUID REFERENCES stores(id) ON DELETE CASCADE NOT NULL,
+  toss_order_id TEXT NOT NULL UNIQUE,
+  order_at TIMESTAMPTZ NOT NULL,
+  total_amount NUMERIC NOT NULL,
+  status TEXT DEFAULT 'COMPLETED' CHECK (status IN ('COMPLETED', 'CANCELLED', 'REFUNDED')),
+  items JSONB DEFAULT '[]',
+  synced_at TIMESTAMPTZ DEFAULT now() NOT NULL
+);
+
 -- ============================================
 -- Row Level Security (RLS) 정책
 -- 매장 owner만 자기 데이터에 접근 가능
@@ -94,6 +109,7 @@ ALTER TABLE order_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE recipes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE recipe_ingredients ENABLE ROW LEVEL SECURITY;
 ALTER TABLE ocr_results ENABLE ROW LEVEL SECURITY;
+ALTER TABLE toss_sales ENABLE ROW LEVEL SECURITY;
 
 -- stores: 본인 매장만
 CREATE POLICY "Users can view own stores"
@@ -151,6 +167,11 @@ CREATE POLICY "Users can manage own ocr results"
   ON ocr_results FOR ALL
   USING (store_id IN (SELECT id FROM stores WHERE owner_id = auth.uid()));
 
+-- toss_sales: 본인 매장 매출만
+CREATE POLICY "Users can manage own toss sales"
+  ON toss_sales FOR ALL
+  USING (store_id IN (SELECT id FROM stores WHERE owner_id = auth.uid()));
+
 -- ============================================
 -- 인덱스 (성능 최적화)
 -- ============================================
@@ -161,6 +182,8 @@ CREATE INDEX idx_order_items_order ON order_items(order_id);
 CREATE INDEX idx_recipes_store ON recipes(store_id);
 CREATE INDEX idx_recipe_ingredients_recipe ON recipe_ingredients(recipe_id);
 CREATE INDEX idx_ocr_results_store ON ocr_results(store_id);
+CREATE INDEX idx_toss_sales_store ON toss_sales(store_id);
+CREATE INDEX idx_toss_sales_order_at ON toss_sales(store_id, order_at DESC);
 
 -- ============================================
 -- RPC 함수 (트랜잭션 보장)

@@ -84,6 +84,42 @@ export interface OcrParsedItem {
   price: number;
 }
 
+// Toss Place POS 연동
+export interface TossOrderItem {
+  itemId: string;
+  itemName: string;
+  quantity: number;
+  unitPrice: number;
+  totalPrice: number;
+}
+
+export interface TossOrder {
+  orderId: string;
+  orderAt: string;
+  totalAmount: number;
+  status: 'COMPLETED' | 'CANCELLED' | 'REFUNDED';
+  items: TossOrderItem[];
+}
+
+export interface TossCatalogItem {
+  itemId: string;
+  itemName: string;
+  categoryName: string;
+  price: number;
+  isAvailable: boolean;
+}
+
+export interface TossSale {
+  id: string;
+  store_id: string;
+  toss_order_id: string;
+  order_at: string;
+  total_amount: number;
+  status: 'COMPLETED' | 'CANCELLED' | 'REFUNDED';
+  items: TossOrderItem[];
+  synced_at: string;
+}
+
 // OCR 라인 아이템 (리뷰 화면용)
 export interface OcrLineItem {
   raw: string;                          // Gemini 응답 원본 아이템 (JSON.stringify된 문자열)
