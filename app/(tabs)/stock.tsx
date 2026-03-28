@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   TextInput,
   Alert,
+  ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -57,16 +58,20 @@ function IngredientRow({
   }
 
   return (
-    <View style={[styles.row, isLowStock && styles.rowLowStock]}>
+    <TouchableOpacity
+      style={[styles.row, isLowStock && styles.rowLowStock]}
+      onPress={() => onEdit(item.id)}
+      activeOpacity={0.7}
+    >
       <View style={styles.rowLeft}>
-        <TouchableOpacity onPress={() => onEdit(item.id)} style={styles.rowNameRow}>
+        <View style={styles.rowNameRow}>
           <Text style={styles.rowName}>{item.name}</Text>
           {isLowStock && (
             <View style={styles.lowStockBadge}>
               <Text style={styles.lowStockText}>품절 임박</Text>
             </View>
           )}
-        </TouchableOpacity>
+        </View>
         <Text style={styles.rowCategory}>
           {item.category}{item.min_stock > 0 ? ` · 최소 ${item.min_stock}${item.unit}` : ''}{item.supplier_name ? ` · ${item.supplier_name}` : ''}
         </Text>
@@ -94,7 +99,7 @@ function IngredientRow({
           <Text style={styles.deleteBtnText}>✕</Text>
         </TouchableOpacity>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 }
 
@@ -103,11 +108,17 @@ export default function StockScreen() {
   const { data, loading, error, refetch, update, remove, bulkCreate } = useIngredients();
   const [csvUploading, setCsvUploading] = useState(false);
   const [activeTab, setActiveTab] = useState<FilterTab>('전체');
+  const [activeSupplier, setActiveSupplier] = useState('전체');
 
   useFocusEffect(useCallback(() => { refetch(); }, []));
 
+  const suppliers = ['전체', ...Array.from(new Set(
+    data.filter(i => i.supplier_name).map(i => i.supplier_name as string)
+  )).sort()];
+
   const filtered = data
     .filter(item => activeTab === '전체' || item.category === activeTab)
+    .filter(item => activeSupplier === '전체' || item.supplier_name === activeSupplier)
     .sort((a, b) => {
       const aLow = a.current_stock <= a.min_stock ? 0 : 1;
       const bLow = b.current_stock <= b.min_stock ? 0 : 1;
@@ -251,6 +262,27 @@ export default function StockScreen() {
         })}
       </View>
 
+      {/* 거래처 필터 (거래처가 1개 이상일 때만 표시) */}
+      {suppliers.length > 1 && (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.supplierBar}
+        >
+          {suppliers.map(s => (
+            <TouchableOpacity
+              key={s}
+              style={[styles.supplierChip, activeSupplier === s && styles.supplierChipActive]}
+              onPress={() => setActiveSupplier(s)}
+            >
+              <Text style={[styles.supplierChipText, activeSupplier === s && styles.supplierChipTextActive]}>
+                {s}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      )}
+
       {data.length === 0 ? (
         <View style={styles.emptyState}>
           <Ionicons name="bar-chart-outline" size={48} color={Colors.gray300} style={styles.emptyIcon} />
@@ -318,6 +350,26 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
     gap: 6,
   },
+  supplierBar: {
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+    gap: 6,
+    flexDirection: 'row',
+  },
+  supplierChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: Colors.gray200,
+    backgroundColor: Colors.white,
+  },
+  supplierChipActive: {
+    backgroundColor: Colors.dark,
+    borderColor: Colors.dark,
+  },
+  supplierChipText: { fontSize: 12, fontWeight: '600', color: Colors.gray500 },
+  supplierChipTextActive: { color: Colors.white },
   tab: {
     paddingHorizontal: 12,
     paddingVertical: 6,

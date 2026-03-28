@@ -12,7 +12,16 @@ import { useDashboard } from '../../lib/hooks/useDashboard';
 import { LoadingSpinner } from '../../lib/components/LoadingSpinner';
 import { ErrorMessage } from '../../lib/components/ErrorMessage';
 
-function StatCard({ icon, label, value }: { icon: keyof typeof Ionicons.glyphMap; label: string; value: string }) {
+function StatCard({ icon, label, value, onPress }: { icon: keyof typeof Ionicons.glyphMap; label: string; value: string; onPress?: () => void }) {
+  if (onPress) {
+    return (
+      <TouchableOpacity style={styles.statCard} onPress={onPress} activeOpacity={0.7}>
+        <Ionicons name={icon} size={22} color={Colors.primary} style={styles.statIcon} />
+        <Text style={styles.statValue}>{value}</Text>
+        <Text style={styles.statLabel}>{label}</Text>
+      </TouchableOpacity>
+    );
+  }
   return (
     <View style={styles.statCard}>
       <Ionicons name={icon} size={22} color={Colors.primary} style={styles.statIcon} />
@@ -59,7 +68,7 @@ export default function HomeScreen() {
           }
           const result = await ImagePicker.launchCameraAsync({ base64: true, quality: 0.8 });
           if (!result.canceled && result.assets[0].base64) {
-            await processImage(result.assets[0].uri, result.assets[0].base64);
+            await processImages([{ uri: result.assets[0].uri, base64: result.assets[0].base64 }]);
           }
         },
       },
@@ -71,9 +80,14 @@ export default function HomeScreen() {
             Alert.alert('권한 필요', '사진 접근 권한이 필요합니다. 설정에서 허용해주세요.');
             return;
           }
-          const result = await ImagePicker.launchImageLibraryAsync({ base64: true, quality: 0.8 });
-          if (!result.canceled && result.assets[0].base64) {
-            await processImage(result.assets[0].uri, result.assets[0].base64);
+          const result = await ImagePicker.launchImageLibraryAsync({
+            base64: true,
+            quality: 0.8,
+            allowsMultipleSelection: true,
+          });
+          if (!result.canceled && result.assets.length > 0) {
+            const assets = result.assets.filter(a => a.base64) as Array<{ uri: string; base64: string }>;
+            if (assets.length > 0) await processImages(assets);
           }
         },
       },
@@ -81,18 +95,23 @@ export default function HomeScreen() {
     ]);
   }
 
-  async function processImage(uri: string, _base64: string) {
+  async function processImages(assets: Array<{ uri: string; base64: string }>) {
     setScanning(true);
     try {
-      const manipulated = await ImageManipulator.manipulateAsync(
-        uri,
-        [{ resize: { width: 1200 } }],
-        { compress: 0.6, format: ImageManipulator.SaveFormat.JPEG, base64: true }
-      );
-      const ocrText = await callOcrEdgeFunction(manipulated.base64!);
+      const allItems: unknown[] = [];
+      for (const asset of assets) {
+        const manipulated = await ImageManipulator.manipulateAsync(
+          asset.uri,
+          [{ resize: { width: 1200 } }],
+          { compress: 0.6, format: ImageManipulator.SaveFormat.JPEG, base64: true }
+        );
+        const ocrText = await callOcrEdgeFunction(manipulated.base64!);
+        const parsed = JSON.parse(ocrText);
+        if (Array.isArray(parsed)) allItems.push(...parsed);
+      }
       router.push({
         pathname: '/orders/ocr-review',
-        params: { imageUri: uri, ocrText },
+        params: { imageUri: assets[0].uri, ocrText: JSON.stringify(allItems) },
       });
     } catch (e: any) {
       Alert.alert('OCR 오류', e.message);
@@ -121,15 +140,31 @@ export default function HomeScreen() {
 
         {/* 요약 카드 */}
         <View style={styles.statRow}>
-          <StatCard icon="document-text-outline" label="이번 달 발주" value={`${monthlyOrderCount}건`} />
-          <StatCard icon="warning-outline" label="품절 임박" value={`${lowStockCount}개`} />
+          <StatCard
+            icon="document-text-outline"
+            label="이번 달 발주"
+            value={`${monthlyOrderCount}건`}
+            onPress={() => router.push('/(tabs)/orders')}
+          />
+          <StatCard
+            icon="warning-outline"
+            label="품절 임박"
+            value={`${lowStockCount}개`}
+            onPress={() => router.push('/(tabs)/stock')}
+          />
         </View>
         <View style={styles.statRow}>
-          <StatCard icon="restaurant-outline" label="레시피" value={`${recipeCount}개`} />
+          <StatCard
+            icon="restaurant-outline"
+            label="레시피"
+            value={`${recipeCount}개`}
+            onPress={() => router.push('/(tabs)/recipes')}
+          />
           <StatCard
             icon="cash-outline"
             label="평균 마진율"
             value={recipeCount > 0 ? `${avgMarginRate}%` : '-%'}
+            onPress={() => router.push({ pathname: '/(tabs)/recipes', params: { sort: 'margin' } })}
           />
         </View>
 

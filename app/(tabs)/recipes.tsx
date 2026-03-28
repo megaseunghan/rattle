@@ -1,13 +1,21 @@
-import { useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, Alert } from 'react-native';
+import { useState, useCallback } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, FlatList, Alert, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { router, useFocusEffect } from 'expo-router';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { Colors } from '../../constants/colors';
 import { useRecipes } from '../../lib/hooks/useRecipes';
 import { LoadingSpinner } from '../../lib/components/LoadingSpinner';
 import { ErrorMessage } from '../../lib/components/ErrorMessage';
 import { RecipeWithIngredients } from '../../lib/services/recipes';
+
+type SortKey = 'name' | 'margin_desc' | 'cost_asc';
+
+const SORT_OPTIONS: { key: SortKey; label: string }[] = [
+  { key: 'name', label: '이름순' },
+  { key: 'margin_desc', label: '마진 높은 순' },
+  { key: 'cost_asc', label: '원가 낮은 순' },
+];
 
 function RecipeCard({
   recipe,
@@ -63,7 +71,30 @@ function RecipeCard({
 
 export default function RecipesScreen() {
   const { data, loading, error, refetch, remove } = useRecipes();
-  useFocusEffect(useCallback(() => { refetch(); }, []));
+  const { sort: sortParam } = useLocalSearchParams<{ sort?: string }>();
+
+  const [sortBy, setSortBy] = useState<SortKey>('name');
+  const [activeCategory, setActiveCategory] = useState('전체');
+
+  useFocusEffect(useCallback(() => {
+    if (sortParam === 'margin') setSortBy('margin_desc');
+    refetch();
+    return () => {
+      setSortBy('name');
+      setActiveCategory('전체');
+    };
+  }, [sortParam]));
+
+  const categories = ['전체', ...Array.from(new Set(data.map(r => r.category))).sort()];
+
+  const displayed = data
+    .filter(r => activeCategory === '전체' || r.category === activeCategory)
+    .slice()
+    .sort((a, b) => {
+      if (sortBy === 'margin_desc') return b.margin_rate - a.margin_rate;
+      if (sortBy === 'cost_asc') return a.cost - b.cost;
+      return a.name.localeCompare(b.name);
+    });
 
   if (loading) return <LoadingSpinner />;
   if (error) return <ErrorMessage message={error} onRetry={refetch} />;
@@ -71,7 +102,10 @@ export default function RecipesScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>레시피</Text>
+        <View>
+          <Text style={styles.title}>레시피</Text>
+          {data.length > 0 && <Text style={styles.subtitle}>{data.length}개</Text>}
+        </View>
         <TouchableOpacity style={styles.addButton} onPress={() => router.push('/recipes/new')}>
           <Text style={styles.addText}>+ 새 레시피</Text>
         </TouchableOpacity>
@@ -89,12 +123,54 @@ export default function RecipesScreen() {
           </TouchableOpacity>
         </View>
       ) : (
-        <FlatList
-          data={data}
-          keyExtractor={item => item.id}
-          contentContainerStyle={styles.listContent}
-          renderItem={({ item }) => <RecipeCard recipe={item} onDelete={remove} />}
-        />
+        <>
+          {/* 정렬 옵션 */}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.sortBar}
+          >
+            {SORT_OPTIONS.map(opt => (
+              <TouchableOpacity
+                key={opt.key}
+                style={[styles.sortChip, sortBy === opt.key && styles.sortChipActive]}
+                onPress={() => setSortBy(opt.key)}
+              >
+                <Text style={[styles.sortChipText, sortBy === opt.key && styles.sortChipTextActive]}>
+                  {opt.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+
+          {/* 카테고리 필터 (카테고리 2개 이상일 때만) */}
+          {categories.length > 2 && (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.categoryBar}
+            >
+              {categories.map(cat => (
+                <TouchableOpacity
+                  key={cat}
+                  style={[styles.categoryChip, activeCategory === cat && styles.categoryChipActive]}
+                  onPress={() => setActiveCategory(cat)}
+                >
+                  <Text style={[styles.categoryChipText, activeCategory === cat && styles.categoryChipTextActive]}>
+                    {cat}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          )}
+
+          <FlatList
+            data={displayed}
+            keyExtractor={item => item.id}
+            contentContainerStyle={styles.listContent}
+            renderItem={({ item }) => <RecipeCard recipe={item} onDelete={remove} />}
+          />
+        </>
       )}
     </SafeAreaView>
   );
@@ -110,6 +186,7 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
   },
   title: { fontSize: 22, fontWeight: '800', color: Colors.black },
+  subtitle: { fontSize: 14, color: Colors.gray500, marginTop: 2 },
   addButton: {
     backgroundColor: Colors.primary,
     paddingHorizontal: 16,
@@ -117,6 +194,46 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   addText: { color: Colors.white, fontSize: 14, fontWeight: '700' },
+  sortBar: {
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+    gap: 6,
+    flexDirection: 'row',
+  },
+  sortChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: Colors.gray200,
+    backgroundColor: Colors.white,
+  },
+  sortChipActive: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+  },
+  sortChipText: { fontSize: 13, fontWeight: '600', color: Colors.gray500 },
+  sortChipTextActive: { color: Colors.white },
+  categoryBar: {
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+    gap: 6,
+    flexDirection: 'row',
+  },
+  categoryChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: Colors.gray200,
+    backgroundColor: Colors.white,
+  },
+  categoryChipActive: {
+    backgroundColor: Colors.dark,
+    borderColor: Colors.dark,
+  },
+  categoryChipText: { fontSize: 12, fontWeight: '600', color: Colors.gray500 },
+  categoryChipTextActive: { color: Colors.white },
   listContent: { padding: 16, gap: 12 },
   recipeCard: {
     backgroundColor: Colors.white,
