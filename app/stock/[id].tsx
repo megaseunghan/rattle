@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   ScrollView,
   Alert,
+  Modal,
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
@@ -14,6 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Colors } from '../../constants/colors';
 import { useIngredients } from '../../lib/hooks/useIngredients';
+import { useOrders } from '../../lib/hooks/useOrders';
 import { getIngredientById } from '../../lib/services/ingredients';
 import { Ingredient } from '../../types';
 import { LoadingSpinner } from '../../lib/components/LoadingSpinner';
@@ -25,6 +27,7 @@ const CONTAINER_UNIT_PRESETS = ['통', '박스', '봉', '팩'];
 export default function EditIngredientScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { update } = useIngredients();
+  const ordersHook = useOrders();
 
   const [ingredient, setIngredient] = useState<Ingredient | null>(null);
   const [fetchLoading, setFetchLoading] = useState(true);
@@ -38,7 +41,11 @@ export default function EditIngredientScreen() {
   const [lastPrice, setLastPrice] = useState('0');
   const [containerUnit, setContainerUnit] = useState('');
   const [containerSize, setContainerSize] = useState('');
+  const [supplierName, setSupplierName] = useState('');
+  const [showSupplierPicker, setShowSupplierPicker] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+
+  const existingSuppliers = [...new Set(ordersHook.data.map(o => o.supplier_name).filter(Boolean))];
 
   useEffect(() => {
     if (!id) return;
@@ -54,6 +61,7 @@ export default function EditIngredientScreen() {
         setLastPrice(String(item.last_price));
         setContainerUnit(item.container_unit ?? '');
         setContainerSize(item.container_size ? String(item.container_size) : '');
+        setSupplierName(item.supplier_name ?? '');
       })
       .catch((e) => setFetchError(e.message ?? '식자재를 불러오지 못했습니다.'))
       .finally(() => setFetchLoading(false));
@@ -92,6 +100,7 @@ export default function EditIngredientScreen() {
         last_price: parseFloat(lastPrice) || 0,
         container_unit: containerUnit.trim() || null,
         container_size: parsedSize,
+        supplier_name: supplierName.trim() || null,
       });
       router.back();
     } catch (e: any) {
@@ -136,6 +145,22 @@ export default function EditIngredientScreen() {
             placeholder="예) 음료재료, 식품, 소모품"
             placeholderTextColor={Colors.gray400}
           />
+
+          <Text style={styles.label}>거래처 (발주 담당)</Text>
+          <View style={styles.supplierRow}>
+            <TextInput
+              style={[styles.input, { flex: 1 }]}
+              value={supplierName}
+              onChangeText={setSupplierName}
+              placeholder="예) 서울식품"
+              placeholderTextColor={Colors.gray400}
+            />
+            {existingSuppliers.length > 0 && (
+              <TouchableOpacity style={styles.supplierPickerBtn} onPress={() => setShowSupplierPicker(true)}>
+                <Text style={styles.supplierPickerBtnText}>목록</Text>
+              </TouchableOpacity>
+            )}
+          </View>
 
           <Text style={styles.label}>단위 *</Text>
           <View style={styles.unitPresets}>
@@ -234,6 +259,29 @@ export default function EditIngredientScreen() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <Modal visible={showSupplierPicker} animationType="slide" transparent>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowSupplierPicker(false)}>
+          <TouchableOpacity activeOpacity={1} style={styles.supplierSheet}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>거래처 선택</Text>
+              <TouchableOpacity onPress={() => setShowSupplierPicker(false)}>
+                <Text style={styles.modalClose}>닫기</Text>
+              </TouchableOpacity>
+            </View>
+            {existingSuppliers.map(s => (
+              <TouchableOpacity
+                key={s}
+                style={styles.supplierItem}
+                onPress={() => { setSupplierName(s); setShowSupplierPicker(false); }}
+              >
+                <Text style={styles.supplierItemText}>{s}</Text>
+                {supplierName === s && <Text style={styles.supplierItemCheck}>✓</Text>}
+              </TouchableOpacity>
+            ))}
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -305,4 +353,25 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     lineHeight: 18,
   },
+  supplierRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  supplierPickerBtn: {
+    paddingHorizontal: 12, paddingVertical: 12, borderRadius: 10,
+    backgroundColor: Colors.bg, borderWidth: 1, borderColor: Colors.pale,
+  },
+  supplierPickerBtnText: { fontSize: 13, color: Colors.dark, fontWeight: '600' },
+  modalOverlay: { flex: 1, backgroundColor: Colors.overlay, justifyContent: 'flex-end' },
+  supplierSheet: { backgroundColor: Colors.white, borderTopLeftRadius: 20, borderTopRightRadius: 20 },
+  modalHeader: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    padding: 20, borderBottomWidth: 1, borderBottomColor: Colors.gray100,
+  },
+  modalTitle: { fontSize: 17, fontWeight: '700', color: Colors.black },
+  modalClose: { fontSize: 15, color: Colors.primary, fontWeight: '600' },
+  supplierItem: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingHorizontal: 20, paddingVertical: 16,
+    borderBottomWidth: 1, borderBottomColor: Colors.gray100,
+  },
+  supplierItemText: { fontSize: 15, color: Colors.black },
+  supplierItemCheck: { fontSize: 16, color: Colors.primary, fontWeight: '700' },
 });

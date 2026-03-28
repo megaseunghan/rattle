@@ -33,11 +33,15 @@ interface OrderItemForm {
 
 export default function NewOrderScreen() {
   const { store } = useAuth();
-  const { create } = useOrders();
+  const ordersHook = useOrders();
+  const { create } = ordersHook;
   const { data: ingredients, create: createIngredient } = useIngredients();
 
   const [supplierName, setSupplierName] = useState('');
   const [orderDate, setOrderDate] = useState(new Date().toISOString().split('T')[0]);
+  const [showSupplierPicker, setShowSupplierPicker] = useState(false);
+
+  const existingSuppliers = [...new Set(ordersHook.data.map(o => o.supplier_name).filter(Boolean))];
   const [items, setItems] = useState<OrderItemForm[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [showPicker, setShowPicker] = useState(false);
@@ -79,6 +83,7 @@ export default function NewOrderScreen() {
         last_price: 0,
         container_unit: null,
         container_size: null,
+        supplier_name: null,
       });
       setShowQuickAdd(false);
       setQuickName('');
@@ -193,13 +198,20 @@ export default function NewOrderScreen() {
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={styles.content}>
           <Text style={styles.label}>거래처명</Text>
-          <TextInput
-            style={styles.input}
-            value={supplierName}
-            onChangeText={setSupplierName}
-            placeholder="거래처명 입력"
-            placeholderTextColor={Colors.gray400}
-          />
+          <View style={styles.supplierRow}>
+            <TextInput
+              style={[styles.input, { flex: 1 }]}
+              value={supplierName}
+              onChangeText={setSupplierName}
+              placeholder="거래처명 입력"
+              placeholderTextColor={Colors.gray400}
+            />
+            {existingSuppliers.length > 0 && (
+              <TouchableOpacity style={styles.supplierPickerBtn} onPress={() => setShowSupplierPicker(true)}>
+                <Text style={styles.supplierPickerBtnText}>목록</Text>
+              </TouchableOpacity>
+            )}
+          </View>
 
           <Text style={styles.label}>발주일</Text>
           <TextInput
@@ -255,6 +267,30 @@ export default function NewOrderScreen() {
           )}
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* 거래처 선택 모달 */}
+      <Modal visible={showSupplierPicker} animationType="slide" transparent>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowSupplierPicker(false)}>
+          <TouchableOpacity activeOpacity={1} style={styles.supplierSheet}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>거래처 선택</Text>
+              <TouchableOpacity onPress={() => setShowSupplierPicker(false)}>
+                <Text style={styles.modalClose}>닫기</Text>
+              </TouchableOpacity>
+            </View>
+            {existingSuppliers.map(name => (
+              <TouchableOpacity
+                key={name}
+                style={styles.supplierItem}
+                onPress={() => { setSupplierName(name); setShowSupplierPicker(false); }}
+              >
+                <Text style={styles.supplierItemText}>{name}</Text>
+                {supplierName === name && <Text style={styles.supplierItemCheck}>✓</Text>}
+              </TouchableOpacity>
+            ))}
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
 
       {/* 식자재 선택 모달 */}
       <Modal visible={showPicker} animationType="slide" transparent>
@@ -635,4 +671,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   quickSubmitText: { fontSize: 14, color: Colors.white, fontWeight: '700' },
+  supplierRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  supplierPickerBtn: {
+    paddingHorizontal: 12, paddingVertical: 12, borderRadius: 10,
+    backgroundColor: Colors.bg, borderWidth: 1, borderColor: Colors.pale,
+  },
+  supplierPickerBtnText: { fontSize: 13, color: Colors.dark, fontWeight: '600' },
+  supplierSheet: {
+    backgroundColor: Colors.white, borderTopLeftRadius: 20, borderTopRightRadius: 20,
+  },
+  supplierItem: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingHorizontal: 20, paddingVertical: 16,
+    borderBottomWidth: 1, borderBottomColor: Colors.gray100,
+  },
+  supplierItemText: { fontSize: 15, color: Colors.black },
+  supplierItemCheck: { fontSize: 16, color: Colors.primary, fontWeight: '700' },
 });

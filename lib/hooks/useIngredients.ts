@@ -15,7 +15,7 @@ interface UseIngredientsResult {
   error: string | null;
   refetch: () => Promise<void>;
   create: (data: Omit<Ingredient, 'id' | 'updated_at' | 'created_at'>) => Promise<void>;
-  update: (id: string, data: Partial<Pick<Ingredient, 'name' | 'category' | 'current_stock' | 'unit' | 'min_stock' | 'last_price' | 'container_unit' | 'container_size'>>) => Promise<void>;
+  update: (id: string, data: Partial<Pick<Ingredient, 'name' | 'category' | 'current_stock' | 'unit' | 'min_stock' | 'last_price' | 'container_unit' | 'container_size' | 'supplier_name'>>) => Promise<void>;
   remove: (id: string) => Promise<void>;
   bulkCreate: (items: Omit<Ingredient, 'id' | 'updated_at' | 'created_at'>[]) => Promise<number>;
 }
