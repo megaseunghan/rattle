@@ -68,7 +68,7 @@ function IngredientRow({
           )}
         </TouchableOpacity>
         <Text style={styles.rowCategory}>
-          {item.category}{item.min_stock > 0 ? ` · 최소 ${item.min_stock}${item.unit}` : ''}
+          {item.category}{item.min_stock > 0 ? ` · 최소 ${item.min_stock}${item.unit}` : ''}{item.supplier_name ? ` · ${item.supplier_name}` : ''}
         </Text>
       </View>
 
@@ -167,6 +167,7 @@ export default function StockScreen() {
         last_price: parseFloat(row.last_price) || 0,
         container_unit: null,
         container_size: null,
+        supplier_name: null,
       });
     });
 

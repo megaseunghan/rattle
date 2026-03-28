@@ -75,6 +75,7 @@ describe('ingredients 서비스', () => {
         last_price: 2500,
         container_unit: null,
         container_size: null,
+        supplier_name: null,
       });
 
       expect(mockSupabase.from).toHaveBeenCalledWith('ingredients');

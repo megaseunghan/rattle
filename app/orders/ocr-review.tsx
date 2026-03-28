@@ -127,6 +127,7 @@ export default function OcrReviewScreen() {
         last_price: 0,
         container_unit: null,
         container_size: null,
+        supplier_name: null,
       });
       // ingredients가 리프레시되면 useEffect에서 자동 매칭됨
       // 이름이 완전 일치할 경우를 위해 미리 수동 매칭

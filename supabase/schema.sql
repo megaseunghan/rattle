@@ -23,6 +23,7 @@ CREATE TABLE ingredients (
   last_price NUMERIC DEFAULT 0,
   container_unit TEXT,
   container_size NUMERIC,
+  supplier_name TEXT,
   updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
   created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
 );

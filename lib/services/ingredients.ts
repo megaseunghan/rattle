@@ -38,7 +38,7 @@ export async function createIngredient(
 
 export async function updateIngredient(
   id: string,
-  data: Partial<Pick<Ingredient, 'name' | 'category' | 'current_stock' | 'unit' | 'min_stock' | 'last_price' | 'container_unit' | 'container_size'>>
+  data: Partial<Pick<Ingredient, 'name' | 'category' | 'current_stock' | 'unit' | 'min_stock' | 'last_price' | 'container_unit' | 'container_size' | 'supplier_name'>>
 ): Promise<Ingredient> {
   const { data: result, error } = await supabase
     .from('ingredients')

@@ -13,13 +13,13 @@ const mockIngredients: Ingredient[] = [
   {
     id: 'ing-1', store_id: 's1', name: '소주', category: '주류',
     current_stock: 10, unit: '병', min_stock: 5, last_price: 1500,
-    container_unit: null, container_size: null,
+    container_unit: null, container_size: null, supplier_name: null,
     updated_at: '', created_at: '',
   },
   {
     id: 'ing-2', store_id: 's1', name: '맥주', category: '주류',
     current_stock: 20, unit: '캔', min_stock: 10, last_price: 2000,
-    container_unit: null, container_size: null,
+    container_unit: null, container_size: null, supplier_name: null,
     updated_at: '', created_at: '',
   },
 ];
