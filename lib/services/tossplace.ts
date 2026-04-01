@@ -1,24 +1,13 @@
+import { supabase } from '../supabase';
 import { TossOrder, TossCatalogItem } from '../../types';
 
-const TOSS_BASE_URL = 'https://api.tossplace.com/api-public/openapi/v1';
-const ACCESS_KEY = process.env.EXPO_PUBLIC_TOSS_ACCESS_KEY ?? '';
-const ACCESS_SECRET = process.env.EXPO_PUBLIC_TOSS_ACCESS_SECRET ?? '';
-
-async function tossRequest<T>(path: string): Promise<T> {
-  const response = await fetch(`${TOSS_BASE_URL}${path}`, {
-    headers: {
-      'x-access-key': ACCESS_KEY,
-      'x-secret-key': ACCESS_SECRET,
-      'Content-Type': 'application/json',
-    },
+async function tossProxyRequest<T>(path: string): Promise<T> {
+  const { data, error } = await supabase.functions.invoke('toss-proxy', {
+    body: { path },
   });
 
-  if (!response.ok) {
-    const body = await response.json().catch(() => ({}));
-    throw new Error(body?.message ?? `Toss Place API 오류: ${response.status}`);
-  }
-
-  return response.json();
+  if (error) throw new Error(error.message ?? 'Toss Place API 오류');
+  return data as T;
 }
 
 export async function fetchTossOrders(
@@ -27,14 +16,14 @@ export async function fetchTossOrders(
   dateTo: string,
 ): Promise<TossOrder[]> {
   const params = new URLSearchParams({ dateFrom, dateTo });
-  const data = await tossRequest<{ orders: TossOrder[] }>(
+  const data = await tossProxyRequest<{ orders: TossOrder[] }>(
     `/merchants/${merchantId}/order/orders?${params}`,
   );
   return data.orders ?? [];
 }
 
 export async function fetchTossCatalog(merchantId: string): Promise<TossCatalogItem[]> {
-  const data = await tossRequest<{ items: TossCatalogItem[] }>(
+  const data = await tossProxyRequest<{ items: TossCatalogItem[] }>(
     `/merchants/${merchantId}/catalog/items`,
   );
   return data.items ?? [];
