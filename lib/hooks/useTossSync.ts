@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../supabase';
 import { fetchTossOrders, fetchTossCatalog } from '../services/tossplace';
-import { TossOrder, TossCatalogItem, TossSale } from '../../types';
+import { TossOrder, TossCatalogItem } from '../../types';
 
 interface TossSyncState {
   loading: boolean;
@@ -26,23 +26,19 @@ export function useTossSync(): UseTossSyncResult {
   const [todaySales, setTodaySales] = useState(0);
   const [todayOrderCount, setTodayOrderCount] = useState(0);
 
-  async function getTossCredentials() {
+  async function getMerchantId(): Promise<string> {
     if (!store) throw new Error('매장 정보가 없습니다');
 
     const { data, error } = await supabase
       .from('stores')
-      .select('toss_merchant_id, toss_access_key, toss_secret_key')
+      .select('toss_merchant_id')
       .eq('id', store.id)
       .single();
 
     if (error) throw new Error(error.message);
     if (!data.toss_merchant_id) throw new Error('Toss Place 연동이 설정되지 않았습니다');
 
-    return {
-      merchantId: data.toss_merchant_id as string,
-      accessKey: data.toss_access_key as string,
-      secretKey: data.toss_secret_key as string,
-    };
+    return data.toss_merchant_id as string;
   }
 
   const syncOrders = useCallback(async (dateFrom: string, dateTo: string): Promise<TossOrder[]> => {
@@ -50,10 +46,9 @@ export function useTossSync(): UseTossSyncResult {
     setLoading(true);
     setError(null);
     try {
-      const { merchantId, accessKey, secretKey } = await getTossCredentials();
-      const orders = await fetchTossOrders(merchantId, accessKey, secretKey, dateFrom, dateTo);
+      const merchantId = await getMerchantId();
+      const orders = await fetchTossOrders(merchantId, dateFrom, dateTo);
 
-      // toss_sales 테이블에 upsert
       if (orders.length > 0) {
         const rows = orders.map(o => ({
           store_id: store.id,
@@ -71,8 +66,7 @@ export function useTossSync(): UseTossSyncResult {
         if (upsertError) throw new Error(upsertError.message);
       }
 
-      const now = new Date().toISOString();
-      setLastSyncAt(now);
+      setLastSyncAt(new Date().toISOString());
       return orders;
     } catch (e: any) {
       setError(e.message);
@@ -87,9 +81,8 @@ export function useTossSync(): UseTossSyncResult {
     setLoading(true);
     setError(null);
     try {
-      const { merchantId, accessKey, secretKey } = await getTossCredentials();
-      const items = await fetchTossCatalog(merchantId, accessKey, secretKey);
-      return items;
+      const merchantId = await getMerchantId();
+      return await fetchTossCatalog(merchantId);
     } catch (e: any) {
       setError(e.message);
       throw e;
