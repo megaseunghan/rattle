@@ -4,6 +4,11 @@ export interface Store {
   name: string;
   owner_id: string;
   created_at: string;
+  // Toss Place 가맹점 신청 정보
+  business_number?: string | null;
+  owner_phone?: string | null;
+  address?: string | null;
+  toss_merchant_id?: string | null;
 }
 
 // 발주
