@@ -11,12 +11,14 @@ import {
   FlatList,
   KeyboardAvoidingView,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Colors } from '../../constants/colors';
 import { useRecipes } from '../../lib/hooks/useRecipes';
 import { useIngredients } from '../../lib/hooks/useIngredients';
+import { useAuth } from '../../lib/contexts/AuthContext';
 import { Ingredient } from '../../types';
 
 interface RecipeIngredientForm {
@@ -26,7 +28,8 @@ interface RecipeIngredientForm {
 
 export default function NewRecipeScreen() {
   const { create } = useRecipes();
-  const { data: ingredients } = useIngredients();
+  const { data: ingredients, create: createIngredient } = useIngredients();
+  const { store } = useAuth();
 
   const [name, setName] = useState('');
   const [category, setCategory] = useState('');
@@ -34,6 +37,13 @@ export default function NewRecipeScreen() {
   const [items, setItems] = useState<RecipeIngredientForm[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [showPicker, setShowPicker] = useState(false);
+
+  // 새 식자재 인라인 등록
+  const [showNewForm, setShowNewForm] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [newUnit, setNewUnit] = useState('');
+  const [newPrice, setNewPrice] = useState('');
+  const [savingNew, setSavingNew] = useState(false);
 
   const cost = useMemo(() => {
     return items.reduce((sum, item) => {
@@ -55,6 +65,43 @@ export default function NewRecipeScreen() {
     return Colors.danger;
   }
   const marginColor = getMarginColor();
+
+  async function handleCreateIngredient() {
+    if (!newName.trim() || !newUnit.trim()) {
+      Alert.alert('입력 오류', '식자재명과 단위를 입력해주세요.');
+      return;
+    }
+    if (!store) return;
+    setSavingNew(true);
+    try {
+      await createIngredient({
+        store_id: store.id,
+        name: newName.trim(),
+        unit: newUnit.trim(),
+        last_price: parseFloat(newPrice) || 0,
+        category: '기타',
+        current_stock: 0,
+        min_stock: 0,
+        container_unit: null,
+        container_size: null,
+        supplier_name: null,
+      });
+      // 방금 만든 식자재를 목록에서 찾아 자동 추가
+      const created = ingredients.find(i => i.name === newName.trim() && i.unit === newUnit.trim())
+        ?? { id: `temp-${Date.now()}`, store_id: store.id, name: newName.trim(), unit: newUnit.trim(),
+             last_price: parseFloat(newPrice) || 0, category: '기타', current_stock: 0, min_stock: 0,
+             container_unit: null, container_size: null, supplier_name: null,
+             updated_at: '', created_at: '' };
+      setItems(prev => [...prev, { ingredient: created, quantity: '1' }]);
+      setNewName(''); setNewUnit(''); setNewPrice('');
+      setShowNewForm(false);
+      setShowPicker(false);
+    } catch (e: any) {
+      Alert.alert('오류', e.message);
+    } finally {
+      setSavingNew(false);
+    }
+  }
 
   function addIngredient(ingredient: Ingredient) {
     const alreadyAdded = items.some(i => i.ingredient.id === ingredient.id);
@@ -216,10 +263,65 @@ export default function NewRecipeScreen() {
           <View style={styles.modalSheet}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>식자재 선택</Text>
-              <TouchableOpacity onPress={() => setShowPicker(false)}>
+              <TouchableOpacity onPress={() => { setShowPicker(false); setShowNewForm(false); }}>
                 <Text style={styles.modalClose}>닫기</Text>
               </TouchableOpacity>
             </View>
+
+            {/* 새 식자재 인라인 폼 */}
+            {showNewForm ? (
+              <View style={styles.newIngredientForm}>
+                <TextInput
+                  style={styles.newInput}
+                  value={newName}
+                  onChangeText={setNewName}
+                  placeholder="식자재명"
+                  placeholderTextColor={Colors.gray300}
+                />
+                <View style={styles.newInputRow}>
+                  <TextInput
+                    style={[styles.newInput, { flex: 1 }]}
+                    value={newUnit}
+                    onChangeText={setNewUnit}
+                    placeholder="단위 (g, ml…)"
+                    placeholderTextColor={Colors.gray300}
+                  />
+                  <TextInput
+                    style={[styles.newInput, { flex: 1 }]}
+                    value={newPrice}
+                    onChangeText={setNewPrice}
+                    placeholder="단가 (원)"
+                    placeholderTextColor={Colors.gray300}
+                    keyboardType="numeric"
+                  />
+                </View>
+                <View style={styles.newInputRow}>
+                  <TouchableOpacity
+                    style={styles.newCancelBtn}
+                    onPress={() => setShowNewForm(false)}
+                  >
+                    <Text style={styles.newCancelText}>취소</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.newSaveBtn, savingNew && { opacity: 0.5 }]}
+                    onPress={handleCreateIngredient}
+                    disabled={savingNew}
+                  >
+                    {savingNew
+                      ? <ActivityIndicator size="small" color={Colors.white} />
+                      : <Text style={styles.newSaveText}>등록 후 추가</Text>}
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ) : (
+              <TouchableOpacity
+                style={styles.newIngredientBtn}
+                onPress={() => setShowNewForm(true)}
+              >
+                <Text style={styles.newIngredientBtnText}>+ 새 식자재 등록</Text>
+              </TouchableOpacity>
+            )}
+
             {ingredients.length === 0 ? (
               <View style={styles.emptyItems}>
                 <Text style={styles.emptyItemsText}>등록된 식자재가 없습니다</Text>
@@ -383,4 +485,28 @@ const styles = StyleSheet.create({
   pickerName: { fontSize: 15, color: Colors.black, fontWeight: '500' },
   pickerNameAdded: { color: Colors.gray400 },
   pickerUnit: { fontSize: 13, color: Colors.gray500 },
+  newIngredientBtn: {
+    marginHorizontal: 20, marginVertical: 10,
+    paddingVertical: 10, borderRadius: 10,
+    borderWidth: 1, borderColor: Colors.primary,
+    alignItems: 'center',
+  },
+  newIngredientBtnText: { fontSize: 14, fontWeight: '600', color: Colors.primary },
+  newIngredientForm: { padding: 16, gap: 8, borderBottomWidth: 1, borderBottomColor: Colors.gray100 },
+  newInput: {
+    borderWidth: 1, borderColor: Colors.gray200, borderRadius: 10,
+    paddingHorizontal: 12, paddingVertical: 9, fontSize: 14,
+    color: Colors.black, backgroundColor: Colors.gray50,
+  },
+  newInputRow: { flexDirection: 'row', gap: 8 },
+  newCancelBtn: {
+    flex: 1, paddingVertical: 10, borderRadius: 10,
+    borderWidth: 1, borderColor: Colors.gray200, alignItems: 'center',
+  },
+  newCancelText: { fontSize: 14, fontWeight: '600', color: Colors.gray500 },
+  newSaveBtn: {
+    flex: 2, paddingVertical: 10, borderRadius: 10,
+    backgroundColor: Colors.primary, alignItems: 'center',
+  },
+  newSaveText: { fontSize: 14, fontWeight: '700', color: Colors.white },
 });
