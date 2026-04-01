@@ -52,11 +52,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         if (__DEV__) console.log('[Auth] event:', event);
-        setSession(session);
-        setUser(session?.user ?? null);
-        if (session?.user) {
-          await loadStore(session.user.id);
+
+        if (session) {
+          // 서버 검증 — 삭제된 유저의 캐시된 JWT 차단
+          const { data: { user }, error } = await supabase.auth.getUser();
+          if (error || !user) {
+            await supabase.auth.signOut();
+            setSession(null);
+            setUser(null);
+            setStore(null);
+            setLoading(false);
+            return;
+          }
+          setSession(session);
+          setUser(user);
+          await loadStore(user.id);
         } else {
+          setSession(null);
+          setUser(null);
           setStore(null);
         }
         setLoading(false);
