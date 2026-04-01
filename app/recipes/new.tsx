@@ -74,7 +74,7 @@ export default function NewRecipeScreen() {
     if (!store) return;
     setSavingNew(true);
     try {
-      await createIngredient({
+      const created = await createIngredient({
         store_id: store.id,
         name: newName.trim(),
         unit: newUnit.trim(),
@@ -86,12 +86,6 @@ export default function NewRecipeScreen() {
         container_size: null,
         supplier_name: null,
       });
-      // 방금 만든 식자재를 목록에서 찾아 자동 추가
-      const created = ingredients.find(i => i.name === newName.trim() && i.unit === newUnit.trim())
-        ?? { id: `temp-${Date.now()}`, store_id: store.id, name: newName.trim(), unit: newUnit.trim(),
-             last_price: parseFloat(newPrice) || 0, category: '기타', current_stock: 0, min_stock: 0,
-             container_unit: null, container_size: null, supplier_name: null,
-             updated_at: '', created_at: '' };
       setItems(prev => [...prev, { ingredient: created, quantity: '1' }]);
       setNewName(''); setNewUnit(''); setNewPrice('');
       setShowNewForm(false);
