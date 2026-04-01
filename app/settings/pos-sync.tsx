@@ -12,39 +12,55 @@ import { useTossSync } from '../../lib/hooks/useTossSync';
 import { supabase } from '../../lib/supabase';
 import { TossCatalogItem } from '../../types';
 
-export default function PosSyncScreen() {
-  const { store, refreshStore } = useAuth();
-  const { loading, error, syncOrders, syncCatalog, loadTodaySales, todaySales, todayOrderCount } = useTossSync();
+type SyncStatus = 'unregistered' | 'pending' | 'connected';
 
-  const [merchantId, setMerchantId] = useState('');
-  const [accessKey, setAccessKey] = useState('');
-  const [secretKey, setSecretKey] = useState('');
+export default function PosSyncScreen() {
+  const { store } = useAuth();
+  const { loading, syncOrders, syncCatalog, loadTodaySales, todaySales, todayOrderCount } = useTossSync();
+
+  const [status, setStatus] = useState<SyncStatus>('unregistered');
+  const [storeName, setStoreName] = useState(store?.name ?? '');
+  const [businessNumber, setBusinessNumber] = useState('');
+  const [ownerPhone, setOwnerPhone] = useState('');
+  const [address, setAddress] = useState('');
   const [saving, setSaving] = useState(false);
   const [catalogItems, setCatalogItems] = useState<TossCatalogItem[]>([]);
   const [showCatalog, setShowCatalog] = useState(false);
 
-  useEffect(() => {
+  const loadStoreInfo = useCallback(async () => {
     if (!store) return;
-    supabase
+    const { data } = await supabase
       .from('stores')
-      .select('toss_merchant_id, toss_access_key, toss_secret_key')
+      .select('name, business_number, owner_phone, address, toss_merchant_id')
       .eq('id', store.id)
-      .single()
-      .then(({ data }) => {
-        if (data) {
-          setMerchantId(data.toss_merchant_id ?? '');
-          setAccessKey(data.toss_access_key ?? '');
-          setSecretKey(data.toss_secret_key ?? '');
-        }
-      });
-    loadTodaySales();
+      .single();
+
+    if (!data) return;
+    setStoreName(data.name ?? '');
+    setBusinessNumber(data.business_number ?? '');
+    setOwnerPhone(data.owner_phone ?? '');
+    setAddress(data.address ?? '');
+
+    if (data.toss_merchant_id) {
+      setStatus('connected');
+    } else if (data.business_number) {
+      setStatus('pending');
+    } else {
+      setStatus('unregistered');
+    }
   }, [store]);
 
-  const isConnected = Boolean(merchantId);
+  useEffect(() => {
+    loadStoreInfo();
+  }, [loadStoreInfo]);
 
-  async function handleSave() {
+  useEffect(() => {
+    if (status === 'connected') loadTodaySales();
+  }, [status]);
+
+  async function handleApply() {
     if (!store) return;
-    if (!merchantId.trim() || !accessKey.trim() || !secretKey.trim()) {
+    if (!businessNumber.trim() || !ownerPhone.trim() || !address.trim()) {
       Alert.alert('입력 오류', '모든 항목을 입력해주세요.');
       return;
     }
@@ -52,9 +68,10 @@ export default function PosSyncScreen() {
     const { error } = await supabase
       .from('stores')
       .update({
-        toss_merchant_id: merchantId.trim(),
-        toss_access_key: accessKey.trim(),
-        toss_secret_key: secretKey.trim(),
+        name: storeName.trim(),
+        business_number: businessNumber.trim(),
+        owner_phone: ownerPhone.trim(),
+        address: address.trim(),
       })
       .eq('id', store.id);
     setSaving(false);
@@ -62,8 +79,7 @@ export default function PosSyncScreen() {
     if (error) {
       Alert.alert('저장 실패', error.message);
     } else {
-      await refreshStore();
-      Alert.alert('저장 완료', 'Toss Place 연동 정보가 저장되었습니다.');
+      setStatus('pending');
     }
   }
 
@@ -72,7 +88,6 @@ export default function PosSyncScreen() {
     const dateFrom = new Date(today.getFullYear(), today.getMonth(), 1)
       .toISOString().split('T')[0];
     const dateTo = today.toISOString().split('T')[0];
-
     try {
       const orders = await syncOrders(dateFrom, dateTo);
       await loadTodaySales();
@@ -94,7 +109,6 @@ export default function PosSyncScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* 헤더 */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="chevron-back" size={24} color={Colors.black} />
@@ -104,150 +118,161 @@ export default function PosSyncScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll}>
-        {/* 연동 상태 배지 */}
-        <View style={[styles.statusBadge, isConnected ? styles.statusConnected : styles.statusDisconnected]}>
+        {/* ── 상태 배지 ── */}
+        <View style={[
+          styles.statusBadge,
+          status === 'connected' ? styles.statusConnected
+            : status === 'pending' ? styles.statusPending
+            : styles.statusDisconnected,
+        ]}>
           <Ionicons
-            name={isConnected ? 'checkmark-circle' : 'ellipse-outline'}
+            name={status === 'connected' ? 'checkmark-circle' : status === 'pending' ? 'time-outline' : 'ellipse-outline'}
             size={16}
-            color={isConnected ? Colors.success : Colors.gray400}
+            color={status === 'connected' ? Colors.success : status === 'pending' ? Colors.warning : Colors.gray400}
           />
-          <Text style={[styles.statusText, isConnected ? styles.statusTextConnected : styles.statusTextDisconnected]}>
-            {isConnected ? '연동됨' : '미연동'}
+          <Text style={[
+            styles.statusText,
+            status === 'connected' ? styles.statusTextConnected
+              : status === 'pending' ? styles.statusTextPending
+              : styles.statusTextDisconnected,
+          ]}>
+            {status === 'connected' ? '연동완료' : status === 'pending' ? '심사중' : '미연동'}
           </Text>
         </View>
 
-        {/* 오늘 매출 (연동 시에만) */}
-        {isConnected && (
-          <View style={styles.salesRow}>
-            <View style={styles.salesCard}>
-              <Text style={styles.salesLabel}>오늘 매출</Text>
-              <Text style={styles.salesValue}>
-                {todaySales.toLocaleString('ko-KR')}원
-              </Text>
-            </View>
-            <View style={styles.salesCard}>
-              <Text style={styles.salesLabel}>주문 건수</Text>
-              <Text style={styles.salesValue}>{todayOrderCount}건</Text>
-            </View>
-          </View>
-        )}
-
-        {/* 자격증명 입력 */}
-        <Text style={styles.sectionTitle}>연동 정보</Text>
-        <View style={styles.card}>
-          <Text style={styles.fieldLabel}>가맹점 ID (Merchant ID)</Text>
-          <TextInput
-            style={styles.input}
-            value={merchantId}
-            onChangeText={setMerchantId}
-            placeholder="사업자 등록 후 발급"
-            placeholderTextColor={Colors.gray300}
-            autoCapitalize="none"
-          />
-          <Text style={styles.fieldLabel}>Access Key</Text>
-          <TextInput
-            style={styles.input}
-            value={accessKey}
-            onChangeText={setAccessKey}
-            placeholder="Toss Place 개발자 콘솔에서 발급"
-            placeholderTextColor={Colors.gray300}
-            autoCapitalize="none"
-            autoCorrect={false}
-          />
-          <Text style={styles.fieldLabel}>Secret Key</Text>
-          <TextInput
-            style={styles.input}
-            value={secretKey}
-            onChangeText={setSecretKey}
-            placeholder="Toss Place 개발자 콘솔에서 발급"
-            placeholderTextColor={Colors.gray300}
-            autoCapitalize="none"
-            autoCorrect={false}
-            secureTextEntry
-          />
-          <TouchableOpacity
-            style={[styles.saveBtn, saving && styles.saveBtnDisabled]}
-            onPress={handleSave}
-            disabled={saving}
-          >
-            {saving
-              ? <ActivityIndicator size="small" color={Colors.white} />
-              : <Text style={styles.saveBtnText}>저장</Text>
-            }
-          </TouchableOpacity>
-        </View>
-
-        {/* 동기화 액션 (연동 후에만 활성화) */}
-        <Text style={styles.sectionTitle}>데이터 동기화</Text>
-        <View style={styles.card}>
-          <TouchableOpacity
-            style={[styles.syncBtn, !isConnected && styles.syncBtnDisabled]}
-            onPress={handleSyncOrders}
-            disabled={!isConnected || loading}
-          >
-            {loading
-              ? <ActivityIndicator size="small" color={Colors.primary} />
-              : <Ionicons name="sync-outline" size={18} color={isConnected ? Colors.primary : Colors.gray300} />
-            }
-            <View style={styles.syncBtnText}>
-              <Text style={[styles.syncBtnTitle, !isConnected && styles.syncBtnTitleDisabled]}>
-                주문 데이터 동기화
-              </Text>
-              <Text style={styles.syncBtnDesc}>이번 달 주문 내역을 가져옵니다</Text>
-            </View>
-          </TouchableOpacity>
-
-          <View style={styles.divider} />
-
-          <TouchableOpacity
-            style={[styles.syncBtn, !isConnected && styles.syncBtnDisabled]}
-            onPress={handleSyncCatalog}
-            disabled={!isConnected || loading}
-          >
-            <Ionicons name="restaurant-outline" size={18} color={isConnected ? Colors.primary : Colors.gray300} />
-            <View style={styles.syncBtnText}>
-              <Text style={[styles.syncBtnTitle, !isConnected && styles.syncBtnTitleDisabled]}>
-                메뉴 카탈로그 조회
-              </Text>
-              <Text style={styles.syncBtnDesc}>POS 메뉴 목록과 레시피를 비교합니다</Text>
-            </View>
-          </TouchableOpacity>
-        </View>
-
-        {/* 카탈로그 결과 */}
-        {showCatalog && catalogItems.length > 0 && (
+        {/* ── 연동완료: 매출 + 동기화 ── */}
+        {status === 'connected' && (
           <>
-            <Text style={styles.sectionTitle}>POS 메뉴 목록 ({catalogItems.length}개)</Text>
-            <View style={styles.card}>
-              {catalogItems.map((item, idx) => (
-                <View key={item.itemId} style={[styles.catalogRow, idx > 0 && styles.catalogRowBorder]}>
-                  <View style={styles.catalogLeft}>
-                    <Text style={styles.catalogName}>{item.itemName}</Text>
-                    <Text style={styles.catalogCategory}>{item.categoryName}</Text>
-                  </View>
-                  <View style={styles.catalogRight}>
-                    <Text style={styles.catalogPrice}>
-                      {item.price.toLocaleString('ko-KR')}원
-                    </Text>
-                    {!item.isAvailable && (
-                      <Text style={styles.catalogUnavailable}>판매 중지</Text>
-                    )}
-                  </View>
-                </View>
-              ))}
+            <View style={styles.salesRow}>
+              <View style={styles.salesCard}>
+                <Text style={styles.salesLabel}>오늘 매출</Text>
+                <Text style={styles.salesValue}>{todaySales.toLocaleString('ko-KR')}원</Text>
+              </View>
+              <View style={styles.salesCard}>
+                <Text style={styles.salesLabel}>주문 건수</Text>
+                <Text style={styles.salesValue}>{todayOrderCount}건</Text>
+              </View>
             </View>
+
+            <Text style={styles.sectionTitle}>데이터 동기화</Text>
+            <View style={styles.card}>
+              <TouchableOpacity style={styles.syncBtn} onPress={handleSyncOrders} disabled={loading}>
+                {loading
+                  ? <ActivityIndicator size="small" color={Colors.primary} />
+                  : <Ionicons name="sync-outline" size={18} color={Colors.primary} />}
+                <View style={styles.syncBtnText}>
+                  <Text style={styles.syncBtnTitle}>주문 데이터 동기화</Text>
+                  <Text style={styles.syncBtnDesc}>이번 달 주문 내역을 가져옵니다</Text>
+                </View>
+              </TouchableOpacity>
+
+              <View style={styles.divider} />
+
+              <TouchableOpacity style={styles.syncBtn} onPress={handleSyncCatalog} disabled={loading}>
+                <Ionicons name="restaurant-outline" size={18} color={Colors.primary} />
+                <View style={styles.syncBtnText}>
+                  <Text style={styles.syncBtnTitle}>메뉴 카탈로그 조회</Text>
+                  <Text style={styles.syncBtnDesc}>POS 메뉴 목록과 레시피를 비교합니다</Text>
+                </View>
+              </TouchableOpacity>
+            </View>
+
+            {showCatalog && catalogItems.length > 0 && (
+              <>
+                <Text style={styles.sectionTitle}>POS 메뉴 목록 ({catalogItems.length}개)</Text>
+                <View style={styles.card}>
+                  {catalogItems.map((item, idx) => (
+                    <View key={item.itemId} style={[styles.catalogRow, idx > 0 && styles.catalogRowBorder]}>
+                      <View style={styles.catalogLeft}>
+                        <Text style={styles.catalogName}>{item.itemName}</Text>
+                        <Text style={styles.catalogCategory}>{item.categoryName}</Text>
+                      </View>
+                      <View style={styles.catalogRight}>
+                        <Text style={styles.catalogPrice}>{item.price.toLocaleString('ko-KR')}원</Text>
+                        {!item.isAvailable && <Text style={styles.catalogUnavailable}>판매 중지</Text>}
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              </>
+            )}
           </>
         )}
 
-        {/* 안내 */}
-        {!isConnected && (
-          <View style={styles.notice}>
-            <Ionicons name="information-circle-outline" size={16} color={Colors.gray400} />
-            <Text style={styles.noticeText}>
-              Toss Place 개발자 계정 생성 시 사업자번호가 필요합니다.{'\n'}
-              연동 정보를 미리 입력해두면 등록 후 바로 사용할 수 있습니다.
+        {/* ── 심사중 안내 ── */}
+        {status === 'pending' && (
+          <View style={styles.pendingCard}>
+            <Ionicons name="time-outline" size={32} color={Colors.warning} style={{ marginBottom: 12 }} />
+            <Text style={styles.pendingTitle}>가맹점 신청 완료</Text>
+            <Text style={styles.pendingDesc}>
+              1~3일 이내 토스 측에서 제공동의 전화 안내 후 처리됩니다.{'\n'}
+              연동 완료 후 이 화면에서 매출 데이터를 동기화할 수 있습니다.
             </Text>
           </View>
+        )}
+
+        {/* ── 미연동: 신청 폼 ── */}
+        {status === 'unregistered' && (
+          <>
+            <Text style={styles.sectionTitle}>가맹점 신청</Text>
+            <View style={styles.card}>
+              <Text style={styles.fieldLabel}>가맹점명</Text>
+              <TextInput
+                style={styles.input}
+                value={storeName}
+                onChangeText={setStoreName}
+                placeholder="가맹점명"
+                placeholderTextColor={Colors.gray300}
+              />
+
+              <Text style={styles.fieldLabel}>대표자 연락처</Text>
+              <TextInput
+                style={styles.input}
+                value={ownerPhone}
+                onChangeText={setOwnerPhone}
+                placeholder="010-0000-0000"
+                placeholderTextColor={Colors.gray300}
+                keyboardType="phone-pad"
+              />
+
+              <Text style={styles.fieldLabel}>매장 주소</Text>
+              <TextInput
+                style={styles.input}
+                value={address}
+                onChangeText={setAddress}
+                placeholder="서울시 강남구 테헤란로 00"
+                placeholderTextColor={Colors.gray300}
+              />
+
+              <Text style={styles.fieldLabel}>사업자번호</Text>
+              <TextInput
+                style={styles.input}
+                value={businessNumber}
+                onChangeText={setBusinessNumber}
+                placeholder="000-00-00000"
+                placeholderTextColor={Colors.gray300}
+                keyboardType="numeric"
+              />
+
+              <TouchableOpacity
+                style={[styles.applyBtn, saving && styles.applyBtnDisabled]}
+                onPress={handleApply}
+                disabled={saving}
+              >
+                {saving
+                  ? <ActivityIndicator size="small" color={Colors.white} />
+                  : <Text style={styles.applyBtnText}>연동 신청하기</Text>
+                }
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.notice}>
+              <Ionicons name="information-circle-outline" size={16} color={Colors.gray400} />
+              <Text style={styles.noticeText}>
+                신청 후 1~3일 이내 토스 측에서 제공동의 전화 안내가 진행됩니다.
+              </Text>
+            </View>
+          </>
         )}
       </ScrollView>
     </SafeAreaView>
@@ -266,12 +291,14 @@ const styles = StyleSheet.create({
   statusBadge: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
     alignSelf: 'flex-start', paddingHorizontal: 12, paddingVertical: 6,
-    borderRadius: 20, marginBottom: 20,
+    borderRadius: 20, marginBottom: 24,
   },
-  statusConnected: { backgroundColor: Colors.success + '15' },
+  statusConnected: { backgroundColor: Colors.success + '18' },
+  statusPending: { backgroundColor: Colors.warning + '18' },
   statusDisconnected: { backgroundColor: Colors.gray100 },
   statusText: { fontSize: 13, fontWeight: '600' },
   statusTextConnected: { color: Colors.success },
+  statusTextPending: { color: Colors.warning },
   statusTextDisconnected: { color: Colors.gray500 },
   salesRow: { flexDirection: 'row', gap: 12, marginBottom: 24 },
   salesCard: {
@@ -291,19 +318,24 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12, paddingVertical: 10, fontSize: 14,
     color: Colors.black, backgroundColor: Colors.gray50,
   },
-  saveBtn: {
+  applyBtn: {
     backgroundColor: Colors.primary, borderRadius: 10,
     paddingVertical: 12, alignItems: 'center', marginTop: 20,
   },
-  saveBtnDisabled: { opacity: 0.5 },
-  saveBtnText: { color: Colors.white, fontSize: 15, fontWeight: '700' },
+  applyBtnDisabled: { opacity: 0.5 },
+  applyBtnText: { color: Colors.white, fontSize: 15, fontWeight: '700' },
   syncBtn: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 8 },
-  syncBtnDisabled: { opacity: 0.4 },
   syncBtnText: { flex: 1 },
   syncBtnTitle: { fontSize: 14, fontWeight: '600', color: Colors.black },
-  syncBtnTitleDisabled: { color: Colors.gray400 },
   syncBtnDesc: { fontSize: 12, color: Colors.gray400, marginTop: 2 },
   divider: { height: 1, backgroundColor: Colors.gray100, marginVertical: 12 },
+  pendingCard: {
+    backgroundColor: Colors.white, borderRadius: 14,
+    padding: 24, borderWidth: 1, borderColor: Colors.gray100,
+    alignItems: 'center', marginBottom: 24,
+  },
+  pendingTitle: { fontSize: 16, fontWeight: '700', color: Colors.black, marginBottom: 8 },
+  pendingDesc: { fontSize: 14, color: Colors.gray500, textAlign: 'center', lineHeight: 22 },
   catalogRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10 },
   catalogRowBorder: { borderTopWidth: 1, borderTopColor: Colors.gray100 },
   catalogLeft: { flex: 1 },
