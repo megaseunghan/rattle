@@ -9,7 +9,7 @@ import { router } from 'expo-router';
 import { Colors } from '../../constants/colors';
 import { useAuth } from '../../lib/contexts/AuthContext';
 import { useTossSync } from '../../lib/hooks/useTossSync';
-import { supabase } from '../../lib/supabase';
+import { getStoreDetails, updateStoreInfo } from '../../lib/services/stores';
 import { TossCatalogItem } from '../../types';
 
 type SyncStatus = 'unregistered' | 'pending' | 'connected';
@@ -29,25 +29,21 @@ export default function PosSyncScreen() {
 
   const loadStoreInfo = useCallback(async () => {
     if (!store) return;
-    const { data } = await supabase
-      .from('stores')
-      .select('name, business_number, owner_phone, address, toss_merchant_id')
-      .eq('id', store.id)
-      .single();
+    try {
+      const data = await getStoreDetails(store.id);
+      setStoreName(data.name ?? '');
+      setBusinessNumber(data.business_number ?? '');
+      setOwnerPhone(data.owner_phone ?? '');
+      setAddress(data.address ?? '');
 
-    if (!data) return;
-    setStoreName(data.name ?? '');
-    setBusinessNumber(data.business_number ?? '');
-    setOwnerPhone(data.owner_phone ?? '');
-    setAddress(data.address ?? '');
-
-    if (data.toss_merchant_id) {
-      setStatus('connected');
-    } else if (data.business_number) {
-      setStatus('pending');
-    } else {
-      setStatus('unregistered');
-    }
+      if (data.toss_merchant_id) {
+        setStatus('connected');
+      } else if (data.business_number) {
+        setStatus('pending');
+      } else {
+        setStatus('unregistered');
+      }
+    } catch {}
   }, [store]);
 
   useEffect(() => {
@@ -65,21 +61,18 @@ export default function PosSyncScreen() {
       return;
     }
     setSaving(true);
-    const { error } = await supabase
-      .from('stores')
-      .update({
+    try {
+      await updateStoreInfo(store.id, {
         name: storeName.trim(),
         business_number: businessNumber.trim(),
         owner_phone: ownerPhone.trim(),
         address: address.trim(),
-      })
-      .eq('id', store.id);
-    setSaving(false);
-
-    if (error) {
-      Alert.alert('저장 실패', error.message);
-    } else {
+      });
       setStatus('pending');
+    } catch (e: any) {
+      Alert.alert('저장 실패', e.message);
+    } finally {
+      setSaving(false);
     }
   }
 

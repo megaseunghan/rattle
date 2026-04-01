@@ -2,7 +2,7 @@
 
 식당/매장 관리 앱 (Expo SDK 55 + React Native + TypeScript + Supabase)
 
-**기능**: 발주(Orders) · 재고(Ingredients/Stock) · 레시피(Recipes, 원가/마진 자동계산) · 대시보드 · OCR 납품서 파싱(타입 정의됨, 미구현)
+**기능**: 발주(Orders) · 재고(Ingredients/Stock) · 레시피(Recipes, 원가/마진 자동계산) · 대시보드 · OCR 납품서 파싱
 
 ---
 
@@ -14,7 +14,7 @@
 
 ---
 
-## 디렉토리 구조
+   ## 디렉토리 구조
 
 ```
 app/
