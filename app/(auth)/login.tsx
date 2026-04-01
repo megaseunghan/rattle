@@ -9,6 +9,7 @@ import {
   Platform,
   Alert,
 } from 'react-native';
+import { router } from 'expo-router';
 import { supabase } from '../../lib/supabase';
 import { Colors } from '../../constants/colors';
 
@@ -16,35 +17,19 @@ export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [isSignUp, setIsSignUp] = useState(false);
 
-  async function handleAuth() {
+  async function handleLogin() {
     if (!email || !password) {
       Alert.alert('알림', '이메일과 비밀번호를 입력해주세요.');
       return;
     }
-
     setLoading(true);
     try {
-      if (isSignUp) {
-        const { error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: { emailRedirectTo: 'rattle://' },
-        });
-        if (error) throw error;
-        Alert.alert('가입 완료', '이메일을 확인해주세요!');
-      } else {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) throw error;
-        // AuthContext의 onAuthStateChange가 라우팅을 처리함
-      }
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+      // AuthContext의 onAuthStateChange가 라우팅을 처리함
     } catch (error: any) {
-      console.error('Auth error:', error);
-      const message = isSignUp
-        ? '회원가입에 실패했습니다. 다시 시도해주세요.'
-        : '이메일 또는 비밀번호가 올바르지 않습니다.';
-      Alert.alert('오류', message);
+      Alert.alert('오류', '이메일 또는 비밀번호가 올바르지 않습니다.');
     } finally {
       setLoading(false);
     }
@@ -86,23 +71,19 @@ export default function LoginScreen() {
 
           <TouchableOpacity
             style={[styles.button, loading && styles.buttonDisabled]}
-            onPress={handleAuth}
+            onPress={handleLogin}
             disabled={loading}
           >
             <Text style={styles.buttonText}>
-              {loading ? '처리 중...' : isSignUp ? '회원가입' : '로그인'}
+              {loading ? '처리 중...' : '로그인'}
             </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
             style={styles.switchButton}
-            onPress={() => setIsSignUp(!isSignUp)}
+            onPress={() => router.push('/(auth)/signup')}
           >
-            <Text style={styles.switchText}>
-              {isSignUp
-                ? '이미 계정이 있으신가요? 로그인'
-                : '처음이신가요? 회원가입'}
-            </Text>
+            <Text style={styles.switchText}>처음이신가요? 회원가입</Text>
           </TouchableOpacity>
         </View>
       </View>
