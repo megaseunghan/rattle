@@ -14,10 +14,10 @@ export async function submitTossPlaceApplication(info: StoreApplyInfo): Promise<
   const body = new URLSearchParams({
     'entry.263323575': 'skud11311@gmail.com',
     'entry.610579560': '010-2512-2157',
-    'entry.51284767': 'Open API만',
+    'entry.51284767': 'Open API',
     'entry.1040582165': 'rattle-recipe-stock',
     'entry.2010669006': 'Rattle',
-    'entry.1674845743': '라이브 가맹점',
+    'entry.1674845743': '라이브 가맹점 (가맹점 대표자에게 가맹점 정보 제공 동의(녹취)를 받은 후 연결해드립니다.)',
     'entry.1639848356': merchantInfo,
   });
 
