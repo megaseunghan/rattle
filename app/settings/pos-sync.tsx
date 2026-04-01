@@ -10,6 +10,7 @@ import { Colors } from '../../constants/colors';
 import { useAuth } from '../../lib/contexts/AuthContext';
 import { useTossSync } from '../../lib/hooks/useTossSync';
 import { getStoreDetails, updateStoreInfo } from '../../lib/services/stores';
+import { submitTossPlaceApplication } from '../../lib/services/tossPlaceForm';
 import { TossCatalogItem } from '../../types';
 
 type SyncStatus = 'unregistered' | 'pending' | 'connected';
@@ -67,6 +68,12 @@ export default function PosSyncScreen() {
         business_number: businessNumber.trim(),
         owner_phone: ownerPhone.trim(),
         address: address.trim(),
+      });
+      await submitTossPlaceApplication({
+        name: storeName.trim(),
+        address: address.trim(),
+        businessNumber: businessNumber.trim(),
+        ownerPhone: ownerPhone.trim(),
       });
       setStatus('pending');
     } catch (e: any) {
