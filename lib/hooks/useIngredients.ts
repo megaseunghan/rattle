@@ -14,7 +14,7 @@ interface UseIngredientsResult {
   loading: boolean;
   error: string | null;
   refetch: () => Promise<void>;
-  create: (data: Omit<Ingredient, 'id' | 'updated_at' | 'created_at'>) => Promise<void>;
+  create: (data: Omit<Ingredient, 'id' | 'updated_at' | 'created_at'>) => Promise<Ingredient>;
   update: (id: string, data: Partial<Pick<Ingredient, 'name' | 'category' | 'current_stock' | 'unit' | 'min_stock' | 'last_price' | 'container_unit' | 'container_size' | 'supplier_name'>>) => Promise<void>;
   remove: (id: string) => Promise<void>;
   bulkCreate: (items: Omit<Ingredient, 'id' | 'updated_at' | 'created_at'>[]) => Promise<number>;
@@ -44,9 +44,10 @@ export function useIngredients(): UseIngredientsResult {
     refetch();
   }, [refetch]);
 
-  async function create(ingredientData: Omit<Ingredient, 'id' | 'updated_at' | 'created_at'>) {
-    await createIngredient(ingredientData);
+  async function create(ingredientData: Omit<Ingredient, 'id' | 'updated_at' | 'created_at'>): Promise<Ingredient> {
+    const result = await createIngredient(ingredientData);
     await refetch();
+    return result;
   }
 
   async function update(id: string, ingredientData: Partial<Pick<Ingredient, 'name' | 'category' | 'current_stock' | 'unit' | 'min_stock' | 'last_price' | 'container_unit' | 'container_size'>>) {
