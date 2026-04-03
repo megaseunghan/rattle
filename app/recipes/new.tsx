@@ -45,11 +45,16 @@ export default function NewRecipeScreen() {
   const [newPrice, setNewPrice] = useState('');
   const [savingNew, setSavingNew] = useState(false);
 
+  function unitPrice(ing: Ingredient): number {
+    const base = ing.last_price ?? 0;
+    if (ing.container_size && ing.container_size > 0) return base / ing.container_size;
+    return base;
+  }
+
   const cost = useMemo(() => {
     return items.reduce((sum, item) => {
       const qty = parseFloat(item.quantity) || 0;
-      const price = item.ingredient.last_price ?? 0;
-      return sum + qty * price;
+      return sum + qty * unitPrice(item.ingredient);
     }, 0);
   }, [items]);
 
@@ -230,7 +235,7 @@ export default function NewRecipeScreen() {
                   <Text style={styles.recipeItemName}>{item.ingredient.name}</Text>
                   <Text style={styles.recipeItemPrice}>
                     {item.ingredient.last_price != null
-                      ? `단가 ${item.ingredient.last_price.toLocaleString('ko-KR')}원/${item.ingredient.unit}`
+                      ? `단가 ${unitPrice(item.ingredient).toLocaleString('ko-KR', { maximumFractionDigits: 2 })}원/${item.ingredient.unit}`
                       : '단가 미설정'}
                   </Text>
                 </View>
