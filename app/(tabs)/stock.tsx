@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useFocusEffect } from 'expo-router';
 import {
   View,
@@ -9,6 +9,8 @@ import {
   TextInput,
   Alert,
   ScrollView,
+  Modal,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -19,13 +21,10 @@ import { Colors } from '../../constants/colors';
 import { formatStock } from '../../lib/utils/unit';
 import { useAuth } from '../../lib/contexts/AuthContext';
 import { useIngredients } from '../../lib/hooks/useIngredients';
+import { useCategories } from '../../lib/hooks/useCategories';
 import { LoadingSpinner } from '../../lib/components/LoadingSpinner';
 import { ErrorMessage } from '../../lib/components/ErrorMessage';
 import { Ingredient } from '../../types';
-
-const VALID_CATEGORIES = ['주류', '식자재', '비품소모품'];
-const FILTER_TABS = ['전체', '식자재', '주류', '비품소모품'] as const;
-type FilterTab = typeof FILTER_TABS[number];
 
 function IngredientRow({
   item,
@@ -106,28 +105,43 @@ function IngredientRow({
 export default function StockScreen() {
   const { store } = useAuth();
   const { data, loading, error, refetch, update, remove, bulkCreate } = useIngredients();
+  const { categories, refetch: refetchCategories, add: addCategory, rename: renameCategory, remove: removeCategory, countByCategory } = useCategories();
+
   const [csvUploading, setCsvUploading] = useState(false);
-  const [activeTab, setActiveTab] = useState<FilterTab>('전체');
+  const [viewMode, setViewMode] = useState<'category' | 'supplier'>('category');
+  const [activeCategory, setActiveCategory] = useState('전체');
   const [activeSupplier, setActiveSupplier] = useState('전체');
 
+  // Modal state
+  const [showCategoryModal, setShowCategoryModal] = useState(false);
+  const [newCatName, setNewCatName] = useState('');
+  const [editingCat, setEditingCat] = useState<string | null>(null);
+  const [editingCatName, setEditingCatName] = useState('');
+  const [catOpLoading, setCatOpLoading] = useState(false);
+
   useFocusEffect(useCallback(() => { refetch(); }, []));
+
+  // activeCategory가 더 이상 유효하지 않으면 '전체'로 리셋
+  useEffect(() => {
+    if (activeCategory !== '전체' && categories.length > 0 && !categories.includes(activeCategory)) {
+      setActiveCategory('전체');
+    }
+  }, [categories]);
 
   const suppliers = ['전체', ...Array.from(new Set(
     data.filter(i => i.supplier_name).map(i => i.supplier_name as string)
   )).sort()];
 
   const filtered = data
-    .filter(item => activeTab === '전체' || item.category === activeTab)
-    .filter(item => activeSupplier === '전체' || item.supplier_name === activeSupplier)
+    .filter(item => viewMode === 'supplier'
+      ? (activeSupplier === '전체' || item.supplier_name === activeSupplier)
+      : (activeCategory === '전체' || item.category === activeCategory)
+    )
     .sort((a, b) => {
       const aLow = a.current_stock <= a.min_stock ? 0 : 1;
       const bLow = b.current_stock <= b.min_stock ? 0 : 1;
       return aLow - bLow || a.name.localeCompare(b.name);
     });
-
-  async function handleUpdateStock(id: string, stock: number) {
-    await update(id, { current_stock: stock });
-  }
 
   async function handleCsvUpload() {
     const result = await DocumentPicker.getDocumentAsync({
@@ -163,10 +177,6 @@ export default function StockScreen() {
         errors.push(`${i + 2}행: name, unit 필수`);
         return;
       }
-      if (category && !VALID_CATEGORIES.includes(category)) {
-        errors.push(`${i + 2}행: category는 주류/식자재/비품소모품 중 하나여야 해요`);
-        return;
-      }
 
       valid.push({
         store_id: store!.id,
@@ -189,11 +199,7 @@ export default function StockScreen() {
 
     const summary = [
       `총 ${valid.length}개 항목을 등록합니다.`,
-      ...VALID_CATEGORIES.map(c => {
-        const count = valid.filter(v => v.category === c).length;
-        return count > 0 ? `${c}: ${count}개` : null;
-      }).filter(Boolean),
-      errors.length > 0 ? `\n건너뜀: ${errors.length}개` : null,
+      errors.length > 0 ? `건너뜀: ${errors.length}개` : null,
     ].filter(Boolean).join('\n');
 
     Alert.alert('CSV 업로드 확인', summary, [
@@ -209,6 +215,68 @@ export default function StockScreen() {
             Alert.alert('오류', e.message);
           } finally {
             setCsvUploading(false);
+          }
+        },
+      },
+    ]);
+  }
+
+  async function handleAddCategory() {
+    const name = newCatName.trim();
+    if (!name) return;
+    if (categories.includes(name)) {
+      Alert.alert('오류', '이미 존재하는 카테고리입니다.');
+      return;
+    }
+    setCatOpLoading(true);
+    try {
+      await addCategory(name);
+      setNewCatName('');
+    } catch (e: any) {
+      Alert.alert('오류', e.message);
+    } finally {
+      setCatOpLoading(false);
+    }
+  }
+
+  async function handleRenameCategory() {
+    const newName = editingCatName.trim();
+    if (!newName || !editingCat) return;
+    if (newName === editingCat) { setEditingCat(null); return; }
+    if (categories.includes(newName)) {
+      Alert.alert('오류', '이미 존재하는 카테고리입니다.');
+      return;
+    }
+    setCatOpLoading(true);
+    try {
+      await renameCategory(editingCat, newName);
+      setEditingCat(null);
+    } catch (e: any) {
+      Alert.alert('오류', e.message);
+    } finally {
+      setCatOpLoading(false);
+    }
+  }
+
+  async function handleDeleteCategory(name: string) {
+    const count = await countByCategory(name);
+    const message = count > 0
+      ? `"${name}" 카테고리를 삭제하면 해당 식자재 ${count}개가 '기타'로 이동됩니다.`
+      : `"${name}" 카테고리를 삭제하시겠습니까?`;
+
+    Alert.alert('카테고리 삭제', message, [
+      { text: '취소', style: 'cancel' },
+      {
+        text: '삭제',
+        style: 'destructive',
+        onPress: async () => {
+          setCatOpLoading(true);
+          try {
+            await removeCategory(name);
+          } catch (e: any) {
+            Alert.alert('오류', e.message);
+          } finally {
+            setCatOpLoading(false);
           }
         },
       },
@@ -242,45 +310,88 @@ export default function StockScreen() {
         </View>
       </View>
 
-      {/* 카테고리 필터 탭 */}
-      <View style={styles.tabBar}>
-        {FILTER_TABS.map(tab => {
-          const count = tab === '전체'
-            ? data.length
-            : data.filter(i => i.category === tab).length;
-          return (
-            <TouchableOpacity
-              key={tab}
-              style={[styles.tab, activeTab === tab && styles.tabActive]}
-              onPress={() => setActiveTab(tab)}
-            >
-              <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
-                {tab}{count > 0 ? ` ${count}` : ''}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
+      {/* 보기 모드 토글 */}
+      <View style={styles.viewToggleRow}>
+        <TouchableOpacity
+          style={[styles.viewToggleBtn, viewMode === 'category' && styles.viewToggleBtnActive]}
+          onPress={() => setViewMode('category')}
+        >
+          <Text style={[styles.viewToggleText, viewMode === 'category' && styles.viewToggleTextActive]}>
+            카테고리별
+          </Text>
+        </TouchableOpacity>
+        {suppliers.length > 1 && (
+          <TouchableOpacity
+            style={[styles.viewToggleBtn, viewMode === 'supplier' && styles.viewToggleBtnActive]}
+            onPress={() => setViewMode('supplier')}
+          >
+            <Text style={[styles.viewToggleText, viewMode === 'supplier' && styles.viewToggleTextActive]}>
+              거래처별
+            </Text>
+          </TouchableOpacity>
+        )}
       </View>
 
-      {/* 거래처 필터 (거래처가 1개 이상일 때만 표시) */}
-      {suppliers.length > 1 && (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.supplierBar}
-        >
-          {suppliers.map(s => (
-            <TouchableOpacity
-              key={s}
-              style={[styles.supplierChip, activeSupplier === s && styles.supplierChipActive]}
-              onPress={() => setActiveSupplier(s)}
-            >
-              <Text style={[styles.supplierChipText, activeSupplier === s && styles.supplierChipTextActive]}>
-                {s}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
+      {/* 카테고리 탭 */}
+      {viewMode === 'category' && (
+        <View style={styles.tabRow}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.tabBar}
+            style={styles.tabScroll}
+          >
+            {['전체', ...categories].map(tab => {
+              const count = tab === '전체'
+                ? data.length
+                : data.filter(i => i.category === tab).length;
+              return (
+                <TouchableOpacity
+                  key={tab}
+                  style={[styles.tab, activeCategory === tab && styles.tabActive]}
+                  onPress={() => setActiveCategory(tab)}
+                >
+                  <Text style={[styles.tabText, activeCategory === tab && styles.tabTextActive]}>
+                    {tab}{count > 0 ? ` ${count}` : ''}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+          <TouchableOpacity
+            style={styles.editCatBtn}
+            onPress={() => setShowCategoryModal(true)}
+          >
+            <Text style={styles.editCatText}>편집</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* 거래처 탭 */}
+      {viewMode === 'supplier' && (
+        <View style={styles.tabRow}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.tabBar}
+            style={styles.tabScroll}
+          >
+            {suppliers.map(s => {
+              const count = s === '전체' ? data.length : data.filter(i => i.supplier_name === s).length;
+              return (
+                <TouchableOpacity
+                  key={s}
+                  style={[styles.tab, activeSupplier === s && styles.tabActive]}
+                  onPress={() => setActiveSupplier(s)}
+                >
+                  <Text style={[styles.tabText, activeSupplier === s && styles.tabTextActive]}>
+                    {s}{count > 0 ? ` ${count}` : ''}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        </View>
       )}
 
       {data.length === 0 ? (
@@ -293,7 +404,9 @@ export default function StockScreen() {
         </View>
       ) : filtered.length === 0 ? (
         <View style={styles.emptyState}>
-          <Text style={styles.emptyText}>{activeTab} 품목이 없어요</Text>
+          <Text style={styles.emptyText}>
+            {viewMode === 'category' ? activeCategory : activeSupplier} 품목이 없어요
+          </Text>
         </View>
       ) : (
         <FlatList
@@ -310,6 +423,89 @@ export default function StockScreen() {
           )}
         />
       )}
+
+      {/* 카테고리 편집 모달 */}
+      <Modal visible={showCategoryModal} animationType="slide" transparent>
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowCategoryModal(false)}
+        >
+          <TouchableOpacity activeOpacity={1} style={styles.modalSheet}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>카테고리 편집</Text>
+              <TouchableOpacity onPress={() => setShowCategoryModal(false)}>
+                <Text style={styles.modalClose}>닫기</Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.modalScroll}>
+              {categories.map(cat => (
+                <View key={cat} style={styles.catRow}>
+                  {editingCat === cat ? (
+                    <TextInput
+                      style={styles.catEditInput}
+                      value={editingCatName}
+                      onChangeText={setEditingCatName}
+                      autoFocus
+                      onSubmitEditing={handleRenameCategory}
+                    />
+                  ) : (
+                    <Text style={styles.catName}>{cat}</Text>
+                  )}
+
+                  <View style={styles.catActions}>
+                    {editingCat === cat ? (
+                      <TouchableOpacity
+                        style={styles.catConfirmBtn}
+                        onPress={handleRenameCategory}
+                        disabled={catOpLoading}
+                      >
+                        <Text style={styles.catConfirmText}>확인</Text>
+                      </TouchableOpacity>
+                    ) : (
+                      <TouchableOpacity
+                        style={styles.catActionBtn}
+                        onPress={() => { setEditingCat(cat); setEditingCatName(cat); }}
+                      >
+                        <Ionicons name="pencil-outline" size={16} color={Colors.gray500} />
+                      </TouchableOpacity>
+                    )}
+                    <TouchableOpacity
+                      style={styles.catActionBtn}
+                      onPress={() => handleDeleteCategory(cat)}
+                      disabled={catOpLoading}
+                    >
+                      <Ionicons name="trash-outline" size={16} color={Colors.danger} />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ))}
+
+              <View style={styles.addCatRow}>
+                <TextInput
+                  style={styles.addCatInput}
+                  value={newCatName}
+                  onChangeText={setNewCatName}
+                  placeholder="새 카테고리 이름"
+                  placeholderTextColor={Colors.gray400}
+                  onSubmitEditing={handleAddCategory}
+                />
+                <TouchableOpacity
+                  style={[styles.addCatBtn, !newCatName.trim() && styles.addCatBtnDisabled]}
+                  onPress={handleAddCategory}
+                  disabled={!newCatName.trim() || catOpLoading}
+                >
+                  {catOpLoading
+                    ? <ActivityIndicator size="small" color={Colors.white} />
+                    : <Text style={styles.addCatBtnText}>추가</Text>
+                  }
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -344,32 +540,50 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   addText: { color: Colors.white, fontSize: 14, fontWeight: '700' },
+  tabRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingRight: 8,
+  },
+  tabScroll: { flex: 1 },
   tabBar: {
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-    paddingBottom: 8,
-    gap: 6,
-  },
-  supplierBar: {
     paddingHorizontal: 16,
     paddingBottom: 8,
     gap: 6,
     flexDirection: 'row',
   },
-  supplierChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderRadius: 20,
+  editCatBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginBottom: 8,
+    marginRight: 4,
+    borderRadius: 8,
     borderWidth: 1,
     borderColor: Colors.gray200,
     backgroundColor: Colors.white,
   },
-  supplierChipActive: {
+  editCatText: { fontSize: 12, fontWeight: '600', color: Colors.gray500 },
+  viewToggleRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingBottom: 10,
+    gap: 6,
+  },
+  viewToggleBtn: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 7,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Colors.gray200,
+    backgroundColor: Colors.white,
+  },
+  viewToggleBtnActive: {
     backgroundColor: Colors.dark,
     borderColor: Colors.dark,
   },
-  supplierChipText: { fontSize: 12, fontWeight: '600', color: Colors.gray500 },
-  supplierChipTextActive: { color: Colors.white },
+  viewToggleText: { fontSize: 13, fontWeight: '600', color: Colors.gray500 },
+  viewToggleTextActive: { color: Colors.white },
   tab: {
     paddingHorizontal: 12,
     paddingVertical: 6,
@@ -429,4 +643,76 @@ const styles = StyleSheet.create({
   emptyIcon: { marginBottom: 16 },
   emptyText: { fontSize: 18, fontWeight: '700', color: Colors.gray700, marginBottom: 8 },
   emptySubtext: { fontSize: 14, color: Colors.gray400, textAlign: 'center' },
+  // Category modal
+  modalOverlay: { flex: 1, backgroundColor: Colors.overlay, justifyContent: 'flex-end' },
+  modalSheet: {
+    backgroundColor: Colors.white,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '70%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.gray100,
+  },
+  modalTitle: { fontSize: 17, fontWeight: '700', color: Colors.black },
+  modalClose: { fontSize: 15, color: Colors.primary, fontWeight: '600' },
+  modalScroll: { paddingHorizontal: 20 },
+  catRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.gray100,
+  },
+  catName: { flex: 1, fontSize: 15, color: Colors.black, fontWeight: '500' },
+  catEditInput: {
+    flex: 1,
+    fontSize: 15,
+    color: Colors.black,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.primary,
+    paddingVertical: 2,
+    marginRight: 8,
+  },
+  catActions: { flexDirection: 'row', gap: 4 },
+  catActionBtn: { padding: 8 },
+  catConfirmBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: Colors.primary,
+    borderRadius: 8,
+    marginRight: 4,
+  },
+  catConfirmText: { fontSize: 13, color: Colors.white, fontWeight: '600' },
+  addCatRow: {
+    flexDirection: 'row',
+    gap: 10,
+    paddingVertical: 16,
+    paddingBottom: 32,
+  },
+  addCatInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: Colors.gray200,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: Colors.black,
+    backgroundColor: Colors.gray50,
+  },
+  addCatBtn: {
+    backgroundColor: Colors.primary,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 10,
+    justifyContent: 'center',
+  },
+  addCatBtnDisabled: { opacity: 0.4 },
+  addCatBtnText: { color: Colors.white, fontSize: 14, fontWeight: '700' },
 });
