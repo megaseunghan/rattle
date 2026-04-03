@@ -208,6 +208,16 @@ export default function PosSyncScreen() {
               1~3일 이내 토스 측에서 제공동의 전화 안내 후 처리됩니다.{'\n'}
               연동 완료 후 이 화면에서 매출 데이터를 동기화할 수 있습니다.
             </Text>
+            <TouchableOpacity
+              style={styles.checkBtn}
+              onPress={loadStoreInfo}
+              disabled={saving}
+            >
+              {saving
+                ? <ActivityIndicator size="small" color={Colors.primary} />
+                : <Text style={styles.checkBtnText}>연동 완료 확인</Text>
+              }
+            </TouchableOpacity>
           </View>
         )}
 
@@ -336,6 +346,15 @@ const styles = StyleSheet.create({
   },
   pendingTitle: { fontSize: 16, fontWeight: '700', color: Colors.black, marginBottom: 8 },
   pendingDesc: { fontSize: 14, color: Colors.gray500, textAlign: 'center', lineHeight: 22 },
+  checkBtn: {
+    marginTop: 16,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Colors.primary,
+  },
+  checkBtnText: { fontSize: 14, fontWeight: '600', color: Colors.primary },
   catalogRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10 },
   catalogRowBorder: { borderTopWidth: 1, borderTopColor: Colors.gray100 },
   catalogLeft: { flex: 1 },
