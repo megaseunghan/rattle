@@ -16,6 +16,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { Colors } from '../../constants/colors';
 import { useIngredients } from '../../lib/hooks/useIngredients';
 import { useOrders } from '../../lib/hooks/useOrders';
+import { useCategories } from '../../lib/hooks/useCategories';
 import { getIngredientById } from '../../lib/services/ingredients';
 import { Ingredient } from '../../types';
 import { LoadingSpinner } from '../../lib/components/LoadingSpinner';
@@ -28,6 +29,7 @@ export default function EditIngredientScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { update } = useIngredients();
   const ordersHook = useOrders();
+  const { categories } = useCategories();
 
   const [ingredient, setIngredient] = useState<Ingredient | null>(null);
   const [fetchLoading, setFetchLoading] = useState(true);
@@ -138,13 +140,19 @@ export default function EditIngredientScreen() {
           />
 
           <Text style={styles.label}>카테고리</Text>
-          <TextInput
-            style={styles.input}
-            value={category}
-            onChangeText={setCategory}
-            placeholder="예) 음료재료, 식품, 소모품"
-            placeholderTextColor={Colors.gray400}
-          />
+          <View style={styles.categoryChips}>
+            {categories.map(c => (
+              <TouchableOpacity
+                key={c}
+                style={[styles.categoryChip, category === c && styles.categoryChipActive]}
+                onPress={() => setCategory(category === c ? '' : c)}
+              >
+                <Text style={[styles.categoryChipText, category === c && styles.categoryChipTextActive]}>
+                  {c}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
 
           <Text style={styles.label}>거래처 (발주 담당)</Text>
           <View style={styles.supplierRow}>
@@ -320,6 +328,18 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: Colors.black,
   },
+  categoryChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  categoryChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: Colors.gray200,
+    backgroundColor: Colors.white,
+  },
+  categoryChipActive: { borderColor: Colors.primary, backgroundColor: Colors.bg },
+  categoryChipText: { fontSize: 14, color: Colors.gray600 },
+  categoryChipTextActive: { color: Colors.primary, fontWeight: '700' },
   unitPresets: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 },
   unitChip: {
     paddingHorizontal: 14,
