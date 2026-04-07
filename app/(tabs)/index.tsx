@@ -263,11 +263,11 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: Colors.black,
   },
-  logoDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: Colors.primary,
+  profileBtn: {
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   statRow: {
     flexDirection: 'row',

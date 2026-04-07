@@ -244,6 +244,7 @@ const styles = StyleSheet.create({
   },
   sortChipText: { fontSize: 13, fontWeight: '600', color: Colors.gray500 },
   sortChipTextActive: { color: Colors.white },
+  categoryScroll: { flexGrow: 0 },
   categoryBar: {
     paddingHorizontal: 16,
     paddingBottom: 12,

@@ -7,12 +7,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../constants/colors';
-import { getOrderById, deleteOrder, updateOrder } from '../../lib/services/orders';
-import { useIngredients } from '../../lib/hooks/useIngredients';
-import { useCategories } from '../../lib/hooks/useCategories';
+import { getOrderById, deleteOrder, OrderWithItems } from '../../lib/services/orders';
 import { LoadingSpinner } from '../../lib/components/LoadingSpinner';
 import { ErrorMessage } from '../../lib/components/ErrorMessage';
-import { OrderWithItems } from '../../types';
 
 export default function OrderDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -92,7 +89,7 @@ export default function OrderDetailScreen() {
         </View>
 
         <Text style={styles.sectionTitle}>품목 목록</Text>
-        {order.items?.map((item, idx) => (
+        {order.order_items?.map((item, idx) => (
           <View key={idx} style={styles.itemCard}>
             <View style={styles.itemHeader}>
               <Text style={styles.itemName}>{item.ingredient?.name || '알 수 없는 품목'}</Text>

@@ -3,11 +3,9 @@ import { useAuth } from '../contexts/AuthContext';
 import {
   getRecipes,
   createRecipeWithIngredients,
-  updateRecipe,
   deleteRecipe,
   RecipeWithIngredients,
 } from '../services/recipes';
-import { Recipe } from '../../types';
 
 interface UseRecipesResult {
   data: RecipeWithIngredients[];
@@ -20,7 +18,6 @@ interface UseRecipesResult {
     sellingPrice: number,
     ingredients: { ingredient_id: string; quantity: number; unit: string }[]
   ) => Promise<void>;
-  update: (id: string, data: Partial<Pick<Recipe, 'name' | 'category' | 'selling_price'>>) => Promise<void>;
   remove: (id: string) => Promise<void>;
 }
 
@@ -59,11 +56,6 @@ export function useRecipes(): UseRecipesResult {
     await refetch();
   }
 
-  async function update(id: string, recipeData: Partial<Pick<Recipe, 'name' | 'category' | 'selling_price'>>) {
-    await updateRecipe(id, recipeData);
-    await refetch();
-  }
-
   async function remove(id: string) {
     const previous = data;
     setData(prev => prev.filter(item => item.id !== id));
@@ -75,5 +67,5 @@ export function useRecipes(): UseRecipesResult {
     }
   }
 
-  return { data, loading, error, refetch, create, update, remove };
+  return { data, loading, error, refetch, create, remove };
 }
