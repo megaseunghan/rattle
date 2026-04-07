@@ -53,3 +53,10 @@ supabase/supabase/
 .omc/
 .claudeignore
 .worktrees
+
+# IDE
+.idea/
+.vscode/
+
+# Test data
+test_stock*.csv
