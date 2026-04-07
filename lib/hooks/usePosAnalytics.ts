@@ -29,6 +29,7 @@ export function usePosAnalytics() {
   const fetchItems = useCallback(async (dateFrom: string, dateTo: string) => {
     if (!store) return;
     setLoadingItems(true);
+    setItems([]); // 이전 데이터 초기화
     setError(null);
     setActiveCategory('전체');
     try {

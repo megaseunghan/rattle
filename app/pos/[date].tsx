@@ -28,9 +28,7 @@ function ItemRow({ item }: { item: DailyItem }) {
 }
 
 export default function PosDateScreen() {
-  const { date, from: encodedFrom, to: encodedTo } = useLocalSearchParams<{ date: string; from: string; to: string }>();
-  const from = decodeURIComponent(encodedFrom ?? '');
-  const to = decodeURIComponent(encodedTo ?? '');
+  const { date, from, to } = useLocalSearchParams<{ date: string; from: string; to: string }>();
 
   const {
     items, allItems, categories, activeCategory, setActiveCategory,
@@ -38,13 +36,15 @@ export default function PosDateScreen() {
   } = usePosAnalytics();
 
   useFocusEffect(useCallback(() => {
-    if (from && to) fetchItems(from, to);
+    if (from && to) {
+      fetchItems(String(from), String(to));
+    }
   }, [from, to, fetchItems]));
 
   const totalAmount = allItems.reduce((sum, i) => sum + i.totalAmount, 0);
   const totalQty = allItems.reduce((sum, i) => sum + i.quantity, 0);
 
-  if (error) return <ErrorMessage message={error} onRetry={() => fetchItems(from, to)} />;
+  if (error) return <ErrorMessage message={error} onRetry={() => fetchItems(String(from), String(to))} />;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -91,7 +91,7 @@ export default function PosDateScreen() {
             contentContainerStyle={styles.list}
             renderItem={({ item }) => <ItemRow item={item} />}
             ListEmptyComponent={
-              <Text style={styles.emptyText}>해당 카테고리의 판매 내역이 없습니다.</Text>
+              <Text style={styles.emptyText}>판매 내역이 없습니다.</Text>
             }
             ItemSeparatorComponent={() => <View style={styles.separator} />}
           />

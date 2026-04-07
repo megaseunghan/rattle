@@ -105,7 +105,7 @@ export async function getDailyItems(
       .eq('store_id', storeId)
       .eq('status', 'COMPLETED')
       .gte('order_at', dateFrom)
-      .lt('order_at', dateTo),
+      .lte('order_at', dateTo),
 
     supabase
       .from('toss_catalog')
