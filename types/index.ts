@@ -3,6 +3,7 @@ export interface Store {
   id: string;
   name: string;
   owner_id: string;
+  categories?: string[];
   created_at: string;
   // Toss Place 가맹점 신청 정보
   business_number?: string | null;
