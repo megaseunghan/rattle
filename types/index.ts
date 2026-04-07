@@ -4,6 +4,7 @@ export interface Store {
   name: string;
   owner_id: string;
   categories?: string[];
+  closing_time?: string | null;  // 'HH:MM' 형식, 예: '23:00'
   created_at: string;
   // Toss Place 가맹점 신청 정보
   business_number?: string | null;
@@ -137,4 +138,34 @@ export interface OcrLineItem {
   matched_ingredient: Ingredient | null; // 재고 자동 매칭 결과
   match_candidates: Ingredient[];        // 후보 2개 이상일 때
   prev_price: number | null;            // 이전 발주 단가 (변동 표시용)
+}
+
+// Toss Place 카탈로그 (DB row)
+export interface TossCatalogEntry {
+  id: string;
+  store_id: string;
+  item_id: string;
+  item_name: string;
+  category_name: string;
+  price: number;
+  is_available: boolean;
+  synced_at: string;
+}
+
+// POS 일별 요약
+export interface DailySummary {
+  date: string;       // 'YYYY-MM-DD' (영업일 기준 날짜 레이블)
+  dateFrom: string;   // ISO — 영업일 시작 (전날 closing_time)
+  dateTo: string;     // ISO — 영업일 종료 (당일 closing_time)
+  totalAmount: number;
+  orderCount: number;
+}
+
+// POS 상품별 집계 (일별 상세)
+export interface DailyItem {
+  itemId: string;
+  itemName: string;
+  categoryName: string;  // 카탈로그 미동기화 시 ''
+  quantity: number;
+  totalAmount: number;
 }
