@@ -16,13 +16,62 @@ export async function fetchTossOrders(
   dateTo: string,
 ): Promise<TossOrder[]> {
   const params = new URLSearchParams({ dateFrom, dateTo });
-  const data = await tossProxyRequest<Record<string, unknown>>(
+  const data = await tossProxyRequest<unknown>(
     `/merchants/${merchantId}/order/orders?${params}`,
   );
   if (!data) throw new Error('Toss Place API 응답이 없습니다');
-  const list = data.orders ?? data.content ?? [];
-  if (!Array.isArray(list)) return [];
-  return list as TossOrder[];
+
+  if (__DEV__) {
+    console.log('[TossOrders] 응답 최상위 키:', Object.keys(data as object));
+  }
+
+  // 배열 직접 반환
+  if (Array.isArray(data)) return data as TossOrder[];
+
+  const d = data as Record<string, unknown>;
+
+  // 가능한 응답 구조 순차 탐색
+  const nested = d.data;
+  if (Array.isArray(nested)) return nested as TossOrder[];
+  if (nested && typeof nested === 'object') {
+    const nd = nested as Record<string, unknown>;
+    const inner = nd.orders ?? nd.content ?? nd.items ?? nd.results;
+    if (Array.isArray(inner)) return inner as TossOrder[];
+  }
+
+  const flat = d.success ?? d.orders ?? d.content ?? d.items ?? d.results;
+  if (Array.isArray(flat)) return normalizeTossOrders(flat);
+
+  if (__DEV__) {
+    console.warn('[TossOrders] 알 수 없는 응답 구조:', JSON.stringify(data).slice(0, 300));
+  }
+  return [];
+}
+
+function normalizeTossOrders(raw: unknown[]): TossOrder[] {
+  return raw.map((o: any) => ({
+    orderId:     o.orderId     ?? o.id          ?? '',
+    orderAt:     o.orderAt     ?? o.createdAt   ?? o.openedAt ?? '',
+    totalAmount: o.totalAmount ?? o.totalOrderAmount ?? o.totalPrice ?? 0,
+    status:      normalizeOrderStatus(o.status  ?? o.orderState ?? ''),
+    items:       normalizeOrderItems(o.items    ?? o.orderItems ?? o.menuItems ?? []),
+  }));
+}
+
+function normalizeOrderStatus(raw: string): TossOrder['status'] {
+  if (raw === 'COMPLETED' || raw === 'CANCELLED' || raw === 'REFUNDED') return raw;
+  if (raw === 'CANCELED') return 'CANCELLED';
+  return 'COMPLETED';
+}
+
+function normalizeOrderItems(raw: unknown[]): TossOrder['items'] {
+  return raw.map((i: any) => ({
+    itemId:     i.itemId    ?? i.id       ?? '',
+    itemName:   i.itemName  ?? i.name     ?? i.title ?? '',
+    quantity:   i.quantity  ?? i.qty      ?? 1,
+    unitPrice:  i.unitPrice ?? i.price    ?? 0,
+    totalPrice: i.totalPrice ?? (i.unitPrice ?? i.price ?? 0) * (i.quantity ?? i.qty ?? 1),
+  }));
 }
 
 export async function fetchTossCatalog(merchantId: string): Promise<TossCatalogItem[]> {
@@ -61,4 +110,27 @@ export async function fetchTossCatalog(merchantId: string): Promise<TossCatalogI
       isAvailable: item.isAvailable ?? item.isActive ?? true,
     };
   });
+}
+
+export async function saveCatalog(
+  storeId: string,
+  items: TossCatalogItem[]
+): Promise<void> {
+  if (items.length === 0) return;
+
+  const rows = items.map(item => ({
+    store_id: storeId,
+    item_id: item.itemId,
+    item_name: item.itemName,
+    category_name: item.categoryName,
+    price: item.price,
+    is_available: item.isAvailable,
+    synced_at: new Date().toISOString(),
+  }));
+
+  const { error } = await supabase
+    .from('toss_catalog')
+    .upsert(rows, { onConflict: 'store_id,item_id' });
+
+  if (error) throw new Error(error.message);
 }
