@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import {
   View,
   Text,
@@ -14,11 +14,12 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { Colors } from '../../constants/colors';
 import { useRecipes } from '../../lib/hooks/useRecipes';
 import { useIngredients } from '../../lib/hooks/useIngredients';
 import { useAuth } from '../../lib/contexts/AuthContext';
+import { getRecipeById, updateRecipeFull } from '../../lib/services/recipes';
 import { Ingredient } from '../../types';
 
 interface RecipeIngredientForm {
@@ -27,6 +28,9 @@ interface RecipeIngredientForm {
 }
 
 export default function NewRecipeScreen() {
+  const { id } = useLocalSearchParams<{ id?: string }>();
+  const isEdit = !!id;
+
   const { create } = useRecipes();
   const { data: ingredients, create: createIngredient } = useIngredients();
   const { store } = useAuth();
@@ -35,6 +39,7 @@ export default function NewRecipeScreen() {
   const [category, setCategory] = useState('');
   const [sellingPrice, setSellingPrice] = useState('');
   const [items, setItems] = useState<RecipeIngredientForm[]>([]);
+  const [loading, setLoading] = useState(isEdit);
   const [submitting, setSubmitting] = useState(false);
   const [showPicker, setShowPicker] = useState(false);
 
@@ -44,6 +49,31 @@ export default function NewRecipeScreen() {
   const [newUnit, setNewUnit] = useState('');
   const [newPrice, setNewPrice] = useState('');
   const [savingNew, setSavingNew] = useState(false);
+
+  useEffect(() => {
+    if (isEdit) {
+      loadOriginalRecipe();
+    }
+  }, [id]);
+
+  async function loadOriginalRecipe() {
+    if (!id) return;
+    try {
+      const data = await getRecipeById(id);
+      setName(data.name);
+      setCategory(data.category);
+      setSellingPrice(String(data.selling_price));
+      setItems(data.recipe_ingredients.map(ri => ({
+        ingredient: ri.ingredient!,
+        quantity: String(ri.quantity),
+      })));
+    } catch (e: any) {
+      Alert.alert('오류', '레시피 정보를 불러오는데 실패했습니다.');
+      router.back();
+    } finally {
+      setLoading(false);
+    }
+  }
 
   function unitPrice(ing: Ingredient): number {
     const base = ing.last_price ?? 0;
@@ -137,22 +167,34 @@ export default function NewRecipeScreen() {
 
     setSubmitting(true);
     try {
-      await create(
-        name.trim(),
-        category.trim() || '기타',
-        sp,
-        items.map(i => ({
-          ingredient_id: i.ingredient.id,
-          quantity: parseFloat(i.quantity) || 0,
-          unit: i.ingredient.unit,
-        }))
-      );
+      const ingredientData = items.map(i => ({
+        ingredient_id: i.ingredient.id,
+        quantity: parseFloat(i.quantity) || 0,
+        unit: i.ingredient.unit,
+      }));
+
+      if (isEdit && id) {
+        await updateRecipeFull(id, name.trim(), category.trim() || '기타', sp, ingredientData);
+        Alert.alert('성공', '레시피가 수정되었습니다.');
+      } else {
+        await create(name.trim(), category.trim() || '기타', sp, ingredientData);
+      }
       router.back();
     } catch (e: any) {
-      Alert.alert('오류', e.message ?? '레시피 등록에 실패했습니다.');
+      Alert.alert('오류', e.message ?? '작업에 실패했습니다.');
     } finally {
       setSubmitting(false);
     }
+  }
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={Colors.primary} />
+        </View>
+      </SafeAreaView>
+    );
   }
 
   const sellingPriceNum = parseFloat(sellingPrice) || 0;
@@ -161,15 +203,15 @@ export default function NewRecipeScreen() {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()}>
-          <Text style={styles.back}>← 뒤로</Text>
+          <Text style={styles.back}>취소</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>새 레시피</Text>
+        <Text style={styles.title}>{isEdit ? '레시피 수정' : '새 레시피'}</Text>
         <TouchableOpacity
           style={[styles.submitBtn, submitting && styles.submitBtnDisabled]}
           onPress={handleSubmit}
           disabled={submitting}
         >
-          <Text style={styles.submitText}>{submitting ? '등록 중...' : '등록'}</Text>
+          <Text style={styles.submitText}>{submitting ? '저장 중...' : isEdit ? '저장' : '등록'}</Text>
         </TouchableOpacity>
       </View>
 
@@ -508,4 +550,5 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary, alignItems: 'center',
   },
   newSaveText: { fontSize: 14, fontWeight: '700', color: Colors.white },
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
 });
