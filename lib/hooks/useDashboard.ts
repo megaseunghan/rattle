@@ -53,10 +53,10 @@ export function useDashboard(): UseDashboardResult {
             .select('current_stock, min_stock')
             .eq('store_id', store.id),
 
-          // 레시피 목록 (수 + 평균 마진율)
+          // 레시피 목록 (수 + 실시간 평균 마진율)
           supabase
             .from('recipes')
-            .select('margin_rate')
+            .select('selling_price, recipe_ingredients(quantity, ingredient:ingredients(last_price, container_size))')
             .eq('store_id', store.id),
 
           // 최근 발주 5건
@@ -87,13 +87,20 @@ export function useDashboard(): UseDashboardResult {
       ).length;
       setLowStockCount(lowStock);
 
-      // 레시피 수 + 평균 마진율
+      // 레시피 수 + 실시간 평균 마진율
       const recipes = recipesRes.data ?? [];
       setRecipeCount(recipes.length);
       if (recipes.length > 0) {
-        const avg =
-          recipes.reduce((sum: number, r: { margin_rate: number }) => sum + Number(r.margin_rate), 0) /
-          recipes.length;
+        const marginRates = recipes.map((r: any) => {
+          const cost = (r.recipe_ingredients ?? []).reduce((sum: number, ri: any) => {
+            const base = ri.ingredient?.last_price ?? 0;
+            const containerSize = ri.ingredient?.container_size;
+            const unitPrice = containerSize && containerSize > 0 ? base / containerSize : base;
+            return sum + ri.quantity * unitPrice;
+          }, 0);
+          return r.selling_price > 0 ? ((r.selling_price - cost) / r.selling_price) * 100 : 0;
+        });
+        const avg = marginRates.reduce((sum: number, m: number) => sum + m, 0) / marginRates.length;
         setAvgMarginRate(Math.round(avg * 10) / 10);
       } else {
         setAvgMarginRate(0);
