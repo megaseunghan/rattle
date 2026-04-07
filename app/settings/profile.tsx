@@ -11,20 +11,35 @@ import { useAuth } from '../../lib/contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
 
 export default function ProfileScreen() {
-  const { user, store, signOut } = useAuth();
+  const { user, store, signOut, refreshStore } = useAuth();
   const [loading, setLoading] = useState(false);
   const [name, setName] = useState(store?.name || '');
+  const [closingTime, setClosingTime] = useState(
+    (store?.closing_time as string | null | undefined)?.slice(0, 5) ?? '23:00'
+  );
 
   async function handleUpdateProfile() {
     if (!name.trim()) return;
+    
+    // 시간 형식 검증 (HH:MM)
+    if (!/^\d{2}:\d{2}$/.test(closingTime)) {
+      Alert.alert('형식 오류', '마감 시간을 HH:MM 형식으로 입력해주세요. (예: 23:00)');
+      return;
+    }
+
     setLoading(true);
     try {
       const { error } = await supabase
         .from('stores')
-        .update({ name: name.trim() })
+        .update({ 
+          name: name.trim(),
+          closing_time: closingTime,
+        })
         .eq('id', store?.id);
       
       if (error) throw error;
+      
+      await refreshStore();
       Alert.alert('성공', '정보가 수정되었습니다.');
     } catch (e: any) {
       Alert.alert('수정 실패', e.message);
@@ -46,9 +61,6 @@ export default function ProfileScreen() {
             setLoading(true);
             try {
               // RPC 등을 통해 관련 데이터 일괄 삭제 로직 필요할 수 있음
-              // 여기서는 간단히 auth.users는 직접 삭제가 불가능하므로 
-              // 비즈니스 로직에 따라 처리 (Supabase는 Admin API 필요)
-              // 여기서는 로그아웃 처리만 우선 가이드
               const { error } = await supabase.rpc('delete_user_data');
               if (error) throw error;
               
@@ -104,6 +116,17 @@ export default function ProfileScreen() {
             onChangeText={setName}
             placeholder="매장 이름"
           />
+
+          <Text style={[styles.label, { marginTop: 16 }]}>마감 시간 (HH:MM)</Text>
+          <TextInput
+            style={styles.input}
+            value={closingTime}
+            onChangeText={setClosingTime}
+            placeholder="23:00"
+            keyboardType="numbers-and-punctuation"
+            maxLength={5}
+          />
+
           <TouchableOpacity
             style={[styles.saveBtn, loading && styles.disabled]}
             onPress={handleUpdateProfile}
