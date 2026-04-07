@@ -1,5 +1,5 @@
 import { supabase } from '../supabase';
-import { DailySummary, DailyItem, TossOrderItem } from '../../types';
+import { DailySummary, DailyItem } from '../../types';
 
 /** 영업일 날짜 레이블 계산
  * closing_time이 23:00이면 23:00 이후 주문은 다음 날 영업일로 분류
@@ -58,7 +58,7 @@ export async function getDailySummaries(
   earliest.setHours(h, m, 0, 0);
 
   const { data, error } = await supabase
-    .from('toss_sales')
+    .from('toss_orders')
     .select('order_at, total_amount, status')
     .eq('store_id', storeId)
     .eq('status', 'COMPLETED')
@@ -98,49 +98,51 @@ export async function getDailyItems(
   dateFrom: string,
   dateTo: string
 ): Promise<DailyItem[]> {
-  const [salesRes, catalogRes] = await Promise.all([
-    supabase
-      .from('toss_sales')
-      .select('items')
-      .eq('store_id', storeId)
-      .eq('status', 'COMPLETED')
-      .gte('order_at', dateFrom)
-      .lte('order_at', dateTo),
+  // toss_order_items와 toss_orders를 JOIN하여 기간 내 판매된 모든 항목 조회
+  const { data, error } = await supabase
+    .from('toss_order_items')
+    .select(`
+      item_id,
+      item_name,
+      quantity,
+      total_price,
+      toss_orders!inner(order_at, status)
+    `)
+    .eq('store_id', storeId)
+    .eq('toss_orders.status', 'COMPLETED')
+    .gte('toss_orders.order_at', dateFrom)
+    .lte('toss_orders.order_at', dateTo);
 
-    supabase
-      .from('toss_catalog')
-      .select('item_id, category_name')
-      .eq('store_id', storeId),
-  ]);
+  if (error) throw new Error(error.message);
 
-  if (salesRes.error) throw new Error(salesRes.error.message);
+  // 카탈로그 정보(카테고리명) 가져오기
+  const { data: catalogData } = await supabase
+    .from('toss_catalog')
+    .select('item_id, category_name')
+    .eq('store_id', storeId);
 
-  // itemId → categoryName 맵
   const catalogMap = new Map<string, string>();
-  for (const row of catalogRes.data ?? []) {
-    catalogMap.set(row.item_id, row.category_name);
+  for (const row of catalogData ?? []) {
+    if (row.item_id) catalogMap.set(row.item_id, row.category_name);
   }
 
-  // 상품별 집계
+  // 상품별 집계 수행
   const itemMap = new Map<string, DailyItem>();
 
-  for (const sale of salesRes.data ?? []) {
-    const items: TossOrderItem[] = sale.items ?? [];
-    for (const item of items) {
-      const key = item.itemId || item.itemName;
-      if (!itemMap.has(key)) {
-        itemMap.set(key, {
-          itemId: item.itemId,
-          itemName: item.itemName,
-          categoryName: catalogMap.get(item.itemId) ?? '',
-          quantity: 0,
-          totalAmount: 0,
-        });
-      }
-      const agg = itemMap.get(key)!;
-      agg.quantity += item.quantity;
-      agg.totalAmount += item.totalPrice;
+  for (const row of data ?? []) {
+    const key = row.item_id || row.item_name;
+    if (!itemMap.has(key)) {
+      itemMap.set(key, {
+        itemId: row.item_id || '',
+        itemName: row.item_name,
+        categoryName: row.item_id ? (catalogMap.get(row.item_id) ?? '') : '',
+        quantity: 0,
+        totalAmount: 0,
+      });
     }
+    const agg = itemMap.get(key)!;
+    agg.quantity += Number(row.quantity);
+    agg.totalAmount += Number(row.total_price);
   }
 
   return Array.from(itemMap.values()).sort((a, b) => b.totalAmount - a.totalAmount);
