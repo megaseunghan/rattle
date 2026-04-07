@@ -1,7 +1,8 @@
 import { useState, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../supabase';
-import { fetchTossOrders, fetchTossCatalog } from '../services/tossplace';
+import { fetchTossOrders, fetchTossCatalog, saveCatalog } from '../services/tossplace';
+import { getAutoSyncRange, getBusinessDayRange } from '../services/posAnalytics';
 import { TossOrder, TossCatalogItem } from '../../types';
 
 interface TossSyncState {
@@ -16,11 +17,15 @@ interface UseTossSyncResult extends TossSyncState {
   syncOrders: (dateFrom: string, dateTo: string) => Promise<TossOrder[]>;
   syncCatalog: () => Promise<TossCatalogItem[]>;
   loadTodaySales: () => Promise<void>;
+  autoSync: () => Promise<void>;
+  syncByDate: (date: string) => Promise<void>;
+  autoSyncing: boolean;
 }
 
 export function useTossSync(): UseTossSyncResult {
   const { store } = useAuth();
   const [loading, setLoading] = useState(false);
+  const [autoSyncing, setAutoSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
   const [todaySales, setTodaySales] = useState(0);
@@ -39,6 +44,16 @@ export function useTossSync(): UseTossSyncResult {
     if (!data.toss_merchant_id) throw new Error('Toss Place 연동이 설정되지 않았습니다');
 
     return data.toss_merchant_id as string;
+  }
+
+  async function getClosingTime(): Promise<string> {
+    if (!store) return '23:00';
+    const { data } = await supabase
+      .from('stores')
+      .select('closing_time')
+      .eq('id', store.id)
+      .single();
+    return (data?.closing_time as string | null) ?? '23:00';
   }
 
   const syncOrders = useCallback(async (dateFrom: string, dateTo: string): Promise<TossOrder[]> => {
@@ -78,11 +93,16 @@ export function useTossSync(): UseTossSyncResult {
   }, [store]);
 
   const syncCatalog = useCallback(async (): Promise<TossCatalogItem[]> => {
+    if (!store) throw new Error('매장 정보가 없습니다');
     setLoading(true);
     setError(null);
     try {
       const merchantId = await getMerchantId();
-      return await fetchTossCatalog(merchantId);
+      const items = await fetchTossCatalog(merchantId);
+      if (items.length > 0) {
+        await saveCatalog(store.id, items);
+      }
+      return items;
     } catch (e: any) {
       setError(e.message);
       throw e;
@@ -109,6 +129,57 @@ export function useTossSync(): UseTossSyncResult {
     setTodayOrderCount(sales.length);
   }, [store]);
 
+  /** 오늘 영업일 데이터 없으면 자동 동기화 */
+  const autoSync = useCallback(async (): Promise<void> => {
+    if (!store || autoSyncing) return;
+    try {
+      setAutoSyncing(true);
+      const closingTime = await getClosingTime();
+      const { from, to } = getAutoSyncRange(closingTime);
+
+      // 이미 데이터 있으면 스킵
+      const { count } = await supabase
+        .from('toss_sales')
+        .select('id', { count: 'exact', head: true })
+        .eq('store_id', store.id)
+        .gte('order_at', from)
+        .lte('order_at', to);
+
+      if ((count ?? 0) > 0) return;
+
+      const merchantId = await getMerchantId();
+      const orders = await fetchTossOrders(merchantId, from.slice(0, 10), to.slice(0, 10));
+
+      if (orders.length > 0) {
+        const rows = orders.map(o => ({
+          store_id: store.id,
+          toss_order_id: o.orderId,
+          order_at: o.orderAt,
+          total_amount: o.totalAmount,
+          status: o.status,
+          items: o.items,
+        }));
+        await supabase.from('toss_sales').upsert(rows, { onConflict: 'toss_order_id' });
+      }
+
+      setLastSyncAt(new Date().toISOString());
+      await loadTodaySales();
+    } catch {
+      // 자동 동기화 실패는 조용히 무시
+    } finally {
+      setAutoSyncing(false);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [store, autoSyncing]);
+
+  /** 특정 날짜 영업일 수동 동기화 */
+  const syncByDate = useCallback(async (date: string): Promise<void> => {
+    if (!store) throw new Error('매장 정보가 없습니다');
+    const closingTime = await getClosingTime();
+    const { from, to } = getBusinessDayRange(date, closingTime);
+    await syncOrders(from.slice(0, 10), to.slice(0, 10));
+  }, [store, syncOrders]);
+
   return {
     loading,
     error,
@@ -118,5 +189,8 @@ export function useTossSync(): UseTossSyncResult {
     syncOrders,
     syncCatalog,
     loadTodaySales,
+    autoSync,
+    syncByDate,
+    autoSyncing,
   };
 }
