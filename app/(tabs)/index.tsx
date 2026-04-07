@@ -137,7 +137,12 @@ export default function HomeScreen() {
             </View>
             <Text style={styles.storeName}>{store?.name ?? '매장 이름'}</Text>
           </View>
-          <View style={styles.logoDot} />
+          <TouchableOpacity
+            style={styles.profileBtn}
+            onPress={() => router.push('/settings/profile')}
+          >
+            <Ionicons name="person-circle-outline" size={32} color={Colors.primary} />
+          </TouchableOpacity>
         </View>
 
         {/* 요약 카드 */}
