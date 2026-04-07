@@ -304,9 +304,6 @@ export default function StockScreen() {
             <Ionicons name="cloud-upload-outline" size={16} color={Colors.primary} />
             <Text style={styles.csvText}>CSV</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.addButton} onPress={() => router.push('/stock/new')}>
-            <Text style={styles.addText}>+ 식자재</Text>
-          </TouchableOpacity>
         </View>
       </View>
 

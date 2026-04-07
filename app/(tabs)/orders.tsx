@@ -62,7 +62,10 @@ function OrderCard({
   }
 
   return (
-    <View style={styles.orderCard}>
+    <TouchableOpacity
+      style={styles.orderCard}
+      onPress={() => router.push(`/orders/${order.id}`)}
+    >
       <View style={styles.orderCardHeader}>
         <View style={styles.orderCardLeft}>
           <Text style={styles.supplierName}>{order.supplier_name || '(거래처 미입력)'}</Text>
@@ -90,7 +93,7 @@ function OrderCard({
           </TouchableOpacity>
         </View>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 }
 
