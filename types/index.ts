@@ -116,15 +116,26 @@ export interface TossCatalogItem {
   isAvailable: boolean;
 }
 
-export interface TossSale {
+export interface TossOrderRecord {
   id: string;
   store_id: string;
   toss_order_id: string;
   order_at: string;
   total_amount: number;
   status: 'COMPLETED' | 'CANCELLED' | 'REFUNDED';
-  items: TossOrderItem[];
   synced_at: string;
+}
+
+export interface TossOrderItemRecord {
+  id: string;
+  order_id: string;
+  store_id: string;
+  item_id: string | null;
+  item_name: string;
+  quantity: number;
+  unit_price: number;
+  total_price: number;
+  created_at: string;
 }
 
 // OCR 라인 아이템 (리뷰 화면용)

@@ -10,6 +10,31 @@ async function tossProxyRequest<T>(path: string): Promise<T> {
   return data as T;
 }
 
+/** 개별 주문 상세 정보 가져오기 (항목 정보 누락 시 사용) */
+export async function fetchTossOrderDetail(
+  merchantId: string,
+  orderId: string,
+): Promise<TossOrder | null> {
+  try {
+    const data = await tossProxyRequest<any>(
+      `/merchants/${merchantId}/order/orders/${orderId}`,
+    );
+    if (!data) return null;
+    
+    // 개별 상세 응답도 목록 응답과 유사하게 노멀라이즈
+    return {
+      orderId:     data.orderId     ?? data.id          ?? orderId,
+      orderAt:     data.orderAt     ?? data.createdAt   ?? data.openedAt ?? '',
+      totalAmount: data.totalAmount ?? data.totalOrderAmount ?? data.totalPrice ?? 0,
+      status:      normalizeOrderStatus(data.status  ?? data.orderState ?? ''),
+      items:       normalizeOrderItems(data.items    ?? data.orderItems ?? data.menuItems ?? []),
+    };
+  } catch (e) {
+    console.error(`[TossOrderDetail] 주문 상세 조회 실패 (${orderId}):`, e);
+    return null;
+  }
+}
+
 export async function fetchTossOrders(
   merchantId: string,
   dateFrom: string,
@@ -22,30 +47,36 @@ export async function fetchTossOrders(
   if (!data) throw new Error('Toss Place API 응답이 없습니다');
 
   if (__DEV__) {
-    console.log('[TossOrders] 응답 최상위 키:', Object.keys(data as object));
+    console.log('[TossOrders] 응답 데이터 확인');
   }
 
-  // 배열 직접 반환
-  if (Array.isArray(data)) return data as TossOrder[];
-
-  const d = data as Record<string, unknown>;
-
-  // 가능한 응답 구조 순차 탐색
-  const nested = d.data;
-  if (Array.isArray(nested)) return nested as TossOrder[];
-  if (nested && typeof nested === 'object') {
-    const nd = nested as Record<string, unknown>;
-    const inner = nd.orders ?? nd.content ?? nd.items ?? nd.results;
-    if (Array.isArray(inner)) return inner as TossOrder[];
+  let rawOrders: any[] = [];
+  if (Array.isArray(data)) {
+    rawOrders = data;
+  } else {
+    const d = data as Record<string, unknown>;
+    const list = d.data ?? d.success ?? d.orders ?? d.content ?? d.items ?? d.results;
+    if (Array.isArray(list)) rawOrders = list;
   }
 
-  const flat = d.success ?? d.orders ?? d.content ?? d.items ?? d.results;
-  if (Array.isArray(flat)) return normalizeTossOrders(flat);
+  if (rawOrders.length === 0) return [];
 
-  if (__DEV__) {
-    console.warn('[TossOrders] 알 수 없는 응답 구조:', JSON.stringify(data).slice(0, 300));
-  }
-  return [];
+  const orders = normalizeTossOrders(rawOrders);
+
+  // 주문 항목(items)이 비어있는 경우 상세 조회를 통해 채워넣기
+  const processedOrders = await Promise.all(
+    orders.map(async (order) => {
+      if (order.items.length === 0 && order.status === 'COMPLETED') {
+        const detail = await fetchTossOrderDetail(merchantId, order.orderId);
+        if (detail && detail.items.length > 0) {
+          return detail;
+        }
+      }
+      return order;
+    })
+  );
+
+  return processedOrders;
 }
 
 function normalizeTossOrders(raw: unknown[]): TossOrder[] {
@@ -59,18 +90,21 @@ function normalizeTossOrders(raw: unknown[]): TossOrder[] {
 }
 
 function normalizeOrderStatus(raw: string): TossOrder['status'] {
-  if (raw === 'COMPLETED' || raw === 'CANCELLED' || raw === 'REFUNDED') return raw;
-  if (raw === 'CANCELED') return 'CANCELLED';
+  const s = String(raw).toUpperCase();
+  if (s === 'COMPLETED' || s === 'SUCCESS' || s === 'PAID') return 'COMPLETED';
+  if (s.includes('CANCEL') || s.includes('VOID')) return 'CANCELLED';
+  if (s.includes('REFUND')) return 'REFUNDED';
   return 'COMPLETED';
 }
 
 function normalizeOrderItems(raw: unknown[]): TossOrder['items'] {
+  if (!Array.isArray(raw)) return [];
   return raw.map((i: any) => ({
     itemId:     i.itemId    ?? i.id       ?? '',
     itemName:   i.itemName  ?? i.name     ?? i.title ?? '',
-    quantity:   i.quantity  ?? i.qty      ?? 1,
-    unitPrice:  i.unitPrice ?? i.price    ?? 0,
-    totalPrice: i.totalPrice ?? (i.unitPrice ?? i.price ?? 0) * (i.quantity ?? i.qty ?? 1),
+    quantity:   Number(i.quantity ?? i.qty ?? 1),
+    unitPrice:  Number(i.unitPrice ?? i.price ?? 0),
+    totalPrice: Number(i.totalPrice ?? (i.unitPrice ?? i.price ?? 0) * (i.quantity ?? i.qty ?? 1)),
   }));
 }
 
@@ -80,19 +114,16 @@ export async function fetchTossCatalog(merchantId: string): Promise<TossCatalogI
   );
   if (!data) throw new Error('Toss Place API 응답이 없습니다');
 
-  // 배열 직접 응답 또는 래핑된 응답 처리
   let list: unknown[];
   if (Array.isArray(data)) {
     list = data;
   } else {
     const wrapped = data as Record<string, unknown>;
-    // 가능한 모든 필드 확인 (items, content, data, results)
     const raw = wrapped.items ?? wrapped.content ?? wrapped.data ?? wrapped.results ?? [];
     list = Array.isArray(raw) ? raw : [];
   }
 
   return list.map((item: any) => {
-    // 가격 정보 추출 (객체 형태인 경우 priceValue, 아니면 숫자)
     let price = 0;
     if (typeof item.price === 'object' && item.price !== null) {
       price = item.price.priceValue ?? 0;
