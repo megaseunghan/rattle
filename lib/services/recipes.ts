@@ -45,20 +45,44 @@ export async function createRecipeWithIngredients(
   if (error) throw new Error(error.message);
   return data as string;
 }
-
-export async function updateRecipe(
+export async function updateRecipeFull(
   id: string,
-  data: Partial<Pick<Recipe, 'name' | 'category' | 'selling_price'>>
-): Promise<Recipe> {
-  const { data: result, error } = await supabase
+  name: string,
+  category: string,
+  sellingPrice: number,
+  ingredients: { ingredient_id: string; quantity: number; unit: string }[]
+): Promise<void> {
+  // 1. 기본 정보 업데이트
+  const { error: updateError } = await supabase
     .from('recipes')
-    .update(data)
-    .eq('id', id)
-    .select()
-    .single();
+    .update({
+      name,
+      category,
+      selling_price: sellingPrice,
+    })
+    .eq('id', id);
 
-  if (error) throw new Error(error.message);
-  return result as Recipe;
+  if (updateError) throw new Error(updateError.message);
+
+  // 2. 기존 재료 삭제
+  const { error: deleteError } = await supabase
+    .from('recipe_ingredients')
+    .delete()
+    .eq('recipe_id', id);
+
+  if (deleteError) throw new Error(deleteError.message);
+
+  // 3. 새 재료 삽입
+  const { error: insertError } = await supabase
+    .from('recipe_ingredients')
+    .insert(
+      ingredients.map(i => ({
+        recipe_id: id,
+        ...i,
+      }))
+    );
+
+  if (insertError) throw new Error(insertError.message);
 }
 
 export async function deleteRecipe(id: string): Promise<void> {

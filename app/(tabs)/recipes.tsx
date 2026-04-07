@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, FlatList, Alert, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -8,6 +8,7 @@ import { useRecipes } from '../../lib/hooks/useRecipes';
 import { LoadingSpinner } from '../../lib/components/LoadingSpinner';
 import { ErrorMessage } from '../../lib/components/ErrorMessage';
 import { RecipeWithIngredients } from '../../lib/services/recipes';
+import { Ingredient } from '../../types';
 
 type SortKey = 'name' | 'margin_desc' | 'cost_asc';
 
@@ -31,14 +32,35 @@ function RecipeCard({
     ]);
   }
 
-  const marginColor = recipe.margin_rate >= 60
+  function unitPrice(ing: Ingredient): number {
+    const base = ing.last_price ?? 0;
+    if (ing.container_size && ing.container_size > 0) return base / ing.container_size;
+    return base;
+  }
+
+  const currentCost = useMemo(() => {
+    return recipe.recipe_ingredients.reduce((sum, ri) => {
+      if (!ri.ingredient) return sum;
+      return sum + ri.quantity * unitPrice(ri.ingredient);
+    }, 0);
+  }, [recipe]);
+
+  const currentMarginRate = useMemo(() => {
+    if (recipe.selling_price <= 0) return 0;
+    return Math.max(0, ((recipe.selling_price - currentCost) / recipe.selling_price) * 100);
+  }, [recipe.selling_price, currentCost]);
+
+  const marginColor = currentMarginRate >= 60
     ? Colors.success
-    : recipe.margin_rate >= 30
+    : currentMarginRate >= 30
     ? Colors.warning
     : Colors.danger;
 
   return (
-    <View style={styles.recipeCard}>
+    <TouchableOpacity
+      style={styles.recipeCard}
+      onPress={() => router.push(`/recipes/${recipe.id}`)}
+    >
       <View style={styles.recipeHeader}>
         <View style={styles.recipeLeft}>
           <Text style={styles.recipeName}>{recipe.name}</Text>
@@ -56,16 +78,16 @@ function RecipeCard({
         </View>
         <View style={styles.recipeStat}>
           <Text style={styles.recipeStatLabel}>원가</Text>
-          <Text style={styles.recipeStatValue}>{recipe.cost.toLocaleString('ko-KR')}원</Text>
+          <Text style={styles.recipeStatValue}>{Math.round(currentCost).toLocaleString('ko-KR')}원</Text>
         </View>
         <View style={styles.recipeStat}>
           <Text style={styles.recipeStatLabel}>마진율</Text>
           <Text style={[styles.recipeStatValue, { color: marginColor }]}>
-            {recipe.margin_rate.toFixed(1)}%
+            {currentMarginRate.toFixed(1)}%
           </Text>
         </View>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 }
 
@@ -79,22 +101,33 @@ export default function RecipesScreen() {
   useFocusEffect(useCallback(() => {
     if (sortParam === 'margin') setSortBy('margin_desc');
     refetch();
-    return () => {
-      setSortBy('name');
-      setActiveCategory('전체');
-    };
   }, [sortParam]));
 
   const categories = ['전체', ...Array.from(new Set(data.map(r => r.category))).sort()];
 
-  const displayed = data
-    .filter(r => activeCategory === '전체' || r.category === activeCategory)
-    .slice()
-    .sort((a, b) => {
-      if (sortBy === 'margin_desc') return b.margin_rate - a.margin_rate;
-      if (sortBy === 'cost_asc') return a.cost - b.cost;
-      return a.name.localeCompare(b.name);
-    });
+  function unitPrice(ing: Ingredient): number {
+    const base = ing.last_price ?? 0;
+    if (ing.container_size && ing.container_size > 0) return base / ing.container_size;
+    return base;
+  }
+
+  const displayed = useMemo(() => {
+    return data
+      .filter(r => activeCategory === '전체' || r.category === activeCategory)
+      .map(r => {
+        const cost = r.recipe_ingredients.reduce((sum, ri) => {
+          if (!ri.ingredient) return sum;
+          return sum + ri.quantity * unitPrice(ri.ingredient);
+        }, 0);
+        const marginRate = r.selling_price > 0 ? ((r.selling_price - cost) / r.selling_price) * 100 : 0;
+        return { ...r, calculatedCost: cost, calculatedMarginRate: marginRate };
+      })
+      .sort((a, b) => {
+        if (sortBy === 'margin_desc') return b.calculatedMarginRate - a.calculatedMarginRate;
+        if (sortBy === 'cost_asc') return a.calculatedCost - b.calculatedCost;
+        return a.name.localeCompare(b.name);
+      });
+  }, [data, activeCategory, sortBy]);
 
   if (loading) return <LoadingSpinner />;
   if (error) return <ErrorMessage message={error} onRetry={refetch} />;
@@ -125,11 +158,7 @@ export default function RecipesScreen() {
       ) : (
         <>
           {/* 정렬 옵션 */}
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.sortBar}
-          >
+          <View style={styles.sortBar}>
             {SORT_OPTIONS.map(opt => (
               <TouchableOpacity
                 key={opt.key}
@@ -141,28 +170,27 @@ export default function RecipesScreen() {
                 </Text>
               </TouchableOpacity>
             ))}
-          </ScrollView>
+          </View>
 
-          {/* 카테고리 필터 (카테고리 2개 이상일 때만) */}
-          {categories.length > 2 && (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.categoryBar}
-            >
-              {categories.map(cat => (
-                <TouchableOpacity
-                  key={cat}
-                  style={[styles.categoryChip, activeCategory === cat && styles.categoryChipActive]}
-                  onPress={() => setActiveCategory(cat)}
-                >
-                  <Text style={[styles.categoryChipText, activeCategory === cat && styles.categoryChipTextActive]}>
-                    {cat}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          )}
+          {/* 카테고리 필터 */}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.categoryBar}
+            style={styles.categoryScroll}
+          >
+            {categories.map(cat => (
+              <TouchableOpacity
+                key={cat}
+                style={[styles.categoryChip, activeCategory === cat && styles.categoryChipActive]}
+                onPress={() => setActiveCategory(cat)}
+              >
+                <Text style={[styles.categoryChipText, activeCategory === cat && styles.categoryChipTextActive]}>
+                  {cat}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
 
           <FlatList
             data={displayed}
@@ -207,22 +235,24 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.gray200,
     backgroundColor: Colors.white,
+    flex: 1,
+    alignItems: 'center',
   },
   sortChipActive: {
-    backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
+    backgroundColor: Colors.dark,
+    borderColor: Colors.dark,
   },
   sortChipText: { fontSize: 13, fontWeight: '600', color: Colors.gray500 },
   sortChipTextActive: { color: Colors.white },
   categoryBar: {
     paddingHorizontal: 16,
-    paddingBottom: 8,
+    paddingBottom: 12,
     gap: 6,
     flexDirection: 'row',
   },
   categoryChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 5,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
     borderRadius: 20,
     borderWidth: 1,
     borderColor: Colors.gray200,
@@ -232,15 +262,16 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.dark,
     borderColor: Colors.dark,
   },
-  categoryChipText: { fontSize: 12, fontWeight: '600', color: Colors.gray500 },
+  categoryChipText: { fontSize: 13, fontWeight: '600', color: Colors.gray500 },
   categoryChipTextActive: { color: Colors.white },
-  listContent: { padding: 16, gap: 12 },
+  listContent: { paddingHorizontal: 16, paddingBottom: 24 },
   recipeCard: {
     backgroundColor: Colors.white,
     borderRadius: 14,
     padding: 16,
     borderWidth: 1,
     borderColor: Colors.gray100,
+    marginBottom: 12,
   },
   recipeHeader: {
     flexDirection: 'row',
