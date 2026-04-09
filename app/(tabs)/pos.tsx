@@ -1,8 +1,9 @@
 import { useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  Alert, ActivityIndicator, TextInput,
+  Alert, ActivityIndicator, Modal, Platform,
 } from 'react-native';
+import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -12,6 +13,9 @@ import { usePosAnalytics } from '../../lib/hooks/usePosAnalytics';
 import { useAuth } from '../../lib/contexts/AuthContext';
 import { LoadingSpinner } from '../../lib/components/LoadingSpinner';
 import { DailySummary } from '../../types';
+import { CatalogImportModal } from '../../lib/components/CatalogImportModal';
+import { upsertRecipesFromCatalog } from '../../lib/services/recipes';
+import { TossCatalogItem } from '../../types';
 
 function SummaryCard({ summary, onPress }: { summary: DailySummary; onPress: () => void }) {
   return (
@@ -36,9 +40,25 @@ export default function PosScreen() {
   } = useTossSync();
   const { summaries, loadingSummaries, fetchSummaries } = usePosAnalytics();
 
-  const [dateInput, setDateInput] = useState('');
+  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [showPicker, setShowPicker] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncingCatalog, setSyncingCatalog] = useState(false);
+  const [catalogItems, setCatalogItems] = useState<TossCatalogItem[]>([]);
+  const [showCatalogImport, setShowCatalogImport] = useState(false);
+
+  function formatDate(d: Date): string {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }
+
+  function onDateChange(event: DateTimePickerEvent, date?: Date) {
+    if (Platform.OS === 'android') setShowPicker(false);
+    if (event.type === 'dismissed') return;
+    if (date) setSelectedDate(date);
+  }
 
   const closingTime = (store?.closing_time as string | null | undefined)?.slice(0, 5) ?? '23:00';
 
@@ -48,16 +68,10 @@ export default function PosScreen() {
   }, [closingTime, fetchSummaries, loadTodaySales]));
 
   async function handleManualSync() {
-    const date = dateInput.trim();
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-      Alert.alert('날짜 형식 오류', 'YYYY-MM-DD 형식으로 입력해주세요. 예: 2026-04-06');
-      return;
-    }
     setSyncing(true);
     try {
-      await syncByDate(date);
+      await syncByDate(formatDate(selectedDate));
       await fetchSummaries(closingTime);
-      setDateInput('');
     } catch (e: any) {
       Alert.alert('동기화 실패', e.message);
     } finally {
@@ -68,12 +82,31 @@ export default function PosScreen() {
   async function handleSyncCatalog() {
     setSyncingCatalog(true);
     try {
-      await syncCatalog();
-      Alert.alert('완료', '카탈로그가 동기화되었습니다.');
+      const items = await syncCatalog();
+      setCatalogItems(items);
+      setShowCatalogImport(true);
     } catch (e: any) {
       Alert.alert('카탈로그 동기화 실패', e.message);
     } finally {
       setSyncingCatalog(false);
+    }
+  }
+
+  async function handleCatalogImportConfirm(selectedItems: TossCatalogItem[]) {
+    if (!store) return;
+    try {
+      const count = await upsertRecipesFromCatalog(
+        store.id,
+        selectedItems.map(i => ({
+          name: i.itemName,
+          category: i.categoryName,
+          sellingPrice: i.price,
+        }))
+      );
+      setShowCatalogImport(false);
+      Alert.alert('완료', `${count}개 품목이 레시피에 추가/업데이트되었습니다.`);
+    } catch (e: any) {
+      Alert.alert('레시피 추가 실패', e.message);
     }
   }
 
@@ -107,14 +140,13 @@ export default function PosScreen() {
         <View style={styles.manualSection}>
           <Text style={styles.sectionTitle}>날짜 조회</Text>
           <View style={styles.manualRow}>
-            <TextInput
-              style={styles.dateInput}
-              value={dateInput}
-              onChangeText={setDateInput}
-              placeholder="YYYY-MM-DD"
-              keyboardType="numbers-and-punctuation"
-              maxLength={10}
-            />
+            <TouchableOpacity
+              style={styles.datePickerBtn}
+              onPress={() => setShowPicker(true)}
+            >
+              <Ionicons name="calendar-outline" size={16} color={Colors.primary} />
+              <Text style={styles.datePickerText}>{formatDate(selectedDate)}</Text>
+            </TouchableOpacity>
             <TouchableOpacity
               style={[styles.syncBtn, syncing && styles.syncBtnDisabled]}
               onPress={handleManualSync}
@@ -127,6 +159,37 @@ export default function PosScreen() {
             </TouchableOpacity>
           </View>
         </View>
+
+        {/* DateTimePicker — Android: 다이얼로그, iOS: 모달 */}
+        {Platform.OS === 'android' && showPicker && (
+          <DateTimePicker
+            value={selectedDate}
+            mode="date"
+            display="default"
+            maximumDate={new Date()}
+            onChange={onDateChange}
+          />
+        )}
+        {Platform.OS === 'ios' && (
+          <Modal transparent animationType="slide" visible={showPicker}>
+            <TouchableOpacity
+              style={styles.modalOverlay}
+              activeOpacity={1}
+              onPress={() => setShowPicker(false)}
+            >
+              <View style={styles.pickerContainer}>
+                <DateTimePicker
+                  value={selectedDate}
+                  mode="date"
+                  display="inline"
+                  maximumDate={new Date()}
+                  onChange={onDateChange}
+                  locale="ko-KR"
+                />
+              </View>
+            </TouchableOpacity>
+          </Modal>
+        )}
 
         {/* 일별 요약 목록 */}
         <Text style={styles.sectionTitle}>최근 영업 내역</Text>
@@ -159,6 +222,12 @@ export default function PosScreen() {
           }
         </TouchableOpacity>
       </ScrollView>
+      <CatalogImportModal
+        visible={showCatalogImport}
+        items={catalogItems}
+        onConfirm={handleCatalogImportConfirm}
+        onClose={() => setShowCatalogImport(false)}
+      />
     </SafeAreaView>
   );
 }
@@ -182,9 +251,18 @@ const styles = StyleSheet.create({
   summaryLabel: { fontSize: 12, color: Colors.gray500 },
   manualSection: { marginBottom: 20 },
   manualRow: { flexDirection: 'row', gap: 10, marginTop: 8 },
-  dateInput: {
-    flex: 1, backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.gray200,
-    borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, fontSize: 15,
+  datePickerBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.gray200,
+    borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12,
+  },
+  datePickerText: { fontSize: 15, color: Colors.black, fontWeight: '500' },
+  modalOverlay: {
+    flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.3)',
+  },
+  pickerContainer: {
+    backgroundColor: Colors.white, borderTopLeftRadius: 20, borderTopRightRadius: 20,
+    padding: 16,
   },
   syncBtn: {
     backgroundColor: Colors.primary, borderRadius: 10,
