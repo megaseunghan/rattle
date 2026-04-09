@@ -18,7 +18,7 @@ export function CatalogImportModal({ visible, items, onConfirm, onClose }: Catal
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set(items.map(i => i.itemId)));
   const [importing, setImporting] = useState(false);
 
-  // 모달이 열릴 때 전체 선택 초기화
+  // items는 의존성에서 의도적으로 제외: visible이 true가 되는 시점에만 선택 초기화
   useEffect(() => {
     if (visible) setSelectedIds(new Set(items.map(i => i.itemId)));
   }, [visible]);

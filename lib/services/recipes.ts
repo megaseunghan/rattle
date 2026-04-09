@@ -114,6 +114,7 @@ export async function upsertRecipesFromCatalog(
   const toInsert = items.filter(i => !existingMap.has(i.name.trim()));
 
   // 2. 기존 레시피 selling_price 업데이트 (재료/원가는 보존)
+  // 개별 UPDATE 호출로 완전한 원자성을 보장하지 않음. 부분 실패 시 일부만 반영될 수 있음.
   const updateResults = await Promise.all(
     toUpdate.map(i =>
       supabase

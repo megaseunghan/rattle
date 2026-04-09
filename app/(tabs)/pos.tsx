@@ -99,7 +99,7 @@ export default function PosScreen() {
         store.id,
         selectedItems.map(i => ({
           name: i.itemName,
-          category: i.categoryName,
+          category: i.categoryName || '미분류',
           sellingPrice: i.price,
         }))
       );
