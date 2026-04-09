@@ -3,6 +3,7 @@ import { DailySummary, DailyItem } from '../../types';
 
 /** 영업일 날짜 레이블 계산
  * closing_time이 23:00이면 23:00 이후 주문은 다음 날 영업일로 분류
+ * getHours()/getMinutes()는 로컬 시간 기준 — closingHour/closingMin과 동일 기준
  */
 function getBusinessDateLabel(orderAt: Date, closingHour: number, closingMin: number): string {
   const orderMins = orderAt.getHours() * 60 + orderAt.getMinutes();
@@ -12,7 +13,11 @@ function getBusinessDateLabel(orderAt: Date, closingHour: number, closingMin: nu
   if (orderMins >= closingMins) {
     label.setDate(label.getDate() + 1);
   }
-  return label.toISOString().slice(0, 10);
+  // 로컬 날짜로 반환 (toISOString()은 UTC 기준이라 KST에서 날짜 오차 발생)
+  const y = label.getFullYear();
+  const mo = String(label.getMonth() + 1).padStart(2, '0');
+  const d = String(label.getDate()).padStart(2, '0');
+  return `${y}-${mo}-${d}`;
 }
 
 /** 특정 날짜의 영업일 범위 반환
@@ -98,20 +103,26 @@ export async function getDailyItems(
   dateFrom: string,
   dateTo: string
 ): Promise<DailyItem[]> {
-  // toss_order_items와 toss_orders를 JOIN하여 기간 내 판매된 모든 항목 조회
+  // Step 1: 해당 범위의 완료된 주문 ID 조회
+  // (PostgREST FK embed 대신 2-step 쿼리로 스키마 캐시 의존성 제거)
+  const { data: orders, error: ordersError } = await supabase
+    .from('toss_orders')
+    .select('id')
+    .eq('store_id', storeId)
+    .eq('status', 'COMPLETED')
+    .gte('order_at', dateFrom)
+    .lte('order_at', dateTo);
+
+  if (ordersError) throw new Error(ordersError.message);
+  if (!orders || orders.length === 0) return [];
+
+  const orderIds = orders.map(o => o.id);
+
+  // Step 2: 해당 주문의 상세 항목 조회
   const { data, error } = await supabase
     .from('toss_order_items')
-    .select(`
-      item_id,
-      item_name,
-      quantity,
-      total_price,
-      toss_orders!inner(order_at, status)
-    `)
-    .eq('store_id', storeId)
-    .eq('toss_orders.status', 'COMPLETED')
-    .gte('toss_orders.order_at', dateFrom)
-    .lte('toss_orders.order_at', dateTo);
+    .select('item_id, item_name, quantity, total_price')
+    .in('order_id', orderIds);
 
   if (error) throw new Error(error.message);
 

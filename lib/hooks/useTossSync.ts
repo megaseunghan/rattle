@@ -65,8 +65,8 @@ export function useTossSync(): UseTossSyncResult {
       const orders = await fetchTossOrders(merchantId, dateFrom, dateTo);
 
       if (orders.length > 0) {
-        // RPC 함수를 사용해 트랜잭션 단위로 주문 + 상세항목 저장
-        for (const o of orders) {
+        // RPC 함수를 사용해 트랜잭션 단위로 주문 + 상세항목 저장 (병렬 처리)
+        await Promise.all(orders.map(async (o) => {
           const { error: rpcError } = await supabase.rpc('upsert_toss_order_with_items', {
             p_store_id: store.id,
             p_toss_order_id: o.orderId,
@@ -76,7 +76,7 @@ export function useTossSync(): UseTossSyncResult {
             p_items: o.items,
           });
           if (rpcError) throw new Error(rpcError.message);
-        }
+        }));
       }
 
       setLastSyncAt(new Date().toISOString());
@@ -146,19 +146,19 @@ export function useTossSync(): UseTossSyncResult {
       if ((count ?? 0) > 0) return;
 
       const merchantId = await getMerchantId();
-      const orders = await fetchTossOrders(merchantId, from.slice(0, 10), to.slice(0, 10));
+      const orders = await fetchTossOrders(merchantId, from, to);
 
       if (orders.length > 0) {
-        for (const o of orders) {
-          await supabase.rpc('upsert_toss_order_with_items', {
+        await Promise.all(orders.map((o) =>
+          supabase.rpc('upsert_toss_order_with_items', {
             p_store_id: store.id,
             p_toss_order_id: o.orderId,
             p_order_at: o.orderAt,
             p_total_amount: o.totalAmount,
             p_status: o.status,
             p_items: o.items,
-          });
-        }
+          })
+        ));
       }
 
       setLastSyncAt(new Date().toISOString());
@@ -176,7 +176,8 @@ export function useTossSync(): UseTossSyncResult {
     if (!store) throw new Error('매장 정보가 없습니다');
     const closingTime = await getClosingTime();
     const { from, to } = getBusinessDayRange(date, closingTime);
-    await syncOrders(from.slice(0, 10), to.slice(0, 10));
+    // ISO 타임스탬프 그대로 전달 (Toss API: from/to 파라미터, timestamp 형식)
+    await syncOrders(from, to);
   }, [store, syncOrders]);
 
   return {

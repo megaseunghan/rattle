@@ -1,14 +1,17 @@
 import { useState, useCallback, useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, Alert, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, FlatList, Alert, ScrollView, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { Colors } from '../../constants/colors';
 import { useRecipes } from '../../lib/hooks/useRecipes';
+import { useAuth } from '../../lib/contexts/AuthContext';
+import { useTossSync } from '../../lib/hooks/useTossSync';
 import { LoadingSpinner } from '../../lib/components/LoadingSpinner';
 import { ErrorMessage } from '../../lib/components/ErrorMessage';
-import { RecipeWithIngredients } from '../../lib/services/recipes';
-import { Ingredient } from '../../types';
+import { CatalogImportModal } from '../../lib/components/CatalogImportModal';
+import { RecipeWithIngredients, upsertRecipesFromCatalog } from '../../lib/services/recipes';
+import { Ingredient, TossCatalogItem } from '../../types';
 
 type SortKey = 'name' | 'margin_desc' | 'cost_asc';
 
@@ -92,16 +95,53 @@ function RecipeCard({
 }
 
 export default function RecipesScreen() {
+  const { store } = useAuth();
   const { data, loading, error, refetch, remove } = useRecipes();
+  const { syncCatalog } = useTossSync();
   const { sort: sortParam } = useLocalSearchParams<{ sort?: string }>();
 
   const [sortBy, setSortBy] = useState<SortKey>('name');
   const [activeCategory, setActiveCategory] = useState('전체');
+  const [syncingCatalog, setSyncingCatalog] = useState(false);
+  const [catalogItems, setCatalogItems] = useState<TossCatalogItem[]>([]);
+  const [showCatalogImport, setShowCatalogImport] = useState(false);
 
   useFocusEffect(useCallback(() => {
     if (sortParam === 'margin') setSortBy('margin_desc');
     refetch();
   }, [sortParam]));
+
+  async function handleSyncCatalog() {
+    setSyncingCatalog(true);
+    try {
+      const items = await syncCatalog();
+      setCatalogItems(items);
+      setShowCatalogImport(true);
+    } catch (e: any) {
+      Alert.alert('카탈로그 동기화 실패', e.message);
+    } finally {
+      setSyncingCatalog(false);
+    }
+  }
+
+  async function handleCatalogImportConfirm(selectedItems: TossCatalogItem[]) {
+    if (!store) return;
+    try {
+      const count = await upsertRecipesFromCatalog(
+        store.id,
+        selectedItems.map(i => ({
+          name: i.itemName,
+          category: i.categoryName || '미분류',
+          sellingPrice: i.price,
+        }))
+      );
+      setShowCatalogImport(false);
+      await refetch();
+      Alert.alert('완료', `${count}개 품목이 레시피에 추가/업데이트되었습니다.`);
+    } catch (e: any) {
+      Alert.alert('레시피 추가 실패', e.message);
+    }
+  }
 
   const categories = ['전체', ...Array.from(new Set(data.map(r => r.category))).sort()];
 

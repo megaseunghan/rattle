@@ -92,12 +92,21 @@ export interface OcrParsedItem {
 }
 
 // Toss Place POS 연동
+export interface TossOrderItemOptionChoice {
+  title: string;
+  code?: string;
+  priceValue: number;
+  quantity: number;
+}
+
 export interface TossOrderItem {
   itemId: string;
   itemName: string;
+  categoryName: string;
   quantity: number;
   unitPrice: number;
   totalPrice: number;
+  optionChoices: TossOrderItemOptionChoice[];
 }
 
 export interface TossOrder {
@@ -132,9 +141,11 @@ export interface TossOrderItemRecord {
   store_id: string;
   item_id: string | null;
   item_name: string;
+  category_name: string;
   quantity: number;
   unit_price: number;
   total_price: number;
+  option_choices: TossOrderItemOptionChoice[];
   created_at: string;
 }
 

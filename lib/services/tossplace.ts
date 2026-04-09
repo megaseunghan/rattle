@@ -27,7 +27,7 @@ export async function fetchTossOrderDetail(
       orderAt:     data.orderAt     ?? data.createdAt   ?? data.openedAt ?? '',
       totalAmount: data.totalAmount ?? data.totalOrderAmount ?? data.totalPrice ?? 0,
       status:      normalizeOrderStatus(data.status  ?? data.orderState ?? ''),
-      items:       normalizeOrderItems(data.items    ?? data.orderItems ?? data.menuItems ?? []),
+      items:       normalizeOrderItems(data.lineItems ?? data.items ?? data.orderItems ?? data.menuItems ?? []),
     };
   } catch (e) {
     console.error(`[TossOrderDetail] 주문 상세 조회 실패 (${orderId}):`, e);
@@ -40,7 +40,8 @@ export async function fetchTossOrders(
   dateFrom: string,
   dateTo: string,
 ): Promise<TossOrder[]> {
-  const params = new URLSearchParams({ dateFrom, dateTo });
+  // Toss Place API: 파라미터명 from/to, ISO timestamp 형식
+  const params = new URLSearchParams({ from: dateFrom, to: dateTo });
   const data = await tossProxyRequest<unknown>(
     `/merchants/${merchantId}/order/orders?${params}`,
   );
@@ -48,6 +49,7 @@ export async function fetchTossOrders(
 
   if (__DEV__) {
     console.log('[TossOrders] 응답 데이터 확인');
+    console.log(data);
   }
 
   let rawOrders: any[] = [];
@@ -85,7 +87,7 @@ function normalizeTossOrders(raw: unknown[]): TossOrder[] {
     orderAt:     o.orderAt     ?? o.createdAt   ?? o.openedAt ?? '',
     totalAmount: o.totalAmount ?? o.totalOrderAmount ?? o.totalPrice ?? 0,
     status:      normalizeOrderStatus(o.status  ?? o.orderState ?? ''),
-    items:       normalizeOrderItems(o.items    ?? o.orderItems ?? o.menuItems ?? []),
+    items:       normalizeOrderItems(o.lineItems ?? o.items ?? o.orderItems ?? o.menuItems ?? []),
   }));
 }
 
@@ -99,27 +101,39 @@ function normalizeOrderStatus(raw: string): TossOrder['status'] {
 
 function normalizeOrderItems(raw: unknown[]): TossOrder['items'] {
   if (!Array.isArray(raw)) return [];
-  return raw.map((i: any) => ({
-    itemId:     i.itemId    ?? i.id       ?? '',
-    itemName:   i.itemName  ?? i.name     ?? i.title ?? '',
-    quantity:   Number(i.quantity ?? i.qty ?? 1),
-    unitPrice:  Number(i.unitPrice ?? i.price ?? 0),
-    totalPrice: Number(i.totalPrice ?? (i.unitPrice ?? i.price ?? 0) * (i.quantity ?? i.qty ?? 1)),
-  }));
+  return raw.map((i: any) => {
+    // OrderLineItem 구조: item(OrderItem), quantity, optionChoices, itemPrice
+    const orderItem = i.item;
+    const itemName = orderItem?.title ?? i.itemName ?? i.name ?? i.title ?? '';
+    const itemId   = orderItem?.code  ?? i.itemId   ?? i.id   ?? '';
+    const categoryName = orderItem?.category?.title ?? i.categoryName ?? '';
+
+    const unitPrice  = Number(i.itemPrice?.priceValue ?? i.unitPrice ?? i.price ?? 0);
+    const quantity   = Number(i.quantity ?? i.qty ?? 1);
+    const totalPrice = Number(i.totalPrice ?? unitPrice * quantity);
+
+    const optionChoices = Array.isArray(i.optionChoices)
+      ? i.optionChoices.map((o: any) => ({
+          title:      o.title      ?? '',
+          code:       o.code,
+          priceValue: Number(o.priceValue ?? 0),
+          quantity:   Number(o.quantity   ?? 1),
+        }))
+      : [];
+
+    return { itemId, itemName, categoryName, quantity, unitPrice, totalPrice, optionChoices };
+  });
 }
 
-export async function fetchTossCatalog(merchantId: string): Promise<TossCatalogItem[]> {
-  const data = await tossProxyRequest<unknown>(
-    `/merchants/${merchantId}/catalog/items`,
-  );
-  if (!data) throw new Error('Toss Place API 응답이 없습니다');
+const CATALOG_PAGE_SIZE = 100;
 
+function normalizeCatalogPage(data: unknown): TossCatalogItem[] {
   let list: unknown[];
   if (Array.isArray(data)) {
     list = data;
   } else {
     const wrapped = data as Record<string, unknown>;
-    const raw = wrapped.items ?? wrapped.content ?? wrapped.data ?? wrapped.results ?? [];
+    const raw = wrapped.success ?? wrapped.items ?? wrapped.content ?? wrapped.data ?? wrapped.results ?? [];
     list = Array.isArray(raw) ? raw : [];
   }
 
@@ -137,10 +151,41 @@ export async function fetchTossCatalog(merchantId: string): Promise<TossCatalogI
       itemId: item.id ?? item.itemId ?? '',
       itemName: item.title ?? item.itemName ?? '',
       categoryName: item.categoryName ?? item.category?.name ?? '',
-      price: price,
+      price,
       isAvailable: item.isAvailable ?? item.isActive ?? true,
     };
   });
+}
+
+export async function fetchTossCatalog(merchantId: string): Promise<TossCatalogItem[]> {
+  const allItems: TossCatalogItem[] = [];
+  let page = 1;
+
+  while (true) {
+    const params = new URLSearchParams({ page: String(page), size: String(CATALOG_PAGE_SIZE) });
+    const data = await tossProxyRequest<unknown>(
+      `/merchants/${merchantId}/catalog/items?${params}`,
+    );
+    if (!data) throw new Error('Toss Place API 응답이 없습니다');
+
+    if (__DEV__) {
+      console.log(`[TossCatalog] page=${page} 원본:`, JSON.stringify(data).slice(0, 500));
+    }
+
+    const items = normalizeCatalogPage(data);
+
+    if (__DEV__) {
+      console.log(`[TossCatalog] page=${page} 파싱결과 count=${items.length}`, items[0]);
+    }
+
+    allItems.push(...items);
+
+    // 마지막 페이지이면 종료
+    if (items.length < CATALOG_PAGE_SIZE) break;
+    page++;
+  }
+
+  return allItems;
 }
 
 export async function saveCatalog(
