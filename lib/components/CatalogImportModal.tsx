@@ -18,10 +18,10 @@ export function CatalogImportModal({ visible, items, onConfirm, onClose }: Catal
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set(items.map(i => i.itemId)));
   const [importing, setImporting] = useState(false);
 
-  // items가 바뀔 때(모달 열릴 때) 전체 선택 초기화
+  // 모달이 열릴 때 전체 선택 초기화
   useEffect(() => {
-    setSelectedIds(new Set(items.map(i => i.itemId)));
-  }, [items]);
+    if (visible) setSelectedIds(new Set(items.map(i => i.itemId)));
+  }, [visible]);
 
   // category_name 기준으로 그룹핑
   const grouped = useMemo(() => {
@@ -34,7 +34,7 @@ export function CatalogImportModal({ visible, items, onConfirm, onClose }: Catal
     return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b));
   }, [items]);
 
-  const allSelected = selectedIds.size === items.length;
+  const allSelected = items.length > 0 && selectedIds.size === items.length;
 
   function toggleAll() {
     if (allSelected) {
@@ -83,32 +83,36 @@ export function CatalogImportModal({ visible, items, onConfirm, onClose }: Catal
 
         {/* 품목 목록 */}
         <ScrollView contentContainerStyle={styles.list}>
-          {grouped.map(([category, catItems]) => (
-            <View key={category}>
-              <Text style={styles.categoryHeader}>{category}</Text>
-              {catItems.map(item => {
-                const checked = selectedIds.has(item.itemId);
-                return (
-                  <TouchableOpacity
-                    key={item.itemId}
-                    style={styles.itemRow}
-                    onPress={() => toggleItem(item.itemId)}
-                    activeOpacity={0.7}
-                  >
-                    <Ionicons
-                      name={checked ? 'checkbox' : 'square-outline'}
-                      size={22}
-                      color={checked ? Colors.primary : Colors.gray300}
-                    />
-                    <View style={styles.itemInfo}>
-                      <Text style={styles.itemName}>{item.itemName}</Text>
-                      <Text style={styles.itemPrice}>{item.price.toLocaleString('ko-KR')}원</Text>
-                    </View>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          ))}
+          {grouped.length === 0 ? (
+            <Text style={styles.emptyText}>가져올 항목이 없습니다.</Text>
+          ) : (
+            grouped.map(([category, catItems]) => (
+              <View key={category}>
+                <Text style={styles.categoryHeader}>{category}</Text>
+                {catItems.map(item => {
+                  const checked = selectedIds.has(item.itemId);
+                  return (
+                    <TouchableOpacity
+                      key={item.itemId}
+                      style={styles.itemRow}
+                      onPress={() => toggleItem(item.itemId)}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons
+                        name={checked ? 'checkbox' : 'square-outline'}
+                        size={22}
+                        color={checked ? Colors.primary : Colors.gray300}
+                      />
+                      <View style={styles.itemInfo}>
+                        <Text style={styles.itemName}>{item.itemName}</Text>
+                        <Text style={styles.itemPrice}>{item.price.toLocaleString('ko-KR')}원</Text>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            ))
+          )}
         </ScrollView>
 
         {/* 하단 확인 버튼 */}
@@ -181,6 +185,7 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     alignItems: 'center',
   },
-  confirmBtnDisabled: { opacity: 0.5 },
+  confirmBtnDisabled: { opacity: 0.6 },
   confirmBtnText: { color: Colors.white, fontSize: 16, fontWeight: '700' },
+  emptyText: { fontSize: 14, color: Colors.gray400, textAlign: 'center', paddingVertical: 40 },
 });
