@@ -108,20 +108,23 @@ export async function upsertRecipesFromCatalog(
 
   if (fetchError) throw new Error(fetchError.message);
 
-  const existingMap = new Map((existing ?? []).map(r => [r.name, r.id]));
+  const existingMap = new Map((existing ?? []).map(r => [r.name.trim(), r.id]));
 
-  const toUpdate = items.filter(i => existingMap.has(i.name));
-  const toInsert = items.filter(i => !existingMap.has(i.name));
+  const toUpdate = items.filter(i => existingMap.has(i.name.trim()));
+  const toInsert = items.filter(i => !existingMap.has(i.name.trim()));
 
   // 2. 기존 레시피 selling_price 업데이트 (재료/원가는 보존)
-  await Promise.all(
+  const updateResults = await Promise.all(
     toUpdate.map(i =>
       supabase
         .from('recipes')
         .update({ selling_price: i.sellingPrice })
-        .eq('id', existingMap.get(i.name)!)
+        .eq('id', existingMap.get(i.name.trim())!)
     )
   );
+  for (const { error } of updateResults) {
+    if (error) throw new Error(error.message);
+  }
 
   // 3. 신규 레시피 삽입
   if (toInsert.length > 0) {
