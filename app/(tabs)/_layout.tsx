@@ -17,6 +17,7 @@ function TabIcon({ tab, focused }: { tab: TabIconName; focused: boolean }) {
   const { active, inactive, label } = TAB_ICONS[tab];
   return (
     <View style={styles.tabIconWrap}>
+      {focused && <View style={styles.tabIndicator} />}
       <Ionicons
         name={focused ? active : inactive}
         size={22}
@@ -77,14 +78,26 @@ export default function TabsLayout() {
 const styles = StyleSheet.create({
   tabBar: {
     height: 80,
-    paddingTop: 8,
+    paddingTop: 10,
     backgroundColor: Colors.white,
-    borderTopWidth: 1,
-    borderTopColor: Colors.gray100,
+    borderTopWidth: 0,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    elevation: 8,
   },
   tabIconWrap: {
     alignItems: 'center',
-    gap: 2,
+    gap: 3,
+  },
+  tabIndicator: {
+    position: 'absolute',
+    top: -10,
+    width: 20,
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: Colors.primary,
   },
   tabLabel: {
     fontSize: 11,

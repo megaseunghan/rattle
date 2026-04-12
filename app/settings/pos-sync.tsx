@@ -8,16 +8,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Colors } from '../../constants/colors';
 import { useAuth } from '../../lib/contexts/AuthContext';
-import { useTossSync } from '../../lib/hooks/useTossSync';
 import { getStoreDetails, updateStoreInfo } from '../../lib/services/stores';
 import { submitTossPlaceApplication } from '../../lib/services/tossPlaceForm';
-import { TossCatalogItem } from '../../types';
 
 type SyncStatus = 'unregistered' | 'pending' | 'connected';
 
 export default function PosSyncScreen() {
   const { store } = useAuth();
-  const { loading, syncOrders, syncCatalog, loadTodaySales, todaySales, todayOrderCount } = useTossSync();
 
   const [status, setStatus] = useState<SyncStatus>('unregistered');
   const [storeName, setStoreName] = useState(store?.name ?? '');
@@ -25,8 +22,6 @@ export default function PosSyncScreen() {
   const [ownerPhone, setOwnerPhone] = useState('');
   const [address, setAddress] = useState('');
   const [saving, setSaving] = useState(false);
-  const [catalogItems, setCatalogItems] = useState<TossCatalogItem[]>([]);
-  const [showCatalog, setShowCatalog] = useState(false);
 
   const loadStoreInfo = useCallback(async () => {
     if (!store) return;
@@ -50,10 +45,6 @@ export default function PosSyncScreen() {
   useEffect(() => {
     loadStoreInfo();
   }, [loadStoreInfo]);
-
-  useEffect(() => {
-    if (status === 'connected') loadTodaySales();
-  }, [status]);
 
   async function handleApply() {
     if (!store) return;
@@ -80,30 +71,6 @@ export default function PosSyncScreen() {
       Alert.alert('저장 실패', e.message);
     } finally {
       setSaving(false);
-    }
-  }
-
-  async function handleSyncOrders() {
-    const today = new Date();
-    const dateFrom = new Date(today.getFullYear(), today.getMonth(), 1)
-      .toISOString().split('T')[0];
-    const dateTo = today.toISOString().split('T')[0];
-    try {
-      const orders = await syncOrders(dateFrom, dateTo);
-      await loadTodaySales();
-      Alert.alert('동기화 완료', `${orders.length}건의 주문이 동기화되었습니다.`);
-    } catch (e: any) {
-      Alert.alert('동기화 실패', e.message);
-    }
-  }
-
-  async function handleSyncCatalog() {
-    try {
-      const items = await syncCatalog();
-      setCatalogItems(items);
-      setShowCatalog(true);
-    } catch (e: any) {
-      Alert.alert('카탈로그 조회 실패', e.message);
     }
   }
 
@@ -140,63 +107,22 @@ export default function PosSyncScreen() {
           </Text>
         </View>
 
-        {/* ── 연동완료: 매출 + 동기화 ── */}
+        {/* ── 연동완료: POS 탭 안내 ── */}
         {status === 'connected' && (
-          <>
-            <View style={styles.salesRow}>
-              <View style={styles.salesCard}>
-                <Text style={styles.salesLabel}>오늘 매출</Text>
-                <Text style={styles.salesValue}>{todaySales.toLocaleString('ko-KR')}원</Text>
-              </View>
-              <View style={styles.salesCard}>
-                <Text style={styles.salesLabel}>주문 건수</Text>
-                <Text style={styles.salesValue}>{todayOrderCount}건</Text>
-              </View>
-            </View>
-
-            <Text style={styles.sectionTitle}>데이터 동기화</Text>
-            <View style={styles.card}>
-              <TouchableOpacity style={styles.syncBtn} onPress={handleSyncOrders} disabled={loading}>
-                {loading
-                  ? <ActivityIndicator size="small" color={Colors.primary} />
-                  : <Ionicons name="sync-outline" size={18} color={Colors.primary} />}
-                <View style={styles.syncBtnText}>
-                  <Text style={styles.syncBtnTitle}>주문 데이터 동기화</Text>
-                  <Text style={styles.syncBtnDesc}>이번 달 주문 내역을 가져옵니다</Text>
-                </View>
-              </TouchableOpacity>
-
-              <View style={styles.divider} />
-
-              <TouchableOpacity style={styles.syncBtn} onPress={handleSyncCatalog} disabled={loading}>
-                <Ionicons name="restaurant-outline" size={18} color={Colors.primary} />
-                <View style={styles.syncBtnText}>
-                  <Text style={styles.syncBtnTitle}>메뉴 카탈로그 조회</Text>
-                  <Text style={styles.syncBtnDesc}>POS 메뉴 목록과 레시피를 비교합니다</Text>
-                </View>
-              </TouchableOpacity>
-            </View>
-
-            {showCatalog && catalogItems.length > 0 && (
-              <>
-                <Text style={styles.sectionTitle}>POS 메뉴 목록 ({catalogItems.length}개)</Text>
-                <View style={styles.card}>
-                  {catalogItems.map((item, idx) => (
-                    <View key={item.itemId} style={[styles.catalogRow, idx > 0 && styles.catalogRowBorder]}>
-                      <View style={styles.catalogLeft}>
-                        <Text style={styles.catalogName}>{item.itemName}</Text>
-                        <Text style={styles.catalogCategory}>{item.categoryName}</Text>
-                      </View>
-                      <View style={styles.catalogRight}>
-                        <Text style={styles.catalogPrice}>{item.price.toLocaleString('ko-KR')}원</Text>
-                        {!item.isAvailable && <Text style={styles.catalogUnavailable}>판매 중지</Text>}
-                      </View>
-                    </View>
-                  ))}
-                </View>
-              </>
-            )}
-          </>
+          <View style={styles.connectedCard}>
+            <Ionicons name="checkmark-circle" size={32} color={Colors.success} style={{ marginBottom: 12 }} />
+            <Text style={styles.connectedTitle}>POS 연동이 완료되었습니다</Text>
+            <Text style={styles.connectedDesc}>
+              매출 데이터는 POS 탭에서 확인할 수 있어요.
+            </Text>
+            <TouchableOpacity
+              style={styles.goToPosBtn}
+              onPress={() => router.push('/(tabs)/pos')}
+            >
+              <Text style={styles.goToPosBtnText}>POS 탭으로 이동</Text>
+              <Ionicons name="arrow-forward" size={16} color={Colors.white} />
+            </TouchableOpacity>
+          </View>
         )}
 
         {/* ── 심사중 안내 ── */}
@@ -206,7 +132,7 @@ export default function PosSyncScreen() {
             <Text style={styles.pendingTitle}>가맹점 신청 완료</Text>
             <Text style={styles.pendingDesc}>
               1~3일 이내 토스 측에서 제공동의 전화 안내 후 처리됩니다.{'\n'}
-              연동 완료 후 이 화면에서 매출 데이터를 동기화할 수 있습니다.
+              연동 완료 후 POS 탭에서 매출 데이터를 확인할 수 있습니다.
             </Text>
             <TouchableOpacity
               style={styles.checkBtn}
@@ -310,13 +236,37 @@ const styles = StyleSheet.create({
   statusTextConnected: { color: Colors.success },
   statusTextPending: { color: Colors.warning },
   statusTextDisconnected: { color: Colors.gray500 },
-  salesRow: { flexDirection: 'row', gap: 12, marginBottom: 24 },
-  salesCard: {
-    flex: 1, backgroundColor: Colors.white, borderRadius: 14,
-    padding: 16, borderWidth: 1, borderColor: Colors.gray100,
+
+  // 연동완료 카드
+  connectedCard: {
+    backgroundColor: Colors.white, borderRadius: 14,
+    padding: 24, borderWidth: 1, borderColor: Colors.gray100,
+    alignItems: 'center', marginBottom: 24,
   },
-  salesLabel: { fontSize: 12, color: Colors.gray500, marginBottom: 4 },
-  salesValue: { fontSize: 20, fontWeight: '800', color: Colors.black },
+  connectedTitle: { fontSize: 16, fontWeight: '700', color: Colors.black, marginBottom: 8 },
+  connectedDesc: { fontSize: 14, color: Colors.gray500, textAlign: 'center', lineHeight: 22, marginBottom: 20 },
+  goToPosBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: Colors.primary, borderRadius: 12,
+    paddingHorizontal: 20, paddingVertical: 12,
+  },
+  goToPosBtnText: { fontSize: 14, fontWeight: '700', color: Colors.white },
+
+  // 심사중
+  pendingCard: {
+    backgroundColor: Colors.white, borderRadius: 14,
+    padding: 24, borderWidth: 1, borderColor: Colors.gray100,
+    alignItems: 'center', marginBottom: 24,
+  },
+  pendingTitle: { fontSize: 16, fontWeight: '700', color: Colors.black, marginBottom: 8 },
+  pendingDesc: { fontSize: 14, color: Colors.gray500, textAlign: 'center', lineHeight: 22 },
+  checkBtn: {
+    marginTop: 16, paddingHorizontal: 20, paddingVertical: 10,
+    borderRadius: 10, borderWidth: 1, borderColor: Colors.primary,
+  },
+  checkBtnText: { fontSize: 14, fontWeight: '600', color: Colors.primary },
+
+  // 신청 폼
   sectionTitle: { fontSize: 15, fontWeight: '700', color: Colors.black, marginBottom: 10 },
   card: {
     backgroundColor: Colors.white, borderRadius: 14,
@@ -334,35 +284,6 @@ const styles = StyleSheet.create({
   },
   applyBtnDisabled: { opacity: 0.5 },
   applyBtnText: { color: Colors.white, fontSize: 15, fontWeight: '700' },
-  syncBtn: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 8 },
-  syncBtnText: { flex: 1 },
-  syncBtnTitle: { fontSize: 14, fontWeight: '600', color: Colors.black },
-  syncBtnDesc: { fontSize: 12, color: Colors.gray400, marginTop: 2 },
-  divider: { height: 1, backgroundColor: Colors.gray100, marginVertical: 12 },
-  pendingCard: {
-    backgroundColor: Colors.white, borderRadius: 14,
-    padding: 24, borderWidth: 1, borderColor: Colors.gray100,
-    alignItems: 'center', marginBottom: 24,
-  },
-  pendingTitle: { fontSize: 16, fontWeight: '700', color: Colors.black, marginBottom: 8 },
-  pendingDesc: { fontSize: 14, color: Colors.gray500, textAlign: 'center', lineHeight: 22 },
-  checkBtn: {
-    marginTop: 16,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: Colors.primary,
-  },
-  checkBtnText: { fontSize: 14, fontWeight: '600', color: Colors.primary },
-  catalogRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10 },
-  catalogRowBorder: { borderTopWidth: 1, borderTopColor: Colors.gray100 },
-  catalogLeft: { flex: 1 },
-  catalogName: { fontSize: 14, fontWeight: '600', color: Colors.black },
-  catalogCategory: { fontSize: 12, color: Colors.gray400, marginTop: 2 },
-  catalogRight: { alignItems: 'flex-end' },
-  catalogPrice: { fontSize: 14, fontWeight: '700', color: Colors.black },
-  catalogUnavailable: { fontSize: 11, color: Colors.warning, marginTop: 2 },
   notice: {
     flexDirection: 'row', gap: 8, padding: 14,
     backgroundColor: Colors.gray100, borderRadius: 12,

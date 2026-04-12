@@ -23,7 +23,6 @@ export function CatalogImportModal({ visible, items, onConfirm, onClose }: Catal
     if (visible) setSelectedIds(new Set(items.map(i => i.itemId)));
   }, [visible]);
 
-  // category_name 기준으로 그룹핑
   const grouped = useMemo(() => {
     const map = new Map<string, TossCatalogItem[]>();
     for (const item of items) {
@@ -73,18 +72,31 @@ export function CatalogImportModal({ visible, items, onConfirm, onClose }: Catal
         {/* 헤더 */}
         <View style={styles.header}>
           <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-            <Ionicons name="close" size={22} color={Colors.gray600} />
+            <Ionicons name="close" size={20} color={Colors.gray600} />
           </TouchableOpacity>
-          <Text style={styles.title}>레시피로 가져오기</Text>
+          <View style={styles.headerCenter}>
+            <Text style={styles.title}>레시피로 가져오기</Text>
+            {items.length > 0 && (
+              <Text style={styles.headerCount}>{items.length}개 품목</Text>
+            )}
+          </View>
           <TouchableOpacity onPress={toggleAll} style={styles.selectAllBtn}>
             <Text style={styles.selectAllText}>{allSelected ? '전체 해제' : '전체 선택'}</Text>
           </TouchableOpacity>
         </View>
 
         {/* 품목 목록 */}
-        <ScrollView contentContainerStyle={styles.list}>
+        <ScrollView
+          contentContainerStyle={styles.list}
+          showsVerticalScrollIndicator={false}
+        >
           {grouped.length === 0 ? (
-            <Text style={styles.emptyText}>가져올 항목이 없습니다.</Text>
+            <View style={styles.emptyState}>
+              <View style={styles.emptyIconBg}>
+                <Ionicons name="restaurant-outline" size={26} color={Colors.gray400} />
+              </View>
+              <Text style={styles.emptyText}>가져올 항목이 없습니다.</Text>
+            </View>
           ) : (
             grouped.map(([category, catItems]) => (
               <View key={category}>
@@ -94,18 +106,20 @@ export function CatalogImportModal({ visible, items, onConfirm, onClose }: Catal
                   return (
                     <TouchableOpacity
                       key={item.itemId}
-                      style={styles.itemRow}
+                      style={[styles.itemRow, checked && styles.itemRowChecked]}
                       onPress={() => toggleItem(item.itemId)}
                       activeOpacity={0.7}
                     >
-                      <Ionicons
-                        name={checked ? 'checkbox' : 'square-outline'}
-                        size={22}
-                        color={checked ? Colors.primary : Colors.gray300}
-                      />
+                      <View style={[styles.checkbox, checked && styles.checkboxChecked]}>
+                        {checked && <Ionicons name="checkmark" size={13} color={Colors.white} />}
+                      </View>
                       <View style={styles.itemInfo}>
-                        <Text style={styles.itemName}>{item.itemName}</Text>
-                        <Text style={styles.itemPrice}>{item.price.toLocaleString('ko-KR')}원</Text>
+                        <Text style={[styles.itemName, checked && styles.itemNameChecked]}>
+                          {item.itemName}
+                        </Text>
+                        <Text style={styles.itemPrice}>
+                          {item.price.toLocaleString('ko-KR')}원
+                        </Text>
                       </View>
                     </TouchableOpacity>
                   );
@@ -124,7 +138,12 @@ export function CatalogImportModal({ visible, items, onConfirm, onClose }: Catal
           >
             {importing
               ? <ActivityIndicator size="small" color={Colors.white} />
-              : <Text style={styles.confirmBtnText}>확인 ({selectedIds.size}개)</Text>
+              : (
+                <>
+                  <Ionicons name="checkmark-circle-outline" size={18} color={Colors.white} />
+                  <Text style={styles.confirmBtnText}>가져오기 ({selectedIds.size}개)</Text>
+                </>
+              )
             }
           </TouchableOpacity>
         </View>
@@ -135,6 +154,7 @@ export function CatalogImportModal({ visible, items, onConfirm, onClose }: Catal
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.gray50 },
+
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -145,47 +165,100 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: Colors.gray100,
   },
-  closeBtn: { padding: 4 },
+  closeBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: Colors.gray100,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerCenter: { alignItems: 'center', gap: 2 },
   title: { fontSize: 16, fontWeight: '700', color: Colors.black },
-  selectAllBtn: { padding: 4 },
-  selectAllText: { fontSize: 14, color: Colors.primary, fontWeight: '600' },
+  headerCount: { fontSize: 12, color: Colors.gray400 },
+  selectAllBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: Colors.tinted,
+  },
+  selectAllText: { fontSize: 13, color: Colors.primary, fontWeight: '700' },
+
   list: { paddingHorizontal: 16, paddingBottom: 24 },
+
   categoryHeader: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '700',
     color: Colors.gray500,
     marginTop: 20,
     marginBottom: 8,
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    letterSpacing: 0.8,
   },
   itemRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
     backgroundColor: Colors.white,
-    borderRadius: 10,
+    borderRadius: 12,
     padding: 14,
     marginBottom: 6,
-    borderWidth: 1,
-    borderColor: Colors.gray100,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+  itemRowChecked: {
+    backgroundColor: Colors.tinted,
+  },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 7,
+    borderWidth: 2,
+    borderColor: Colors.gray200,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: Colors.white,
+  },
+  checkboxChecked: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
   },
   itemInfo: { flex: 1, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   itemName: { fontSize: 15, fontWeight: '500', color: Colors.black, flex: 1 },
-  itemPrice: { fontSize: 14, color: Colors.gray500, marginLeft: 8 },
+  itemNameChecked: { fontWeight: '600', color: Colors.dark },
+  itemPrice: { fontSize: 14, color: Colors.gray500, marginLeft: 8, fontWeight: '500' },
+
   footer: {
     padding: 16,
+    paddingBottom: 24,
     backgroundColor: Colors.white,
     borderTopWidth: 1,
     borderTopColor: Colors.gray100,
   },
   confirmBtn: {
-    backgroundColor: Colors.primary,
-    borderRadius: 12,
-    paddingVertical: 16,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: Colors.primary,
+    borderRadius: 14,
+    paddingVertical: 16,
   },
-  confirmBtnDisabled: { opacity: 0.6 },
+  confirmBtnDisabled: { opacity: 0.5 },
   confirmBtnText: { color: Colors.white, fontSize: 16, fontWeight: '700' },
-  emptyText: { fontSize: 14, color: Colors.gray400, textAlign: 'center', paddingVertical: 40 },
+
+  emptyState: { alignItems: 'center', paddingVertical: 48 },
+  emptyIconBg: {
+    width: 64,
+    height: 64,
+    borderRadius: 20,
+    backgroundColor: Colors.gray100,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  emptyText: { fontSize: 15, color: Colors.gray400, fontWeight: '500' },
 });

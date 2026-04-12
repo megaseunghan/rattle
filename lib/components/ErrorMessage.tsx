@@ -1,4 +1,5 @@
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../constants/colors';
 
 interface ErrorMessageProps {
@@ -9,10 +10,13 @@ interface ErrorMessageProps {
 export function ErrorMessage({ message, onRetry }: ErrorMessageProps) {
   return (
     <View style={styles.container}>
-      <Text style={styles.emoji}>⚠️</Text>
+      <View style={styles.iconBg}>
+        <Ionicons name="alert-circle-outline" size={28} color={Colors.danger} />
+      </View>
       <Text style={styles.message}>{message}</Text>
       {onRetry && (
         <TouchableOpacity style={styles.retryButton} onPress={onRetry}>
+          <Ionicons name="refresh-outline" size={15} color={Colors.white} />
           <Text style={styles.retryText}>다시 시도</Text>
         </TouchableOpacity>
       )}
@@ -28,21 +32,30 @@ const styles = StyleSheet.create({
     padding: 32,
     backgroundColor: Colors.gray50,
   },
-  emoji: {
-    fontSize: 40,
-    marginBottom: 12,
+  iconBg: {
+    width: 64,
+    height: 64,
+    borderRadius: 20,
+    backgroundColor: Colors.danger + '12',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
   },
   message: {
     fontSize: 15,
     color: Colors.gray600,
     textAlign: 'center',
-    marginBottom: 16,
+    lineHeight: 22,
+    marginBottom: 20,
   },
   retryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
     backgroundColor: Colors.primary,
     paddingHorizontal: 24,
-    paddingVertical: 10,
-    borderRadius: 10,
+    paddingVertical: 12,
+    borderRadius: 12,
   },
   retryText: {
     color: Colors.white,
