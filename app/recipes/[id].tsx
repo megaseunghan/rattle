@@ -90,7 +90,7 @@ export default function RecipeDetailScreen() {
       <ScrollView contentContainerStyle={styles.scroll}>
         <View style={styles.card}>
           <View style={styles.recipeHeader}>
-            <View>
+            <View style={styles.recipeNameBlock}>
               <Text style={styles.recipeName}>{recipe.name}</Text>
               <Text style={styles.recipeCategory}>{recipe.category}</Text>
             </View>
@@ -159,10 +159,11 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.white, borderRadius: 14, padding: 20,
     borderWidth: 1, borderColor: Colors.gray100, marginBottom: 24,
   },
-  recipeHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  recipeHeader: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  recipeNameBlock: { flex: 1 },
   recipeName: { fontSize: 20, fontWeight: '800', color: Colors.black, marginBottom: 4 },
   recipeCategory: { fontSize: 14, color: Colors.gray500 },
-  priceBadge: { backgroundColor: Colors.primary + '15', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10 },
+  priceBadge: { flexShrink: 0, backgroundColor: Colors.primary + '15', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10 },
   priceValue: { fontSize: 16, fontWeight: '700', color: Colors.primary },
   divider: { height: 1, backgroundColor: Colors.gray100, marginVertical: 20 },
   statsRow: { flexDirection: 'row', gap: 12 },

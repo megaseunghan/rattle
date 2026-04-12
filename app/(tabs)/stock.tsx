@@ -24,6 +24,8 @@ import { useIngredients } from '../../lib/hooks/useIngredients';
 import { useCategories } from '../../lib/hooks/useCategories';
 import { LoadingSpinner } from '../../lib/components/LoadingSpinner';
 import { ErrorMessage } from '../../lib/components/ErrorMessage';
+import { BulkCategoryModal } from '../../lib/components/BulkCategoryModal';
+import { getIngredientsByCategory } from '../../lib/services/ingredients';
 import { Ingredient } from '../../types';
 
 function IngredientRow({
@@ -107,10 +109,13 @@ function IngredientRow({
 
 export default function StockScreen() {
   const { store } = useAuth();
-  const { data, loading, loadingMore, hasMore, loadMore, error, refetch, update, remove, bulkCreate } = useIngredients();
+  const { data, loading, loadingMore, hasMore, loadMore, error, refetch, update, remove, bulkCreate, bulkUpdateCategory } = useIngredients();
   const { categories, add: addCategory, rename: renameCategory, remove: removeCategory, countByCategory } = useCategories();
 
   const [csvUploading, setCsvUploading] = useState(false);
+  const [showBulkCat, setShowBulkCat] = useState(false);
+  const [bulkCatItems, setBulkCatItems] = useState<{ id: string; name: string }[]>([]);
+  const [loadingBulkCat, setLoadingBulkCat] = useState(false);
   const [viewMode, setViewMode] = useState<'category' | 'supplier'>('category');
   const [activeCategory, setActiveCategory] = useState('전체');
   const [activeSupplier, setActiveSupplier] = useState('전체');
@@ -122,6 +127,22 @@ export default function StockScreen() {
   const [catOpLoading, setCatOpLoading] = useState(false);
 
   useFocusEffect(useCallback(() => { refetch(); }, []));
+
+  const unclassifiedCount = data.filter(i => i.category === '기타').length;
+
+  async function handleOpenBulkCat() {
+    if (!store) return;
+    setLoadingBulkCat(true);
+    try {
+      const items = await getIngredientsByCategory(store.id, '기타');
+      setBulkCatItems(items);
+      setShowBulkCat(true);
+    } catch (e: any) {
+      Alert.alert('오류', e.message);
+    } finally {
+      setLoadingBulkCat(false);
+    }
+  }
 
   useEffect(() => {
     if (activeCategory !== '전체' && categories.length > 0 && !categories.includes(activeCategory)) {
@@ -401,6 +422,35 @@ export default function StockScreen() {
           })}
         </ScrollView>
       )}
+
+      {unclassifiedCount > 0 && (
+        <TouchableOpacity
+          style={styles.unclassifiedBanner}
+          onPress={handleOpenBulkCat}
+          disabled={loadingBulkCat}
+          activeOpacity={0.75}
+        >
+          <View style={styles.unclassifiedLeft}>
+            <Ionicons name="folder-open-outline" size={15} color={Colors.warning} />
+            <Text style={styles.unclassifiedText}>기타(미분류) {unclassifiedCount}개</Text>
+          </View>
+          {loadingBulkCat
+            ? <ActivityIndicator size="small" color={Colors.warning} />
+            : <Text style={styles.unclassifiedAction}>카테고리 지정 →</Text>
+          }
+        </TouchableOpacity>
+      )}
+
+      <BulkCategoryModal
+        visible={showBulkCat}
+        items={bulkCatItems}
+        categories={categories}
+        onConfirm={async (ids, category) => {
+          await bulkUpdateCategory(ids, category);
+          setShowBulkCat(false);
+        }}
+        onClose={() => setShowBulkCat(false)}
+      />
 
       {data.length === 0 ? (
         <View style={styles.emptyState}>
@@ -788,4 +838,22 @@ const styles = StyleSheet.create({
   },
   addCatBtnDisabled: { opacity: 0.4 },
   addCatBtnText: { color: Colors.white, fontSize: 14, fontWeight: '700' },
+
+  // 미분류 배너
+  unclassifiedBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginHorizontal: 16,
+    marginBottom: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: Colors.warning + '12',
+    borderWidth: 1,
+    borderColor: Colors.warning + '40',
+  },
+  unclassifiedLeft: { flexDirection: 'row', alignItems: 'center', gap: 7 },
+  unclassifiedText: { fontSize: 13, fontWeight: '600', color: Colors.warning },
+  unclassifiedAction: { fontSize: 13, fontWeight: '600', color: Colors.warning },
 });

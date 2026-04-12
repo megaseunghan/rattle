@@ -70,6 +70,17 @@ export async function deleteIngredient(id: string): Promise<void> {
   if (error) throw new Error(error.message);
 }
 
+export async function getIngredientsByCategory(storeId: string, category: string): Promise<{ id: string; name: string }[]> {
+  const { data, error } = await supabase
+    .from('ingredients')
+    .select('id, name')
+    .eq('store_id', storeId)
+    .eq('category', category)
+    .order('name', { ascending: true });
+  if (error) throw new Error(error.message);
+  return (data ?? []) as { id: string; name: string }[];
+}
+
 export async function bulkCreateIngredients(
   items: Omit<Ingredient, 'id' | 'updated_at' | 'created_at'>[]
 ): Promise<number> {

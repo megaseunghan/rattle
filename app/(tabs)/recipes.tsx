@@ -10,7 +10,8 @@ import { useTossSync } from '../../lib/hooks/useTossSync';
 import { LoadingSpinner } from '../../lib/components/LoadingSpinner';
 import { ErrorMessage } from '../../lib/components/ErrorMessage';
 import { CatalogImportModal } from '../../lib/components/CatalogImportModal';
-import { RecipeWithIngredients, upsertRecipesFromCatalog } from '../../lib/services/recipes';
+import { BulkCategoryModal } from '../../lib/components/BulkCategoryModal';
+import { RecipeWithIngredients, upsertRecipesFromCatalog, getRecipesByCategory } from '../../lib/services/recipes';
 import { Ingredient, TossCatalogItem } from '../../types';
 
 type SortKey = 'name' | 'margin_desc' | 'cost_asc';
@@ -108,7 +109,7 @@ function RecipeCard({
 
 export default function RecipesScreen() {
   const { store } = useAuth();
-  const { data, loading, loadingMore, hasMore, loadMore, error, refetch, remove } = useRecipes();
+  const { data, loading, loadingMore, hasMore, loadMore, error, refetch, remove, bulkUpdateCategory } = useRecipes();
   const { syncCatalog } = useTossSync();
   const { sort: sortParam } = useLocalSearchParams<{ sort?: string }>();
 
@@ -117,6 +118,9 @@ export default function RecipesScreen() {
   const [syncingCatalog, setSyncingCatalog] = useState(false);
   const [catalogItems, setCatalogItems] = useState<TossCatalogItem[]>([]);
   const [showCatalogImport, setShowCatalogImport] = useState(false);
+  const [showBulkCat, setShowBulkCat] = useState(false);
+  const [bulkCatItems, setBulkCatItems] = useState<{ id: string; name: string }[]>([]);
+  const [loadingBulkCat, setLoadingBulkCat] = useState(false);
 
   useFocusEffect(useCallback(() => {
     if (sortParam === 'margin') setSortBy('margin_desc');
@@ -127,7 +131,8 @@ export default function RecipesScreen() {
     setSyncingCatalog(true);
     try {
       const items = await syncCatalog();
-      setCatalogItems(items);
+      const existingNames = new Set(data.map(r => r.name));
+      setCatalogItems(items.filter(i => !existingNames.has(i.itemName)));
       setShowCatalogImport(true);
     } catch (e: any) {
       Alert.alert('카탈로그 동기화 실패', e.message);
@@ -152,6 +157,22 @@ export default function RecipesScreen() {
       Alert.alert('완료', `${count}개 품목이 레시피에 추가/업데이트되었습니다.`);
     } catch (e: any) {
       Alert.alert('레시피 추가 실패', e.message);
+    }
+  }
+
+  const unclassifiedCount = data.filter(r => r.category === '미분류').length;
+
+  async function handleOpenBulkCat() {
+    if (!store) return;
+    setLoadingBulkCat(true);
+    try {
+      const items = await getRecipesByCategory(store.id, '미분류');
+      setBulkCatItems(items);
+      setShowBulkCat(true);
+    } catch (e: any) {
+      Alert.alert('오류', e.message);
+    } finally {
+      setLoadingBulkCat(false);
     }
   }
 
@@ -265,6 +286,35 @@ export default function RecipesScreen() {
               </TouchableOpacity>
             ))}
           </ScrollView>
+
+          {unclassifiedCount > 0 && (
+            <TouchableOpacity
+              style={styles.unclassifiedBanner}
+              onPress={handleOpenBulkCat}
+              disabled={loadingBulkCat}
+              activeOpacity={0.75}
+            >
+              <View style={styles.unclassifiedLeft}>
+                <Ionicons name="folder-open-outline" size={15} color={Colors.warning} />
+                <Text style={styles.unclassifiedText}>미분류 {unclassifiedCount}개</Text>
+              </View>
+              {loadingBulkCat
+                ? <ActivityIndicator size="small" color={Colors.warning} />
+                : <Text style={styles.unclassifiedAction}>카테고리 지정 →</Text>
+              }
+            </TouchableOpacity>
+          )}
+
+          <BulkCategoryModal
+            visible={showBulkCat}
+            items={bulkCatItems}
+            categories={categories.filter(c => c !== '전체')}
+            onConfirm={async (ids, category) => {
+              await bulkUpdateCategory(ids, category);
+              setShowBulkCat(false);
+            }}
+            onClose={() => setShowBulkCat(false)}
+          />
 
           <FlatList
             data={displayed}
@@ -466,4 +516,22 @@ const styles = StyleSheet.create({
     borderRadius: 14,
   },
   addFirstText: { color: Colors.white, fontSize: 15, fontWeight: '700' },
+
+  // 미분류 배너
+  unclassifiedBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginHorizontal: 16,
+    marginBottom: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: Colors.warning + '12',
+    borderWidth: 1,
+    borderColor: Colors.warning + '40',
+  },
+  unclassifiedLeft: { flexDirection: 'row', alignItems: 'center', gap: 7 },
+  unclassifiedText: { fontSize: 13, fontWeight: '600', color: Colors.warning },
+  unclassifiedAction: { fontSize: 13, fontWeight: '600', color: Colors.warning },
 });

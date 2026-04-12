@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import {
   getIngredients,
+  getIngredientsByCategory,
   createIngredient,
   updateIngredient,
   deleteIngredient,
@@ -23,6 +24,7 @@ interface UseIngredientsResult {
   update: (id: string, data: Partial<Pick<Ingredient, 'name' | 'category' | 'current_stock' | 'unit' | 'min_stock' | 'last_price' | 'container_unit' | 'container_size' | 'supplier_name'>>) => Promise<void>;
   remove: (id: string) => Promise<void>;
   bulkCreate: (items: Omit<Ingredient, 'id' | 'updated_at' | 'created_at'>[]) => Promise<number>;
+  bulkUpdateCategory: (ids: string[], category: string) => Promise<void>;
 }
 
 export function useIngredients(): UseIngredientsResult {
@@ -99,5 +101,10 @@ export function useIngredients(): UseIngredientsResult {
     return count;
   }
 
-  return { data, loading, loadingMore, hasMore, error, refetch, loadMore, create, update, remove, bulkCreate };
+  async function bulkUpdateCategory(ids: string[], category: string) {
+    await Promise.all(ids.map(id => updateIngredient(id, { category })));
+    await refetch();
+  }
+
+  return { data, loading, loadingMore, hasMore, error, refetch, loadMore, create, update, remove, bulkCreate, bulkUpdateCategory };
 }

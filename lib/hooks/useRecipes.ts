@@ -2,7 +2,9 @@ import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import {
   getRecipes,
+  getRecipesByCategory,
   createRecipeWithIngredients,
+  updateRecipeCategory,
   deleteRecipe,
   RecipeWithIngredients,
 } from '../services/recipes';
@@ -24,6 +26,7 @@ interface UseRecipesResult {
     ingredients: { ingredient_id: string; quantity: number; unit: string }[]
   ) => Promise<void>;
   remove: (id: string) => Promise<void>;
+  bulkUpdateCategory: (ids: string[], category: string) => Promise<void>;
 }
 
 export function useRecipes(): UseRecipesResult {
@@ -94,5 +97,10 @@ export function useRecipes(): UseRecipesResult {
     }
   }
 
-  return { data, loading, loadingMore, hasMore, error, refetch, loadMore, create, remove };
+  async function bulkUpdateCategory(ids: string[], category: string) {
+    await Promise.all(ids.map(id => updateRecipeCategory(id, category)));
+    await refetch();
+  }
+
+  return { data, loading, loadingMore, hasMore, error, refetch, loadMore, create, remove, bulkUpdateCategory };
 }
