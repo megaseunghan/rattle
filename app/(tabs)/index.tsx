@@ -13,29 +13,61 @@ import { useTossSync } from '../../lib/hooks/useTossSync';
 import { LoadingSpinner } from '../../lib/components/LoadingSpinner';
 import { ErrorMessage } from '../../lib/components/ErrorMessage';
 
-function StatCard({ icon, label, value, onPress }: { icon: keyof typeof Ionicons.glyphMap; label: string; value: string; onPress?: () => void }) {
+function StatCard({
+  icon,
+  label,
+  value,
+  onPress,
+  accent,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  value: string;
+  onPress?: () => void;
+  accent?: boolean;
+}) {
+  const content = (
+    <>
+      <View style={[styles.statIconBg, accent && styles.statIconBgAccent]}>
+        <Ionicons name={icon} size={20} color={accent ? Colors.dark : Colors.primary} />
+      </View>
+      <Text style={[styles.statValue, accent && styles.statValueAccent]}>{value}</Text>
+      <Text style={styles.statLabel}>{label}</Text>
+    </>
+  );
+
   if (onPress) {
     return (
-      <TouchableOpacity style={styles.statCard} onPress={onPress} activeOpacity={0.7}>
-        <Ionicons name={icon} size={22} color={Colors.primary} style={styles.statIcon} />
-        <Text style={styles.statValue}>{value}</Text>
-        <Text style={styles.statLabel}>{label}</Text>
+      <TouchableOpacity
+        style={[styles.statCard, accent && styles.statCardAccent]}
+        onPress={onPress}
+        activeOpacity={0.75}
+      >
+        {content}
       </TouchableOpacity>
     );
   }
   return (
-    <View style={styles.statCard}>
-      <Ionicons name={icon} size={22} color={Colors.primary} style={styles.statIcon} />
-      <Text style={styles.statValue}>{value}</Text>
-      <Text style={styles.statLabel}>{label}</Text>
+    <View style={[styles.statCard, accent && styles.statCardAccent]}>
+      {content}
     </View>
   );
 }
 
-function QuickAction({ icon, label, onPress }: { icon: keyof typeof Ionicons.glyphMap; label: string; onPress?: () => void }) {
+function QuickAction({
+  icon,
+  label,
+  onPress,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  onPress?: () => void;
+}) {
   return (
-    <TouchableOpacity style={styles.quickAction} onPress={onPress}>
-      <Ionicons name={icon} size={26} color={Colors.primary} style={styles.quickIcon} />
+    <TouchableOpacity style={styles.quickAction} onPress={onPress} activeOpacity={0.7}>
+      <View style={styles.quickIconBg}>
+        <Ionicons name={icon} size={24} color={Colors.primary} />
+      </View>
       <Text style={styles.quickLabel}>{label}</Text>
     </TouchableOpacity>
   );
@@ -127,21 +159,17 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scroll}>
+      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         {/* 헤더 */}
         <View style={styles.header}>
           <View>
-            <View style={styles.greetingRow}>
-              <Text style={styles.greeting}>안녕하세요</Text>
-              <Ionicons name="hand-right-outline" size={14} color={Colors.gray500} />
-            </View>
             <Text style={styles.storeName}>{store?.name ?? '매장 이름'}</Text>
           </View>
           <TouchableOpacity
             style={styles.profileBtn}
             onPress={() => router.push('/settings/profile')}
           >
-            <Ionicons name="person-circle-outline" size={32} color={Colors.primary} />
+            <Ionicons name="person-outline" size={18} color={Colors.primary} />
           </TouchableOpacity>
         </View>
 
@@ -180,8 +208,14 @@ export default function HomeScreen() {
               icon="stats-chart-outline"
               label="오늘 매출 (POS)"
               value={`${todaySales.toLocaleString('ko-KR')}원`}
+              accent
             />
-            <StatCard icon="receipt-outline" label="오늘 주문 (POS)" value={`${todayOrderCount}건`} />
+            <StatCard
+              icon="receipt-outline"
+              label="오늘 주문 (POS)"
+              value={`${todayOrderCount}건`}
+              accent
+            />
           </View>
         )}
 
@@ -195,29 +229,39 @@ export default function HomeScreen() {
           />
           <QuickAction icon="add-circle-outline" label="발주 추가" onPress={() => router.push('/orders/new')} />
           <QuickAction icon="bar-chart-outline" label="재고 확인" onPress={() => router.push('/(tabs)/stock')} />
-          <QuickAction icon="link-outline" label="POS 연동" onPress={() => router.push('/settings/pos-sync')} />
+          <QuickAction icon="link-outline" label="POS 연동" onPress={() => router.push('/(tabs)/pos')} />
         </View>
 
         {/* 최근 활동 */}
         <Text style={styles.sectionTitle}>최근 활동</Text>
         {recentActivity.length === 0 ? (
           <View style={styles.emptyState}>
-            <Ionicons name="mail-open-outline" size={40} color={Colors.gray400} style={styles.emptyIcon} />
+            <View style={styles.emptyIconBg}>
+              <Ionicons name="mail-open-outline" size={26} color={Colors.gray400} />
+            </View>
             <Text style={styles.emptyText}>아직 활동이 없어요</Text>
-            <Text style={styles.emptySubtext}>
-              영수증을 촬영하거나 발주를 추가해보세요
-            </Text>
+            <Text style={styles.emptySubtext}>영수증을 촬영하거나 발주를 추가해보세요</Text>
           </View>
         ) : (
           <View style={styles.activityList}>
-            {recentActivity.map(activity => (
-              <View key={activity.id} style={styles.activityItem}>
-                <Ionicons
-                  name={activity.type === 'order' ? 'document-text-outline' : 'leaf-outline'}
-                  size={20}
-                  color={Colors.gray500}
-                  style={styles.activityIcon}
-                />
+            {recentActivity.map((activity, index) => (
+              <View
+                key={activity.id}
+                style={[
+                  styles.activityItem,
+                  index === recentActivity.length - 1 && styles.activityItemLast,
+                ]}
+              >
+                <View style={[
+                  styles.activityIconCircle,
+                  { backgroundColor: activity.type === 'order' ? Colors.info + '18' : Colors.primary + '18' },
+                ]}>
+                  <Ionicons
+                    name={activity.type === 'order' ? 'document-text-outline' : 'leaf-outline'}
+                    size={16}
+                    color={activity.type === 'order' ? Colors.info : Colors.primary}
+                  />
+                </View>
                 <View style={styles.activityContent}>
                   <Text style={styles.activityLabel}>{activity.label}</Text>
                   <Text style={styles.activityDate}>
@@ -240,35 +284,37 @@ const styles = StyleSheet.create({
   },
   scroll: {
     padding: 20,
-    paddingBottom: 40,
+    paddingBottom: 48,
   },
+
+  // 헤더
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 24,
   },
-  greetingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    marginBottom: 2,
-  },
   greeting: {
     fontSize: 14,
     color: Colors.gray500,
+    marginBottom: 2,
   },
   storeName: {
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: '800',
     color: Colors.black,
+    letterSpacing: -0.5,
   },
   profileBtn: {
     width: 40,
     height: 40,
+    borderRadius: 20,
+    backgroundColor: Colors.tinted,
     justifyContent: 'center',
     alignItems: 'center',
   },
+
+  // 스탯 카드
   statRow: {
     flexDirection: 'row',
     gap: 12,
@@ -277,80 +323,124 @@ const styles = StyleSheet.create({
   statCard: {
     flex: 1,
     backgroundColor: Colors.white,
-    borderRadius: 16,
+    borderRadius: 18,
     padding: 16,
-    borderWidth: 1,
-    borderColor: Colors.gray100,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
   },
-  statIcon: {
-    marginBottom: 8,
+  statCardAccent: {
+    backgroundColor: Colors.tinted,
+  },
+  statIconBg: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: Colors.tinted,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  statIconBgAccent: {
+    backgroundColor: Colors.pale + '60',
   },
   statValue: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: '800',
     color: Colors.black,
-    marginBottom: 2,
+    marginBottom: 3,
+    letterSpacing: -0.5,
+  },
+  statValueAccent: {
+    color: Colors.deeper,
   },
   statLabel: {
-    fontSize: 13,
+    fontSize: 12,
     color: Colors.gray500,
+    fontWeight: '500',
   },
+
+  // 빠른 실행
   sectionTitle: {
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: '700',
     color: Colors.black,
-    marginTop: 24,
-    marginBottom: 12,
+    marginTop: 28,
+    marginBottom: 14,
   },
   quickRow: {
     flexDirection: 'row',
-    gap: 10,
+    gap: 8,
   },
   quickAction: {
     flex: 1,
-    backgroundColor: Colors.white,
-    borderRadius: 14,
-    paddingVertical: 16,
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: Colors.gray100,
+    gap: 8,
   },
-  quickIcon: {
-    marginBottom: 6,
+  quickIconBg: {
+    width: 58,
+    height: 58,
+    borderRadius: 18,
+    backgroundColor: Colors.white,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.07,
+    shadowRadius: 6,
+    elevation: 2,
   },
   quickLabel: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
-    color: Colors.gray700,
+    color: Colors.gray600,
+    textAlign: 'center',
   },
+
+  // 최근 활동
   emptyState: {
     backgroundColor: Colors.white,
-    borderRadius: 16,
+    borderRadius: 18,
     padding: 32,
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: Colors.gray100,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 1,
   },
-  emptyIcon: {
-    marginBottom: 12,
+  emptyIconBg: {
+    width: 56,
+    height: 56,
+    borderRadius: 18,
+    backgroundColor: Colors.gray100,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 14,
   },
   emptyText: {
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 15,
+    fontWeight: '700',
     color: Colors.gray700,
     marginBottom: 4,
   },
   emptySubtext: {
-    fontSize: 14,
+    fontSize: 13,
     color: Colors.gray400,
     textAlign: 'center',
+    lineHeight: 18,
   },
   activityList: {
     backgroundColor: Colors.white,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: Colors.gray100,
+    borderRadius: 18,
     overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
   },
   activityItem: {
     flexDirection: 'row',
@@ -359,7 +449,15 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: Colors.gray100,
   },
-  activityIcon: {
+  activityItemLast: {
+    borderBottomWidth: 0,
+  },
+  activityIconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 11,
+    justifyContent: 'center',
+    alignItems: 'center',
     marginRight: 12,
   },
   activityContent: {

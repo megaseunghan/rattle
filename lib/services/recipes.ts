@@ -5,13 +5,23 @@ export type RecipeWithIngredients = Recipe & {
   recipe_ingredients: (RecipeIngredient & { ingredient: Ingredient | null })[];
 };
 
-export async function getRecipes(storeId: string): Promise<RecipeWithIngredients[]> {
-  const { data, error } = await supabase
+export async function getRecipes(
+  storeId: string,
+  page?: number,
+  pageSize = 20
+): Promise<RecipeWithIngredients[]> {
+  let query = supabase
     .from('recipes')
     .select('*, recipe_ingredients(*, ingredient:ingredients(*))')
     .eq('store_id', storeId)
     .order('name', { ascending: true });
 
+  if (page !== undefined) {
+    const from = page * pageSize;
+    query = query.range(from, from + pageSize - 1);
+  }
+
+  const { data, error } = await query;
   if (error) throw new Error(error.message);
   return (data ?? []) as RecipeWithIngredients[];
 }

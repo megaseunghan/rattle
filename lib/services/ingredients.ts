@@ -1,13 +1,23 @@
 import { supabase } from '../supabase';
 import { Ingredient } from '../../types';
 
-export async function getIngredients(storeId: string): Promise<Ingredient[]> {
-  const { data, error } = await supabase
+export async function getIngredients(
+  storeId: string,
+  page?: number,
+  pageSize = 20
+): Promise<Ingredient[]> {
+  let query = supabase
     .from('ingredients')
     .select('*')
     .eq('store_id', storeId)
     .order('name', { ascending: true });
 
+  if (page !== undefined) {
+    const from = page * pageSize;
+    query = query.range(from, from + pageSize - 1);
+  }
+
+  const { data, error } = await query;
   if (error) throw new Error(error.message);
   return (data ?? []) as Ingredient[];
 }

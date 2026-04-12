@@ -5,6 +5,7 @@ export const Colors = {
   light: '#5DCAA5',
   pale: '#9FE1CB',
   bg: '#E1F5EE',
+  tinted: '#EDFAF4',
   black: '#111111',
   white: '#FFFFFF',
 

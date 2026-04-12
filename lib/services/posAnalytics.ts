@@ -50,17 +50,23 @@ export function getAutoSyncRange(closingTime: string): { from: string; to: strin
   return { from: from.toISOString(), to: new Date().toISOString() };
 }
 
-/** 최근 N일 영업일 요약 목록 */
+/** 최근 N일 영업일 요약 목록
+ * @param offsetDays 페이지네이션용 일 오프셋 (0 = 가장 최근, 14 = 14~28일 전 등)
+ */
 export async function getDailySummaries(
   storeId: string,
   closingTime: string,
-  days: number = 14
+  days: number = 14,
+  offsetDays: number = 0
 ): Promise<DailySummary[]> {
   const [h, m] = closingTime.split(':').map(Number);
 
-  const earliest = new Date();
+  const latest = new Date();
+  if (offsetDays > 0) latest.setDate(latest.getDate() - offsetDays);
+  latest.setHours(h, m, 0, 0);
+
+  const earliest = new Date(latest);
   earliest.setDate(earliest.getDate() - days);
-  earliest.setHours(h, m, 0, 0);
 
   const { data, error } = await supabase
     .from('toss_orders')
@@ -68,6 +74,7 @@ export async function getDailySummaries(
     .eq('store_id', storeId)
     .eq('status', 'COMPLETED')
     .gte('order_at', earliest.toISOString())
+    .lte('order_at', latest.toISOString())
     .order('order_at', { ascending: false });
 
   if (error) throw new Error(error.message);
