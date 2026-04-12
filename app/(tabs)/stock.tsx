@@ -67,12 +67,15 @@ function IngredientRow({
           <Text style={styles.rowName}>{item.name}</Text>
           {isLowStock && (
             <View style={styles.lowStockBadge}>
+              <Ionicons name="alert-circle" size={10} color={Colors.warning} />
               <Text style={styles.lowStockText}>품절 임박</Text>
             </View>
           )}
         </View>
         <Text style={styles.rowCategory}>
-          {item.category}{item.min_stock > 0 ? ` · 최소 ${item.min_stock}${item.unit}` : ''}{item.supplier_name ? ` · ${item.supplier_name}` : ''}
+          {item.category}
+          {item.min_stock > 0 ? ` · 최소 ${item.min_stock}${item.unit}` : ''}
+          {item.supplier_name ? ` · ${item.supplier_name}` : ''}
         </Text>
       </View>
 
@@ -95,7 +98,7 @@ function IngredientRow({
           </TouchableOpacity>
         )}
         <TouchableOpacity onPress={handleDelete} style={styles.deleteBtn}>
-          <Text style={styles.deleteBtnText}>✕</Text>
+          <Ionicons name="trash-outline" size={15} color={Colors.gray300} />
         </TouchableOpacity>
       </View>
     </TouchableOpacity>
@@ -104,15 +107,14 @@ function IngredientRow({
 
 export default function StockScreen() {
   const { store } = useAuth();
-  const { data, loading, error, refetch, update, remove, bulkCreate } = useIngredients();
-  const { categories, refetch: refetchCategories, add: addCategory, rename: renameCategory, remove: removeCategory, countByCategory } = useCategories();
+  const { data, loading, loadingMore, hasMore, loadMore, error, refetch, update, remove, bulkCreate } = useIngredients();
+  const { categories, add: addCategory, rename: renameCategory, remove: removeCategory, countByCategory } = useCategories();
 
   const [csvUploading, setCsvUploading] = useState(false);
   const [viewMode, setViewMode] = useState<'category' | 'supplier'>('category');
   const [activeCategory, setActiveCategory] = useState('전체');
   const [activeSupplier, setActiveSupplier] = useState('전체');
 
-  // Modal state
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [newCatName, setNewCatName] = useState('');
   const [editingCat, setEditingCat] = useState<string | null>(null);
@@ -121,7 +123,6 @@ export default function StockScreen() {
 
   useFocusEffect(useCallback(() => { refetch(); }, []));
 
-  // activeCategory가 더 이상 유효하지 않으면 '전체'로 리셋
   useEffect(() => {
     if (activeCategory !== '전체' && categories.length > 0 && !categories.includes(activeCategory)) {
       setActiveCategory('전체');
@@ -286,43 +287,53 @@ export default function StockScreen() {
   if (loading) return <LoadingSpinner />;
   if (error) return <ErrorMessage message={error} onRetry={refetch} />;
 
+  const lowStockCount = data.filter(i => i.current_stock <= i.min_stock).length;
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <View>
           <Text style={styles.title}>재고</Text>
           {data.length > 0 && (
-            <Text style={styles.subtitle}>{data.length}개 품목</Text>
+            <Text style={styles.subtitle}>
+              {data.length}개 품목
+              {lowStockCount > 0 && (
+                <Text style={styles.subtitleWarn}> · 품절 임박 {lowStockCount}개</Text>
+              )}
+            </Text>
           )}
         </View>
-        <View style={styles.headerActions}>
-          <TouchableOpacity
-            style={styles.csvButton}
-            onPress={handleCsvUpload}
-            disabled={csvUploading}
-          >
-            <Ionicons name="cloud-upload-outline" size={16} color={Colors.primary} />
-            <Text style={styles.csvText}>CSV</Text>
-          </TouchableOpacity>
-        </View>
+        <TouchableOpacity
+          style={styles.csvButton}
+          onPress={handleCsvUpload}
+          disabled={csvUploading}
+        >
+          {csvUploading
+            ? <ActivityIndicator size="small" color={Colors.primary} />
+            : <>
+                <Ionicons name="cloud-upload-outline" size={15} color={Colors.primary} />
+                <Text style={styles.csvText}>CSV</Text>
+              </>
+          }
+        </TouchableOpacity>
       </View>
 
       {/* 보기 모드 토글 */}
-      <View style={styles.viewToggleRow}>
+      <View style={styles.segmentRow}>
         <TouchableOpacity
-          style={[styles.viewToggleBtn, viewMode === 'category' && styles.viewToggleBtnActive]}
+          style={[styles.segmentBtn, viewMode === 'category' && styles.segmentBtnActive]}
           onPress={() => setViewMode('category')}
         >
-          <Text style={[styles.viewToggleText, viewMode === 'category' && styles.viewToggleTextActive]}>
+          <Text style={[styles.segmentText, viewMode === 'category' && styles.segmentTextActive]}>
             카테고리별
           </Text>
         </TouchableOpacity>
         {suppliers.length > 1 && (
           <TouchableOpacity
-            style={[styles.viewToggleBtn, viewMode === 'supplier' && styles.viewToggleBtnActive]}
+            style={[styles.segmentBtn, viewMode === 'supplier' && styles.segmentBtnActive]}
             onPress={() => setViewMode('supplier')}
           >
-            <Text style={[styles.viewToggleText, viewMode === 'supplier' && styles.viewToggleTextActive]}>
+            <Text style={[styles.segmentText, viewMode === 'supplier' && styles.segmentTextActive]}>
               거래처별
             </Text>
           </TouchableOpacity>
@@ -349,7 +360,8 @@ export default function StockScreen() {
                   onPress={() => setActiveCategory(tab)}
                 >
                   <Text style={[styles.tabText, activeCategory === tab && styles.tabTextActive]}>
-                    {tab}{count > 0 ? ` ${count}` : ''}
+                    {tab}
+                    {count > 0 ? <Text style={styles.tabCount}> {count}</Text> : ''}
                   </Text>
                 </TouchableOpacity>
               );
@@ -359,45 +371,44 @@ export default function StockScreen() {
             style={styles.editCatBtn}
             onPress={() => setShowCategoryModal(true)}
           >
-            <Text style={styles.editCatText}>편집</Text>
+            <Ionicons name="settings-outline" size={15} color={Colors.gray500} />
           </TouchableOpacity>
         </View>
       )}
 
       {/* 거래처 탭 */}
       {viewMode === 'supplier' && (
-        <View style={styles.tabRow}>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.tabBar}
-            style={styles.tabScroll}
-          >
-            {suppliers.map(s => {
-              const count = s === '전체' ? data.length : data.filter(i => i.supplier_name === s).length;
-              return (
-                <TouchableOpacity
-                  key={s}
-                  style={[styles.tab, activeSupplier === s && styles.tabActive]}
-                  onPress={() => setActiveSupplier(s)}
-                >
-                  <Text style={[styles.tabText, activeSupplier === s && styles.tabTextActive]}>
-                    {s}{count > 0 ? ` ${count}` : ''}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
-        </View>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.tabBar}
+          style={styles.tabScroll}
+        >
+          {suppliers.map(s => {
+            const count = s === '전체' ? data.length : data.filter(i => i.supplier_name === s).length;
+            return (
+              <TouchableOpacity
+                key={s}
+                style={[styles.tab, activeSupplier === s && styles.tabActive]}
+                onPress={() => setActiveSupplier(s)}
+              >
+                <Text style={[styles.tabText, activeSupplier === s && styles.tabTextActive]}>
+                  {s}
+                  {count > 0 ? <Text style={styles.tabCount}> {count}</Text> : ''}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
       )}
 
       {data.length === 0 ? (
         <View style={styles.emptyState}>
-          <Ionicons name="bar-chart-outline" size={48} color={Colors.gray300} style={styles.emptyIcon} />
+          <View style={styles.emptyIconBg}>
+            <Ionicons name="bar-chart-outline" size={28} color={Colors.gray400} />
+          </View>
           <Text style={styles.emptyText}>재고 데이터가 없어요</Text>
-          <Text style={styles.emptySubtext}>
-            발주를 등록하면 재고가 자동으로 관리돼요
-          </Text>
+          <Text style={styles.emptySubtext}>발주를 등록하면 재고가 자동으로 관리돼요</Text>
         </View>
       ) : filtered.length === 0 ? (
         <View style={styles.emptyState}>
@@ -410,6 +421,7 @@ export default function StockScreen() {
           data={filtered}
           keyExtractor={item => item.id}
           contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
           renderItem={({ item }) => (
             <IngredientRow
               item={item}
@@ -418,6 +430,9 @@ export default function StockScreen() {
               onEdit={(id) => router.push(`/stock/${id}`)}
             />
           )}
+          onEndReached={hasMore ? loadMore : undefined}
+          onEndReachedThreshold={0.5}
+          ListFooterComponent={loadingMore ? <ActivityIndicator style={{ padding: 16 }} color={Colors.primary} /> : null}
         />
       )}
 
@@ -429,10 +444,11 @@ export default function StockScreen() {
           onPress={() => setShowCategoryModal(false)}
         >
           <TouchableOpacity activeOpacity={1} style={styles.modalSheet}>
+            <View style={styles.modalHandle} />
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>카테고리 편집</Text>
-              <TouchableOpacity onPress={() => setShowCategoryModal(false)}>
-                <Text style={styles.modalClose}>닫기</Text>
+              <TouchableOpacity onPress={() => setShowCategoryModal(false)} style={styles.modalCloseBtn}>
+                <Ionicons name="close" size={20} color={Colors.gray500} />
               </TouchableOpacity>
             </View>
 
@@ -509,155 +525,208 @@ export default function StockScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.gray50 },
+
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingTop: 16,
+    paddingBottom: 12,
   },
-  title: { fontSize: 22, fontWeight: '800', color: Colors.black },
-  subtitle: { fontSize: 14, color: Colors.gray500, marginTop: 2 },
-  headerActions: { flexDirection: 'row', gap: 8, alignItems: 'center' },
+  title: { fontSize: 24, fontWeight: '800', color: Colors.black, letterSpacing: -0.5 },
+  subtitle: { fontSize: 13, color: Colors.gray400, marginTop: 2 },
+  subtitleWarn: { color: Colors.warning, fontWeight: '600' },
   csvButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 5,
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 10,
-    borderWidth: 1,
-    borderColor: Colors.primary,
+    borderWidth: 1.5,
+    borderColor: Colors.primary + '60',
+    backgroundColor: Colors.tinted,
   },
-  csvText: { color: Colors.primary, fontSize: 14, fontWeight: '700' },
-  addButton: {
-    backgroundColor: Colors.primary,
-    paddingHorizontal: 16,
+  csvText: { color: Colors.primary, fontSize: 13, fontWeight: '700' },
+
+  // 세그먼트 컨트롤
+  segmentRow: {
+    flexDirection: 'row',
+    marginHorizontal: 16,
+    marginBottom: 12,
+    backgroundColor: Colors.gray100,
+    borderRadius: 12,
+    padding: 3,
+  },
+  segmentBtn: {
+    flex: 1,
+    alignItems: 'center',
     paddingVertical: 8,
     borderRadius: 10,
   },
-  addText: { color: Colors.white, fontSize: 14, fontWeight: '700' },
+  segmentBtnActive: {
+    backgroundColor: Colors.white,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  segmentText: { fontSize: 13, fontWeight: '600', color: Colors.gray500 },
+  segmentTextActive: { color: Colors.black, fontWeight: '700' },
+
+  // 탭 바
   tabRow: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingRight: 8,
+    marginBottom: 4,
   },
   tabScroll: { flex: 1 },
   tabBar: {
     paddingHorizontal: 16,
-    paddingBottom: 8,
-    gap: 6,
-    flexDirection: 'row',
-  },
-  editCatBtn: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    marginBottom: 8,
-    marginRight: 4,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: Colors.gray200,
-    backgroundColor: Colors.white,
-  },
-  editCatText: { fontSize: 12, fontWeight: '600', color: Colors.gray500 },
-  viewToggleRow: {
-    flexDirection: 'row',
-    paddingHorizontal: 16,
     paddingBottom: 10,
     gap: 6,
+    flexDirection: 'row',
   },
-  viewToggleBtn: {
-    flex: 1,
-    alignItems: 'center',
-    paddingVertical: 7,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: Colors.gray200,
-    backgroundColor: Colors.white,
-  },
-  viewToggleBtnActive: {
-    backgroundColor: Colors.dark,
-    borderColor: Colors.dark,
-  },
-  viewToggleText: { fontSize: 13, fontWeight: '600', color: Colors.gray500 },
-  viewToggleTextActive: { color: Colors.white },
   tab: {
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
     paddingVertical: 6,
     borderRadius: 20,
-    borderWidth: 1,
-    borderColor: Colors.gray200,
     backgroundColor: Colors.white,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 2,
+    elevation: 1,
   },
   tabActive: {
     backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
   },
   tabText: { fontSize: 13, fontWeight: '600', color: Colors.gray500 },
   tabTextActive: { color: Colors.white },
-  listContent: { paddingHorizontal: 16, paddingBottom: 24 },
+  tabCount: { fontWeight: '500', opacity: 0.8 },
+  editCatBtn: {
+    width: 34,
+    height: 34,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 10,
+    marginRight: 4,
+    borderRadius: 10,
+    backgroundColor: Colors.white,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+
+  // 리스트 행
+  listContent: { paddingHorizontal: 16, paddingBottom: 32 },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: Colors.white,
-    borderRadius: 12,
+    borderRadius: 14,
     padding: 14,
     marginBottom: 8,
-    borderWidth: 1,
-    borderColor: Colors.gray100,
+    borderLeftWidth: 3,
+    borderLeftColor: 'transparent',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 1,
   },
   rowLowStock: {
-    borderColor: Colors.warning + '60',
-    backgroundColor: Colors.warning + '08',
+    borderLeftColor: Colors.warning,
+    backgroundColor: Colors.warning + '06',
   },
   rowLeft: { flex: 1 },
-  rowNameRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 2 },
+  rowNameRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 3 },
   rowName: { fontSize: 15, fontWeight: '600', color: Colors.black },
   lowStockBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
     backgroundColor: Colors.warning + '20',
-    paddingHorizontal: 6,
+    paddingHorizontal: 7,
     paddingVertical: 2,
     borderRadius: 6,
   },
   lowStockText: { fontSize: 11, fontWeight: '700', color: Colors.warning },
   rowCategory: { fontSize: 12, color: Colors.gray400 },
-  rowRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  rowRight: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   stockValue: { fontSize: 16, fontWeight: '700', color: Colors.black, minWidth: 60, textAlign: 'right' },
   stockValueLow: { color: Colors.warning },
   stockInput: {
     fontSize: 16,
     fontWeight: '700',
     color: Colors.black,
-    borderBottomWidth: 1,
+    borderBottomWidth: 2,
     borderBottomColor: Colors.primary,
     minWidth: 60,
     textAlign: 'right',
     paddingVertical: 2,
   },
-  deleteBtn: { padding: 4 },
-  deleteBtnText: { fontSize: 14, color: Colors.gray400 },
+  deleteBtn: {
+    width: 32,
+    height: 32,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  // 빈 상태
   emptyState: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 32 },
-  emptyIcon: { marginBottom: 16 },
-  emptyText: { fontSize: 18, fontWeight: '700', color: Colors.gray700, marginBottom: 8 },
+  emptyIconBg: {
+    width: 72,
+    height: 72,
+    borderRadius: 22,
+    backgroundColor: Colors.gray100,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 18,
+  },
+  emptyText: { fontSize: 17, fontWeight: '700', color: Colors.gray700, marginBottom: 8 },
   emptySubtext: { fontSize: 14, color: Colors.gray400, textAlign: 'center' },
-  // Category modal
+
+  // 카테고리 모달
   modalOverlay: { flex: 1, backgroundColor: Colors.overlay, justifyContent: 'flex-end' },
   modalSheet: {
     backgroundColor: Colors.white,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: '70%',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: '75%',
+    paddingTop: 8,
+  },
+  modalHandle: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: Colors.gray200,
+    alignSelf: 'center',
+    marginBottom: 8,
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 20,
+    paddingHorizontal: 20,
+    paddingVertical: 14,
     borderBottomWidth: 1,
     borderBottomColor: Colors.gray100,
   },
   modalTitle: { fontSize: 17, fontWeight: '700', color: Colors.black },
-  modalClose: { fontSize: 15, color: Colors.primary, fontWeight: '600' },
+  modalCloseBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: Colors.gray100,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   modalScroll: { paddingHorizontal: 20 },
   catRow: {
     flexDirection: 'row',
@@ -671,43 +740,50 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 15,
     color: Colors.black,
-    borderBottomWidth: 1,
+    borderBottomWidth: 2,
     borderBottomColor: Colors.primary,
     paddingVertical: 2,
     marginRight: 8,
   },
   catActions: { flexDirection: 'row', gap: 4 },
-  catActionBtn: { padding: 8 },
+  catActionBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: Colors.gray50,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   catConfirmBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
     backgroundColor: Colors.primary,
-    borderRadius: 8,
+    borderRadius: 10,
     marginRight: 4,
   },
-  catConfirmText: { fontSize: 13, color: Colors.white, fontWeight: '600' },
+  catConfirmText: { fontSize: 13, color: Colors.white, fontWeight: '700' },
   addCatRow: {
     flexDirection: 'row',
     gap: 10,
     paddingVertical: 16,
-    paddingBottom: 32,
+    paddingBottom: 40,
   },
   addCatInput: {
     flex: 1,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: Colors.gray200,
-    borderRadius: 10,
+    borderRadius: 12,
     paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingVertical: 11,
     fontSize: 14,
     color: Colors.black,
     backgroundColor: Colors.gray50,
   },
   addCatBtn: {
     backgroundColor: Colors.primary,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 10,
+    paddingHorizontal: 18,
+    paddingVertical: 11,
+    borderRadius: 12,
     justifyContent: 'center',
   },
   addCatBtnDisabled: { opacity: 0.4 },

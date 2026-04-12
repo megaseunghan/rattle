@@ -59,18 +59,23 @@ function RecipeCard({
     ? Colors.warning
     : Colors.danger;
 
+  const marginBarWidth = `${Math.min(Math.max(currentMarginRate, 0), 100)}%` as `${number}%`;
+
   return (
     <TouchableOpacity
       style={styles.recipeCard}
       onPress={() => router.push(`/recipes/${recipe.id}`)}
+      activeOpacity={0.75}
     >
       <View style={styles.recipeHeader}>
         <View style={styles.recipeLeft}>
           <Text style={styles.recipeName}>{recipe.name}</Text>
-          <Text style={styles.recipeCategory}>{recipe.category}</Text>
+          <View style={styles.categoryPill}>
+            <Text style={styles.categoryPillText}>{recipe.category}</Text>
+          </View>
         </View>
         <TouchableOpacity onPress={handleDelete} style={styles.deleteBtn}>
-          <Text style={styles.deleteBtnText}>✕</Text>
+          <Ionicons name="trash-outline" size={15} color={Colors.gray300} />
         </TouchableOpacity>
       </View>
 
@@ -79,16 +84,23 @@ function RecipeCard({
           <Text style={styles.recipeStatLabel}>판매가</Text>
           <Text style={styles.recipeStatValue}>{recipe.selling_price.toLocaleString('ko-KR')}원</Text>
         </View>
+        <View style={styles.recipeStatDivider} />
         <View style={styles.recipeStat}>
           <Text style={styles.recipeStatLabel}>원가</Text>
           <Text style={styles.recipeStatValue}>{Math.round(currentCost).toLocaleString('ko-KR')}원</Text>
         </View>
+        <View style={styles.recipeStatDivider} />
         <View style={styles.recipeStat}>
           <Text style={styles.recipeStatLabel}>마진율</Text>
-          <Text style={[styles.recipeStatValue, { color: marginColor }]}>
+          <Text style={[styles.recipeStatValue, styles.recipeStatMargin, { color: marginColor }]}>
             {currentMarginRate.toFixed(1)}%
           </Text>
         </View>
+      </View>
+
+      {/* 마진율 시각 바 */}
+      <View style={styles.marginBarTrack}>
+        <View style={[styles.marginBarFill, { width: marginBarWidth, backgroundColor: marginColor }]} />
       </View>
     </TouchableOpacity>
   );
@@ -96,7 +108,7 @@ function RecipeCard({
 
 export default function RecipesScreen() {
   const { store } = useAuth();
-  const { data, loading, error, refetch, remove } = useRecipes();
+  const { data, loading, loadingMore, hasMore, loadMore, error, refetch, remove } = useRecipes();
   const { syncCatalog } = useTossSync();
   const { sort: sortParam } = useLocalSearchParams<{ sort?: string }>();
 
@@ -179,20 +191,42 @@ export default function RecipesScreen() {
           <Text style={styles.title}>레시피</Text>
           {data.length > 0 && <Text style={styles.subtitle}>{data.length}개</Text>}
         </View>
-        <TouchableOpacity style={styles.addButton} onPress={() => router.push('/recipes/new')}>
-          <Text style={styles.addText}>+ 새 레시피</Text>
-        </TouchableOpacity>
+        <View style={styles.headerButtons}>
+          <TouchableOpacity
+            style={[styles.syncButton, syncingCatalog && styles.syncButtonDisabled]}
+            onPress={handleSyncCatalog}
+            disabled={syncingCatalog}
+          >
+            {syncingCatalog
+              ? <ActivityIndicator size="small" color={Colors.primary} />
+              : <Ionicons name="sync-outline" size={17} color={Colors.primary} />
+            }
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.addButton} onPress={() => router.push('/recipes/new')}>
+            <Ionicons name="add" size={16} color={Colors.white} />
+            <Text style={styles.addText}>새 레시피</Text>
+          </TouchableOpacity>
+        </View>
       </View>
+
+      <CatalogImportModal
+        visible={showCatalogImport}
+        items={catalogItems}
+        onConfirm={handleCatalogImportConfirm}
+        onClose={() => setShowCatalogImport(false)}
+      />
 
       {data.length === 0 ? (
         <View style={styles.emptyState}>
-          <Ionicons name="restaurant-outline" size={48} color={Colors.gray300} style={styles.emptyIcon} />
+          <View style={styles.emptyIconBg}>
+            <Ionicons name="restaurant-outline" size={28} color={Colors.gray400} />
+          </View>
           <Text style={styles.emptyText}>레시피가 없어요</Text>
           <Text style={styles.emptySubtext}>
             레시피를 등록하면 원가와{'\n'}마진율을 자동으로 계산해드려요
           </Text>
           <TouchableOpacity style={styles.addFirstButton} onPress={() => router.push('/recipes/new')}>
-            <Text style={styles.addFirstText}>+ 첫 레시피 등록하기</Text>
+            <Text style={styles.addFirstText}>첫 레시피 등록하기</Text>
           </TouchableOpacity>
         </View>
       ) : (
@@ -236,7 +270,11 @@ export default function RecipesScreen() {
             data={displayed}
             keyExtractor={item => item.id}
             contentContainerStyle={styles.listContent}
+            showsVerticalScrollIndicator={false}
             renderItem={({ item }) => <RecipeCard recipe={item} onDelete={remove} />}
+            onEndReached={hasMore ? loadMore : undefined}
+            onEndReachedThreshold={0.5}
+            ListFooterComponent={loadingMore ? <ActivityIndicator style={{ padding: 16 }} color={Colors.primary} /> : null}
           />
         </>
       )}
@@ -246,22 +284,45 @@ export default function RecipesScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.gray50 },
+
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingTop: 16,
+    paddingBottom: 12,
   },
-  title: { fontSize: 22, fontWeight: '800', color: Colors.black },
-  subtitle: { fontSize: 14, color: Colors.gray500, marginTop: 2 },
+  title: { fontSize: 24, fontWeight: '800', color: Colors.black, letterSpacing: -0.5 },
+  subtitle: { fontSize: 13, color: Colors.gray400, marginTop: 2 },
+  headerButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  syncButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: Colors.tinted,
+    borderWidth: 1.5,
+    borderColor: Colors.primary + '40',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  syncButtonDisabled: { opacity: 0.5 },
   addButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
     backgroundColor: Colors.primary,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 12,
   },
   addText: { color: Colors.white, fontSize: 14, fontWeight: '700' },
+
+  // 정렬 바
   sortBar: {
     paddingHorizontal: 16,
     paddingBottom: 8,
@@ -270,20 +331,24 @@ const styles = StyleSheet.create({
   },
   sortChip: {
     paddingHorizontal: 14,
-    paddingVertical: 6,
+    paddingVertical: 7,
     borderRadius: 20,
-    borderWidth: 1,
-    borderColor: Colors.gray200,
     backgroundColor: Colors.white,
     flex: 1,
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 2,
+    elevation: 1,
   },
   sortChipActive: {
     backgroundColor: Colors.dark,
-    borderColor: Colors.dark,
   },
   sortChipText: { fontSize: 13, fontWeight: '600', color: Colors.gray500 },
   sortChipTextActive: { color: Colors.white },
+
+  // 카테고리 바
   categoryScroll: { flexGrow: 0 },
   categoryBar: {
     paddingHorizontal: 16,
@@ -295,61 +360,110 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 7,
     borderRadius: 20,
-    borderWidth: 1,
-    borderColor: Colors.gray200,
     backgroundColor: Colors.white,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 2,
+    elevation: 1,
   },
   categoryChipActive: {
-    backgroundColor: Colors.dark,
-    borderColor: Colors.dark,
+    backgroundColor: Colors.primary,
   },
   categoryChipText: { fontSize: 13, fontWeight: '600', color: Colors.gray500 },
   categoryChipTextActive: { color: Colors.white },
-  listContent: { paddingHorizontal: 16, paddingBottom: 24 },
+
+  // 레시피 리스트
+  listContent: { paddingHorizontal: 16, paddingBottom: 32 },
   recipeCard: {
     backgroundColor: Colors.white,
-    borderRadius: 14,
+    borderRadius: 18,
     padding: 16,
-    borderWidth: 1,
-    borderColor: Colors.gray100,
     marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.07,
+    shadowRadius: 8,
+    elevation: 2,
   },
   recipeHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 12,
+    marginBottom: 14,
   },
-  recipeLeft: { flex: 1 },
-  recipeName: { fontSize: 16, fontWeight: '700', color: Colors.black, marginBottom: 2 },
-  recipeCategory: { fontSize: 13, color: Colors.gray500 },
-  deleteBtn: { padding: 4 },
-  deleteBtnText: { fontSize: 16, color: Colors.gray400 },
-  recipeStats: { flexDirection: 'row', gap: 8 },
-  recipeStat: {
-    flex: 1,
-    backgroundColor: Colors.gray50,
-    borderRadius: 10,
-    padding: 10,
+  recipeLeft: { flex: 1, gap: 6 },
+  recipeName: { fontSize: 16, fontWeight: '700', color: Colors.black },
+  categoryPill: {
+    alignSelf: 'flex-start',
+    backgroundColor: Colors.gray100,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  categoryPillText: { fontSize: 11, fontWeight: '600', color: Colors.gray500 },
+  deleteBtn: {
+    width: 32,
+    height: 32,
+    justifyContent: 'center',
     alignItems: 'center',
   },
-  recipeStatLabel: { fontSize: 11, color: Colors.gray500, marginBottom: 4 },
+
+  // 스탯
+  recipeStats: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  recipeStat: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  recipeStatDivider: {
+    width: 1,
+    height: 28,
+    backgroundColor: Colors.gray100,
+  },
+  recipeStatLabel: { fontSize: 11, color: Colors.gray400, marginBottom: 4, fontWeight: '500' },
   recipeStatValue: { fontSize: 14, fontWeight: '700', color: Colors.black },
+  recipeStatMargin: { fontSize: 15 },
+
+  // 마진율 바
+  marginBarTrack: {
+    height: 4,
+    backgroundColor: Colors.gray100,
+    borderRadius: 2,
+    overflow: 'hidden',
+  },
+  marginBarFill: {
+    height: 4,
+    borderRadius: 2,
+  },
+
+  // 빈 상태
   emptyState: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 32 },
-  emptyIcon: { marginBottom: 16 },
-  emptyText: { fontSize: 18, fontWeight: '700', color: Colors.gray700, marginBottom: 8 },
+  emptyIconBg: {
+    width: 72,
+    height: 72,
+    borderRadius: 22,
+    backgroundColor: Colors.gray100,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 18,
+  },
+  emptyText: { fontSize: 17, fontWeight: '700', color: Colors.gray700, marginBottom: 8 },
   emptySubtext: {
     fontSize: 14,
     color: Colors.gray400,
     textAlign: 'center',
-    lineHeight: 20,
-    marginBottom: 24,
+    lineHeight: 21,
+    marginBottom: 28,
   },
   addFirstButton: {
     backgroundColor: Colors.primary,
-    paddingHorizontal: 24,
+    paddingHorizontal: 28,
     paddingVertical: 14,
-    borderRadius: 12,
+    borderRadius: 14,
   },
   addFirstText: { color: Colors.white, fontSize: 15, fontWeight: '700' },
 });

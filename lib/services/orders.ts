@@ -5,13 +5,23 @@ export type OrderWithItems = Order & {
   order_items: (OrderItem & { ingredient: Ingredient | null })[];
 };
 
-export async function getOrders(storeId: string): Promise<OrderWithItems[]> {
-  const { data, error } = await supabase
+export async function getOrders(
+  storeId: string,
+  page?: number,
+  pageSize = 20
+): Promise<OrderWithItems[]> {
+  let query = supabase
     .from('orders')
     .select('*, order_items(*, ingredient:ingredients(*))')
     .eq('store_id', storeId)
     .order('created_at', { ascending: false });
 
+  if (page !== undefined) {
+    const from = page * pageSize;
+    query = query.range(from, from + pageSize - 1);
+  }
+
+  const { data, error } = await query;
   if (error) throw new Error(error.message);
   return (data ?? []) as OrderWithItems[];
 }

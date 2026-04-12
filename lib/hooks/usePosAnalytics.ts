@@ -3,11 +3,16 @@ import { useAuth } from '../contexts/AuthContext';
 import { getDailySummaries, getDailyItems } from '../services/posAnalytics';
 import { DailySummary, DailyItem } from '../../types';
 
+const SUMMARY_PAGE_DAYS = 14;
+
 export function usePosAnalytics() {
   const { store } = useAuth();
   const [summaries, setSummaries] = useState<DailySummary[]>([]);
   const [items, setItems] = useState<DailyItem[]>([]);
   const [loadingSummaries, setLoadingSummaries] = useState(false);
+  const [loadingMoreSummaries, setLoadingMoreSummaries] = useState(false);
+  const [hasMoreSummaries, setHasMoreSummaries] = useState(true);
+  const [summaryPage, setSummaryPage] = useState(0);
   const [loadingItems, setLoadingItems] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeCategory, setActiveCategory] = useState('전체');
@@ -15,10 +20,13 @@ export function usePosAnalytics() {
   const fetchSummaries = useCallback(async (closingTime: string) => {
     if (!store) return;
     setLoadingSummaries(true);
+    setSummaryPage(0);
+    setHasMoreSummaries(true);
     setError(null);
     try {
-      const result = await getDailySummaries(store.id, closingTime);
+      const result = await getDailySummaries(store.id, closingTime, SUMMARY_PAGE_DAYS, 0);
       setSummaries(result);
+      setHasMoreSummaries(result.length > 0);
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -26,10 +34,31 @@ export function usePosAnalytics() {
     }
   }, [store]);
 
+  const loadMoreSummaries = useCallback(async (closingTime: string) => {
+    if (!store || !hasMoreSummaries || loadingMoreSummaries) return;
+    setLoadingMoreSummaries(true);
+    try {
+      const nextPage = summaryPage + 1;
+      const result = await getDailySummaries(
+        store.id,
+        closingTime,
+        SUMMARY_PAGE_DAYS,
+        nextPage * SUMMARY_PAGE_DAYS
+      );
+      setSummaries(prev => [...prev, ...result]);
+      setSummaryPage(nextPage);
+      setHasMoreSummaries(result.length > 0);
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setLoadingMoreSummaries(false);
+    }
+  }, [store, summaryPage, hasMoreSummaries, loadingMoreSummaries]);
+
   const fetchItems = useCallback(async (dateFrom: string, dateTo: string) => {
     if (!store) return;
     setLoadingItems(true);
-    setItems([]); // 이전 데이터 초기화
+    setItems([]);
     setError(null);
     setActiveCategory('전체');
     try {
@@ -56,9 +85,12 @@ export function usePosAnalytics() {
     activeCategory,
     setActiveCategory,
     loadingSummaries,
+    loadingMoreSummaries,
+    hasMoreSummaries,
     loadingItems,
     error,
     fetchSummaries,
+    loadMoreSummaries,
     fetchItems,
   };
 }

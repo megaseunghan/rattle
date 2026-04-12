@@ -9,11 +9,16 @@ import {
 } from '../services/ingredients';
 import { Ingredient } from '../../types';
 
+const PAGE_SIZE = 20;
+
 interface UseIngredientsResult {
   data: Ingredient[];
   loading: boolean;
+  loadingMore: boolean;
+  hasMore: boolean;
   error: string | null;
   refetch: () => Promise<void>;
+  loadMore: () => Promise<void>;
   create: (data: Omit<Ingredient, 'id' | 'updated_at' | 'created_at'>) => Promise<Ingredient>;
   update: (id: string, data: Partial<Pick<Ingredient, 'name' | 'category' | 'current_stock' | 'unit' | 'min_stock' | 'last_price' | 'container_unit' | 'container_size' | 'supplier_name'>>) => Promise<void>;
   remove: (id: string) => Promise<void>;
@@ -24,21 +29,43 @@ export function useIngredients(): UseIngredientsResult {
   const { store } = useAuth();
   const [data, setData] = useState<Ingredient[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const [page, setPage] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
   const refetch = useCallback(async () => {
     if (!store) return;
     setLoading(true);
     setError(null);
+    setPage(0);
+    setHasMore(true);
     try {
-      const result = await getIngredients(store.id);
+      const result = await getIngredients(store.id, 0, PAGE_SIZE);
       setData(result);
+      setHasMore(result.length === PAGE_SIZE);
     } catch (e: any) {
       setError(e.message);
     } finally {
       setLoading(false);
     }
   }, [store]);
+
+  const loadMore = useCallback(async () => {
+    if (!store || !hasMore || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const nextPage = page + 1;
+      const result = await getIngredients(store.id, nextPage, PAGE_SIZE);
+      setData(prev => [...prev, ...result]);
+      setPage(nextPage);
+      setHasMore(result.length === PAGE_SIZE);
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [store, page, hasMore, loadingMore]);
 
   useEffect(() => {
     refetch();
@@ -56,13 +83,11 @@ export function useIngredients(): UseIngredientsResult {
   }
 
   async function remove(id: string) {
-    // Optimistic update: 즉시 UI에서 제거
     const previous = data;
     setData(prev => prev.filter(item => item.id !== id));
     try {
       await deleteIngredient(id);
     } catch (e: any) {
-      // 실패 시 복원
       setData(previous);
       setError(e.message);
     }
@@ -74,5 +99,5 @@ export function useIngredients(): UseIngredientsResult {
     return count;
   }
 
-  return { data, loading, error, refetch, create, update, remove, bulkCreate };
+  return { data, loading, loadingMore, hasMore, error, refetch, loadMore, create, update, remove, bulkCreate };
 }
