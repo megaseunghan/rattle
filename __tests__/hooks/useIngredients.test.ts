@@ -48,7 +48,7 @@ describe('useIngredients 훅', () => {
 
     expect(result.current.loading).toBe(false);
     expect(result.current.data).toEqual([sampleIngredient]);
-    expect(mockGetIngredients).toHaveBeenCalledWith('store-123');
+    expect(mockGetIngredients).toHaveBeenCalledWith('store-123', 0, 20);
   });
 
   it('remove 시 optimistic delete로 즉시 UI에서 제거된다', async () => {
