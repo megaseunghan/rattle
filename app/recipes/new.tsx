@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../constants/colors';
 import { useRecipes } from '../../lib/hooks/useRecipes';
 import { useIngredients } from '../../lib/hooks/useIngredients';
@@ -31,13 +32,18 @@ export default function NewRecipeScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
   const isEdit = !!id;
 
-  const { create } = useRecipes();
+  const { data: recipes, create } = useRecipes();
   const { data: ingredients, create: createIngredient } = useIngredients();
   const { store } = useAuth();
 
   const [name, setName] = useState('');
   const [category, setCategory] = useState('');
+  const [showCustomCat, setShowCustomCat] = useState(false);
   const [sellingPrice, setSellingPrice] = useState('');
+
+  const existingCategories = useMemo(() => {
+    return Array.from(new Set(recipes.filter(r => r.category !== '기타').map(r => r.category))).sort();
+  }, [recipes]);
   const [items, setItems] = useState<RecipeIngredientForm[]>([]);
   const [loading, setLoading] = useState(isEdit);
   const [submitting, setSubmitting] = useState(false);
@@ -227,13 +233,48 @@ export default function NewRecipeScreen() {
           />
 
           <Text style={styles.label}>카테고리</Text>
-          <TextInput
-            style={styles.input}
-            value={category}
-            onChangeText={setCategory}
-            placeholder="예) 음료, 디저트"
-            placeholderTextColor={Colors.gray400}
-          />
+          <View style={styles.categoryGrid}>
+            {existingCategories.map(cat => (
+              <TouchableOpacity
+                key={cat}
+                style={[styles.categoryChip, category === cat && styles.categoryChipActive]}
+                onPress={() => { setCategory(cat); setShowCustomCat(false); }}
+              >
+                <Text style={[styles.categoryChipText, category === cat && styles.categoryChipTextActive]}>
+                  {cat}
+                </Text>
+              </TouchableOpacity>
+            ))}
+            <TouchableOpacity
+              style={[
+                styles.categoryChip, 
+                styles.customCatChip,
+                showCustomCat && styles.categoryChipActive
+              ]}
+              onPress={() => setShowCustomCat(true)}
+            >
+              <Ionicons 
+                name="add-circle-outline" 
+                size={14} 
+                color={showCustomCat ? Colors.white : Colors.primary} 
+                style={{ marginRight: 4 }}
+              />
+              <Text style={[styles.categoryChipText, showCustomCat && styles.categoryChipTextActive]}>
+                직접 입력
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {showCustomCat && (
+            <TextInput
+              style={[styles.input, { marginTop: 10 }]}
+              value={category}
+              onChangeText={setCategory}
+              placeholder="새 카테고리 이름"
+              placeholderTextColor={Colors.gray400}
+              autoFocus
+            />
+          )}
 
           <Text style={styles.label}>판매가 (원)</Text>
           <TextInput
@@ -428,6 +469,39 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     fontSize: 15,
     color: Colors.black,
+  },
+  categoryGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 2,
+  },
+  categoryChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    backgroundColor: Colors.white,
+    borderWidth: 1,
+    borderColor: Colors.gray200,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  categoryChipActive: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+  },
+  categoryChipText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: Colors.gray600,
+  },
+  categoryChipTextActive: {
+    color: Colors.white,
+  },
+  customCatChip: {
+    borderStyle: 'dashed',
+    borderColor: Colors.primary + '80',
+    backgroundColor: Colors.tinted,
   },
   costPreview: {
     flexDirection: 'row',

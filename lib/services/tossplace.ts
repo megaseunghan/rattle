@@ -47,11 +47,6 @@ export async function fetchTossOrders(
   );
   if (!data) throw new Error('Toss Place API 응답이 없습니다');
 
-  if (__DEV__) {
-    console.log('[TossOrders] 응답 데이터 확인');
-    console.log(data);
-  }
-
   let rawOrders: any[] = [];
   if (Array.isArray(data)) {
     rawOrders = data;
@@ -168,15 +163,7 @@ export async function fetchTossCatalog(merchantId: string): Promise<TossCatalogI
     );
     if (!data) throw new Error('Toss Place API 응답이 없습니다');
 
-    if (__DEV__) {
-      console.log(`[TossCatalog] page=${page} 원본:`, JSON.stringify(data).slice(0, 500));
-    }
-
     const items = normalizeCatalogPage(data);
-
-    if (__DEV__) {
-      console.log(`[TossCatalog] page=${page} 파싱결과 count=${items.length}`, items[0]);
-    }
 
     allItems.push(...items);
 
