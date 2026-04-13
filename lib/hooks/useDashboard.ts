@@ -1,6 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../supabase';
+import { getAutoSyncRange } from '../services/posAnalytics';
+
+export interface EstimatedConsumption {
+  ingredientName: string;
+  amount: number;
+  unit: string;
+}
 
 interface RecentActivity {
   id: string;
@@ -15,6 +22,7 @@ interface UseDashboardResult {
   recipeCount: number;
   avgMarginRate: number;
   recentActivity: RecentActivity[];
+  estimatedConsumptions: EstimatedConsumption[];
   loading: boolean;
   error: string | null;
   refetch: () => Promise<void>;
@@ -27,6 +35,7 @@ export function useDashboard(): UseDashboardResult {
   const [recipeCount, setRecipeCount] = useState(0);
   const [avgMarginRate, setAvgMarginRate] = useState(0);
   const [recentActivity, setRecentActivity] = useState<RecentActivity[]>([]);
+  const [estimatedConsumptions, setEstimatedConsumptions] = useState<EstimatedConsumption[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -127,6 +136,56 @@ export function useDashboard(): UseDashboardResult {
         .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
         .slice(0, 5);
       setRecentActivity(combined);
+
+      // 예상 재고 소진량: 오늘 POS 판매 × 레시피 재료 구성
+      const { from: todayFrom } = getAutoSyncRange(store.closing_time ?? '23:00');
+      const todayItemsRes = await supabase
+        .from('toss_order_items')
+        .select('item_name, quantity, toss_orders!inner(order_at, status)')
+        .eq('store_id', store.id)
+        .eq('toss_orders.status', 'COMPLETED')
+        .gte('toss_orders.order_at', todayFrom);
+
+      const itemMap: Record<string, number> = {};
+      for (const item of (todayItemsRes.data ?? []) as { item_name: string; quantity: number }[]) {
+        itemMap[item.item_name] = (itemMap[item.item_name] ?? 0) + item.quantity;
+      }
+
+      if (Object.keys(itemMap).length > 0) {
+        const matchedRecipes = await supabase
+          .from('recipes')
+          .select('name, recipe_ingredients(quantity, ingredient:ingredients(name, unit))')
+          .eq('store_id', store.id)
+          .in('name', Object.keys(itemMap));
+
+        const consumptionMap: Record<string, { amount: number; unit: string }> = {};
+        for (const recipe of (matchedRecipes.data ?? []) as any[]) {
+          const soldQty = itemMap[recipe.name] ?? 0;
+          for (const ri of recipe.recipe_ingredients ?? []) {
+            const ingName = ri.ingredient?.name;
+            if (!ingName) continue;
+            const consumed = ri.quantity * soldQty;
+            if (consumptionMap[ingName]) {
+              consumptionMap[ingName].amount += consumed;
+            } else {
+              consumptionMap[ingName] = { amount: consumed, unit: ri.ingredient?.unit ?? '' };
+            }
+          }
+        }
+
+        setEstimatedConsumptions(
+          Object.entries(consumptionMap)
+            .sort((a, b) => b[1].amount - a[1].amount)
+            .slice(0, 5)
+            .map(([name, v]) => ({
+              ingredientName: name,
+              amount: Math.round(v.amount * 100) / 100,
+              unit: v.unit,
+            }))
+        );
+      } else {
+        setEstimatedConsumptions([]);
+      }
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -144,6 +203,7 @@ export function useDashboard(): UseDashboardResult {
     recipeCount,
     avgMarginRate,
     recentActivity,
+    estimatedConsumptions,
     loading,
     error,
     refetch,
