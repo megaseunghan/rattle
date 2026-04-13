@@ -89,24 +89,44 @@ export function BulkCategoryModal({ visible, items, categories, onConfirm, onClo
               </TouchableOpacity>
             ))}
             <TouchableOpacity
-              style={[styles.catChip, isCustom && styles.catChipActive]}
+              style={[
+                styles.catChip, 
+                styles.customCatChip,
+                isCustom && styles.catChipActive
+              ]}
               onPress={() => setTargetCategory('__new__')}
             >
+              <Ionicons 
+                name="add-circle-outline" 
+                size={16} 
+                color={isCustom ? Colors.white : Colors.primary} 
+                style={{ marginRight: 4 }}
+              />
               <Text style={[styles.catChipText, isCustom && styles.catChipTextActive]}>
-                + 새 카테고리
+                새 카테고리
               </Text>
             </TouchableOpacity>
           </View>
 
           {isCustom && (
-            <TextInput
-              style={styles.newCatInput}
-              value={newCategory}
-              onChangeText={setNewCategory}
-              placeholder="새 카테고리 이름"
-              placeholderTextColor={Colors.gray400}
-              autoFocus
-            />
+            <View style={styles.newCatInputWrapper}>
+              <TextInput
+                style={styles.newCatInput}
+                value={newCategory}
+                onChangeText={setNewCategory}
+                placeholder="새 카테고리 이름"
+                placeholderTextColor={Colors.gray400}
+                autoFocus
+              />
+              {newCategory.length > 0 && (
+                <TouchableOpacity 
+                  style={styles.clearInputBtn}
+                  onPress={() => setNewCategory('')}
+                >
+                  <Ionicons name="close-circle" size={18} color={Colors.gray300} />
+                </TouchableOpacity>
+              )}
+            </View>
           )}
 
           <Text style={styles.sectionLabel}>수정할 항목 선택</Text>
@@ -180,15 +200,35 @@ const styles = StyleSheet.create({
   catChip: {
     paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20,
     backgroundColor: Colors.white, borderWidth: 1.5, borderColor: Colors.gray200,
+    flexDirection: 'row', alignItems: 'center',
+  },
+  customCatChip: {
+    borderStyle: 'dashed',
+    borderColor: Colors.primary + '80',
+    backgroundColor: Colors.tinted,
   },
   catChipActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
   catChipText: { fontSize: 14, fontWeight: '600', color: Colors.gray600 },
   catChipTextActive: { color: Colors.white },
 
+  newCatInputWrapper: {
+    marginTop: 10,
+    position: 'relative',
+    justifyContent: 'center',
+  },
   newCatInput: {
-    marginTop: 10, borderWidth: 1.5, borderColor: Colors.primary,
+    borderWidth: 1.5, borderColor: Colors.primary,
     borderRadius: 12, paddingHorizontal: 14, paddingVertical: 11,
+    paddingRight: 40,
     fontSize: 14, color: Colors.black, backgroundColor: Colors.white,
+  },
+  clearInputBtn: {
+    position: 'absolute',
+    right: 12,
+    width: 24,
+    height: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 
   itemRow: {

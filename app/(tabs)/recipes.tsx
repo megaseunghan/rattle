@@ -11,7 +11,8 @@ import { LoadingSpinner } from '../../lib/components/LoadingSpinner';
 import { ErrorMessage } from '../../lib/components/ErrorMessage';
 import { CatalogImportModal } from '../../lib/components/CatalogImportModal';
 import { BulkCategoryModal } from '../../lib/components/BulkCategoryModal';
-import { RecipeWithIngredients, upsertRecipesFromCatalog, getRecipesByCategory } from '../../lib/services/recipes';
+import { Modal, TextInput } from 'react-native';
+import { RecipeWithIngredients, upsertRecipesFromCatalog, getRecipesByCategory, renameRecipeCategory, deleteRecipeCategory } from '../../lib/services/recipes';
 import { Ingredient, TossCatalogItem } from '../../types';
 
 type SortKey = 'name' | 'margin_desc' | 'cost_asc';
@@ -121,11 +122,20 @@ export default function RecipesScreen() {
   const [showBulkCat, setShowBulkCat] = useState(false);
   const [bulkCatItems, setBulkCatItems] = useState<{ id: string; name: string }[]>([]);
   const [loadingBulkCat, setLoadingBulkCat] = useState(false);
+  const [unclassifiedCount, setUnclassifiedCount] = useState(0);
+
+  const [showCategoryModal, setShowCategoryModal] = useState(false);
+  const [editingCat, setEditingCat] = useState<string | null>(null);
+  const [editingCatName, setEditingCatName] = useState('');
+  const [catOpLoading, setCatOpLoading] = useState(false);
 
   useFocusEffect(useCallback(() => {
     if (sortParam === 'margin') setSortBy('margin_desc');
     refetch();
-  }, [sortParam]));
+    if (store) {
+      getRecipesByCategory(store.id, '미분류').then(items => setUnclassifiedCount(items.length));
+    }
+  }, [sortParam, store]));
 
   async function handleSyncCatalog() {
     setSyncingCatalog(true);
@@ -160,14 +170,13 @@ export default function RecipesScreen() {
     }
   }
 
-  const unclassifiedCount = data.filter(r => r.category === '미분류').length;
-
   async function handleOpenBulkCat() {
     if (!store) return;
     setLoadingBulkCat(true);
     try {
       const items = await getRecipesByCategory(store.id, '미분류');
       setBulkCatItems(items);
+      setUnclassifiedCount(items.length);
       setShowBulkCat(true);
     } catch (e: any) {
       Alert.alert('오류', e.message);
@@ -177,6 +186,49 @@ export default function RecipesScreen() {
   }
 
   const categories = ['전체', ...Array.from(new Set(data.map(r => r.category))).sort()];
+
+  async function handleRenameCategory() {
+    const newName = editingCatName.trim();
+    if (!newName || !editingCat || !store) return;
+    if (newName === editingCat) { setEditingCat(null); return; }
+    setCatOpLoading(true);
+    try {
+      await renameRecipeCategory(store.id, editingCat, newName);
+      setEditingCat(null);
+      await refetch();
+    } catch (e: any) {
+      Alert.alert('오류', e.message);
+    } finally {
+      setCatOpLoading(false);
+    }
+  }
+
+  async function handleDeleteCategory(name: string) {
+    if (!store) return;
+    const count = data.filter(r => r.category === name).length;
+    const message = count > 0
+      ? `"${name}" 카테고리를 삭제하면 해당 레시피 ${count}개가 '미분류'로 이동됩니다.`
+      : `"${name}" 카테고리를 삭제하시겠습니까?`;
+
+    Alert.alert('카테고리 삭제', message, [
+      { text: '취소', style: 'cancel' },
+      {
+        text: '삭제',
+        style: 'destructive',
+        onPress: async () => {
+          setCatOpLoading(true);
+          try {
+            await deleteRecipeCategory(store.id, name);
+            await refetch();
+          } catch (e: any) {
+            Alert.alert('오류', e.message);
+          } finally {
+            setCatOpLoading(false);
+          }
+        },
+      },
+    ]);
+  }
 
   function unitPrice(ing: Ingredient): number {
     const base = ing.last_price ?? 0;
@@ -268,24 +320,34 @@ export default function RecipesScreen() {
           </View>
 
           {/* 카테고리 필터 */}
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.categoryBar}
-            style={styles.categoryScroll}
-          >
-            {categories.map(cat => (
+          <View style={styles.tabRow}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.categoryBar}
+              style={styles.categoryScroll}
+            >
+              {categories.map(cat => (
+                <TouchableOpacity
+                  key={cat}
+                  style={[styles.categoryChip, activeCategory === cat && styles.categoryChipActive]}
+                  onPress={() => setActiveCategory(cat)}
+                >
+                  <Text style={[styles.categoryChipText, activeCategory === cat && styles.categoryChipTextActive]}>
+                    {cat}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+            {categories.length > 1 && (
               <TouchableOpacity
-                key={cat}
-                style={[styles.categoryChip, activeCategory === cat && styles.categoryChipActive]}
-                onPress={() => setActiveCategory(cat)}
+                style={styles.editCatBtn}
+                onPress={() => setShowCategoryModal(true)}
               >
-                <Text style={[styles.categoryChipText, activeCategory === cat && styles.categoryChipTextActive]}>
-                  {cat}
-                </Text>
+                <Ionicons name="settings-outline" size={15} color={Colors.gray500} />
               </TouchableOpacity>
-            ))}
-          </ScrollView>
+            )}
+          </View>
 
           {unclassifiedCount > 0 && (
             <TouchableOpacity
@@ -315,6 +377,70 @@ export default function RecipesScreen() {
             }}
             onClose={() => setShowBulkCat(false)}
           />
+
+          {/* 카테고리 편집 모달 */}
+          <Modal visible={showCategoryModal} animationType="slide" transparent>
+            <TouchableOpacity
+              style={styles.modalOverlay}
+              activeOpacity={1}
+              onPress={() => setShowCategoryModal(false)}
+            >
+              <TouchableOpacity activeOpacity={1} style={styles.modalSheet}>
+                <View style={styles.modalHandle} />
+                <View style={styles.modalHeader}>
+                  <Text style={styles.modalTitle}>카테고리 관리</Text>
+                  <TouchableOpacity onPress={() => setShowCategoryModal(false)} style={styles.modalCloseBtn}>
+                    <Ionicons name="close" size={20} color={Colors.gray500} />
+                  </TouchableOpacity>
+                </View>
+
+                <ScrollView style={styles.modalScroll}>
+                  {categories.filter(c => c !== '전체').map(cat => (
+                    <View key={cat} style={styles.catRow}>
+                      {editingCat === cat ? (
+                        <TextInput
+                          style={styles.catEditInput}
+                          value={editingCatName}
+                          onChangeText={setEditingCatName}
+                          autoFocus
+                          onSubmitEditing={handleRenameCategory}
+                        />
+                      ) : (
+                        <Text style={styles.catName}>{cat}</Text>
+                      )}
+
+                      <View style={styles.catActions}>
+                        {editingCat === cat ? (
+                          <TouchableOpacity
+                            style={styles.catConfirmBtn}
+                            onPress={handleRenameCategory}
+                            disabled={catOpLoading}
+                          >
+                            <Text style={styles.catConfirmText}>확인</Text>
+                          </TouchableOpacity>
+                        ) : (
+                          <TouchableOpacity
+                            style={styles.catActionBtn}
+                            onPress={() => { setEditingCat(cat); setEditingCatName(cat); }}
+                          >
+                            <Ionicons name="pencil-outline" size={16} color={Colors.gray500} />
+                          </TouchableOpacity>
+                        )}
+                        <TouchableOpacity
+                          style={styles.catActionBtn}
+                          onPress={() => handleDeleteCategory(cat)}
+                          disabled={catOpLoading}
+                        >
+                          <Ionicons name="trash-outline" size={16} color={Colors.danger} />
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  ))}
+                  <View style={{ height: 40 }} />
+                </ScrollView>
+              </TouchableOpacity>
+            </TouchableOpacity>
+          </Modal>
 
           <FlatList
             data={displayed}
@@ -399,7 +525,13 @@ const styles = StyleSheet.create({
   sortChipTextActive: { color: Colors.white },
 
   // 카테고리 바
-  categoryScroll: { flexGrow: 0 },
+  tabRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingRight: 8,
+    marginBottom: 4,
+  },
+  categoryScroll: { flex: 1 },
   categoryBar: {
     paddingHorizontal: 16,
     paddingBottom: 12,
@@ -422,6 +554,92 @@ const styles = StyleSheet.create({
   },
   categoryChipText: { fontSize: 13, fontWeight: '600', color: Colors.gray500 },
   categoryChipTextActive: { color: Colors.white },
+  editCatBtn: {
+    width: 34,
+    height: 34,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 10,
+    marginRight: 4,
+    borderRadius: 10,
+    backgroundColor: Colors.white,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+
+  // 카테고리 모달
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
+  modalSheet: {
+    backgroundColor: Colors.white,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: '75%',
+    paddingTop: 8,
+  },
+  modalHandle: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: Colors.gray200,
+    alignSelf: 'center',
+    marginBottom: 8,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.gray100,
+  },
+  modalTitle: { fontSize: 17, fontWeight: '700', color: Colors.black },
+  modalCloseBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: Colors.gray100,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalScroll: { paddingHorizontal: 20 },
+  catRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.gray100,
+  },
+  catName: { flex: 1, fontSize: 15, color: Colors.black, fontWeight: '500' },
+  catEditInput: {
+    flex: 1,
+    fontSize: 15,
+    color: Colors.black,
+    borderBottomWidth: 2,
+    borderBottomColor: Colors.primary,
+    paddingVertical: 2,
+    marginRight: 8,
+  },
+  catActions: { flexDirection: 'row', gap: 4 },
+  catActionBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: Colors.gray50,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  catConfirmBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    backgroundColor: Colors.primary,
+    borderRadius: 10,
+    marginRight: 4,
+  },
+  catConfirmText: { fontSize: 13, color: Colors.white, fontWeight: '700' },
 
   // 레시피 리스트
   listContent: { paddingHorizontal: 16, paddingBottom: 32 },

@@ -100,6 +100,33 @@ export async function updateRecipeCategory(id: string, category: string): Promis
   if (error) throw new Error(error.message);
 }
 
+export async function renameRecipeCategory(
+  storeId: string,
+  oldName: string,
+  newName: string
+): Promise<void> {
+  const { error } = await supabase
+    .from('recipes')
+    .update({ category: newName })
+    .eq('store_id', storeId)
+    .eq('category', oldName);
+
+  if (error) throw new Error(error.message);
+}
+
+export async function deleteRecipeCategory(
+  storeId: string,
+  category: string
+): Promise<void> {
+  const { error } = await supabase
+    .from('recipes')
+    .update({ category: '미분류' })
+    .eq('store_id', storeId)
+    .eq('category', category);
+
+  if (error) throw new Error(error.message);
+}
+
 export async function getRecipesByCategory(storeId: string, category: string): Promise<{ id: string; name: string }[]> {
   const { data, error } = await supabase
     .from('recipes')
