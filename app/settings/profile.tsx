@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, Alert,
   TextInput, ScrollView, ActivityIndicator,
@@ -11,17 +11,22 @@ import { useAuth } from '../../lib/contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
 
 export default function ProfileScreen() {
-  const { user, store, signOut, refreshStore } = useAuth();
+  const { user, store, stores, signOut, refreshStore } = useAuth();
   const [loading, setLoading] = useState(false);
   const [name, setName] = useState(store?.name || '');
   const [closingTime, setClosingTime] = useState(
     (store?.closing_time as string | null | undefined)?.slice(0, 5) ?? '23:00'
   );
 
+  useEffect(() => {
+    if (!store) return;
+    setName(store.name || '');
+    setClosingTime((store.closing_time as string | null | undefined)?.slice(0, 5) ?? '23:00');
+  }, [store?.id]);
+
   async function handleUpdateProfile() {
-    if (!name.trim()) return;
-    
-    // 시간 형식 검증 (HH:MM)
+    if (!store || !name.trim()) return;
+
     if (!/^\d{2}:\d{2}$/.test(closingTime)) {
       Alert.alert('형식 오류', '마감 시간을 HH:MM 형식으로 입력해주세요. (예: 23:00)');
       return;
@@ -31,18 +36,18 @@ export default function ProfileScreen() {
     try {
       const { error } = await supabase
         .from('stores')
-        .update({ 
+        .update({
           name: name.trim(),
           closing_time: closingTime,
         })
-        .eq('id', store?.id);
-      
+        .eq('id', store.id);
+
       if (error) throw error;
-      
+
       await refreshStore();
       Alert.alert('성공', '정보가 수정되었습니다.');
-    } catch (e: any) {
-      Alert.alert('수정 실패', e.message);
+    } catch (e: unknown) {
+      Alert.alert('수정 실패', e instanceof Error ? e.message : '오류가 발생했습니다.');
     } finally {
       setLoading(false);
     }
@@ -60,13 +65,12 @@ export default function ProfileScreen() {
           onPress: async () => {
             setLoading(true);
             try {
-              // RPC 등을 통해 관련 데이터 일괄 삭제 로직 필요할 수 있음
               const { error } = await supabase.rpc('delete_user_data');
               if (error) throw error;
-              
+
               await signOut();
               router.replace('/(auth)/login');
-            } catch (e: any) {
+            } catch (e: unknown) {
               Alert.alert('탈퇴 실패', '탈퇴 처리에 실패했습니다. 고객센터에 문의해주세요.');
             } finally {
               setLoading(false);
@@ -106,6 +110,9 @@ export default function ProfileScreen() {
             <Ionicons name="person" size={40} color={Colors.gray300} />
           </View>
           <Text style={styles.email}>{user?.email}</Text>
+          {store?.name && (
+            <Text style={styles.storeName}>{store.name}</Text>
+          )}
         </View>
 
         <View style={styles.section}>
@@ -132,11 +139,22 @@ export default function ProfileScreen() {
             onPress={handleUpdateProfile}
             disabled={loading}
           >
-            {loading ? <ActivityIndicator size="small" color={Colors.white} /> : <Text style={styles.saveBtnText}>정보 수정 저장</Text>}
+            {loading ? (
+              <ActivityIndicator size="small" color={Colors.white} />
+            ) : (
+              <Text style={styles.saveBtnText}>정보 수정 저장</Text>
+            )}
           </TouchableOpacity>
         </View>
 
         <View style={styles.menuCard}>
+          <TouchableOpacity style={styles.menuItem} onPress={() => router.push('/(auth)/select-store')}>
+            <Ionicons name="storefront-outline" size={20} color={Colors.gray600} />
+            <Text style={styles.menuText}>매장 전환</Text>
+            <Ionicons name="chevron-forward" size={16} color={Colors.gray300} />
+          </TouchableOpacity>
+          <View style={styles.divider} />
+
           <TouchableOpacity style={styles.menuItem} onPress={handleSignOut}>
             <Ionicons name="log-out-outline" size={20} color={Colors.gray600} />
             <Text style={styles.menuText}>로그아웃</Text>
@@ -173,6 +191,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center', alignItems: 'center', marginBottom: 12,
   },
   email: { fontSize: 15, color: Colors.gray500, fontWeight: '500' },
+  storeName: { fontSize: 13, color: Colors.gray400, marginTop: 4 },
   section: { marginBottom: 32 },
   label: { fontSize: 13, fontWeight: '600', color: Colors.gray600, marginBottom: 8 },
   input: {
