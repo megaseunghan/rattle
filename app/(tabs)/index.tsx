@@ -6,7 +6,6 @@ import { router, useFocusEffect } from 'expo-router';
 import { Colors } from '../../constants/colors';
 import { useAuth } from '../../lib/contexts/AuthContext';
 import { useDashboard } from '../../lib/hooks/useDashboard';
-import { useTossSync } from '../../lib/hooks/useTossSync';
 import { LoadingSpinner } from '../../lib/components/LoadingSpinner';
 import { ErrorMessage } from '../../lib/components/ErrorMessage';
 
@@ -78,12 +77,12 @@ export default function HomeScreen() {
     recipeCount,
     avgMarginRate,
     recentActivity,
+    estimatedConsumptions,
     loading,
     error,
     refetch,
   } = useDashboard();
-  const { todaySales, todayOrderCount, loadTodaySales } = useTossSync();
-  useFocusEffect(useCallback(() => { refetch(); loadTodaySales(); }, []));
+  useFocusEffect(useCallback(() => { refetch(); }, []));
 
   if (loading) return <LoadingSpinner />;
   if (error) return <ErrorMessage message={error} onRetry={refetch} />;
@@ -133,21 +132,26 @@ export default function HomeScreen() {
             onPress={() => router.push({ pathname: '/(tabs)/recipes', params: { sort: 'margin' } })}
           />
         </View>
-        {todayOrderCount > 0 && (
-          <View style={styles.statRow}>
-            <StatCard
-              icon="stats-chart-outline"
-              label="오늘 매출 (POS)"
-              value={`${todaySales.toLocaleString('ko-KR')}원`}
-              accent
-            />
-            <StatCard
-              icon="receipt-outline"
-              label="오늘 주문 (POS)"
-              value={`${todayOrderCount}건`}
-              accent
-            />
-          </View>
+        {estimatedConsumptions.length > 0 && (
+          <>
+            <Text style={[styles.sectionTitle, { marginTop: 16 }]}>예상 재고 소진량 (오늘)</Text>
+            <View style={styles.consumptionCard}>
+              {estimatedConsumptions.map((item, index) => (
+                <View
+                  key={item.ingredientName}
+                  style={[
+                    styles.consumptionRow,
+                    index === estimatedConsumptions.length - 1 && styles.consumptionRowLast,
+                  ]}
+                >
+                  <Text style={styles.consumptionName}>{item.ingredientName}</Text>
+                  <Text style={styles.consumptionAmount}>
+                    {item.amount}{item.unit}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          </>
         )}
 
         {/* 빠른 실행 */}
@@ -399,5 +403,39 @@ const styles = StyleSheet.create({
   activityDate: {
     fontSize: 12,
     color: Colors.gray400,
+  },
+
+  // 예상 소진량
+  consumptionCard: {
+    backgroundColor: Colors.white,
+    borderRadius: 18,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  consumptionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 13,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.gray100,
+  },
+  consumptionRowLast: {
+    borderBottomWidth: 0,
+  },
+  consumptionName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.black,
+  },
+  consumptionAmount: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: Colors.primary,
   },
 });
