@@ -19,7 +19,7 @@ export default function SelectStoreScreen() {
   const [storeName, setStoreName] = useState('');
   const [loading, setLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
-  const { user, store, stores, refreshStore, switchStore } = useAuth();
+  const { user, store, stores, switchStore } = useAuth();
   const router = useRouter();
 
   async function handleSelectStore(storeId: string) {
@@ -45,7 +45,6 @@ export default function SelectStoreScreen() {
 
       if (error) throw error;
 
-      await refreshStore();
       await switchStore(data.id);
       router.replace('/(tabs)');
     } catch (error: unknown) {
