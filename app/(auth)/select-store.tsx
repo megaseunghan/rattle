@@ -83,14 +83,24 @@ export default function SelectStoreScreen() {
         })}
 
         {hasStores && !showForm && (
-          <TouchableOpacity
-            style={styles.addButton}
-            onPress={() => setShowForm(true)}
-            activeOpacity={0.7}
-          >
-            <Ionicons name="add" size={20} color={Colors.primary} />
-            <Text style={styles.addButtonText}>새 매장 추가</Text>
-          </TouchableOpacity>
+          <View style={styles.actionRow}>
+            <TouchableOpacity
+              style={[styles.addButton, { flex: 1 }]}
+              onPress={() => setShowForm(true)}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="add" size={20} color={Colors.primary} />
+              <Text style={styles.addButtonText}>새 매장 추가</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.addButton, styles.joinButton, { flex: 1 }]}
+              onPress={() => router.push('/(auth)/join-store')}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="enter-outline" size={20} color={Colors.gray600} />
+              <Text style={[styles.addButtonText, styles.joinButtonText]}>기존 매장 참여</Text>
+            </TouchableOpacity>
+          </View>
         )}
 
         {(!hasStores || showForm) && (
@@ -169,6 +179,11 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: Colors.black,
   },
+  actionRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 4,
+  },
   addButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -178,13 +193,18 @@ const styles = StyleSheet.create({
     borderStyle: 'dashed',
     borderRadius: 12,
     paddingVertical: 14,
-    marginTop: 4,
     gap: 6,
   },
   addButtonText: {
     fontSize: 15,
     fontWeight: '600',
     color: Colors.primary,
+  },
+  joinButton: {
+    borderColor: Colors.gray300,
+  },
+  joinButtonText: {
+    color: Colors.gray600,
   },
   form: {
     marginTop: 8,

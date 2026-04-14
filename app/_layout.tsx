@@ -70,6 +70,8 @@ function RootNavigator() {
       <Stack.Screen name="orders/[id]" options={{ headerShown: false }} />
       <Stack.Screen name="recipes/[id]" options={{ headerShown: false }} />
       <Stack.Screen name="settings/profile" options={{ headerShown: false }} />
+      <Stack.Screen name="settings/members" options={{ headerShown: false }} />
+      <Stack.Screen name="(auth)/join-store" options={{ headerShown: false }} />
       <Stack.Screen name="pos/[date]" options={{ headerShown: false }} />
     </Stack>
   );

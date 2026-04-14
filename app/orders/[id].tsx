@@ -8,11 +8,13 @@ import { useLocalSearchParams, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../constants/colors';
 import { getOrderById, deleteOrder, OrderWithItems } from '../../lib/services/orders';
+import { useAuth } from '../../lib/contexts/AuthContext';
 import { LoadingSpinner } from '../../lib/components/LoadingSpinner';
 import { ErrorMessage } from '../../lib/components/ErrorMessage';
 
 export default function OrderDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { currentRole } = useAuth();
   const [order, setOrder] = useState<OrderWithItems | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -117,11 +119,13 @@ export default function OrderDetailScreen() {
           <Text style={styles.totalValue}>{order.total_amount.toLocaleString()}원</Text>
         </View>
 
-        <View style={styles.deleteContainer}>
-          <TouchableOpacity style={styles.deleteBtn} onPress={handleDelete} disabled={saving}>
-            {saving ? <ActivityIndicator size="small" color={Colors.danger} /> : <Text style={styles.deleteBtnText}>발주 내역 삭제</Text>}
-          </TouchableOpacity>
-        </View>
+        {currentRole === 'admin' && (
+          <View style={styles.deleteContainer}>
+            <TouchableOpacity style={styles.deleteBtn} onPress={handleDelete} disabled={saving}>
+              {saving ? <ActivityIndicator size="small" color={Colors.danger} /> : <Text style={styles.deleteBtnText}>발주 내역 삭제</Text>}
+            </TouchableOpacity>
+          </View>
+        )}
       </ScrollView>
     </SafeAreaView>
   );

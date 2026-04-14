@@ -11,7 +11,7 @@ import { useAuth } from '../../lib/contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
 
 export default function ProfileScreen() {
-  const { user, store, stores, signOut, refreshStore } = useAuth();
+  const { user, store, stores, currentRole, signOut, refreshStore } = useAuth();
   const [loading, setLoading] = useState(false);
   const [name, setName] = useState(store?.name || '');
   const [closingTime, setClosingTime] = useState(
@@ -154,6 +154,17 @@ export default function ProfileScreen() {
             <Ionicons name="chevron-forward" size={16} color={Colors.gray300} />
           </TouchableOpacity>
           <View style={styles.divider} />
+
+          {currentRole === 'admin' && (
+            <>
+              <TouchableOpacity style={styles.menuItem} onPress={() => router.push('/settings/members')}>
+                <Ionicons name="people-outline" size={20} color={Colors.gray600} />
+                <Text style={styles.menuText}>멤버 관리</Text>
+                <Ionicons name="chevron-forward" size={16} color={Colors.gray300} />
+              </TouchableOpacity>
+              <View style={styles.divider} />
+            </>
+          )}
 
           <TouchableOpacity style={styles.menuItem} onPress={handleSignOut}>
             <Ionicons name="log-out-outline" size={20} color={Colors.gray600} />

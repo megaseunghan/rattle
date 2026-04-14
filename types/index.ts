@@ -183,6 +183,17 @@ export interface DailySummary {
   orderCount: number;
 }
 
+// 매장 멤버
+export interface StoreMember {
+  id: string;
+  store_id: string;
+  user_id: string;
+  user_email: string | null;
+  role: 'admin' | 'member';
+  status: 'pending' | 'approved' | 'rejected';
+  created_at: string;
+}
+
 // POS 상품별 집계 (일별 상세)
 export interface DailyItem {
   itemId: string;

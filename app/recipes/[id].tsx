@@ -8,6 +8,7 @@ import { useLocalSearchParams, router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../constants/colors';
 import { getRecipeById, deleteRecipe } from '../../lib/services/recipes';
+import { useAuth } from '../../lib/contexts/AuthContext';
 import { LoadingSpinner } from '../../lib/components/LoadingSpinner';
 import { ErrorMessage } from '../../lib/components/ErrorMessage';
 import { RecipeWithIngredients } from '../../lib/services/recipes';
@@ -15,6 +16,7 @@ import { Ingredient } from '../../types';
 
 export default function RecipeDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { currentRole } = useAuth();
   const [recipe, setRecipe] = useState<RecipeWithIngredients | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -134,11 +136,13 @@ export default function RecipeDetailScreen() {
           ))}
         </View>
 
-        <View style={styles.deleteContainer}>
-          <TouchableOpacity style={styles.deleteBtn} onPress={handleDelete} disabled={saving}>
-            {saving ? <ActivityIndicator size="small" color={Colors.danger} /> : <Text style={styles.deleteBtnText}>레시피 삭제</Text>}
-          </TouchableOpacity>
-        </View>
+        {currentRole === 'admin' && (
+          <View style={styles.deleteContainer}>
+            <TouchableOpacity style={styles.deleteBtn} onPress={handleDelete} disabled={saving}>
+              {saving ? <ActivityIndicator size="small" color={Colors.danger} /> : <Text style={styles.deleteBtnText}>레시피 삭제</Text>}
+            </TouchableOpacity>
+          </View>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
