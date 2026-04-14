@@ -49,7 +49,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function switchStore(storeId: string) {
     await AsyncStorage.setItem(LAST_STORE_ID_KEY, storeId);
-    setStore(stores.find(s => s.id === storeId) ?? null);
+    if (user) {
+      await loadStores(user.id);
+    }
   }
 
   async function refreshStore() {
