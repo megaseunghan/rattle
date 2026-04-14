@@ -11,6 +11,7 @@ interface AuthContextValue {
   session: Session | null;
   store: Store | null;
   stores: Store[];
+  currentRole: 'admin' | 'member';
   loading: boolean;
   signOut: () => Promise<void>;
   refreshStore: () => Promise<void>;
@@ -24,24 +25,49 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [store, setStore] = useState<Store | null>(null);
   const [stores, setStores] = useState<Store[]>([]);
+  const [memberRoles, setMemberRoles] = useState<Record<string, 'admin' | 'member'>>({});
   const [loading, setLoading] = useState(true);
 
   async function loadStores(userId: string) {
-    const { data, error } = await supabase
-      .from('stores')
-      .select('*')
-      .eq('owner_id', userId)
-      .order('created_at', { ascending: true });
+    const [ownedRes, memberRes] = await Promise.all([
+      supabase
+        .from('stores')
+        .select('*')
+        .eq('owner_id', userId)
+        .order('created_at', { ascending: true }),
+      supabase
+        .from('store_members')
+        .select('store_id, role, stores(*)')
+        .eq('user_id', userId)
+        .eq('status', 'approved'),
+    ]);
 
-    if (error || !data || data.length === 0) {
+    const ownedStores: Store[] = (ownedRes.data ?? []) as Store[];
+
+    const roles: Record<string, 'admin' | 'member'> = {};
+    const memberStores: Store[] = [];
+    for (const m of (memberRes.data ?? []) as any[]) {
+      if (m.stores) {
+        roles[m.store_id] = m.role;
+        memberStores.push(m.stores as Store);
+      }
+    }
+    setMemberRoles(roles);
+
+    // 소유 매장 우선, 멤버 매장 중복 제거 후 병합
+    const storeMap = new Map<string, Store>();
+    ownedStores.forEach(s => storeMap.set(s.id, s));
+    memberStores.forEach(s => { if (!storeMap.has(s.id)) storeMap.set(s.id, s); });
+
+    const storeList = Array.from(storeMap.values());
+
+    if (storeList.length === 0) {
       setStores([]);
       setStore(null);
       return;
     }
 
-    const storeList = data as Store[];
     setStores(storeList);
-
     const lastStoreId = await AsyncStorage.getItem(LAST_STORE_ID_KEY);
     const selectedStore = lastStoreId ? storeList.find(s => s.id === lastStoreId) : storeList[0];
     setStore(selectedStore ?? null);
@@ -67,7 +93,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSession(null);
     setStore(null);
     setStores([]);
+    setMemberRoles({});
   }
+
+  // 현재 매장에서의 역할 (오너이면 admin, 아니면 memberRoles에서 조회)
+  const currentRole: 'admin' | 'member' =
+    !store || !user ? 'admin' :
+    store.owner_id === user.id ? 'admin' :
+    memberRoles[store.id] ?? 'member';
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
@@ -82,6 +115,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setUser(null);
             setStore(null);
             setStores([]);
+            setMemberRoles({});
             setLoading(false);
             return;
           }
@@ -93,6 +127,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setUser(null);
           setStore(null);
           setStores([]);
+          setMemberRoles({});
         }
         setLoading(false);
       }
@@ -102,7 +137,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, session, store, stores, loading, signOut, refreshStore, switchStore }}>
+    <AuthContext.Provider value={{ user, session, store, stores, currentRole, loading, signOut, refreshStore, switchStore }}>
       {children}
     </AuthContext.Provider>
   );

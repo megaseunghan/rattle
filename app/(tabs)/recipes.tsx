@@ -26,9 +26,11 @@ const SORT_OPTIONS: { key: SortKey; label: string }[] = [
 function RecipeCard({
   recipe,
   onDelete,
+  isAdmin = true,
 }: {
   recipe: RecipeWithIngredients;
   onDelete: (id: string) => void;
+  isAdmin?: boolean;
 }) {
   function handleDelete() {
     Alert.alert('레시피 삭제', `"${recipe.name}"을(를) 삭제하시겠습니까?`, [
@@ -76,9 +78,11 @@ function RecipeCard({
             <Text style={styles.categoryPillText}>{recipe.category}</Text>
           </View>
         </View>
-        <TouchableOpacity onPress={handleDelete} style={styles.deleteBtn}>
-          <Ionicons name="trash-outline" size={15} color={Colors.gray300} />
-        </TouchableOpacity>
+        {isAdmin && (
+          <TouchableOpacity onPress={handleDelete} style={styles.deleteBtn}>
+            <Ionicons name="trash-outline" size={15} color={Colors.gray300} />
+          </TouchableOpacity>
+        )}
       </View>
 
       <View style={styles.recipeStats}>
@@ -109,7 +113,8 @@ function RecipeCard({
 }
 
 export default function RecipesScreen() {
-  const { store } = useAuth();
+  const { store, currentRole } = useAuth();
+  const isAdmin = currentRole === 'admin';
   const { data, loading, loadingMore, hasMore, loadMore, error, refetch, remove, bulkUpdateCategory } = useRecipes();
   const { syncCatalog } = useTossSync();
   const { sort: sortParam } = useLocalSearchParams<{ sort?: string }>();
@@ -409,31 +414,33 @@ export default function RecipesScreen() {
                         <Text style={styles.catName}>{cat}</Text>
                       )}
 
-                      <View style={styles.catActions}>
-                        {editingCat === cat ? (
-                          <TouchableOpacity
-                            style={styles.catConfirmBtn}
-                            onPress={handleRenameCategory}
-                            disabled={catOpLoading}
-                          >
-                            <Text style={styles.catConfirmText}>확인</Text>
-                          </TouchableOpacity>
-                        ) : (
+                      {isAdmin && (
+                        <View style={styles.catActions}>
+                          {editingCat === cat ? (
+                            <TouchableOpacity
+                              style={styles.catConfirmBtn}
+                              onPress={handleRenameCategory}
+                              disabled={catOpLoading}
+                            >
+                              <Text style={styles.catConfirmText}>확인</Text>
+                            </TouchableOpacity>
+                          ) : (
+                            <TouchableOpacity
+                              style={styles.catActionBtn}
+                              onPress={() => { setEditingCat(cat); setEditingCatName(cat); }}
+                            >
+                              <Ionicons name="pencil-outline" size={16} color={Colors.gray500} />
+                            </TouchableOpacity>
+                          )}
                           <TouchableOpacity
                             style={styles.catActionBtn}
-                            onPress={() => { setEditingCat(cat); setEditingCatName(cat); }}
+                            onPress={() => handleDeleteCategory(cat)}
+                            disabled={catOpLoading}
                           >
-                            <Ionicons name="pencil-outline" size={16} color={Colors.gray500} />
+                            <Ionicons name="trash-outline" size={16} color={Colors.danger} />
                           </TouchableOpacity>
-                        )}
-                        <TouchableOpacity
-                          style={styles.catActionBtn}
-                          onPress={() => handleDeleteCategory(cat)}
-                          disabled={catOpLoading}
-                        >
-                          <Ionicons name="trash-outline" size={16} color={Colors.danger} />
-                        </TouchableOpacity>
-                      </View>
+                        </View>
+                      )}
                     </View>
                   ))}
                   <View style={{ height: 40 }} />
@@ -447,7 +454,7 @@ export default function RecipesScreen() {
             keyExtractor={item => item.id}
             contentContainerStyle={styles.listContent}
             showsVerticalScrollIndicator={false}
-            renderItem={({ item }) => <RecipeCard recipe={item} onDelete={remove} />}
+            renderItem={({ item }) => <RecipeCard recipe={item} onDelete={remove} isAdmin={isAdmin} />}
             onEndReached={hasMore ? loadMore : undefined}
             onEndReachedThreshold={0.5}
             ListFooterComponent={loadingMore ? <ActivityIndicator style={{ padding: 16 }} color={Colors.primary} /> : null}
