@@ -1,4 +1,5 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const FORM_URL =
   'https://docs.google.com/forms/d/e/1FAIpQLScAgvrevASsUllyf6o5TiyxxtMGLiFdUl3Vzk83gaQbLiysrA/formResponse';
@@ -13,14 +14,44 @@ serve(async (req) => {
     return new Response('ok', { headers: corsHeaders });
   }
 
+  // JWT 인증
+  const authHeader = req.headers.get('Authorization');
+  if (!authHeader) {
+    return new Response(
+      JSON.stringify({ error: 'Unauthorized' }),
+      { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+    );
+  }
+  const supabase = createClient(
+    Deno.env.get('SUPABASE_URL')!,
+    Deno.env.get('SUPABASE_ANON_KEY')!,
+    { global: { headers: { Authorization: authHeader } } },
+  );
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (authError || !user) {
+    return new Response(
+      JSON.stringify({ error: 'Unauthorized' }),
+      { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+    );
+  }
+
   try {
     const { name, address, businessNumber, ownerPhone } = await req.json();
+
+    const contactEmail = Deno.env.get('TOSS_CONTACT_EMAIL');
+    const contactPhone = Deno.env.get('TOSS_CONTACT_PHONE');
+    if (!contactEmail || !contactPhone) {
+      return new Response(
+        JSON.stringify({ error: '서버 설정 오류' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
+    }
 
     const merchantInfo = [name, address, businessNumber, ownerPhone].join(', ');
 
     const body = new URLSearchParams({
-      'entry.263323575': 'skud11311@gmail.com',
-      'entry.610579560': '010-2512-2157',
+      'entry.263323575': contactEmail,
+      'entry.610579560': contactPhone,
       'entry.51284767': 'Open API',
       'entry.1040582165': 'rattle-recipe-stock',
       'entry.2010669006': 'Rattle',
@@ -28,7 +59,6 @@ serve(async (req) => {
       'entry.1639848356': merchantInfo,
     });
 
-    // 서버사이드 호출이므로 CORS 없이 redirect 응답을 정상 수신
     const res = await fetch(FORM_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },

@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
+import { useFocusEffect } from 'expo-router';
 import {
   View, Text, StyleSheet, TextInput, TouchableOpacity,
   ScrollView, Alert, ActivityIndicator,
@@ -43,15 +44,17 @@ export default function PosSyncScreen() {
     } catch {}
   }, [store]);
 
-  useEffect(() => {
-    loadStoreInfo();
-  }, [loadStoreInfo]);
+  useFocusEffect(loadStoreInfo);
 
   async function handleSaveMerchantId() {
     if (!store) return;
     const trimmed = merchantId.trim();
     if (!trimmed) {
       Alert.alert('입력 오류', '가맹점 ID를 입력해주세요.');
+      return;
+    }
+    if (!/^[A-Za-z0-9_-]{4,64}$/.test(trimmed)) {
+      Alert.alert('입력 오류', '유효하지 않은 가맹점 ID입니다.');
       return;
     }
     setSaving(true);
@@ -69,6 +72,14 @@ export default function PosSyncScreen() {
     if (!store) return;
     if (!businessNumber.trim() || !ownerPhone.trim() || !address.trim()) {
       Alert.alert('입력 오류', '모든 항목을 입력해주세요.');
+      return;
+    }
+    if (!/^\d{3}-\d{2}-\d{5}$/.test(businessNumber.trim())) {
+      Alert.alert('입력 오류', '사업자번호 형식이 올바르지 않습니다 (예: 000-00-00000).');
+      return;
+    }
+    if (!/^01[016789]-\d{3,4}-\d{4}$/.test(ownerPhone.trim())) {
+      Alert.alert('입력 오류', '연락처 형식이 올바르지 않습니다 (예: 010-1234-5678).');
       return;
     }
     setSaving(true);
@@ -147,7 +158,7 @@ export default function PosSyncScreen() {
         {/* ── 심사중 안내 ── */}
         {status === 'pending' && (
           <View style={styles.pendingCard}>
-            <Ionicons name="time-outline" size={32} color={Colors.warning} style={{ marginBottom: 12 }} />
+            <Ionicons name="time-outline" size={32} color={Colors.warning} style={{ alignSelf: 'center', marginBottom: 12 }} />
             <Text style={styles.pendingTitle}>가맹점 신청 완료</Text>
             <Text style={styles.pendingDesc}>
               1~3일 이내 토스 측에서 제공동의 전화 안내 후 처리됩니다.{'\n'}
@@ -283,18 +294,19 @@ const styles = StyleSheet.create({
   pendingCard: {
     backgroundColor: Colors.white, borderRadius: 14,
     padding: 24, borderWidth: 1, borderColor: Colors.gray100,
-    alignItems: 'center', marginBottom: 24,
+    marginBottom: 24,
   },
-  pendingTitle: { fontSize: 16, fontWeight: '700', color: Colors.black, marginBottom: 8 },
+  pendingTitle: { fontSize: 16, fontWeight: '700', color: Colors.black, marginBottom: 8, textAlign: 'center' },
   pendingDesc: { fontSize: 14, color: Colors.gray500, textAlign: 'center', lineHeight: 22 },
   merchantInput: {
-    alignSelf: 'stretch', marginTop: 16,
+    marginTop: 16,
     borderWidth: 1, borderColor: Colors.gray200, borderRadius: 10,
     paddingHorizontal: 12, paddingVertical: 10, fontSize: 14,
     color: Colors.black, backgroundColor: Colors.gray50,
   },
   checkBtn: {
-    marginTop: 12, paddingHorizontal: 20, paddingVertical: 10,
+    marginTop: 10, alignItems: 'center',
+    paddingHorizontal: 20, paddingVertical: 10,
     borderRadius: 10, borderWidth: 1, borderColor: Colors.primary,
   },
   checkBtnText: { fontSize: 14, fontWeight: '600', color: Colors.primary },

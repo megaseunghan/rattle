@@ -51,6 +51,8 @@ export default function PosScreen() {
   const [address, setAddress] = useState('');
   const [saving, setSaving] = useState(false);
 
+  const [merchantId, setMerchantId] = useState('');
+
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [showPicker, setShowPicker] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -102,6 +104,14 @@ export default function PosScreen() {
       Alert.alert('입력 오류', '모든 항목을 입력해주세요.');
       return;
     }
+    if (!/^\d{3}-\d{2}-\d{5}$/.test(businessNumber.trim())) {
+      Alert.alert('입력 오류', '사업자번호 형식이 올바르지 않습니다 (예: 000-00-00000).');
+      return;
+    }
+    if (!/^01[016789]-\d{3,4}-\d{4}$/.test(ownerPhone.trim())) {
+      Alert.alert('입력 오류', '연락처 형식이 올바르지 않습니다 (예: 010-1234-5678).');
+      return;
+    }
     setSaving(true);
     try {
       await updateStoreInfo(store.id, {
@@ -117,6 +127,30 @@ export default function PosScreen() {
         ownerPhone: ownerPhone.trim(),
       });
       setStatus('pending');
+    } catch (e: any) {
+      Alert.alert('저장 실패', e.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleSaveMerchantId() {
+    if (!store) return;
+    const trimmed = merchantId.trim();
+    if (!trimmed) {
+      Alert.alert('입력 오류', '가맹점 ID를 입력해주세요.');
+      return;
+    }
+    if (!/^[A-Za-z0-9_-]{4,64}$/.test(trimmed)) {
+      Alert.alert('입력 오류', '유효하지 않은 가맹점 ID입니다.');
+      return;
+    }
+    setSaving(true);
+    try {
+      await updateStoreInfo(store.id, { toss_merchant_id: trimmed });
+      setStatus('connected');
+      loadTodaySales();
+      fetchSummaries(closingTime);
     } catch (e: any) {
       Alert.alert('저장 실패', e.message);
     } finally {
@@ -370,20 +404,28 @@ export default function PosScreen() {
               {/* ── 심사중 ── */}
               {status === 'pending' && (
                 <View style={styles.pendingCard}>
-                  <Ionicons name="time-outline" size={36} color={Colors.warning} style={{ marginBottom: 12 }} />
+                  <Ionicons name="time-outline" size={36} color={Colors.warning} style={{ alignSelf: 'center', marginBottom: 12 }} />
                   <Text style={styles.pendingTitle}>가맹점 신청 완료</Text>
                   <Text style={styles.pendingDesc}>
                     1~3일 이내 토스 측에서 제공동의 전화 안내 후 처리됩니다.{'\n'}
-                    연동 완료 후 이 화면에서 매출 데이터를 확인할 수 있습니다.
+                    연동 완료 후 토스에서 가맹점 ID를 받으면 아래에 입력하세요.
                   </Text>
+                  <TextInput
+                    style={styles.merchantInput}
+                    value={merchantId}
+                    onChangeText={setMerchantId}
+                    placeholder="가맹점 ID 입력"
+                    placeholderTextColor={Colors.gray300}
+                    autoCapitalize="none"
+                  />
                   <TouchableOpacity
-                    style={styles.checkBtn}
-                    onPress={loadStoreStatus}
+                    style={[styles.checkBtn, saving && { opacity: 0.5 }]}
+                    onPress={handleSaveMerchantId}
                     disabled={saving}
                   >
                     {saving
                       ? <ActivityIndicator size="small" color={Colors.primary} />
-                      : <Text style={styles.checkBtnText}>연동 완료 확인</Text>
+                      : <Text style={styles.checkBtnText}>연동 완료</Text>
                     }
                   </TouchableOpacity>
                 </View>
@@ -483,20 +525,22 @@ const styles = StyleSheet.create({
   pendingCard: {
     backgroundColor: Colors.white, borderRadius: 20,
     padding: 32, borderWidth: 1, borderColor: Colors.gray100,
-    alignItems: 'center', marginTop: 8,
+    marginTop: 8,
   },
-  pendingTitle: { fontSize: 16, fontWeight: '700', color: Colors.black, marginBottom: 8 },
+  pendingTitle: { fontSize: 16, fontWeight: '700', color: Colors.black, marginBottom: 8, textAlign: 'center' },
   pendingDesc: { fontSize: 14, color: Colors.gray500, textAlign: 'center', lineHeight: 22 },
-  checkBtn: {
-    marginTop: 20,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 12,
-    backgroundColor: Colors.tinted,
-    borderWidth: 1,
-    borderColor: Colors.pale,
+  merchantInput: {
+    marginTop: 16,
+    borderWidth: 1, borderColor: Colors.gray200, borderRadius: 10,
+    paddingHorizontal: 12, paddingVertical: 10, fontSize: 14,
+    color: Colors.black, backgroundColor: Colors.gray50,
   },
-  checkBtnText: { fontSize: 14, fontWeight: '600', color: Colors.deeper },
+  checkBtn: {
+    marginTop: 12, alignItems: 'center',
+    paddingHorizontal: 24, paddingVertical: 12,
+    borderRadius: 12, borderWidth: 1, borderColor: Colors.primary,
+  },
+  checkBtnText: { fontSize: 14, fontWeight: '600', color: Colors.primary },
 
   // 연동완료: 오늘 카드
   todayCard: {
