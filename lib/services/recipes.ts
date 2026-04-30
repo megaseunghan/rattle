@@ -62,37 +62,14 @@ export async function updateRecipeFull(
   sellingPrice: number,
   ingredients: { ingredient_id: string; quantity: number; unit: string }[]
 ): Promise<void> {
-  // 1. 기본 정보 업데이트
-  const { error: updateError } = await supabase
-    .from('recipes')
-    .update({
-      name,
-      category,
-      selling_price: sellingPrice,
-    })
-    .eq('id', id);
-
-  if (updateError) throw new Error(updateError.message);
-
-  // 2. 기존 재료 삭제
-  const { error: deleteError } = await supabase
-    .from('recipe_ingredients')
-    .delete()
-    .eq('recipe_id', id);
-
-  if (deleteError) throw new Error(deleteError.message);
-
-  // 3. 새 재료 삽입
-  const { error: insertError } = await supabase
-    .from('recipe_ingredients')
-    .insert(
-      ingredients.map(i => ({
-        recipe_id: id,
-        ...i,
-      }))
-    );
-
-  if (insertError) throw new Error(insertError.message);
+  const { error } = await supabase.rpc('update_recipe_full', {
+    p_recipe_id: id,
+    p_name: name,
+    p_category: category,
+    p_selling_price: sellingPrice,
+    p_ingredients: ingredients,
+  });
+  if (error) throw new Error(error.message);
 }
 
 export async function updateRecipeCategory(id: string, category: string): Promise<void> {

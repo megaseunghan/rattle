@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -8,8 +8,10 @@ import {
   Alert,
   ScrollView,
   SafeAreaView,
+  ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../lib/contexts/AuthContext';
@@ -19,8 +21,14 @@ export default function SelectStoreScreen() {
   const [storeName, setStoreName] = useState('');
   const [loading, setLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
-  const { user, store, stores, switchStore } = useAuth();
+  const [isRefreshing, setIsRefreshing] = useState(true);
+  const { user, store, stores, storesLoaded, switchStore, refreshStore } = useAuth();
   const router = useRouter();
+
+  useFocusEffect(useCallback(() => {
+    setIsRefreshing(true);
+    refreshStore().finally(() => setIsRefreshing(false));
+  }, []));
 
   async function handleSelectStore(storeId: string) {
     await switchStore(storeId);
@@ -62,7 +70,11 @@ export default function SelectStoreScreen() {
         <Text style={styles.title}>{hasStores ? '매장 선택' : '매장 등록'}</Text>
       </View>
 
+      {isRefreshing ? (
+        <ActivityIndicator style={{ marginTop: 60 }} color={Colors.primary} />
+      ) : (
       <ScrollView contentContainerStyle={styles.scrollContent}>
+        {/* 기존 매장 목록 */}
         {hasStores && stores.map((item) => {
           const isSelected = store?.id === item.id;
           return (
@@ -82,6 +94,29 @@ export default function SelectStoreScreen() {
           );
         })}
 
+        {/* 신규 회원: stores 로드 완료 후 진짜 매장 없을 때만 표시 */}
+        {storesLoaded && !hasStores && !showForm && (
+          <View style={styles.actionRow}>
+            <TouchableOpacity
+              style={[styles.addButton, { flex: 1 }]}
+              onPress={() => setShowForm(true)}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="add" size={20} color={Colors.primary} />
+              <Text style={styles.addButtonText}>매장 등록</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.addButton, styles.joinButton, { flex: 1 }]}
+              onPress={() => router.push('/(auth)/join-store')}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="enter-outline" size={20} color={Colors.gray600} />
+              <Text style={[styles.addButtonText, styles.joinButtonText]}>기존 매장 참여</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* 기존 회원: 매장 있을 때 추가/참여 버튼 */}
         {hasStores && !showForm && (
           <View style={styles.actionRow}>
             <TouchableOpacity
@@ -103,10 +138,10 @@ export default function SelectStoreScreen() {
           </View>
         )}
 
-        {(!hasStores || showForm) && (
+        {/* 매장 등록 폼 */}
+        {storesLoaded && showForm && (
           <View style={styles.form}>
-            {hasStores && <Text style={styles.formTitle}>새 매장 추가</Text>}
-            {!hasStores && <Text style={styles.subtitle}>사용하실 매장 이름을 입력해주세요</Text>}
+            <Text style={styles.formTitle}>{hasStores ? '새 매장 추가' : '매장 등록'}</Text>
             <TextInput
               style={styles.input}
               placeholder="예: 카페 라틀"
@@ -123,9 +158,16 @@ export default function SelectStoreScreen() {
                 {loading ? '등록 중...' : '등록하기'}
               </Text>
             </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.cancelButton}
+              onPress={() => setShowForm(false)}
+            >
+              <Text style={styles.cancelButtonText}>취소</Text>
+            </TouchableOpacity>
           </View>
         )}
       </ScrollView>
+      )}
     </SafeAreaView>
   );
 }
@@ -240,5 +282,14 @@ const styles = StyleSheet.create({
     color: Colors.white,
     fontSize: 16,
     fontWeight: '700',
+  },
+  cancelButton: {
+    marginTop: 12,
+    alignItems: 'center',
+    paddingVertical: 10,
+  },
+  cancelButtonText: {
+    fontSize: 15,
+    color: Colors.gray500,
   },
 });

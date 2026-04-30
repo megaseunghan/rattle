@@ -11,6 +11,7 @@ interface AuthContextValue {
   session: Session | null;
   store: Store | null;
   stores: Store[];
+  storesLoaded: boolean;
   currentRole: 'admin' | 'member';
   loading: boolean;
   signOut: () => Promise<void>;
@@ -25,10 +26,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [store, setStore] = useState<Store | null>(null);
   const [stores, setStores] = useState<Store[]>([]);
+  const [storesLoaded, setStoresLoaded] = useState(false);
   const [memberRoles, setMemberRoles] = useState<Record<string, 'admin' | 'member'>>({});
   const [loading, setLoading] = useState(true);
 
   async function loadStores(userId: string) {
+    console.log('[loadStores] start', userId);
     const [ownedRes, memberRes] = await Promise.all([
       supabase
         .from('stores')
@@ -41,6 +44,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .eq('user_id', userId)
         .eq('status', 'approved'),
     ]);
+
+    console.log('[loadStores] owned:', ownedRes.data?.length ?? 0, 'ownedErr:', ownedRes.error?.message);
+    console.log('[loadStores] member:', memberRes.data?.length ?? 0, 'memberErr:', memberRes.error?.message);
 
     const ownedStores: Store[] = (ownedRes.data ?? []) as Store[];
 
@@ -60,10 +66,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     memberStores.forEach(s => { if (!storeMap.has(s.id)) storeMap.set(s.id, s); });
 
     const storeList = Array.from(storeMap.values());
+    console.log('[loadStores] total stores:', storeList.length);
 
     if (storeList.length === 0) {
       setStores([]);
       setStore(null);
+      setStoresLoaded(true);
       return;
     }
 
@@ -71,6 +79,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const lastStoreId = await AsyncStorage.getItem(LAST_STORE_ID_KEY);
     const selectedStore = lastStoreId ? storeList.find(s => s.id === lastStoreId) : storeList[0];
     setStore(selectedStore ?? null);
+    setStoresLoaded(true);
   }
 
   async function switchStore(storeId: string) {
@@ -93,6 +102,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSession(null);
     setStore(null);
     setStores([]);
+    setStoresLoaded(false);
     setMemberRoles({});
   }
 
@@ -104,32 +114,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
+      (event, session) => {
+        const userId = session?.user?.id ?? null;
+        console.log('[Auth] event:', event, 'hasSession:', !!session, 'userId:', userId);
         setLoading(true);
 
-        if (session) {
-          const { data: { user }, error } = await supabase.auth.getUser();
-          if (error || !user) {
-            await supabase.auth.signOut();
-            setSession(null);
-            setUser(null);
-            setStore(null);
-            setStores([]);
-            setMemberRoles({});
-            setLoading(false);
-            return;
-          }
+        if (session?.user) {
+          const user = session.user;
           setSession(session);
           setUser(user);
-          await loadStores(user.id);
+          // onAuthStateChange 콜백 안에서 Supabase 쿼리를 직접 호출하면
+          // 내부 잠금으로 인해 데드락이 발생하므로 setTimeout으로 defer
+          setTimeout(async () => {
+            try {
+              const t = Date.now();
+              await loadStores(user.id);
+              console.log('[Auth] loadStores done in', Date.now() - t, 'ms');
+            } catch (e) {
+              console.error('[Auth] loadStores error:', e);
+            } finally {
+              setLoading(false);
+            }
+          }, 0);
         } else {
           setSession(null);
           setUser(null);
           setStore(null);
           setStores([]);
+          setStoresLoaded(false);
           setMemberRoles({});
+          setLoading(false);
         }
-        setLoading(false);
       }
     );
 
@@ -137,7 +152,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, session, store, stores, currentRole, loading, signOut, refreshStore, switchStore }}>
+    <AuthContext.Provider value={{ user, session, store, stores, storesLoaded, currentRole, loading, signOut, refreshStore, switchStore }}>
       {children}
     </AuthContext.Provider>
   );

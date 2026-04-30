@@ -24,11 +24,9 @@ export default function JoinStoreScreen() {
 
     setLoading(true);
     try {
-      const { data: storeData, error: storeError } = await supabase
-        .from('stores')
-        .select('id, name')
-        .eq('business_number', cleaned)
-        .single();
+      const { data: rows, error: storeError } = await supabase
+        .rpc('find_store_by_business_number', { p_number: cleaned });
+      const storeData = rows?.[0] ?? null;
 
       if (storeError || !storeData) {
         Alert.alert('매장을 찾을 수 없습니다', '사업자번호를 다시 확인해주세요.');

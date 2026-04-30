@@ -1,8 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import {
   getIngredients,
-  getIngredientsByCategory,
   createIngredient,
   updateIngredient,
   deleteIngredient,
@@ -11,6 +10,7 @@ import {
 import { Ingredient } from '../../types';
 
 const PAGE_SIZE = 20;
+const CACHE_TTL = 60_000;
 
 interface UseIngredientsResult {
   data: Ingredient[];
@@ -35,9 +35,11 @@ export function useIngredients(): UseIngredientsResult {
   const [hasMore, setHasMore] = useState(true);
   const [page, setPage] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const lastFetchedAt = useRef(0);
 
   const refetch = useCallback(async () => {
     if (!store) return;
+    if (Date.now() - lastFetchedAt.current < CACHE_TTL) return;
     setLoading(true);
     setError(null);
     setPage(0);
@@ -46,6 +48,7 @@ export function useIngredients(): UseIngredientsResult {
       const result = await getIngredients(store.id, 0, PAGE_SIZE);
       setData(result);
       setHasMore(result.length === PAGE_SIZE);
+      lastFetchedAt.current = Date.now();
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -75,12 +78,14 @@ export function useIngredients(): UseIngredientsResult {
 
   async function create(ingredientData: Omit<Ingredient, 'id' | 'updated_at' | 'created_at'>): Promise<Ingredient> {
     const result = await createIngredient(ingredientData);
+    lastFetchedAt.current = 0;
     await refetch();
     return result;
   }
 
   async function update(id: string, ingredientData: Partial<Pick<Ingredient, 'name' | 'category' | 'current_stock' | 'unit' | 'min_stock' | 'last_price' | 'container_unit' | 'container_size'>>) {
     await updateIngredient(id, ingredientData);
+    lastFetchedAt.current = 0;
     await refetch();
   }
 
@@ -97,12 +102,14 @@ export function useIngredients(): UseIngredientsResult {
 
   async function bulkCreate(items: Omit<Ingredient, 'id' | 'updated_at' | 'created_at'>[]) {
     const count = await bulkCreateIngredients(items);
+    lastFetchedAt.current = 0;
     await refetch();
     return count;
   }
 
   async function bulkUpdateCategory(ids: string[], category: string) {
     await Promise.all(ids.map(id => updateIngredient(id, { category })));
+    lastFetchedAt.current = 0;
     await refetch();
   }
 
