@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import {
   getOrders,
@@ -11,6 +11,7 @@ import {
 import { Order } from '../../types';
 
 const PAGE_SIZE = 20;
+const CACHE_TTL = 60_000;
 
 interface UseOrdersResult {
   data: OrderWithItems[];
@@ -38,9 +39,11 @@ export function useOrders(): UseOrdersResult {
   const [hasMore, setHasMore] = useState(true);
   const [page, setPage] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const lastFetchedAt = useRef(0);
 
   const refetch = useCallback(async () => {
     if (!store) return;
+    if (Date.now() - lastFetchedAt.current < CACHE_TTL) return;
     setLoading(true);
     setError(null);
     setPage(0);
@@ -49,6 +52,7 @@ export function useOrders(): UseOrdersResult {
       const result = await getOrders(store.id, 0, PAGE_SIZE);
       setData(result);
       setHasMore(result.length === PAGE_SIZE);
+      lastFetchedAt.current = Date.now();
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -83,16 +87,19 @@ export function useOrders(): UseOrdersResult {
   ) {
     if (!store) return;
     await createOrderWithItems(store.id, supplierName, orderDate, items);
+    lastFetchedAt.current = 0;
     await refetch();
   }
 
   async function updateStatus(id: string, status: Order['status']) {
     await updateOrderStatus(id, status);
+    lastFetchedAt.current = 0;
     await refetch();
   }
 
   async function deliver(orderId: string) {
     await deliverOrder(orderId);
+    lastFetchedAt.current = 0;
     await refetch();
   }
 

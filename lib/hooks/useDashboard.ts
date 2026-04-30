@@ -1,7 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../supabase';
 import { getAutoSyncRange } from '../services/posAnalytics';
+
+const CACHE_TTL = 60_000; // 60초
 
 export interface EstimatedConsumption {
   ingredientName: string;
@@ -38,9 +40,11 @@ export function useDashboard(): UseDashboardResult {
   const [estimatedConsumptions, setEstimatedConsumptions] = useState<EstimatedConsumption[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const lastFetchedAt = useRef(0);
 
-  const refetch = useCallback(async () => {
+  const refetch = useCallback(async (force = false) => {
     if (!store) return;
+    if (!force && Date.now() - lastFetchedAt.current < CACHE_TTL) return;
     setLoading(true);
     setError(null);
     try {
@@ -56,11 +60,12 @@ export function useDashboard(): UseDashboardResult {
             .eq('store_id', store.id)
             .gte('created_at', startOfMonth),
 
-          // 모든 식자재 (품절 임박 계산용 - 컬럼 간 비교는 클라이언트에서)
+          // 품절 임박 건수 (is_low_stock 생성 컬럼 활용)
           supabase
             .from('ingredients')
-            .select('current_stock, min_stock')
-            .eq('store_id', store.id),
+            .select('id', { count: 'exact', head: true })
+            .eq('store_id', store.id)
+            .eq('is_low_stock', true),
 
           // 레시피 목록 (수 + 실시간 평균 마진율)
           supabase
@@ -88,13 +93,7 @@ export function useDashboard(): UseDashboardResult {
       // 이번 달 발주 건수
       setMonthlyOrderCount(ordersRes.count ?? 0);
 
-      // 품절 임박: current_stock <= min_stock 클라이언트 계산
-      const allIngredients = ingredientsRes.data ?? [];
-      const lowStock = allIngredients.filter(
-        (i: { current_stock: number; min_stock: number }) =>
-          Number(i.current_stock) <= Number(i.min_stock)
-      ).length;
-      setLowStockCount(lowStock);
+      setLowStockCount(ingredientsRes.count ?? 0);
 
       // 레시피 수 + 실시간 평균 마진율
       const recipes = recipesRes.data ?? [];
@@ -186,6 +185,7 @@ export function useDashboard(): UseDashboardResult {
       } else {
         setEstimatedConsumptions([]);
       }
+      lastFetchedAt.current = Date.now();
     } catch (e: any) {
       setError(e.message);
     } finally {

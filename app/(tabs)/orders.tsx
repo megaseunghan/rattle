@@ -110,7 +110,7 @@ function OrderCard({
 export default function OrdersScreen() {
   const { data, loading, loadingMore, hasMore, loadMore, error, refetch, deliver, remove } = useOrders();
   const [scanning, setScanning] = useState(false);
-  useFocusEffect(useCallback(() => { refetch(); }, []));
+  useFocusEffect(useCallback(() => { refetch(); }, [refetch]));
 
   async function handleScanReceipt() {
     Alert.alert('납품서 스캔', '이미지를 어떻게 가져올까요?', [

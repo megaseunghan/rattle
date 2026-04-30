@@ -1,8 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import {
   getRecipes,
-  getRecipesByCategory,
   createRecipeWithIngredients,
   updateRecipeCategory,
   deleteRecipe,
@@ -10,6 +9,7 @@ import {
 } from '../services/recipes';
 
 const PAGE_SIZE = 20;
+const CACHE_TTL = 60_000;
 
 interface UseRecipesResult {
   data: RecipeWithIngredients[];
@@ -37,9 +37,11 @@ export function useRecipes(): UseRecipesResult {
   const [hasMore, setHasMore] = useState(true);
   const [page, setPage] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const lastFetchedAt = useRef(0);
 
   const refetch = useCallback(async () => {
     if (!store) return;
+    if (Date.now() - lastFetchedAt.current < CACHE_TTL) return;
     setLoading(true);
     setError(null);
     setPage(0);
@@ -48,6 +50,7 @@ export function useRecipes(): UseRecipesResult {
       const result = await getRecipes(store.id, 0, PAGE_SIZE);
       setData(result);
       setHasMore(result.length === PAGE_SIZE);
+      lastFetchedAt.current = Date.now();
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -83,6 +86,7 @@ export function useRecipes(): UseRecipesResult {
   ) {
     if (!store) return;
     await createRecipeWithIngredients(store.id, name, category, sellingPrice, ingredients);
+    lastFetchedAt.current = 0;
     await refetch();
   }
 
@@ -99,6 +103,7 @@ export function useRecipes(): UseRecipesResult {
 
   async function bulkUpdateCategory(ids: string[], category: string) {
     await Promise.all(ids.map(id => updateRecipeCategory(id, category)));
+    lastFetchedAt.current = 0;
     await refetch();
   }
 

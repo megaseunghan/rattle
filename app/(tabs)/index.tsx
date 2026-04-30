@@ -82,7 +82,7 @@ export default function HomeScreen() {
     error,
     refetch,
   } = useDashboard();
-  useFocusEffect(useCallback(() => { refetch(); }, []));
+  useFocusEffect(useCallback(() => { refetch(); }, [refetch]));
 
   if (loading) return <LoadingSpinner />;
   if (error) return <ErrorMessage message={error} onRetry={refetch} />;

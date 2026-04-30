@@ -126,7 +126,7 @@ export default function StockScreen() {
   const [editingCatName, setEditingCatName] = useState('');
   const [catOpLoading, setCatOpLoading] = useState(false);
 
-  useFocusEffect(useCallback(() => { refetch(); }, []));
+  useFocusEffect(useCallback(() => { refetch(); }, [refetch]));
 
   const unclassifiedCount = data.filter(i => i.category === '기타').length;
 
