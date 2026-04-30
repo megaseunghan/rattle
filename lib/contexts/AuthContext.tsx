@@ -31,7 +31,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   async function loadStores(userId: string) {
-    console.log('[loadStores] start', userId);
     const [ownedRes, memberRes] = await Promise.all([
       supabase
         .from('stores')
@@ -44,9 +43,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .eq('user_id', userId)
         .eq('status', 'approved'),
     ]);
-
-    console.log('[loadStores] owned:', ownedRes.data?.length ?? 0, 'ownedErr:', ownedRes.error?.message);
-    console.log('[loadStores] member:', memberRes.data?.length ?? 0, 'memberErr:', memberRes.error?.message);
 
     const ownedStores: Store[] = (ownedRes.data ?? []) as Store[];
 
@@ -66,7 +62,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     memberStores.forEach(s => { if (!storeMap.has(s.id)) storeMap.set(s.id, s); });
 
     const storeList = Array.from(storeMap.values());
-    console.log('[loadStores] total stores:', storeList.length);
 
     if (storeList.length === 0) {
       setStores([]);
@@ -115,8 +110,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
-        const userId = session?.user?.id ?? null;
-        console.log('[Auth] event:', event, 'hasSession:', !!session, 'userId:', userId);
         setLoading(true);
 
         if (session?.user) {
@@ -127,9 +120,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // 내부 잠금으로 인해 데드락이 발생하므로 setTimeout으로 defer
           setTimeout(async () => {
             try {
-              const t = Date.now();
               await loadStores(user.id);
-              console.log('[Auth] loadStores done in', Date.now() - t, 'ms');
             } catch (e) {
               console.error('[Auth] loadStores error:', e);
             } finally {
