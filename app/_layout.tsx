@@ -1,18 +1,50 @@
 import { SplashScreen, Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect } from 'react';
-import { AppState } from 'react-native';
+import { useEffect, useRef } from 'react';
+import { AppState, Alert } from 'react-native';
+import * as Linking from 'expo-linking';
+import * as WebBrowser from 'expo-web-browser';
 import { AuthProvider, useAuth } from '../lib/contexts/AuthContext';
 import { useTossSync } from '../lib/hooks/useTossSync';
 import { Colors } from '../constants/colors';
+import { supabase } from '../lib/supabase';
+
+WebBrowser.maybeCompleteAuthSession();
 
 SplashScreen.preventAutoHideAsync();
 
+const PENDING_CHECK_INTERVAL = 30 * 60 * 1000; // 30분
+
 function RootNavigator() {
-  const { user, store, loading } = useAuth();
+  const { user, store, currentRole, loading } = useAuth();
   const router = useRouter();
   const segments = useSegments();
   const { autoSync } = useTossSync();
+  const lastCheckedAt = useRef<number>(0);
+
+  async function checkPendingMembers() {
+    if (!store || currentRole !== 'admin') return;
+    const now = Date.now();
+    if (now - lastCheckedAt.current < PENDING_CHECK_INTERVAL) return;
+    lastCheckedAt.current = now;
+
+    const { count } = await supabase
+      .from('store_members')
+      .select('*', { count: 'exact', head: true })
+      .eq('store_id', store.id)
+      .eq('status', 'pending');
+
+    if (count && count > 0) {
+      Alert.alert(
+        '멤버 승인 요청',
+        `${count}건의 매장 참여 요청이 있습니다.`,
+        [
+          { text: '나중에', style: 'cancel' },
+          { text: '확인하기', onPress: () => router.push('/settings/members') },
+        ],
+      );
+    }
+  }
 
   useEffect(() => {
     if (loading) return;
@@ -30,14 +62,33 @@ function RootNavigator() {
     }
   }, [loading, user, store]);
 
+  // 로그인 + 매장 준비 완료 시 최초 1회 체크
+  useEffect(() => {
+    if (!loading && user && store) {
+      checkPendingMembers();
+    }
+  }, [user?.id, store?.id]);
+
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextState) => {
       if (nextState === 'active') {
         autoSync();
+        checkPendingMembers();
       }
     });
     return () => subscription.remove();
-  }, [autoSync]);
+  }, [autoSync, store, currentRole]);
+
+  // OAuth 콜백 딥링크 처리 (카카오 로그인)
+  useEffect(() => {
+    const handleUrl = async ({ url }: { url: string }) => {
+      if (!url.includes('code=')) return;
+      await supabase.auth.exchangeCodeForSession(url);
+    };
+
+    const subscription = Linking.addEventListener('url', handleUrl);
+    return () => subscription.remove();
+  }, []);
 
   return (
     <Stack
@@ -71,8 +122,7 @@ function RootNavigator() {
       <Stack.Screen name="recipes/[id]" options={{ headerShown: false }} />
       <Stack.Screen name="settings/profile" options={{ headerShown: false }} />
       <Stack.Screen name="settings/members" options={{ headerShown: false }} />
-      <Stack.Screen name="(auth)/join-store" options={{ headerShown: false }} />
-      <Stack.Screen name="pos/[date]" options={{ headerShown: false }} />
+<Stack.Screen name="pos/[date]" options={{ headerShown: false }} />
     </Stack>
   );
 }
