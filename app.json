@@ -36,7 +36,8 @@
           "cameraPermission": "납품서 촬영을 위해 카메라 접근이 필요합니다."
         }
       ],
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      "expo-web-browser"
     ]
   }
 }
