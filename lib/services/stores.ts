@@ -21,7 +21,7 @@ export async function getStoreDetails(storeId: string): Promise<StoreDetails> {
 
 export async function updateStoreInfo(
   storeId: string,
-  data: Partial<Pick<StoreDetails, 'name' | 'business_number' | 'owner_phone' | 'address'>>,
+  data: Partial<Pick<StoreDetails, 'name' | 'business_number' | 'owner_phone' | 'address' | 'toss_merchant_id'>>,
 ): Promise<void> {
   const { error } = await supabase
     .from('stores')

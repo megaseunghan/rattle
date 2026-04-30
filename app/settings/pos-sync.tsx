@@ -21,6 +21,7 @@ export default function PosSyncScreen() {
   const [businessNumber, setBusinessNumber] = useState('');
   const [ownerPhone, setOwnerPhone] = useState('');
   const [address, setAddress] = useState('');
+  const [merchantId, setMerchantId] = useState('');
   const [saving, setSaving] = useState(false);
 
   const loadStoreInfo = useCallback(async () => {
@@ -45,6 +46,24 @@ export default function PosSyncScreen() {
   useEffect(() => {
     loadStoreInfo();
   }, [loadStoreInfo]);
+
+  async function handleSaveMerchantId() {
+    if (!store) return;
+    const trimmed = merchantId.trim();
+    if (!trimmed) {
+      Alert.alert('입력 오류', '가맹점 ID를 입력해주세요.');
+      return;
+    }
+    setSaving(true);
+    try {
+      await updateStoreInfo(store.id, { toss_merchant_id: trimmed });
+      setStatus('connected');
+    } catch (e: any) {
+      Alert.alert('저장 실패', e.message);
+    } finally {
+      setSaving(false);
+    }
+  }
 
   async function handleApply() {
     if (!store) return;
@@ -132,16 +151,24 @@ export default function PosSyncScreen() {
             <Text style={styles.pendingTitle}>가맹점 신청 완료</Text>
             <Text style={styles.pendingDesc}>
               1~3일 이내 토스 측에서 제공동의 전화 안내 후 처리됩니다.{'\n'}
-              연동 완료 후 POS 탭에서 매출 데이터를 확인할 수 있습니다.
+              연동 완료 후 토스에서 가맹점 ID를 받으면 아래에 입력하세요.
             </Text>
+            <TextInput
+              style={styles.merchantInput}
+              value={merchantId}
+              onChangeText={setMerchantId}
+              placeholder="가맹점 ID 입력"
+              placeholderTextColor={Colors.gray300}
+              autoCapitalize="none"
+            />
             <TouchableOpacity
-              style={styles.checkBtn}
-              onPress={loadStoreInfo}
+              style={[styles.checkBtn, saving && { opacity: 0.5 }]}
+              onPress={handleSaveMerchantId}
               disabled={saving}
             >
               {saving
                 ? <ActivityIndicator size="small" color={Colors.primary} />
-                : <Text style={styles.checkBtnText}>연동 완료 확인</Text>
+                : <Text style={styles.checkBtnText}>연동 완료</Text>
               }
             </TouchableOpacity>
           </View>
@@ -260,8 +287,14 @@ const styles = StyleSheet.create({
   },
   pendingTitle: { fontSize: 16, fontWeight: '700', color: Colors.black, marginBottom: 8 },
   pendingDesc: { fontSize: 14, color: Colors.gray500, textAlign: 'center', lineHeight: 22 },
+  merchantInput: {
+    alignSelf: 'stretch', marginTop: 16,
+    borderWidth: 1, borderColor: Colors.gray200, borderRadius: 10,
+    paddingHorizontal: 12, paddingVertical: 10, fontSize: 14,
+    color: Colors.black, backgroundColor: Colors.gray50,
+  },
   checkBtn: {
-    marginTop: 16, paddingHorizontal: 20, paddingVertical: 10,
+    marginTop: 12, paddingHorizontal: 20, paddingVertical: 10,
     borderRadius: 10, borderWidth: 1, borderColor: Colors.primary,
   },
   checkBtnText: { fontSize: 14, fontWeight: '600', color: Colors.primary },
