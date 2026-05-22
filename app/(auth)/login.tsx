@@ -33,8 +33,7 @@ export default function LoginScreen() {
       });
       if (error) throw error;
       if (data.url) {
-        console.log('[Kakao OAuth] redirectUrl:', redirectUrl);
-        console.log('[Kakao OAuth] data.url:', data.url);
+
         const result = await WebBrowser.openAuthSessionAsync(data.url, redirectUrl);
         if (result.type === 'success') {
           const fragment = result.url.split('#')[1] ?? '';
