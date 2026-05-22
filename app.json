@@ -2,6 +2,7 @@
   "expo": {
     "name": "rattle",
     "slug": "rattle",
+    "privacyPolicyUrl": "https://megaseunghan.github.io/rattle/privacy-policy.html",
     "scheme": "rattle",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -14,7 +15,9 @@
     },
     "ios": {
       "supportsTablet": true,
-      "icon": "./assets2/ios_AppStore_1024.png"
+      "icon": "./assets2/ios_AppStore_1024.png",
+      "bundleIdentifier": "com.seunghan.rattle",
+      "buildNumber": "1"
     },
     "android": {
       "icon": "./assets2/android_playstore_512.png",
@@ -22,7 +25,9 @@
         "foregroundImage": "./assets2/android_playstore_512.png",
         "backgroundColor": "#ffffff"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.seunghan.rattle",
+      "versionCode": 1
     },
     "web": {
       "favicon": "./assets/favicon.png"
