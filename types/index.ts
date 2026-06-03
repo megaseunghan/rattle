@@ -194,6 +194,87 @@ export interface StoreMember {
   created_at: string;
 }
 
+// 직원
+export type EmploymentType = 'regular' | 'part_time';
+
+export interface Employee {
+  id: string;
+  store_id: string;
+  name: string;
+  employment_type: EmploymentType;
+  base_salary: number;
+  non_taxable: number;
+  is_probation: boolean;
+  probation_started_at: string | null; // 'YYYY-MM-DD'
+  is_resigned_during_probation: boolean;
+  weekly_hours: number | null;         // 파트타이머 주 시간
+  dependents: number;
+  is_active: boolean;
+  created_at: string;
+}
+
+// 급여 명세
+export interface Payroll {
+  id: string;
+  store_id: string;
+  employee_id: string;
+  year_month: string;              // 'YYYY-MM'
+  gross: number;                   // 세전 총 지급액
+  taxable_base: number;            // 과세기준액
+  national_pension: number;
+  health_insurance: number;
+  long_term_care: number;
+  employment_insurance: number;
+  income_tax: number;
+  local_income_tax: number;
+  withholding_tax: number;         // 3.3% 원천징수 (파트타임 주15h 미만)
+  net_pay: number;
+  created_at: string;
+}
+
+// 매입
+export type PurchaseCategory = '식자재' | '비품' | '소모품' | '주류' | '기타';
+export type PurchaseType = '전자세금계산서' | '쿠팡' | '네이버' | '수기';
+
+export interface Purchase {
+  id: string;
+  store_id: string;
+  date: string;           // 'YYYY-MM-DD'
+  supplier: string;
+  amount: number;
+  category: PurchaseCategory;
+  type: PurchaseType;
+  note: string | null;
+  created_at: string;
+}
+
+// 비용
+export type ExpenseCategory = '마케팅' | '고정비' | '시설보수' | '공과금';
+
+export interface Expense {
+  id: string;
+  store_id: string;
+  year_month: string;     // 'YYYY-MM'
+  category: ExpenseCategory;
+  name: string;
+  amount: number;
+  created_at: string;
+}
+
+// 손익계산서
+export interface ProfitLoss {
+  yearMonth: string;
+  revenue: number;
+  purchaseCost: number;
+  grossProfit: number;
+  laborCost: number;
+  fixedExpense: number;
+  variableExpense: number;
+  operatingProfit: number;
+  taxReserve: number;
+  netProfit: number;
+}
+
 // POS 상품별 집계 (일별 상세)
 export interface DailyItem {
   itemId: string;

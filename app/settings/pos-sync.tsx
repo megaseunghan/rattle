@@ -44,7 +44,7 @@ export default function PosSyncScreen() {
     } catch {}
   }, [store]);
 
-  useFocusEffect(loadStoreInfo);
+  useFocusEffect(useCallback(() => { loadStoreInfo(); }, [loadStoreInfo]));
 
   async function handleSaveMerchantId() {
     if (!store) return;

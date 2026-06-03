@@ -18,7 +18,9 @@ interface UseTossSyncResult extends TossSyncState {
   syncCatalog: () => Promise<TossCatalogItem[]>;
   loadTodaySales: () => Promise<void>;
   autoSync: () => Promise<void>;
+  autoSyncRecent: (closingTime: string, days?: number) => Promise<void>;
   syncByDate: (date: string) => Promise<void>;
+  syncByMonth: (year: number, month: number) => Promise<void>;
   autoSyncing: boolean;
 }
 
@@ -112,19 +114,20 @@ export function useTossSync(): UseTossSyncResult {
 
   const loadTodaySales = useCallback(async () => {
     if (!store) return;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const closingTime = await getClosingTime();
+    const { from } = getAutoSyncRange(closingTime);
 
     const { data } = await supabase
       .from('toss_orders')
       .select('total_amount, status')
       .eq('store_id', store.id)
       .eq('status', 'COMPLETED')
-      .gte('order_at', today.toISOString());
+      .gte('order_at', from);
 
     const sales = data ?? [];
     setTodaySales(sales.reduce((sum: number, s: { total_amount: number }) => sum + Number(s.total_amount), 0));
     setTodayOrderCount(sales.length);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [store]);
 
   /** 오늘 영업일 데이터 없으면 자동 동기화 */
@@ -171,13 +174,75 @@ export function useTossSync(): UseTossSyncResult {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [store, autoSyncing]);
 
+  /** 최근 N일치 일괄 자동 동기화 (마감시간 기준, 30분 캐시) */
+  const autoSyncRecent = useCallback(async (closingTime: string, days: number = 14): Promise<void> => {
+    if (!store || autoSyncing) return;
+    // 30분 이내 동기화했으면 스킵
+    if (lastSyncAt && Date.now() - new Date(lastSyncAt).getTime() < 30 * 60 * 1000) return;
+    try {
+      setAutoSyncing(true);
+      const [h, m] = closingTime.split(':').map(Number);
+
+      // to: 현재 시각 (오늘 진행 중인 영업일 데이터 포함)
+      const to = new Date();
+
+      // from: N일 전 closing time
+      const from = new Date();
+      from.setDate(from.getDate() - days);
+      from.setHours(h, m, 0, 0);
+
+      const merchantId = await getMerchantId();
+      const orders = await fetchTossOrders(merchantId, from.toISOString(), to.toISOString());
+
+      if (orders.length > 0) {
+        await Promise.all(orders.map(o =>
+          supabase.rpc('upsert_toss_order_with_items', {
+            p_store_id: store.id,
+            p_toss_order_id: o.orderId,
+            p_order_at: o.orderAt,
+            p_total_amount: o.totalAmount,
+            p_status: o.status,
+            p_items: o.items,
+          })
+        ));
+      }
+
+      setLastSyncAt(new Date().toISOString());
+      await loadTodaySales();
+    } catch {
+      // 자동 동기화 실패는 조용히 무시
+    } finally {
+      setAutoSyncing(false);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [store, autoSyncing, lastSyncAt, loadTodaySales]);
+
   /** 특정 날짜 영업일 수동 동기화 */
   const syncByDate = useCallback(async (date: string): Promise<void> => {
     if (!store) throw new Error('매장 정보가 없습니다');
     const closingTime = await getClosingTime();
     const { from, to } = getBusinessDayRange(date, closingTime);
-    // ISO 타임스탬프 그대로 전달 (Toss API: from/to 파라미터, timestamp 형식)
     await syncOrders(from, to);
+  }, [store, syncOrders]);
+
+  /** 특정 월 전체 동기화 (1일 영업일 시작 ~ 말일 영업일 종료) */
+  const syncByMonth = useCallback(async (year: number, month: number): Promise<void> => {
+    if (!store) throw new Error('매장 정보가 없습니다');
+    const closingTime = await getClosingTime();
+    const [h, m] = closingTime.split(':').map(Number);
+
+    // from: 해당 월 1일 영업일 시작 = 전달 말일 closing_time
+    const from = new Date(year, month - 1, 0); // month-1은 JS month, 0은 전달 말일
+    from.setHours(h, m, 0, 0);
+
+    // to: 해당 월 말일 영업일 종료 = 해당 월 말일 closing_time (미래면 현재 시각)
+    const lastDay = new Date(year, month, 0).getDate();
+    const to = new Date(year, month - 1, lastDay);
+    to.setHours(h, m, 0, 0);
+    if (to > new Date()) to.setTime(Date.now());
+
+    await syncOrders(from.toISOString(), to.toISOString());
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [store, syncOrders]);
 
   return {
@@ -190,7 +255,9 @@ export function useTossSync(): UseTossSyncResult {
     syncCatalog,
     loadTodaySales,
     autoSync,
+    autoSyncRecent,
     syncByDate,
+    syncByMonth,
     autoSyncing,
   };
 }

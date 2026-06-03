@@ -104,6 +104,49 @@ export async function getDailySummaries(
   return Array.from(dayMap.values()).sort((a, b) => b.date.localeCompare(a.date));
 }
 
+/** 특정 날짜 범위의 영업일 요약 목록 (월별 조회용) */
+export async function getDailySummariesByRange(
+  storeId: string,
+  closingTime: string,
+  from: Date,
+  to: Date
+): Promise<DailySummary[]> {
+  const [h, m] = closingTime.split(':').map(Number);
+
+  const { data, error } = await supabase
+    .from('toss_orders')
+    .select('order_at, total_amount, status')
+    .eq('store_id', storeId)
+    .eq('status', 'COMPLETED')
+    .gte('order_at', from.toISOString())
+    .lte('order_at', to.toISOString())
+    .order('order_at', { ascending: false });
+
+  if (error) throw new Error(error.message);
+
+  const dayMap = new Map<string, DailySummary>();
+  for (const sale of data ?? []) {
+    const orderAt = new Date(sale.order_at);
+    const dateLabel = getBusinessDateLabel(orderAt, h, m);
+    const { from: dayFrom, to: dayTo } = getBusinessDayRange(dateLabel, closingTime);
+
+    if (!dayMap.has(dateLabel)) {
+      dayMap.set(dateLabel, {
+        date: dateLabel,
+        dateFrom: dayFrom,
+        dateTo: dayTo,
+        totalAmount: 0,
+        orderCount: 0,
+      });
+    }
+    const day = dayMap.get(dateLabel)!;
+    day.totalAmount += Number(sale.total_amount);
+    day.orderCount += 1;
+  }
+
+  return Array.from(dayMap.values()).sort((a, b) => b.date.localeCompare(a.date));
+}
+
 /** 특정 영업일 범위의 상품별 집계 */
 export async function getDailyItems(
   storeId: string,

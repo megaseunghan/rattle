@@ -1,7 +1,14 @@
 import { useState, useCallback } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../contexts/AuthContext';
-import { getDailySummaries, getDailyItems } from '../services/posAnalytics';
+import { getDailySummaries, getDailySummariesByRange, getDailyItems } from '../services/posAnalytics';
 import { DailySummary, DailyItem } from '../../types';
+
+function summariesCacheKey(storeId: string, to: Date): string {
+  // to에서 1초를 빼서 해당 월 내 날짜로 만든 뒤 year/month 추출
+  const d = new Date(to.getTime() - 1000);
+  return `pos_summaries_${storeId}_${d.getFullYear()}_${d.getMonth() + 1}`;
+}
 
 const SUMMARY_PAGE_DAYS = 14;
 
@@ -55,6 +62,38 @@ export function usePosAnalytics() {
     }
   }, [store, summaryPage, hasMoreSummaries, loadingMoreSummaries]);
 
+  const fetchSummariesByRange = useCallback(async (from: Date, to: Date) => {
+    if (!store) return;
+    setHasMoreSummaries(false);
+    setError(null);
+
+    // 캐시 확인 → 있으면 즉시 표시 (로딩 없음)
+    const key = summariesCacheKey(store.id, to);
+    try {
+      const cached = await AsyncStorage.getItem(key);
+      if (cached) {
+        setSummaries(JSON.parse(cached));
+        setLoadingSummaries(false);
+      } else {
+        setLoadingSummaries(true);
+      }
+    } catch {
+      setLoadingSummaries(true);
+    }
+
+    // 백그라운드에서 DB 재조회 후 업데이트
+    try {
+      const closingTime = (store as any).closing_time?.slice(0, 5) ?? '23:00';
+      const result = await getDailySummariesByRange(store.id, closingTime, from, to);
+      setSummaries(result);
+      await AsyncStorage.setItem(key, JSON.stringify(result));
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setLoadingSummaries(false);
+    }
+  }, [store]);
+
   const fetchItems = useCallback(async (dateFrom: string, dateTo: string) => {
     if (!store) return;
     setLoadingItems(true);
@@ -90,6 +129,7 @@ export function usePosAnalytics() {
     loadingItems,
     error,
     fetchSummaries,
+    fetchSummariesByRange,
     loadMoreSummaries,
     fetchItems,
   };
