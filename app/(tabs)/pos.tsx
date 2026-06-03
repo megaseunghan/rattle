@@ -1,9 +1,8 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, FlatList, TouchableOpacity,
-  Alert, ActivityIndicator, Modal, Platform, TextInput,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity,
+  Alert, ActivityIndicator, TextInput,
 } from 'react-native';
-import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -18,30 +17,28 @@ import { DailySummary } from '../../types';
 
 type SyncStatus = 'unregistered' | 'pending' | 'connected';
 
-function SummaryCard({ summary, onPress }: { summary: DailySummary; onPress: () => void }) {
-  return (
-    <TouchableOpacity style={styles.dayCard} onPress={onPress} activeOpacity={0.75}>
-      <View style={styles.dayCardLeft}>
-        <Text style={styles.dayCardDate}>{summary.date}</Text>
-        <Text style={styles.dayCardCount}>{summary.orderCount}건</Text>
-      </View>
-      <View style={styles.dayCardRight}>
-        <Text style={styles.dayCardAmount}>{summary.totalAmount.toLocaleString('ko-KR')}원</Text>
-        <View style={styles.dayCardChevron}>
-          <Ionicons name="chevron-forward" size={14} color={Colors.gray400} />
-        </View>
-      </View>
-    </TouchableOpacity>
-  );
+const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
+
+function getCalendarDays(year: number, month: number): (number | null)[] {
+  const firstDay = new Date(year, month - 1, 1).getDay();
+  const lastDate = new Date(year, month, 0).getDate();
+  const days: (number | null)[] = Array(firstDay).fill(null);
+  for (let i = 1; i <= lastDate; i++) days.push(i);
+  while (days.length % 7 !== 0) days.push(null);
+  return days;
+}
+
+function toDateKey(year: number, month: number, day: number) {
+  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
 
 export default function PosScreen() {
   const { store } = useAuth();
   const {
     lastSyncAt, todaySales, todayOrderCount,
-    loadTodaySales, syncByDate, autoSyncing,
+    loadTodaySales, syncByMonth, autoSyncing, autoSyncRecent,
   } = useTossSync();
-  const { summaries, loadingSummaries, loadingMoreSummaries, hasMoreSummaries, fetchSummaries, loadMoreSummaries } = usePosAnalytics();
+  const { summaries, loadingSummaries, fetchSummariesByRange } = usePosAnalytics();
 
   const [status, setStatus] = useState<SyncStatus>('unregistered');
   const [loadingStatus, setLoadingStatus] = useState(true);
@@ -50,27 +47,62 @@ export default function PosScreen() {
   const [ownerPhone, setOwnerPhone] = useState('');
   const [address, setAddress] = useState('');
   const [saving, setSaving] = useState(false);
-
   const [merchantId, setMerchantId] = useState('');
 
-  const [selectedDate, setSelectedDate] = useState(new Date());
-  const [showPicker, setShowPicker] = useState(false);
+  const [queryYear, setQueryYear] = useState(new Date().getFullYear());
+  const [queryMonth, setQueryMonth] = useState(new Date().getMonth() + 1);
   const [syncing, setSyncing] = useState(false);
+  const [selectedDay, setSelectedDay] = useState<number | null>(null);
 
-  function formatDate(d: Date): string {
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${y}-${m}-${day}`;
-  }
-
-  function onDateChange(event: DateTimePickerEvent, date?: Date) {
-    if (Platform.OS === 'android') setShowPicker(false);
-    if (event.type === 'dismissed') return;
-    if (date) setSelectedDate(date);
-  }
+  const hasLoadedRef = useRef(false);
+  const selectedYearRef = useRef(new Date().getFullYear());
+  const selectedMonthRef = useRef(new Date().getMonth() + 1);
 
   const closingTime = (store?.closing_time as string | null | undefined)?.slice(0, 5) ?? '23:00';
+
+  function prevQueryMonth() {
+    setSelectedDay(null);
+    if (queryMonth === 1) {
+      const y = queryYear - 1; const m = 12;
+      setQueryYear(y); setQueryMonth(m);
+      selectedYearRef.current = y; selectedMonthRef.current = m;
+      const { from, to } = getMonthRange(y, m, closingTime);
+      fetchSummariesByRange(from, to);
+    } else {
+      const m = queryMonth - 1;
+      setQueryMonth(m); selectedMonthRef.current = m;
+      const { from, to } = getMonthRange(queryYear, m, closingTime);
+      fetchSummariesByRange(from, to);
+    }
+  }
+
+  function nextQueryMonth() {
+    const now = new Date();
+    if (queryYear === now.getFullYear() && queryMonth === now.getMonth() + 1) return;
+    setSelectedDay(null);
+    if (queryMonth === 12) {
+      const y = queryYear + 1; const m = 1;
+      setQueryYear(y); setQueryMonth(m);
+      selectedYearRef.current = y; selectedMonthRef.current = m;
+      const { from, to } = getMonthRange(y, m, closingTime);
+      fetchSummariesByRange(from, to);
+    } else {
+      const m = queryMonth + 1;
+      setQueryMonth(m); selectedMonthRef.current = m;
+      const { from, to } = getMonthRange(queryYear, m, closingTime);
+      fetchSummariesByRange(from, to);
+    }
+  }
+
+  function getMonthRange(year: number, month: number, ct: string): { from: Date; to: Date } {
+    const [h, m] = ct.split(':').map(Number);
+    const from = new Date(year, month - 1, 0);
+    from.setHours(h, m, 0, 0);
+    const to = new Date(year, month, 0);
+    to.setHours(h, m, 0, 0);
+    if (to > new Date()) to.setTime(Date.now());
+    return { from, to };
+  }
 
   const loadStoreStatus = useCallback(async () => {
     if (!store) return;
@@ -85,13 +117,30 @@ export default function PosScreen() {
         : data.business_number ? 'pending'
         : 'unregistered';
       setStatus(newStatus);
+
       if (newStatus === 'connected') {
+        const ct = (data.closing_time as string | null | undefined)?.slice(0, 5) ?? '23:00';
+        await autoSyncRecent(ct, 30);
         loadTodaySales();
-        fetchSummaries(closingTime);
+
+        if (!hasLoadedRef.current) {
+          hasLoadedRef.current = true;
+          const curYear = new Date().getFullYear();
+          const curMonth = new Date().getMonth() + 1;
+          selectedYearRef.current = curYear;
+          selectedMonthRef.current = curMonth;
+          setQueryYear(curYear);
+          setQueryMonth(curMonth);
+          const { from, to } = getMonthRange(curYear, curMonth, ct);
+          await fetchSummariesByRange(from, to);
+        } else {
+          const { from, to } = getMonthRange(selectedYearRef.current, selectedMonthRef.current, ct);
+          await fetchSummariesByRange(from, to);
+        }
       }
     } catch {}
     setLoadingStatus(false);
-  }, [store, loadTodaySales, fetchSummaries, closingTime]);
+  }, [store, loadTodaySales, fetchSummariesByRange, autoSyncRecent]);
 
   useFocusEffect(useCallback(() => {
     setLoadingStatus(true);
@@ -150,7 +199,8 @@ export default function PosScreen() {
       await updateStoreInfo(store.id, { toss_merchant_id: trimmed });
       setStatus('connected');
       loadTodaySales();
-      fetchSummaries(closingTime);
+      const { from, to } = getMonthRange(queryYear, queryMonth, closingTime);
+      await fetchSummariesByRange(from, to);
     } catch (e: any) {
       Alert.alert('저장 실패', e.message);
     } finally {
@@ -161,8 +211,9 @@ export default function PosScreen() {
   async function handleManualSync() {
     setSyncing(true);
     try {
-      await syncByDate(formatDate(selectedDate));
-      await fetchSummaries(closingTime);
+      const { from, to } = getMonthRange(queryYear, queryMonth, closingTime);
+      await syncByMonth(queryYear, queryMonth);
+      await fetchSummariesByRange(from, to);
     } catch (e: any) {
       Alert.alert('동기화 실패', e.message);
     } finally {
@@ -217,44 +268,60 @@ export default function PosScreen() {
       {loadingStatus
         ? <LoadingSpinner fullScreen={false} />
         : status === 'connected'
-          ? (
-            <FlatList
-              data={summaries}
-              keyExtractor={s => s.date}
-              contentContainerStyle={styles.scroll}
-              showsVerticalScrollIndicator={false}
-              ListHeaderComponent={(
-                <>
-                  {/* 오늘 요약 */}
+          ? (() => {
+              const summaryByDay = new Map<string, DailySummary>();
+              summaries.forEach(s => summaryByDay.set(s.date, s));
+              const calendarDays = getCalendarDays(queryYear, queryMonth);
+              const selectedKey = selectedDay ? toDateKey(queryYear, queryMonth, selectedDay) : null;
+              const selectedSummary = selectedKey ? summaryByDay.get(selectedKey) ?? null : null;
+              const monthTotal = summaries.reduce((sum, s) => sum + s.totalAmount, 0);
+              const today = new Date();
+              const isToday = (day: number) =>
+                queryYear === today.getFullYear() &&
+                queryMonth === today.getMonth() + 1 &&
+                day === today.getDate();
+
+              return (
+                <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+                  {/* 날짜 요약 카드 (선택된 날짜 or 오늘) */}
                   <View style={styles.todayCard}>
                     <View style={styles.todayCardItem}>
                       <View style={styles.todayIconBg}>
                         <Ionicons name="cash-outline" size={20} color={Colors.dark} />
                       </View>
-                      <Text style={styles.todayValue}>{todaySales.toLocaleString('ko-KR')}원</Text>
-                      <Text style={styles.todayLabel}>오늘 매출</Text>
+                      <Text style={styles.todayValue}>
+                        {(selectedSummary ? selectedSummary.totalAmount : todaySales).toLocaleString('ko-KR')}원
+                      </Text>
+                      <Text style={styles.todayLabel}>
+                        {selectedSummary ? `${queryMonth}월 ${selectedDay}일 매출` : '오늘 매출'}
+                      </Text>
                     </View>
                     <View style={styles.todayDivider} />
                     <View style={styles.todayCardItem}>
                       <View style={styles.todayIconBg}>
                         <Ionicons name="receipt-outline" size={20} color={Colors.dark} />
                       </View>
-                      <Text style={styles.todayValue}>{todayOrderCount}건</Text>
-                      <Text style={styles.todayLabel}>오늘 주문</Text>
+                      <Text style={styles.todayValue}>
+                        {selectedSummary ? selectedSummary.orderCount : todayOrderCount}건
+                      </Text>
+                      <Text style={styles.todayLabel}>
+                        {selectedSummary ? `${queryMonth}월 ${selectedDay}일 주문` : '오늘 주문'}
+                      </Text>
                     </View>
                   </View>
 
-                  {/* 날짜 조회 */}
+                  {/* 월 조회 */}
                   <View style={styles.querySection}>
-                    <Text style={styles.sectionTitle}>날짜 조회</Text>
                     <View style={styles.queryRow}>
-                      <TouchableOpacity
-                        style={styles.datePickerBtn}
-                        onPress={() => setShowPicker(true)}
-                      >
-                        <Ionicons name="calendar-outline" size={16} color={Colors.primary} />
-                        <Text style={styles.datePickerText}>{formatDate(selectedDate)}</Text>
-                      </TouchableOpacity>
+                      <View style={styles.monthPickerRow}>
+                        <TouchableOpacity onPress={prevQueryMonth} style={styles.monthNavBtn} activeOpacity={0.7}>
+                          <Ionicons name="chevron-back" size={18} color={Colors.gray600} />
+                        </TouchableOpacity>
+                        <Text style={styles.monthPickerText}>{queryYear}년 {queryMonth}월</Text>
+                        <TouchableOpacity onPress={nextQueryMonth} style={styles.monthNavBtn} activeOpacity={0.7}>
+                          <Ionicons name="chevron-forward" size={18} color={Colors.gray600} />
+                        </TouchableOpacity>
+                      </View>
                       <TouchableOpacity
                         style={[styles.syncBtn, syncing && styles.syncBtnDisabled]}
                         onPress={handleManualSync}
@@ -262,71 +329,109 @@ export default function PosScreen() {
                       >
                         {syncing
                           ? <ActivityIndicator size="small" color={Colors.white} />
-                          : <>
-                              <Ionicons name="search-outline" size={15} color={Colors.white} />
-                              <Text style={styles.syncBtnText}>조회</Text>
-                            </>
+                          : <><Ionicons name="search-outline" size={15} color={Colors.white} /><Text style={styles.syncBtnText}>조회</Text></>
                         }
                       </TouchableOpacity>
                     </View>
                   </View>
 
-                  {/* DateTimePicker */}
-                  {Platform.OS === 'android' && showPicker && (
-                    <DateTimePicker
-                      value={selectedDate}
-                      mode="date"
-                      display="default"
-                      maximumDate={new Date()}
-                      onChange={onDateChange}
-                    />
-                  )}
-                  {Platform.OS === 'ios' && (
-                    <Modal transparent animationType="slide" visible={showPicker}>
-                      <TouchableOpacity
-                        style={styles.modalOverlay}
-                        activeOpacity={1}
-                        onPress={() => setShowPicker(false)}
-                      >
-                        <View style={styles.pickerContainer}>
-                          <View style={styles.pickerHandle} />
-                          <DateTimePicker
-                            value={selectedDate}
-                            mode="date"
-                            display="inline"
-                            maximumDate={new Date()}
-                            onChange={onDateChange}
-                            locale="ko-KR"
-                          />
-                        </View>
-                      </TouchableOpacity>
-                    </Modal>
-                  )}
-
-                  <Text style={styles.sectionTitle}>최근 영업 내역</Text>
-                  {loadingSummaries && <LoadingSpinner fullScreen={false} />}
-                </>
-              )}
-              renderItem={({ item: s }) => (
-                <SummaryCard
-                  summary={s}
-                  onPress={() => router.push(`/pos/${s.date}?from=${encodeURIComponent(s.dateFrom)}&to=${encodeURIComponent(s.dateTo)}`)}
-                />
-              )}
-              ListEmptyComponent={!loadingSummaries ? (
-                <View style={styles.emptyState}>
-                  <View style={styles.emptyIconBg}>
-                    <Ionicons name="storefront-outline" size={26} color={Colors.gray400} />
+                  {/* 월 합계 헤더 */}
+                  <View style={styles.sectionHeader}>
+                    <Text style={styles.sectionTitle}>{queryYear}년 {queryMonth}월 매출</Text>
+                    {!loadingSummaries && monthTotal > 0 && (
+                      <Text style={styles.sectionTotal}>{monthTotal.toLocaleString('ko-KR')}원</Text>
+                    )}
                   </View>
-                  <Text style={styles.emptyText}>동기화된 내역이 없어요</Text>
-                  <Text style={styles.emptySubtext}>날짜를 선택해 동기화해보세요</Text>
-                </View>
-              ) : null}
-              onEndReached={hasMoreSummaries ? () => loadMoreSummaries(closingTime) : undefined}
-              onEndReachedThreshold={0.5}
-              ListFooterComponent={loadingMoreSummaries ? <ActivityIndicator style={{ padding: 16 }} color={Colors.primary} /> : null}
-            />
-          )
+
+                  {loadingSummaries
+                    ? <LoadingSpinner fullScreen={false} />
+                    : (
+                      <>
+                        {/* 캘린더 */}
+                        <View style={styles.calendarCard}>
+                          <View style={styles.weekRow}>
+                            {WEEKDAYS.map((w, i) => (
+                              <Text key={w} style={[styles.weekDay, i === 0 && styles.sundayText, i === 6 && styles.saturdayText]}>{w}</Text>
+                            ))}
+                          </View>
+                          {Array.from({ length: Math.ceil(calendarDays.length / 7) }, (_, rowIdx) => (
+                            <View key={rowIdx} style={styles.calendarRow}>
+                              {calendarDays.slice(rowIdx * 7, (rowIdx + 1) * 7).map((day, colIdx) => {
+                                if (!day) return <View key={`empty-${rowIdx}-${colIdx}`} style={styles.dayCell} />;
+                                const key = toDateKey(queryYear, queryMonth, day);
+                                const hasSales = summaryByDay.has(key);
+                                const isSelected = selectedDay === day;
+                                const todayFlag = isToday(day);
+                                const isSun = colIdx === 0;
+                                const isSat = colIdx === 6;
+                                return (
+                                  <TouchableOpacity
+                                    key={day}
+                                    style={styles.dayCell}
+                                    onPress={() => setSelectedDay(isSelected ? null : day)}
+                                    activeOpacity={0.7}
+                                  >
+                                    <View style={[styles.dayInner, isSelected && styles.daySelected, !isSelected && todayFlag && styles.dayToday]}>
+                                      <Text style={[
+                                        styles.dayText,
+                                        isSun && !isSelected && styles.sundayText,
+                                        isSat && !isSelected && styles.saturdayText,
+                                        isSelected && styles.dayTextSelected,
+                                        !isSelected && todayFlag && styles.dayTextToday,
+                                      ]}>
+                                        {day}
+                                      </Text>
+                                    </View>
+                                    {hasSales && <View style={[styles.dot, isSelected && styles.dotSelected]} />}
+                                  </TouchableOpacity>
+                                );
+                              })}
+                            </View>
+                          ))}
+                        </View>
+
+                        {/* 선택된 날짜 매출 요약 */}
+                        {selectedDay !== null && (
+                          selectedSummary ? (
+                            <TouchableOpacity
+                              style={styles.selectedDayCard}
+                              onPress={() => router.push(`/pos/${selectedSummary.date}?from=${encodeURIComponent(selectedSummary.dateFrom)}&to=${encodeURIComponent(selectedSummary.dateTo)}`)}
+                              activeOpacity={0.75}
+                            >
+                              <View style={styles.selectedDayInfo}>
+                                <Text style={styles.selectedDayDate}>{queryMonth}월 {selectedDay}일</Text>
+                                <Text style={styles.selectedDayCount}>{selectedSummary.orderCount}건</Text>
+                              </View>
+                              <View style={styles.selectedDayRight}>
+                                <Text style={styles.selectedDayAmount}>{selectedSummary.totalAmount.toLocaleString('ko-KR')}원</Text>
+                                <View style={styles.dayCardChevron}>
+                                  <Ionicons name="chevron-forward" size={14} color={Colors.gray400} />
+                                </View>
+                              </View>
+                            </TouchableOpacity>
+                          ) : (
+                            <View style={styles.selectedDayEmpty}>
+                              <Text style={styles.selectedDayEmptyText}>{queryMonth}월 {selectedDay}일 매출 없음</Text>
+                            </View>
+                          )
+                        )}
+
+                        {/* 날짜 미선택 + 데이터 없음 */}
+                        {selectedDay === null && summaries.length === 0 && (
+                          <View style={styles.emptyState}>
+                            <View style={styles.emptyIconBg}>
+                              <Ionicons name="storefront-outline" size={26} color={Colors.gray400} />
+                            </View>
+                            <Text style={styles.emptyText}>이 달의 내역이 없어요</Text>
+                            <Text style={styles.emptySubtext}>조회 버튼을 눌러 데이터를 불러오세요</Text>
+                          </View>
+                        )}
+                      </>
+                    )
+                  }
+                </ScrollView>
+              );
+            })()
           : (
             <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
               {/* ── 미연동: 신청 폼 ── */}
@@ -465,7 +570,6 @@ const styles = StyleSheet.create({
   },
   syncingText: { fontSize: 12, color: Colors.dark, fontWeight: '600' },
 
-  // 상태 배지
   statusBadge: {
     flexDirection: 'row', alignItems: 'center', gap: 5,
     paddingHorizontal: 10, paddingVertical: 5,
@@ -481,7 +585,6 @@ const styles = StyleSheet.create({
 
   scroll: { padding: 16, paddingBottom: 48 },
 
-  // 미연동 안내 카드
   infoCard: {
     backgroundColor: Colors.tinted,
     borderRadius: 20,
@@ -492,12 +595,22 @@ const styles = StyleSheet.create({
   infoTitle: { fontSize: 16, fontWeight: '800', color: Colors.deeper, marginBottom: 8 },
   infoDesc: { fontSize: 13, color: Colors.dark, textAlign: 'center', lineHeight: 20 },
 
-  // 신청 폼
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'baseline',
+    marginBottom: 10,
+  },
   sectionTitle: {
     fontSize: 15,
     fontWeight: '700',
     color: Colors.black,
     marginBottom: 10,
+  },
+  sectionTotal: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: Colors.primary,
   },
   card: {
     backgroundColor: Colors.white, borderRadius: 14,
@@ -521,7 +634,6 @@ const styles = StyleSheet.create({
   },
   noticeText: { flex: 1, fontSize: 13, color: Colors.gray500, lineHeight: 20 },
 
-  // 심사중
   pendingCard: {
     backgroundColor: Colors.white, borderRadius: 20,
     padding: 32, borderWidth: 1, borderColor: Colors.gray100,
@@ -542,7 +654,6 @@ const styles = StyleSheet.create({
   },
   checkBtnText: { fontSize: 14, fontWeight: '600', color: Colors.primary },
 
-  // 연동완료: 오늘 카드
   todayCard: {
     flexDirection: 'row',
     backgroundColor: Colors.tinted,
@@ -565,17 +676,32 @@ const styles = StyleSheet.create({
   todayValue: { fontSize: 20, fontWeight: '800', color: Colors.deeper, letterSpacing: -0.5 },
   todayLabel: { fontSize: 12, color: Colors.dark, fontWeight: '500' },
 
-  // 날짜 조회
   querySection: { marginBottom: 20 },
   queryRow: { flexDirection: 'row', gap: 10 },
-  datePickerBtn: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8,
-    backgroundColor: Colors.white, borderWidth: 1.5, borderColor: Colors.gray200,
-    borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04, shadowRadius: 3, elevation: 1,
+  monthPickerRow: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.white,
+    borderWidth: 1.5,
+    borderColor: Colors.gray200,
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 10,
   },
-  datePickerText: { fontSize: 15, color: Colors.black, fontWeight: '500' },
+  monthNavBtn: {
+    width: 28,
+    height: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  monthPickerText: {
+    flex: 1,
+    textAlign: 'center',
+    fontSize: 15,
+    fontWeight: '600',
+    color: Colors.black,
+  },
   syncBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 5,
     backgroundColor: Colors.primary, borderRadius: 12,
@@ -584,7 +710,6 @@ const styles = StyleSheet.create({
   syncBtnDisabled: { opacity: 0.6 },
   syncBtnText: { color: Colors.white, fontWeight: '700', fontSize: 14 },
 
-  // 일별 카드
   dayCard: {
     backgroundColor: Colors.white, borderRadius: 14,
     paddingVertical: 14, paddingHorizontal: 16, marginBottom: 8,
@@ -602,7 +727,6 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.gray100, justifyContent: 'center', alignItems: 'center',
   },
 
-  // 빈 상태
   emptyState: { alignItems: 'center', paddingVertical: 32 },
   emptyIconBg: {
     width: 64, height: 64, borderRadius: 20,
@@ -611,17 +735,43 @@ const styles = StyleSheet.create({
   emptyText: { fontSize: 15, fontWeight: '700', color: Colors.gray600, marginBottom: 4 },
   emptySubtext: { fontSize: 13, color: Colors.gray400 },
 
-  // 날짜 피커 모달
-  modalOverlay: {
-    flex: 1, justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0,0,0,0.35)',
+  // 캘린더
+  calendarCard: {
+    backgroundColor: Colors.white, borderRadius: 16,
+    borderWidth: 0.5, borderColor: Colors.gray100,
+    paddingHorizontal: 8, paddingVertical: 12, marginBottom: 12,
   },
-  pickerContainer: {
-    backgroundColor: Colors.white, borderTopLeftRadius: 24, borderTopRightRadius: 24,
-    padding: 16, paddingTop: 10,
+  weekRow: { flexDirection: 'row', marginBottom: 4 },
+  weekDay: { flex: 1, textAlign: 'center', fontSize: 12, fontWeight: '500', color: Colors.gray400, paddingVertical: 4 },
+  sundayText: { color: '#D94040' },
+  saturdayText: { color: '#3A7FD4' },
+  calendarRow: { flexDirection: 'row' },
+  dayCell: { flex: 1, alignItems: 'center', paddingVertical: 4, gap: 3 },
+  dayInner: { width: 34, height: 34, borderRadius: 17, justifyContent: 'center', alignItems: 'center' },
+  daySelected: { backgroundColor: Colors.primary },
+  dayToday: { borderWidth: 1.5, borderColor: Colors.primary },
+  dayText: { fontSize: 14, color: Colors.black },
+  dayTextSelected: { color: Colors.white, fontWeight: '600' },
+  dayTextToday: { color: Colors.primary, fontWeight: '600' },
+  dot: { width: 4, height: 4, borderRadius: 2, backgroundColor: Colors.primary },
+  dotSelected: { backgroundColor: Colors.white },
+
+  // 선택된 날짜 요약
+  selectedDayCard: {
+    backgroundColor: Colors.white, borderRadius: 14,
+    paddingVertical: 14, paddingHorizontal: 16,
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    borderWidth: 0.5, borderColor: Colors.gray100,
   },
-  pickerHandle: {
-    width: 36, height: 4, borderRadius: 2,
-    backgroundColor: Colors.gray200, alignSelf: 'center', marginBottom: 8,
+  selectedDayInfo: { gap: 3 },
+  selectedDayDate: { fontSize: 15, fontWeight: '700', color: Colors.black },
+  selectedDayCount: { fontSize: 12, color: Colors.gray500 },
+  selectedDayRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  selectedDayAmount: { fontSize: 16, fontWeight: '800', color: Colors.primary, letterSpacing: -0.3 },
+  selectedDayEmpty: {
+    backgroundColor: Colors.white, borderRadius: 14,
+    paddingVertical: 18, alignItems: 'center',
+    borderWidth: 0.5, borderColor: Colors.gray100,
   },
+  selectedDayEmptyText: { fontSize: 14, color: Colors.gray400 },
 });

@@ -1,859 +1,432 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import { useFocusEffect } from 'expo-router';
 import {
-  View,
-  Text,
-  StyleSheet,
-  FlatList,
-  TouchableOpacity,
-  TextInput,
-  Alert,
-  ScrollView,
-  Modal,
-  ActivityIndicator,
+  View, Text, StyleSheet, FlatList, TouchableOpacity,
+  ScrollView, ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import * as DocumentPicker from 'expo-document-picker';
-import Papa from 'papaparse';
 import { Colors } from '../../constants/colors';
-import { formatStock } from '../../lib/utils/unit';
-import { useAuth } from '../../lib/contexts/AuthContext';
 import { useIngredients } from '../../lib/hooks/useIngredients';
-import { useCategories } from '../../lib/hooks/useCategories';
-import { LoadingSpinner } from '../../lib/components/LoadingSpinner';
-import { ErrorMessage } from '../../lib/components/ErrorMessage';
-import { BulkCategoryModal } from '../../lib/components/BulkCategoryModal';
-import { getIngredientsByCategory } from '../../lib/services/ingredients';
+import { useOrders } from '../../lib/hooks/useOrders';
+import { useRecipes } from '../../lib/hooks/useRecipes';
 import { Ingredient } from '../../types';
+import { formatStock } from '../../lib/utils/unit';
 
-function IngredientRow({
-  item,
-  onUpdateStock,
-  onDelete,
-  onEdit,
-}: {
-  item: Ingredient;
-  onUpdateStock: (id: string, stock: number) => void;
-  onDelete: (id: string) => void;
-  onEdit: (id: string) => void;
-}) {
-  const [editing, setEditing] = useState(false);
-  const [stockValue, setStockValue] = useState(String(item.current_stock));
-  const isLowStock = item.current_stock <= item.min_stock;
+type ContentTab = '재고현황' | '발주내역' | '레시피';
 
-  function handleStockSubmit() {
-    const num = parseFloat(stockValue);
-    if (!isNaN(num) && num >= 0) {
-      onUpdateStock(item.id, num);
-    }
-    setEditing(false);
-  }
+// ─── 재고 행 (프로그레스 바 포함) ───────────────────────────────
+function IngredientRow({ item }: { item: Ingredient }) {
+  const ratio = item.min_stock > 0 ? item.current_stock / item.min_stock : 1;
+  const capped = Math.min(ratio, 1);
+  const isDanger = ratio <= 0.2;
+  const isWarn = ratio > 0.2 && ratio <= 1;
 
-  function handleDelete() {
-    Alert.alert('식자재 삭제', `"${item.name}"을(를) 삭제하시겠습니까?`, [
-      { text: '취소', style: 'cancel' },
-      { text: '삭제', style: 'destructive', onPress: () => onDelete(item.id) },
-    ]);
-  }
+  const barColor = isDanger ? '#E24B4A' : isWarn ? '#EF9F27' : Colors.primary;
+  const iconBg = isDanger ? '#FCEBEB' : isWarn ? '#FAEEDA' : Colors.tinted;
+  const iconColor = isDanger ? '#A32D2D' : isWarn ? '#854F0B' : Colors.primary;
 
   return (
     <TouchableOpacity
-      style={[styles.row, isLowStock && styles.rowLowStock]}
-      onPress={() => onEdit(item.id)}
+      style={styles.ingredientRow}
+      onPress={() => router.push(`/stock/${item.id}`)}
       activeOpacity={0.7}
     >
-      <View style={styles.rowLeft}>
-        <View style={styles.rowNameRow}>
-          <Text style={styles.rowName}>{item.name}</Text>
-          {isLowStock && (
-            <View style={styles.lowStockBadge}>
-              <Ionicons name="alert-circle" size={10} color={Colors.warning} />
-              <Text style={styles.lowStockText}>품절 임박</Text>
-            </View>
-          )}
-        </View>
-        <Text style={styles.rowCategory}>
-          {item.category}
-          {item.min_stock > 0 ? ` · 최소 ${item.min_stock}${item.unit}` : ''}
-          {item.supplier_name ? ` · ${item.supplier_name}` : ''}
-        </Text>
+      <View style={[styles.rowIcon, { backgroundColor: iconBg }]}>
+        <Ionicons name="cube-outline" size={18} color={iconColor} />
       </View>
-
-      <View style={styles.rowRight}>
-        {editing ? (
-          <TextInput
-            style={styles.stockInput}
-            value={stockValue}
-            onChangeText={setStockValue}
-            keyboardType="numeric"
-            onBlur={handleStockSubmit}
-            onSubmitEditing={handleStockSubmit}
-            autoFocus
-          />
-        ) : (
-          <TouchableOpacity onPress={() => setEditing(true)}>
-            <Text style={[styles.stockValue, isLowStock && styles.stockValueLow]}>
-              {formatStock(item.current_stock, item)}
+      <View style={styles.ingredientInfo}>
+        <View style={styles.nameRow}>
+          <Text style={styles.ingredientName}>{item.name}</Text>
+          <View style={[
+            styles.badge,
+            isDanger ? styles.badgeDanger : isWarn ? styles.badgeWarn : styles.badgeOk,
+          ]}>
+            <Text style={[
+              styles.badgeText,
+              isDanger ? styles.badgeTextDanger : isWarn ? styles.badgeTextWarn : styles.badgeTextOk,
+            ]}>
+              {isDanger ? '부족' : isWarn ? '임박' : '정상'}
             </Text>
-          </TouchableOpacity>
+          </View>
+        </View>
+        <Text style={styles.ingredientSub}>
+          잔여 {formatStock(item.current_stock, item)}
+          {item.min_stock > 0 ? ` / 기준 ${item.min_stock}${item.unit}` : ''}
+        </Text>
+        {item.min_stock > 0 && (
+          <View style={styles.progressBg}>
+            <View style={[styles.progressFill, { width: `${capped * 100}%` as any, backgroundColor: barColor }]} />
+          </View>
         )}
-        <TouchableOpacity onPress={handleDelete} style={styles.deleteBtn}>
-          <Ionicons name="trash-outline" size={15} color={Colors.gray300} />
-        </TouchableOpacity>
       </View>
     </TouchableOpacity>
   );
 }
 
+// ─── 발주 행 ──────────────────────────────────────────────────
+function OrderRow({ item }: { item: any }) {
+  const statusMap = { pending: '대기', confirmed: '확인', delivered: '납품' } as const;
+  const colorMap = { pending: Colors.warning, confirmed: Colors.info, delivered: Colors.success } as const;
+  const status = item.status as keyof typeof statusMap;
+
+  return (
+    <TouchableOpacity
+      style={styles.orderRow}
+      onPress={() => router.push(`/orders/${item.id}`)}
+      activeOpacity={0.7}
+    >
+      <View style={[styles.rowIcon, { backgroundColor: Colors.gray100 }]}>
+        <Ionicons name="document-text-outline" size={18} color={Colors.gray500} />
+      </View>
+      <View style={styles.rowInfo}>
+        <Text style={styles.rowName}>{item.supplier_name}</Text>
+        <Text style={styles.rowSub}>
+          {item.order_date} · {item.items?.length ?? 0}품목
+        </Text>
+      </View>
+      <View style={styles.orderRight}>
+        <Text style={styles.orderAmount}>
+          {item.total_amount > 0 ? `${(item.total_amount / 10000).toFixed(1)}만원` : '—'}
+        </Text>
+        <View style={[styles.statusPill, { backgroundColor: colorMap[status] + '18' }]}>
+          <Text style={[styles.statusText, { color: colorMap[status] }]}>
+            {statusMap[status]}
+          </Text>
+        </View>
+      </View>
+    </TouchableOpacity>
+  );
+}
+
+// ─── 레시피 행 ────────────────────────────────────────────────
+function RecipeRow({ item }: { item: any }) {
+  return (
+    <TouchableOpacity
+      style={styles.recipeRow}
+      onPress={() => router.push(`/recipes/${item.id}`)}
+      activeOpacity={0.7}
+    >
+      <View style={[styles.rowIcon, { backgroundColor: Colors.tinted }]}>
+        <Ionicons name="restaurant-outline" size={18} color={Colors.primary} />
+      </View>
+      <View style={styles.rowInfo}>
+        <Text style={styles.rowName}>{item.name}</Text>
+        <Text style={styles.rowSub}>{item.category}</Text>
+      </View>
+      <View style={styles.recipeRight}>
+        <Text style={styles.recipePrice}>{item.selling_price?.toLocaleString()}원</Text>
+        <Text style={styles.recipeMargin}>마진 {item.margin_rate ?? 0}%</Text>
+      </View>
+    </TouchableOpacity>
+  );
+}
+
+// ─── 메인 스크린 ──────────────────────────────────────────────
 export default function StockScreen() {
-  const { store } = useAuth();
-  const { data, loading, loadingMore, hasMore, loadMore, error, refetch, update, remove, bulkCreate, bulkUpdateCategory } = useIngredients();
-  const { categories, add: addCategory, rename: renameCategory, remove: removeCategory, countByCategory } = useCategories();
-
-  const [csvUploading, setCsvUploading] = useState(false);
-  const [showBulkCat, setShowBulkCat] = useState(false);
-  const [bulkCatItems, setBulkCatItems] = useState<{ id: string; name: string }[]>([]);
-  const [loadingBulkCat, setLoadingBulkCat] = useState(false);
-  const [viewMode, setViewMode] = useState<'category' | 'supplier'>('category');
+  const [activeTab, setActiveTab] = useState<ContentTab>('재고현황');
   const [activeCategory, setActiveCategory] = useState('전체');
-  const [activeSupplier, setActiveSupplier] = useState('전체');
 
-  const [showCategoryModal, setShowCategoryModal] = useState(false);
-  const [newCatName, setNewCatName] = useState('');
-  const [editingCat, setEditingCat] = useState<string | null>(null);
-  const [editingCatName, setEditingCatName] = useState('');
-  const [catOpLoading, setCatOpLoading] = useState(false);
+  const {
+    data: ingredients, loading: ingLoading,
+    loadingMore, hasMore, loadMore, refetch: refetchIng,
+  } = useIngredients();
+  const { data: orders, loading: ordLoading, refetch: refetchOrd } = useOrders();
+  const { data: recipes, loading: recLoading, refetch: refetchRec } = useRecipes();
 
-  useFocusEffect(useCallback(() => { refetch(); }, [refetch]));
+  useFocusEffect(useCallback(() => {
+    if (activeTab === '재고현황') refetchIng();
+    else if (activeTab === '발주내역') refetchOrd();
+    else refetchRec();
+  }, [activeTab, refetchIng, refetchOrd, refetchRec]));
 
-  const unclassifiedCount = data.filter(i => i.category === '기타').length;
-
-  async function handleOpenBulkCat() {
-    if (!store) return;
-    setLoadingBulkCat(true);
-    try {
-      const items = await getIngredientsByCategory(store.id, '기타');
-      setBulkCatItems(items);
-      setShowBulkCat(true);
-    } catch (e: any) {
-      Alert.alert('오류', e.message);
-    } finally {
-      setLoadingBulkCat(false);
-    }
-  }
-
-  useEffect(() => {
-    if (activeCategory !== '전체' && categories.length > 0 && !categories.includes(activeCategory)) {
-      setActiveCategory('전체');
-    }
-  }, [categories]);
-
-  const suppliers = ['전체', ...Array.from(new Set(
-    data.filter(i => i.supplier_name).map(i => i.supplier_name as string)
-  )).sort()];
-
-  const filtered = data
-    .filter(item => viewMode === 'supplier'
-      ? (activeSupplier === '전체' || item.supplier_name === activeSupplier)
-      : (activeCategory === '전체' || item.category === activeCategory)
-    )
+  const categories = ['전체', ...Array.from(new Set(ingredients.map(i => i.category))).sort()];
+  const filtered = (activeCategory === '전체' ? ingredients : ingredients.filter(i => i.category === activeCategory))
+    .slice()
     .sort((a, b) => {
       const aLow = a.current_stock <= a.min_stock ? 0 : 1;
       const bLow = b.current_stock <= b.min_stock ? 0 : 1;
       return aLow - bLow || a.name.localeCompare(b.name);
     });
 
-  async function handleCsvUpload() {
-    const result = await DocumentPicker.getDocumentAsync({
-      type: ['text/csv', 'text/comma-separated-values', 'text/plain'],
-      copyToCacheDirectory: true,
-    });
-    if (result.canceled) return;
+  const lowStockCount = ingredients.filter(i => i.current_stock <= i.min_stock).length;
+  const isLoading = activeTab === '재고현황' ? ingLoading : activeTab === '발주내역' ? ordLoading : recLoading;
 
-    const uri = result.assets[0].uri;
-    let text: string;
-    try {
-      const response = await fetch(uri);
-      text = await response.text();
-    } catch {
-      Alert.alert('오류', '파일을 읽을 수 없어요.');
-      return;
-    }
-
-    const parsed = Papa.parse<Record<string, string>>(text, {
-      header: true,
-      skipEmptyLines: true,
-    });
-
-    const valid: Omit<Ingredient, 'id' | 'updated_at' | 'created_at'>[] = [];
-    const errors: string[] = [];
-
-    parsed.data.forEach((row, i) => {
-      const name = row.name?.trim();
-      const unit = row.unit?.trim();
-      const category = row.category?.trim();
-
-      if (!name || !unit) {
-        errors.push(`${i + 2}행: name, unit 필수`);
-        return;
-      }
-
-      valid.push({
-        store_id: store!.id,
-        name,
-        category: category || '기타',
-        unit,
-        current_stock: parseFloat(row.current_stock) || 0,
-        min_stock: parseFloat(row.min_stock) || 0,
-        last_price: parseFloat(row.last_price) || 0,
-        container_unit: null,
-        container_size: null,
-        supplier_name: null,
-      });
-    });
-
-    if (valid.length === 0) {
-      Alert.alert('유효한 데이터 없음', errors.join('\n') || 'CSV 형식을 확인해주세요.');
-      return;
-    }
-
-    const summary = [
-      `총 ${valid.length}개 항목을 등록합니다.`,
-      errors.length > 0 ? `건너뜀: ${errors.length}개` : null,
-    ].filter(Boolean).join('\n');
-
-    Alert.alert('CSV 업로드 확인', summary, [
-      { text: '취소', style: 'cancel' },
-      {
-        text: '등록',
-        onPress: async () => {
-          setCsvUploading(true);
-          try {
-            const count = await bulkCreate(valid);
-            Alert.alert('완료', `${count}개 항목이 등록되었어요.`);
-          } catch (e: any) {
-            Alert.alert('오류', e.message);
-          } finally {
-            setCsvUploading(false);
-          }
-        },
-      },
-    ]);
+  function handleFab() {
+    if (activeTab === '재고현황') router.push('/stock/new');
+    else if (activeTab === '발주내역') router.push('/orders/new');
+    else router.push('/recipes/new');
   }
-
-  async function handleAddCategory() {
-    const name = newCatName.trim();
-    if (!name) return;
-    if (categories.includes(name)) {
-      Alert.alert('오류', '이미 존재하는 카테고리입니다.');
-      return;
-    }
-    setCatOpLoading(true);
-    try {
-      await addCategory(name);
-      setNewCatName('');
-    } catch (e: any) {
-      Alert.alert('오류', e.message);
-    } finally {
-      setCatOpLoading(false);
-    }
-  }
-
-  async function handleRenameCategory() {
-    const newName = editingCatName.trim();
-    if (!newName || !editingCat) return;
-    if (newName === editingCat) { setEditingCat(null); return; }
-    if (categories.includes(newName)) {
-      Alert.alert('오류', '이미 존재하는 카테고리입니다.');
-      return;
-    }
-    setCatOpLoading(true);
-    try {
-      await renameCategory(editingCat, newName);
-      setEditingCat(null);
-    } catch (e: any) {
-      Alert.alert('오류', e.message);
-    } finally {
-      setCatOpLoading(false);
-    }
-  }
-
-  async function handleDeleteCategory(name: string) {
-    const count = await countByCategory(name);
-    const message = count > 0
-      ? `"${name}" 카테고리를 삭제하면 해당 식자재 ${count}개가 '기타'로 이동됩니다.`
-      : `"${name}" 카테고리를 삭제하시겠습니까?`;
-
-    Alert.alert('카테고리 삭제', message, [
-      { text: '취소', style: 'cancel' },
-      {
-        text: '삭제',
-        style: 'destructive',
-        onPress: async () => {
-          setCatOpLoading(true);
-          try {
-            await removeCategory(name);
-          } catch (e: any) {
-            Alert.alert('오류', e.message);
-          } finally {
-            setCatOpLoading(false);
-          }
-        },
-      },
-    ]);
-  }
-
-  if (loading) return <LoadingSpinner />;
-  if (error) return <ErrorMessage message={error} onRetry={refetch} />;
-
-  const lowStockCount = data.filter(i => i.current_stock <= i.min_stock).length;
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
+      {/* 헤더 */}
+      <View style={styles.topBar}>
         <View>
-          <Text style={styles.title}>재고</Text>
-          {data.length > 0 && (
-            <Text style={styles.subtitle}>
-              {data.length}개 품목
-              {lowStockCount > 0 && (
-                <Text style={styles.subtitleWarn}> · 품절 임박 {lowStockCount}개</Text>
-              )}
-            </Text>
+          <Text style={styles.title}>재고 · 발주</Text>
+          {lowStockCount > 0 && (
+            <Text style={styles.lowStockHint}>품절 임박 {lowStockCount}개</Text>
           )}
         </View>
         <TouchableOpacity
-          style={styles.csvButton}
-          onPress={handleCsvUpload}
-          disabled={csvUploading}
+          style={styles.orderBtn}
+          onPress={() => router.push('/orders/new')}
+          activeOpacity={0.7}
         >
-          {csvUploading
-            ? <ActivityIndicator size="small" color={Colors.primary} />
-            : <>
-                <Ionicons name="cloud-upload-outline" size={15} color={Colors.primary} />
-                <Text style={styles.csvText}>CSV</Text>
-              </>
-          }
+          <Ionicons name="add" size={14} color={Colors.gray600} />
+          <Text style={styles.orderBtnText}>발주 요청</Text>
         </TouchableOpacity>
       </View>
 
-      {/* 보기 모드 토글 */}
-      <View style={styles.segmentRow}>
-        <TouchableOpacity
-          style={[styles.segmentBtn, viewMode === 'category' && styles.segmentBtnActive]}
-          onPress={() => setViewMode('category')}
-        >
-          <Text style={[styles.segmentText, viewMode === 'category' && styles.segmentTextActive]}>
-            카테고리별
-          </Text>
-        </TouchableOpacity>
-        {suppliers.length > 1 && (
+      {/* 콘텐츠 탭 */}
+      <View style={styles.contentTabRow}>
+        {(['재고현황', '발주내역', '레시피'] as ContentTab[]).map(tab => (
           <TouchableOpacity
-            style={[styles.segmentBtn, viewMode === 'supplier' && styles.segmentBtnActive]}
-            onPress={() => setViewMode('supplier')}
+            key={tab}
+            style={[styles.contentTab, activeTab === tab && styles.contentTabActive]}
+            onPress={() => setActiveTab(tab)}
           >
-            <Text style={[styles.segmentText, viewMode === 'supplier' && styles.segmentTextActive]}>
-              거래처별
+            <Text style={[styles.contentTabText, activeTab === tab && styles.contentTabTextActive]}>
+              {tab}
             </Text>
           </TouchableOpacity>
-        )}
+        ))}
       </View>
 
-      {/* 카테고리 탭 */}
-      {viewMode === 'category' && (
-        <View style={styles.tabRow}>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.tabBar}
-            style={styles.tabScroll}
-          >
-            {['전체', ...categories].map(tab => {
-              const count = tab === '전체'
-                ? data.length
-                : data.filter(i => i.category === tab).length;
-              return (
-                <TouchableOpacity
-                  key={tab}
-                  style={[styles.tab, activeCategory === tab && styles.tabActive]}
-                  onPress={() => setActiveCategory(tab)}
-                >
-                  <Text style={[styles.tabText, activeCategory === tab && styles.tabTextActive]}>
-                    {tab}
-                    {count > 0 ? <Text style={styles.tabCount}> {count}</Text> : ''}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
-          <TouchableOpacity
-            style={styles.editCatBtn}
-            onPress={() => setShowCategoryModal(true)}
-          >
-            <Ionicons name="settings-outline" size={15} color={Colors.gray500} />
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {/* 거래처 탭 */}
-      {viewMode === 'supplier' && (
+      {/* 카테고리 필터 */}
+      {activeTab === '재고현황' && categories.length > 1 && (
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.tabBar}
-          style={styles.tabScroll}
+          contentContainerStyle={styles.catBar}
         >
-          {suppliers.map(s => {
-            const count = s === '전체' ? data.length : data.filter(i => i.supplier_name === s).length;
-            return (
-              <TouchableOpacity
-                key={s}
-                style={[styles.tab, activeSupplier === s && styles.tabActive]}
-                onPress={() => setActiveSupplier(s)}
-              >
-                <Text style={[styles.tabText, activeSupplier === s && styles.tabTextActive]}>
-                  {s}
-                  {count > 0 ? <Text style={styles.tabCount}> {count}</Text> : ''}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
+          {categories.map(cat => (
+            <TouchableOpacity
+              key={cat}
+              style={[styles.catTab, activeCategory === cat && styles.catTabActive]}
+              onPress={() => setActiveCategory(cat)}
+            >
+              <Text style={[styles.catTabText, activeCategory === cat && styles.catTabTextActive]}>
+                {cat}
+              </Text>
+            </TouchableOpacity>
+          ))}
         </ScrollView>
       )}
 
-      {unclassifiedCount > 0 && (
-        <TouchableOpacity
-          style={styles.unclassifiedBanner}
-          onPress={handleOpenBulkCat}
-          disabled={loadingBulkCat}
-          activeOpacity={0.75}
-        >
-          <View style={styles.unclassifiedLeft}>
-            <Ionicons name="folder-open-outline" size={15} color={Colors.warning} />
-            <Text style={styles.unclassifiedText}>기타(미분류) {unclassifiedCount}개</Text>
-          </View>
-          {loadingBulkCat
-            ? <ActivityIndicator size="small" color={Colors.warning} />
-            : <Text style={styles.unclassifiedAction}>카테고리 지정 →</Text>
-          }
-        </TouchableOpacity>
-      )}
-
-      <BulkCategoryModal
-        visible={showBulkCat}
-        items={bulkCatItems}
-        categories={categories}
-        onConfirm={async (ids, category) => {
-          await bulkUpdateCategory(ids, category);
-          setShowBulkCat(false);
-        }}
-        onClose={() => setShowBulkCat(false)}
-      />
-
-      {data.length === 0 ? (
-        <View style={styles.emptyState}>
-          <View style={styles.emptyIconBg}>
-            <Ionicons name="bar-chart-outline" size={28} color={Colors.gray400} />
-          </View>
-          <Text style={styles.emptyText}>재고 데이터가 없어요</Text>
-          <Text style={styles.emptySubtext}>발주를 등록하면 재고가 자동으로 관리돼요</Text>
+      {/* 리스트 */}
+      {isLoading ? (
+        <View style={styles.loadingWrap}>
+          <ActivityIndicator size="large" color={Colors.primary} />
         </View>
-      ) : filtered.length === 0 ? (
-        <View style={styles.emptyState}>
-          <Text style={styles.emptyText}>
-            {viewMode === 'category' ? activeCategory : activeSupplier} 품목이 없어요
-          </Text>
-        </View>
-      ) : (
+      ) : activeTab === '재고현황' ? (
         <FlatList
           data={filtered}
           keyExtractor={item => item.id}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
-          renderItem={({ item }) => (
-            <IngredientRow
-              item={item}
-              onUpdateStock={(id, stock) => update(id, { current_stock: stock })}
-              onDelete={remove}
-              onEdit={(id) => router.push(`/stock/${id}`)}
-            />
-          )}
+          renderItem={({ item }) => <IngredientRow item={item} />}
           onEndReached={hasMore ? loadMore : undefined}
           onEndReachedThreshold={0.5}
+          ListEmptyComponent={<EmptyState icon="cube-outline" text="재고 데이터가 없어요" />}
           ListFooterComponent={loadingMore ? <ActivityIndicator style={{ padding: 16 }} color={Colors.primary} /> : null}
+        />
+      ) : activeTab === '발주내역' ? (
+        <FlatList
+          data={orders}
+          keyExtractor={item => item.id}
+          contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
+          renderItem={({ item }) => <OrderRow item={item} />}
+          ListEmptyComponent={<EmptyState icon="document-text-outline" text="발주 내역이 없어요" />}
+        />
+      ) : (
+        <FlatList
+          data={recipes}
+          keyExtractor={item => item.id}
+          contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
+          renderItem={({ item }) => <RecipeRow item={item} />}
+          ListEmptyComponent={<EmptyState icon="restaurant-outline" text="레시피가 없어요" />}
         />
       )}
 
-      {/* 카테고리 편집 모달 */}
-      <Modal visible={showCategoryModal} animationType="slide" transparent>
-        <TouchableOpacity
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setShowCategoryModal(false)}
-        >
-          <TouchableOpacity activeOpacity={1} style={styles.modalSheet}>
-            <View style={styles.modalHandle} />
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>카테고리 편집</Text>
-              <TouchableOpacity onPress={() => setShowCategoryModal(false)} style={styles.modalCloseBtn}>
-                <Ionicons name="close" size={20} color={Colors.gray500} />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView style={styles.modalScroll}>
-              {categories.map(cat => (
-                <View key={cat} style={styles.catRow}>
-                  {editingCat === cat ? (
-                    <TextInput
-                      style={styles.catEditInput}
-                      value={editingCatName}
-                      onChangeText={setEditingCatName}
-                      autoFocus
-                      onSubmitEditing={handleRenameCategory}
-                    />
-                  ) : (
-                    <Text style={styles.catName}>{cat}</Text>
-                  )}
-
-                  <View style={styles.catActions}>
-                    {editingCat === cat ? (
-                      <TouchableOpacity
-                        style={styles.catConfirmBtn}
-                        onPress={handleRenameCategory}
-                        disabled={catOpLoading}
-                      >
-                        <Text style={styles.catConfirmText}>확인</Text>
-                      </TouchableOpacity>
-                    ) : (
-                      <TouchableOpacity
-                        style={styles.catActionBtn}
-                        onPress={() => { setEditingCat(cat); setEditingCatName(cat); }}
-                      >
-                        <Ionicons name="pencil-outline" size={16} color={Colors.gray500} />
-                      </TouchableOpacity>
-                    )}
-                    <TouchableOpacity
-                      style={styles.catActionBtn}
-                      onPress={() => handleDeleteCategory(cat)}
-                      disabled={catOpLoading}
-                    >
-                      <Ionicons name="trash-outline" size={16} color={Colors.danger} />
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              ))}
-
-              <View style={styles.addCatRow}>
-                <TextInput
-                  style={styles.addCatInput}
-                  value={newCatName}
-                  onChangeText={setNewCatName}
-                  placeholder="새 카테고리 이름"
-                  placeholderTextColor={Colors.gray400}
-                  onSubmitEditing={handleAddCategory}
-                />
-                <TouchableOpacity
-                  style={[styles.addCatBtn, !newCatName.trim() && styles.addCatBtnDisabled]}
-                  onPress={handleAddCategory}
-                  disabled={!newCatName.trim() || catOpLoading}
-                >
-                  {catOpLoading
-                    ? <ActivityIndicator size="small" color={Colors.white} />
-                    : <Text style={styles.addCatBtnText}>추가</Text>
-                  }
-                </TouchableOpacity>
-              </View>
-            </ScrollView>
-          </TouchableOpacity>
-        </TouchableOpacity>
-      </Modal>
+      {/* FAB */}
+      <TouchableOpacity style={styles.fab} onPress={handleFab} activeOpacity={0.85}>
+        <Ionicons name="add" size={26} color={Colors.white} />
+      </TouchableOpacity>
     </SafeAreaView>
+  );
+}
+
+function EmptyState({ icon, text }: { icon: keyof typeof Ionicons.glyphMap; text: string }) {
+  return (
+    <View style={styles.emptyState}>
+      <Ionicons name={icon} size={32} color={Colors.gray300} />
+      <Text style={styles.emptyText}>{text}</Text>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.gray50 },
 
-  header: {
+  topBar: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
+    alignItems: 'center',
     paddingHorizontal: 20,
     paddingTop: 16,
     paddingBottom: 12,
-  },
-  title: { fontSize: 24, fontWeight: '800', color: Colors.black, letterSpacing: -0.5 },
-  subtitle: { fontSize: 13, color: Colors.gray400, marginTop: 2 },
-  subtitleWarn: { color: Colors.warning, fontWeight: '600' },
-  csvButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 10,
-    borderWidth: 1.5,
-    borderColor: Colors.primary + '60',
-    backgroundColor: Colors.tinted,
-  },
-  csvText: { color: Colors.primary, fontSize: 13, fontWeight: '700' },
-
-  // 세그먼트 컨트롤
-  segmentRow: {
-    flexDirection: 'row',
-    marginHorizontal: 16,
-    marginBottom: 12,
-    backgroundColor: Colors.gray100,
-    borderRadius: 12,
-    padding: 3,
-  },
-  segmentBtn: {
-    flex: 1,
-    alignItems: 'center',
-    paddingVertical: 8,
-    borderRadius: 10,
-  },
-  segmentBtnActive: {
     backgroundColor: Colors.white,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 3,
-    elevation: 2,
+    borderBottomWidth: 0.5,
+    borderBottomColor: Colors.gray100,
   },
-  segmentText: { fontSize: 13, fontWeight: '600', color: Colors.gray500 },
-  segmentTextActive: { color: Colors.black, fontWeight: '700' },
-
-  // 탭 바
-  tabRow: {
+  title: { fontSize: 17, fontWeight: '600', color: Colors.black },
+  lowStockHint: { fontSize: 11, color: Colors.warning, marginTop: 1 },
+  orderBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingRight: 8,
-    marginBottom: 4,
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 20,
+    borderWidth: 0.5,
+    borderColor: Colors.gray200,
+    backgroundColor: Colors.white,
   },
-  tabScroll: { flex: 1 },
-  tabBar: {
-    paddingHorizontal: 16,
-    paddingBottom: 10,
-    gap: 6,
+  orderBtnText: { fontSize: 13, color: Colors.gray600 },
+
+  contentTabRow: {
     flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    gap: 6,
+    backgroundColor: Colors.white,
+    borderBottomWidth: 0.5,
+    borderBottomColor: Colors.gray100,
   },
-  tab: {
+  contentTab: {
     paddingHorizontal: 14,
     paddingVertical: 6,
     borderRadius: 20,
+    borderWidth: 0.5,
+    borderColor: Colors.gray200,
+    backgroundColor: Colors.gray50,
+  },
+  contentTabActive: { backgroundColor: Colors.black, borderColor: Colors.black },
+  contentTabText: { fontSize: 13, color: Colors.gray500 },
+  contentTabTextActive: { color: Colors.white, fontWeight: '500' },
+
+  catBar: { paddingHorizontal: 16, paddingVertical: 10, gap: 6, flexDirection: 'row' },
+  catTab: {
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 20,
     backgroundColor: Colors.white,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 2,
-    elevation: 1,
+    borderWidth: 0.5,
+    borderColor: Colors.gray200,
   },
-  tabActive: {
-    backgroundColor: Colors.primary,
+  catTabActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
+  catTabText: { fontSize: 12, fontWeight: '500', color: Colors.gray500 },
+  catTabTextActive: { color: Colors.white },
+
+  listContent: { padding: 16, paddingBottom: 100 },
+
+  // 재고 행
+  ingredientRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: Colors.white,
+    borderRadius: 14,
+    borderWidth: 0.5,
+    borderColor: Colors.gray100,
+    padding: 12,
+    marginBottom: 8,
+    gap: 12,
   },
-  tabText: { fontSize: 13, fontWeight: '600', color: Colors.gray500 },
-  tabTextActive: { color: Colors.white },
-  tabCount: { fontWeight: '500', opacity: 0.8 },
-  editCatBtn: {
-    width: 34,
-    height: 34,
+  rowIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 10,
-    marginRight: 4,
-    borderRadius: 10,
-    backgroundColor: Colors.white,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 2,
-    elevation: 1,
+    flexShrink: 0,
+    marginTop: 2,
   },
+  ingredientInfo: { flex: 1 },
+  nameRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 },
+  ingredientName: { fontSize: 14, fontWeight: '500', color: Colors.black },
+  ingredientSub: { fontSize: 11, color: Colors.gray400, marginBottom: 6 },
+  progressBg: { height: 4, backgroundColor: Colors.gray100, borderRadius: 2, overflow: 'hidden' },
+  progressFill: { height: 4, borderRadius: 2 },
 
-  // 리스트 행
-  listContent: { paddingHorizontal: 16, paddingBottom: 32 },
-  row: {
+  // 발주 행
+  orderRow: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: Colors.white,
     borderRadius: 14,
-    padding: 14,
+    borderWidth: 0.5,
+    borderColor: Colors.gray100,
+    padding: 12,
     marginBottom: 8,
-    borderLeftWidth: 3,
-    borderLeftColor: 'transparent',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 1,
+    gap: 12,
   },
-  rowLowStock: {
-    borderLeftColor: Colors.warning,
-    backgroundColor: Colors.warning + '06',
-  },
-  rowLeft: { flex: 1 },
-  rowNameRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 3 },
-  rowName: { fontSize: 15, fontWeight: '600', color: Colors.black },
-  lowStockBadge: {
+  rowInfo: { flex: 1 },
+  rowName: { fontSize: 14, fontWeight: '500', color: Colors.black },
+  rowSub: { fontSize: 11, color: Colors.gray400, marginTop: 1 },
+  orderRight: { alignItems: 'flex-end', gap: 4 },
+  orderAmount: { fontSize: 14, fontWeight: '600', color: Colors.black },
+  statusPill: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 },
+  statusText: { fontSize: 11, fontWeight: '600' },
+
+  // 레시피 행
+  recipeRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
-    backgroundColor: Colors.warning + '20',
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-    borderRadius: 6,
-  },
-  lowStockText: { fontSize: 11, fontWeight: '700', color: Colors.warning },
-  rowCategory: { fontSize: 12, color: Colors.gray400 },
-  rowRight: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  stockValue: { fontSize: 16, fontWeight: '700', color: Colors.black, minWidth: 60, textAlign: 'right' },
-  stockValueLow: { color: Colors.warning },
-  stockInput: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: Colors.black,
-    borderBottomWidth: 2,
-    borderBottomColor: Colors.primary,
-    minWidth: 60,
-    textAlign: 'right',
-    paddingVertical: 2,
-  },
-  deleteBtn: {
-    width: 32,
-    height: 32,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-
-  // 빈 상태
-  emptyState: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 32 },
-  emptyIconBg: {
-    width: 72,
-    height: 72,
-    borderRadius: 22,
-    backgroundColor: Colors.gray100,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 18,
-  },
-  emptyText: { fontSize: 17, fontWeight: '700', color: Colors.gray700, marginBottom: 8 },
-  emptySubtext: { fontSize: 14, color: Colors.gray400, textAlign: 'center' },
-
-  // 카테고리 모달
-  modalOverlay: { flex: 1, backgroundColor: Colors.overlay, justifyContent: 'flex-end' },
-  modalSheet: {
     backgroundColor: Colors.white,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    maxHeight: '75%',
-    paddingTop: 8,
-  },
-  modalHandle: {
-    width: 36,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: Colors.gray200,
-    alignSelf: 'center',
+    borderRadius: 14,
+    borderWidth: 0.5,
+    borderColor: Colors.gray100,
+    padding: 12,
     marginBottom: 8,
+    gap: 12,
   },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.gray100,
-  },
-  modalTitle: { fontSize: 17, fontWeight: '700', color: Colors.black },
-  modalCloseBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 10,
-    backgroundColor: Colors.gray100,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalScroll: { paddingHorizontal: 20 },
-  catRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.gray100,
-  },
-  catName: { flex: 1, fontSize: 15, color: Colors.black, fontWeight: '500' },
-  catEditInput: {
-    flex: 1,
-    fontSize: 15,
-    color: Colors.black,
-    borderBottomWidth: 2,
-    borderBottomColor: Colors.primary,
-    paddingVertical: 2,
-    marginRight: 8,
-  },
-  catActions: { flexDirection: 'row', gap: 4 },
-  catActionBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    backgroundColor: Colors.gray50,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  catConfirmBtn: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    backgroundColor: Colors.primary,
-    borderRadius: 10,
-    marginRight: 4,
-  },
-  catConfirmText: { fontSize: 13, color: Colors.white, fontWeight: '700' },
-  addCatRow: {
-    flexDirection: 'row',
-    gap: 10,
-    paddingVertical: 16,
-    paddingBottom: 40,
-  },
-  addCatInput: {
-    flex: 1,
-    borderWidth: 1.5,
-    borderColor: Colors.gray200,
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 11,
-    fontSize: 14,
-    color: Colors.black,
-    backgroundColor: Colors.gray50,
-  },
-  addCatBtn: {
-    backgroundColor: Colors.primary,
-    paddingHorizontal: 18,
-    paddingVertical: 11,
-    borderRadius: 12,
-    justifyContent: 'center',
-  },
-  addCatBtnDisabled: { opacity: 0.4 },
-  addCatBtnText: { color: Colors.white, fontSize: 14, fontWeight: '700' },
+  recipeRight: { alignItems: 'flex-end' },
+  recipePrice: { fontSize: 14, fontWeight: '600', color: Colors.black },
+  recipeMargin: { fontSize: 11, color: Colors.primary, marginTop: 1 },
 
-  // 미분류 배너
-  unclassifiedBanner: {
-    flexDirection: 'row',
+  // 뱃지
+  badge: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 10 },
+  badgeDanger: { backgroundColor: '#FCEBEB' },
+  badgeWarn: { backgroundColor: '#FAEEDA' },
+  badgeOk: { backgroundColor: '#EAF3DE' },
+  badgeText: { fontSize: 10, fontWeight: '600' },
+  badgeTextDanger: { color: '#A32D2D' },
+  badgeTextWarn: { color: '#854F0B' },
+  badgeTextOk: { color: '#3B6D11' },
+
+  // 기타
+  loadingWrap: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  emptyState: { paddingTop: 60, alignItems: 'center', gap: 12 },
+  emptyText: { fontSize: 15, color: Colors.gray400 },
+
+  fab: {
+    position: 'absolute',
+    bottom: 24,
+    right: 20,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: Colors.black,
+    justifyContent: 'center',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    marginHorizontal: 16,
-    marginBottom: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 12,
-    backgroundColor: Colors.warning + '12',
-    borderWidth: 1,
-    borderColor: Colors.warning + '40',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 6,
   },
-  unclassifiedLeft: { flexDirection: 'row', alignItems: 'center', gap: 7 },
-  unclassifiedText: { fontSize: 13, fontWeight: '600', color: Colors.warning },
-  unclassifiedAction: { fontSize: 13, fontWeight: '600', color: Colors.warning },
 });

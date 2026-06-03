@@ -6,12 +6,13 @@ export interface StoreDetails {
   owner_phone: string | null;
   address: string | null;
   toss_merchant_id: string | null;
+  closing_time: string | null;
 }
 
 export async function getStoreDetails(storeId: string): Promise<StoreDetails> {
   const { data, error } = await supabase
     .from('stores')
-    .select('name, business_number, owner_phone, address, toss_merchant_id')
+    .select('name, business_number, owner_phone, address, toss_merchant_id, closing_time')
     .eq('id', storeId)
     .single();
 
