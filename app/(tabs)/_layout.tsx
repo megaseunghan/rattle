@@ -27,7 +27,7 @@ function TabIcon({ tab, focused }: { tab: TabName; focused: boolean }) {
         size={22}
         color={focused ? Colors.primary : Colors.gray400}
       />
-      <Text style={[styles.label, focused && styles.labelActive]}>{cfg.label}</Text>
+      <Text style={[styles.label, focused && styles.labelActive]} numberOfLines={1} adjustsFontSizeToFit>{cfg.label}</Text>
     </View>
   );
 }
