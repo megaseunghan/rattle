@@ -21,6 +21,10 @@ export async function createEmployee(data: {
   employment_type: EmploymentType;
   base_salary: number;
   non_taxable: number;
+  joined_at?: string | null;
+  phone?: string | null;
+  bank_name?: string | null;
+  account_number?: string | null;
   is_probation: boolean;
   probation_started_at?: string | null;
   weekly_hours?: number | null;
@@ -69,13 +73,13 @@ export async function deleteEmployee(id: string): Promise<void> {
   if (error) throw new Error(error.message);
 }
 
-/** 수습 기간 중인지 여부 (2달 기준) */
+/** 수습 기간 중인지 여부 — 입사일 기준 61일 자동 적용 */
 export function isInProbation(employee: Employee): boolean {
-  if (!employee.is_probation || !employee.probation_started_at) return false;
-  const started = new Date(employee.probation_started_at);
-  const twoMonthsLater = new Date(started);
-  twoMonthsLater.setMonth(twoMonthsLater.getMonth() + 2);
-  return new Date() < twoMonthsLater;
+  if (!employee.joined_at) return false;
+  const joined = new Date(employee.joined_at);
+  const probationEnd = new Date(joined);
+  probationEnd.setDate(probationEnd.getDate() + 61);
+  return new Date() < probationEnd;
 }
 
 /** 4대보험 적용 여부 */
