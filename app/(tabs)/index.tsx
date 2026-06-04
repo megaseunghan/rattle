@@ -35,7 +35,7 @@ function PnLSection({
   onPress: () => void;
 }) {
   const t = SECTION_THEME[theme];
-  const hasSubs = subs && subs.some(s => s.value !== '—' && s.value !== '0원');
+  const hasSubs = subs && subs.length > 0;
 
   return (
     <TouchableOpacity
@@ -65,7 +65,7 @@ function PnLSection({
 
       {hasSubs && !loading && (
         <View style={[styles.subList, { borderTopColor: t.border }]}>
-          {subs!.filter(s => s.value !== '—' && s.value !== '0원').map((s, i) => (
+          {subs!.map((s, i) => (
             <View key={i} style={styles.subItem}>
               <View style={[styles.subDot, { backgroundColor: t.color + '60' }]} />
               <Text style={styles.subItemLabel}>{s.label}</Text>
