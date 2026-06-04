@@ -76,6 +76,22 @@ export default function MoreScreen() {
           })}
         </View>
 
+        <Text style={[styles.sectionLabel, { marginTop: 20 }]}>출퇴근</Text>
+        <View style={styles.card}>
+          <SettingRow
+            icon="time-outline"
+            label="출퇴근 기록"
+            onPress={() => router.push('/attendance')}
+          />
+          <View style={styles.listItemBorder}>
+            <SettingRow
+              icon="location-outline"
+              label="매장 위치 등록"
+              onPress={() => router.push('/settings/store-location')}
+            />
+          </View>
+        </View>
+
         <Text style={[styles.sectionLabel, { marginTop: 20 }]}>설정</Text>
         <View style={styles.card}>
           <SettingRow

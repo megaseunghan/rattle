@@ -124,6 +124,8 @@ function RootNavigator() {
       <Stack.Screen name="settings/members" options={{ headerShown: false }} />
 <Stack.Screen name="pos/[date]" options={{ headerShown: false }} />
       <Stack.Screen name="profit-loss/index" options={{ headerShown: false }} />
+      <Stack.Screen name="attendance/index" options={{ headerShown: false }} />
+      <Stack.Screen name="settings/store-location" options={{ headerShown: false }} />
     </Stack>
   );
 }

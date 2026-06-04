@@ -4,13 +4,29 @@ export interface Store {
   name: string;
   owner_id: string;
   categories?: string[];
-  closing_time?: string | null;  // 'HH:MM' 형식, 예: '23:00'
+  closing_time?: string | null;
   created_at: string;
-  // Toss Place 가맹점 신청 정보
   business_number?: string | null;
   owner_phone?: string | null;
   address?: string | null;
   toss_merchant_id?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+}
+
+export type AttendanceType = 'clock_in' | 'clock_out';
+
+export interface Attendance {
+  id: string;
+  store_id: string;
+  employee_id: string;
+  type: AttendanceType;
+  timestamp: string;
+  latitude: number;
+  longitude: number;
+  distance_m: number;
+  note: string | null;
+  created_at: string;
 }
 
 // 발주

@@ -41,6 +41,12 @@
           "cameraPermission": "납품서 촬영을 위해 카메라 접근이 필요합니다."
         }
       ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "출퇴근 기록을 위해 위치 접근이 필요합니다."
+        }
+      ],
       "@react-native-community/datetimepicker",
       "expo-web-browser"
     ]
