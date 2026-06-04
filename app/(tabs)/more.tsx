@@ -79,17 +79,10 @@ export default function MoreScreen() {
         <Text style={[styles.sectionLabel, { marginTop: 20 }]}>설정</Text>
         <View style={styles.card}>
           <SettingRow
-            icon="people-outline"
-            label="직원 관리"
+            icon="document-text-outline"
+            label="전자세금계산서 연동"
             onPress={() => {}}
           />
-          <View style={styles.listItemBorder}>
-            <SettingRow
-              icon="document-text-outline"
-              label="전자세금계산서 연동"
-              onPress={() => {}}
-            />
-          </View>
           <View style={styles.listItemBorder}>
             <SettingRow
               icon="card-outline"
