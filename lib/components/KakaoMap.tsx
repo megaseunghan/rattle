@@ -20,7 +20,6 @@ function buildHtml(lat: number, lng: number): string {
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
-  <script src="//dapi.kakao.com/v2/maps/sdk.js?appkey=${JS_KEY}&libraries=services"></script>
   <style>
     *{margin:0;padding:0;box-sizing:border-box}
     html,body,#map{width:100%;height:100%;overflow:hidden}
@@ -28,31 +27,30 @@ function buildHtml(lat: number, lng: number): string {
 </head>
 <body>
 <div id="map"></div>
+<script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=${JS_KEY}&libraries=services&autoload=false"></script>
 <script>
 var map, marker;
 
+function send(obj) {
+  if (window.ReactNativeWebView) window.ReactNativeWebView.postMessage(JSON.stringify(obj));
+}
+
 function init(lat, lng) {
   var pos = new kakao.maps.LatLng(lat, lng);
-  map = new kakao.maps.Map(document.getElementById('map'), {
-    center: pos, level: 3
-  });
+  map = new kakao.maps.Map(document.getElementById('map'), { center: pos, level: 3 });
   marker = new kakao.maps.Marker({ position: pos, draggable: true });
   marker.setMap(map);
   kakao.maps.event.addListener(marker, 'dragend', function() {
     var p = marker.getPosition();
     send({ type: 'dragend', lat: p.getLat(), lng: p.getLng() });
   });
+  send({ type: 'ready' });
 }
 
 function moveTo(lat, lng) {
   var pos = new kakao.maps.LatLng(lat, lng);
   if (marker) marker.setPosition(pos);
   if (map) map.panTo(pos);
-  send({ type: 'moved', lat: lat, lng: lng });
-}
-
-function send(obj) {
-  if (window.ReactNativeWebView) window.ReactNativeWebView.postMessage(JSON.stringify(obj));
 }
 
 function handleMsg(e) {
@@ -64,7 +62,7 @@ function handleMsg(e) {
 window.addEventListener('message', handleMsg);
 document.addEventListener('message', handleMsg);
 
-init(${lat}, ${lng});
+kakao.maps.load(function() { init(${lat}, ${lng}); });
 </script>
 </body>
 </html>`;
@@ -97,6 +95,8 @@ const KakaoMap = forwardRef<KakaoMapRef, Props>(({ initialLat, initialLng, onPin
         javaScriptEnabled
         domStorageEnabled
         allowsInlineMediaPlayback
+        mixedContentMode="always"
+        allowsFullscreenVideo={false}
         onMessage={onMessage}
         scrollEnabled={false}
         style={styles.webview}
