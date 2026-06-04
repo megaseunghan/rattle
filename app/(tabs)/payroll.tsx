@@ -140,7 +140,7 @@ export default function PayrollScreen() {
   const [month, setMonth] = useState(today.getMonth() + 1);
 
   const yearMonth = toYearMonth(year, month);
-  const { employees, loading: empLoading, refetch: refetchEmp, add, update } = useEmployees();
+  const { employees, loading: empLoading, refetch: refetchEmp, add, update, deactivate } = useEmployees();
   const { payrolls, loading: payLoading, calculating, refetch: refetchPay, calculate } = usePayroll(yearMonth);
 
   const [modalVisible, setModalVisible] = useState(false);
@@ -409,6 +409,29 @@ export default function PayrollScreen() {
                 }
               </TouchableOpacity>
             </View>
+            {editTarget && (
+              <TouchableOpacity
+                style={styles.deleteBtn}
+                onPress={() => {
+                  Alert.alert('직원 삭제', `${editTarget.name}을(를) 삭제할까요?`, [
+                    { text: '취소', style: 'cancel' },
+                    {
+                      text: '삭제', style: 'destructive',
+                      onPress: async () => {
+                        try {
+                          await deactivate(editTarget.id);
+                          setModalVisible(false);
+                        } catch (e: any) {
+                          Alert.alert('삭제 실패', e.message);
+                        }
+                      },
+                    },
+                  ]);
+                }}
+              >
+                <Text style={styles.deleteBtnText}>직원 삭제</Text>
+              </TouchableOpacity>
+            )}
             <View style={{ height: 40 }} />
           </ScrollView>
         </KeyboardAvoidingView>
@@ -490,4 +513,6 @@ const styles = StyleSheet.create({
   cancelBtnText: { fontSize: 14, fontWeight: '600', color: Colors.gray600 },
   saveBtn: { flex: 1, paddingVertical: 13, borderRadius: 12, backgroundColor: Colors.black, alignItems: 'center' },
   saveBtnText: { fontSize: 14, fontWeight: '600', color: Colors.white },
+  deleteBtn: { marginTop: 12, paddingVertical: 13, alignItems: 'center' },
+  deleteBtnText: { fontSize: 14, color: '#D94040' },
 });
