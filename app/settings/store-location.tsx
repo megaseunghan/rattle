@@ -1,98 +1,83 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, Alert,
-  ActivityIndicator, TextInput, FlatList,
-  KeyboardAvoidingView, Platform,
+  View, Text, StyleSheet, TouchableOpacity,
+  Alert, ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import * as Location from 'expo-location';
 import { Colors } from '../../constants/colors';
 import { useAuth } from '../../lib/contexts/AuthContext';
 import { updateStoreLocation } from '../../lib/services/attendance';
-import { searchKakaoPlaces, reverseGeocode, KakaoPlace } from '../../lib/services/kakaoLocal';
-import KakaoMap, { KakaoMapRef } from '../../lib/components/KakaoMap';
+import { searchKakaoPlaces } from '../../lib/services/kakaoLocal';
 
-const SEOUL = { lat: 37.5665, lng: 126.9780 };
+interface GeoResult {
+  latitude: number;
+  longitude: number;
+  address: string;
+}
 
 export default function StoreLocationScreen() {
   const { store, refreshStore } = useAuth();
-
-  const initialLat = store?.latitude ?? SEOUL.lat;
-  const initialLng = store?.longitude ?? SEOUL.lng;
-
-  const [pin, setPin] = useState({ latitude: initialLat, longitude: initialLng });
-  const [address, setAddress] = useState('');
-  const [query, setQuery] = useState('');
-  const [results, setResults] = useState<KakaoPlace[]>([]);
-  const [searchLoading, setSearchLoading] = useState(false);
-  const [gpsLoading, setGpsLoading] = useState(false);
+  const [geoResult, setGeoResult] = useState<GeoResult | null>(null);
+  const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  const mapRef = useRef<KakaoMapRef>(null);
+  const hasLocation = store?.latitude != null && store?.longitude != null;
 
-  const moveToCoord = useCallback(async (lat: number, lng: number) => {
-    setPin({ latitude: lat, longitude: lng });
-    mapRef.current?.moveToCoord(lat, lng);
-    const addr = await reverseGeocode(lat, lng);
-    setAddress(addr);
-  }, []);
+  useEffect(() => {
+    if (!store?.address) return;
+    geocodeAddress(store.address);
+  }, [store?.address]);
 
-  async function handleGps() {
-    setGpsLoading(true);
+  async function geocodeAddress(address: string) {
+    setLoading(true);
     try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') { Alert.alert('권한 필요', '위치 권한이 필요합니다.'); return; }
-      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
-      await moveToCoord(loc.coords.latitude, loc.coords.longitude);
-      setResults([]);
-      setQuery('');
+      const results = await searchKakaoPlaces(address);
+      if (results.length === 0) {
+        Alert.alert('주소 변환 실패', '매장 주소로 위치를 찾지 못했어요.\n매장 주소를 확인해주세요.');
+        return;
+      }
+      const r = results[0];
+      setGeoResult({
+        latitude: r.latitude,
+        longitude: r.longitude,
+        address: r.road_address_name || r.address_name,
+      });
     } catch (e: any) {
       Alert.alert('오류', e.message);
     } finally {
-      setGpsLoading(false);
+      setLoading(false);
     }
   }
 
-  async function handleSearch() {
-    const q = query.trim();
-    if (!q) return;
-    setSearchLoading(true);
-    setResults([]);
-    try {
-      const list = await searchKakaoPlaces(q);
-      if (list.length === 0) {
-        Alert.alert('검색 결과 없음', '다른 검색어로 다시 시도해보세요.');
-      } else {
-        setResults(list);
-      }
-    } catch (e: any) {
-      Alert.alert('검색 오류', e.message);
-    } finally {
-      setSearchLoading(false);
-    }
-  }
+  async function handleRegister() {
+    if (!geoResult || !store) return;
 
-  async function handleSelectPlace(place: KakaoPlace) {
-    setResults([]);
-    setQuery(place.road_address_name || place.address_name);
-    await moveToCoord(place.latitude, place.longitude);
-  }
-
-  async function handleSave() {
-    setSaving(true);
-    try {
-      await updateStoreLocation(store!.id, pin.latitude, pin.longitude);
-      await refreshStore();
-      Alert.alert('완료', '매장 위치가 저장됐습니다.', [
-        { text: '확인', onPress: () => router.back() },
-      ]);
-    } catch (e: any) {
-      Alert.alert('저장 실패', e.message);
-    } finally {
-      setSaving(false);
-    }
+    Alert.alert(
+      '위치 등록',
+      `아래 주소로 출퇴근 기준 위치를 등록할까요?\n\n${geoResult.address}`,
+      [
+        { text: '아니오', style: 'cancel' },
+        {
+          text: '예',
+          onPress: async () => {
+            setSaving(true);
+            try {
+              await updateStoreLocation(store.id, geoResult.latitude, geoResult.longitude);
+              await refreshStore();
+              Alert.alert('완료', '매장 위치가 등록됐습니다.', [
+                { text: '확인', onPress: () => router.back() },
+              ]);
+            } catch (e: any) {
+              Alert.alert('저장 실패', e.message);
+            } finally {
+              setSaving(false);
+            }
+          },
+        },
+      ],
+    );
   }
 
   return (
@@ -102,167 +87,134 @@ export default function StoreLocationScreen() {
           <Ionicons name="chevron-back" size={22} color={Colors.black} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>매장 위치 등록</Text>
-        <TouchableOpacity
-          style={[styles.saveBtn, saving && { opacity: 0.5 }]}
-          onPress={handleSave}
-          disabled={saving}
-          activeOpacity={0.7}
-        >
-          {saving ? <ActivityIndicator size="small" color={Colors.white} /> : <Text style={styles.saveBtnText}>저장</Text>}
-        </TouchableOpacity>
+        <View style={{ width: 36 }} />
       </View>
 
-      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        {/* 검색바 */}
-        <View style={styles.searchBar}>
-          <Ionicons name="search-outline" size={16} color={Colors.gray400} />
-          <TextInput
-            style={styles.searchInput}
-            value={query}
-            onChangeText={setQuery}
-            placeholder="도로명, 동읍면, 건물명 검색"
-            placeholderTextColor={Colors.gray300}
-            returnKeyType="search"
-            onSubmitEditing={handleSearch}
-          />
-          {searchLoading
-            ? <ActivityIndicator size="small" color={Colors.gray400} />
-            : <TouchableOpacity onPress={handleSearch} activeOpacity={0.7}>
-                <Text style={styles.searchBtnText}>검색</Text>
-              </TouchableOpacity>
-          }
+      <View style={styles.body}>
+        <View style={styles.infoCard}>
+          <Ionicons name="location" size={28} color={Colors.primary} style={{ marginBottom: 10 }} />
+          <Text style={styles.infoTitle}>출퇴근 GPS 기준점 등록</Text>
+          <Text style={styles.infoDesc}>
+            매장 주소를 기반으로 위치를 등록합니다.{'\n'}
+            직원이 40m 이내에서 출퇴근을 찍을 수 있습니다.
+          </Text>
         </View>
 
-        {/* 검색 결과 */}
-        {results.length > 0 && (
-          <View style={styles.resultList}>
-            <FlatList
-              data={results}
-              keyExtractor={(_, i) => String(i)}
-              keyboardShouldPersistTaps="handled"
-              renderItem={({ item, index }) => (
-                <TouchableOpacity
-                  style={[styles.resultItem, index < results.length - 1 && styles.resultBorder]}
-                  onPress={() => handleSelectPlace(item)}
-                  activeOpacity={0.7}
-                >
-                  <Ionicons name="location-outline" size={15} color={Colors.primary} style={{ marginTop: 2 }} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.placeName} numberOfLines={1}>{item.place_name}</Text>
-                    <Text style={styles.placeAddr} numberOfLines={1}>
-                      {item.road_address_name || item.address_name}
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-              )}
-            />
+        {/* 매장 주소 */}
+        <View style={styles.addressCard}>
+          <Text style={styles.addressLabel}>등록된 매장 주소</Text>
+          <Text style={styles.addressText}>
+            {store?.address ?? '주소가 등록되어 있지 않습니다.'}
+          </Text>
+        </View>
+
+        {/* 변환된 좌표 */}
+        {loading ? (
+          <View style={styles.loadingRow}>
+            <ActivityIndicator size="small" color={Colors.primary} />
+            <Text style={styles.loadingText}>주소 변환 중...</Text>
+          </View>
+        ) : geoResult ? (
+          <View style={styles.coordCard}>
+            <View style={styles.coordRow}>
+              <Ionicons name="checkmark-circle" size={16} color={Colors.success} />
+              <Text style={styles.coordLabel}>변환된 위치</Text>
+            </View>
+            <Text style={styles.coordAddr}>{geoResult.address}</Text>
+            <Text style={styles.coordValues}>
+              위도 {geoResult.latitude.toFixed(6)} · 경도 {geoResult.longitude.toFixed(6)}
+            </Text>
+          </View>
+        ) : null}
+
+        {/* 현재 등록된 위치 */}
+        {hasLocation && (
+          <View style={styles.currentCard}>
+            <Ionicons name="location" size={14} color={Colors.gray400} />
+            <Text style={styles.currentText}>
+              현재 등록된 위치: {store!.latitude!.toFixed(5)}, {store!.longitude!.toFixed(5)}
+            </Text>
           </View>
         )}
 
-        {/* 지도 */}
-        <View style={styles.mapWrap}>
-          <KakaoMap
-            ref={mapRef}
-            initialLat={initialLat}
-            initialLng={initialLng}
-            onPinMoved={async (lat, lng) => {
-              setPin({ latitude: lat, longitude: lng });
-              const addr = await reverseGeocode(lat, lng);
-              setAddress(addr);
-            }}
-          />
+        {/* 등록 버튼 */}
+        <TouchableOpacity
+          style={[styles.btn, (!geoResult || saving) && styles.btnDisabled]}
+          onPress={handleRegister}
+          disabled={!geoResult || saving}
+          activeOpacity={0.7}
+        >
+          {saving
+            ? <ActivityIndicator size="small" color={Colors.white} />
+            : <>
+                <Ionicons name="location-outline" size={17} color={Colors.white} />
+                <Text style={styles.btnText}>{hasLocation ? '위치 다시 등록' : '위치 등록'}</Text>
+              </>
+          }
+        </TouchableOpacity>
 
-          {/* GPS 버튼 */}
-          <TouchableOpacity
-            style={[styles.gpsBtn, gpsLoading && { opacity: 0.5 }]}
-            onPress={handleGps}
-            disabled={gpsLoading}
-            activeOpacity={0.7}
-          >
-            {gpsLoading
-              ? <ActivityIndicator size="small" color={Colors.black} />
-              : <Ionicons name="locate-outline" size={20} color={Colors.black} />
-            }
-          </TouchableOpacity>
-
-          {/* 주소/좌표 배지 */}
-          <View style={styles.coordBadge}>
-            <Ionicons name="location" size={13} color={Colors.primary} />
-            <Text style={styles.coordText} numberOfLines={1}>
-              {address || `${pin.latitude.toFixed(5)}, ${pin.longitude.toFixed(5)}`}
-            </Text>
+        {!store?.address && (
+          <View style={styles.warningRow}>
+            <Ionicons name="warning-outline" size={14} color={Colors.warning} />
+            <Text style={styles.warningText}>매장 주소가 없습니다. TossPos 연동 설정에서 주소를 먼저 등록해주세요.</Text>
           </View>
-        </View>
-
-        {/* 안내 */}
-        <View style={styles.hint}>
-          <Ionicons name="information-circle-outline" size={14} color={Colors.gray400} />
-          <Text style={styles.hintText}>핀을 드래그하거나 검색해서 위치를 조정하세요. 저장 후 40m 이내에서 출퇴근이 가능합니다.</Text>
-        </View>
-      </KeyboardAvoidingView>
+        )}
+      </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.white },
-  flex: { flex: 1 },
+  container: { flex: 1, backgroundColor: Colors.gray50 },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 16, paddingVertical: 12,
-    borderBottomWidth: 0.5, borderBottomColor: Colors.gray100,
+    paddingHorizontal: 16, paddingVertical: 14,
+    backgroundColor: Colors.white, borderBottomWidth: 0.5, borderBottomColor: Colors.gray100,
   },
   backBtn: { width: 36, height: 36, justifyContent: 'center' },
   headerTitle: { fontSize: 16, fontWeight: '700', color: Colors.black },
-  saveBtn: { backgroundColor: Colors.primary, borderRadius: 10, paddingHorizontal: 16, paddingVertical: 7 },
-  saveBtnText: { fontSize: 13, fontWeight: '700', color: Colors.white },
 
-  searchBar: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    paddingHorizontal: 16, paddingVertical: 10,
-    borderBottomWidth: 0.5, borderBottomColor: Colors.gray100,
-    backgroundColor: Colors.white,
+  body: { padding: 16, gap: 12 },
+
+  infoCard: { backgroundColor: Colors.tinted, borderRadius: 16, padding: 20, alignItems: 'center' },
+  infoTitle: { fontSize: 14, fontWeight: '700', color: Colors.deeper, marginBottom: 6 },
+  infoDesc: { fontSize: 13, color: Colors.dark, textAlign: 'center', lineHeight: 20 },
+
+  addressCard: {
+    backgroundColor: Colors.white, borderRadius: 14,
+    borderWidth: 0.5, borderColor: Colors.gray100, padding: 14, gap: 4,
   },
-  searchInput: { flex: 1, fontSize: 14, color: Colors.black, paddingVertical: 4 },
-  searchBtnText: { fontSize: 13, fontWeight: '600', color: Colors.primary },
+  addressLabel: { fontSize: 11, color: Colors.gray400, fontWeight: '500', textTransform: 'uppercase', letterSpacing: 0.5 },
+  addressText: { fontSize: 14, color: Colors.black, fontWeight: '500', lineHeight: 20 },
 
-  resultList: {
-    backgroundColor: Colors.white, maxHeight: 220,
-    borderBottomWidth: 0.5, borderBottomColor: Colors.gray100,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08, shadowRadius: 8, elevation: 4, zIndex: 10,
+  loadingRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8 },
+  loadingText: { fontSize: 13, color: Colors.gray400 },
+
+  coordCard: {
+    backgroundColor: Colors.white, borderRadius: 14,
+    borderWidth: 0.5, borderColor: Colors.gray100, padding: 14, gap: 4,
   },
-  resultItem: {
-    flexDirection: 'row', alignItems: 'flex-start', gap: 8,
-    paddingHorizontal: 16, paddingVertical: 12,
-  },
-  resultBorder: { borderBottomWidth: 0.5, borderBottomColor: Colors.gray100 },
-  placeName: { fontSize: 13, fontWeight: '600', color: Colors.black },
-  placeAddr: { fontSize: 12, color: Colors.gray400, marginTop: 2 },
+  coordRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  coordLabel: { fontSize: 12, fontWeight: '600', color: Colors.success },
+  coordAddr: { fontSize: 13, color: Colors.black, fontWeight: '500' },
+  coordValues: { fontSize: 12, color: Colors.gray400 },
 
-  mapWrap: { flex: 1, position: 'relative' },
-
-  gpsBtn: {
-    position: 'absolute', top: 12, right: 12,
-    width: 44, height: 44, borderRadius: 12,
-    backgroundColor: Colors.white, justifyContent: 'center', alignItems: 'center',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.12, shadowRadius: 6, elevation: 4, zIndex: 5,
-  },
-
-  coordBadge: {
-    position: 'absolute', bottom: 14, left: 12, right: 12,
+  currentCard: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
-    backgroundColor: Colors.white, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1, shadowRadius: 6, elevation: 3, zIndex: 5,
+    backgroundColor: Colors.gray100, borderRadius: 10, padding: 10,
   },
-  coordText: { flex: 1, fontSize: 13, color: Colors.black, fontWeight: '500' },
+  currentText: { fontSize: 12, color: Colors.gray500, flex: 1 },
 
-  hint: {
-    flexDirection: 'row', alignItems: 'flex-start', gap: 6,
-    paddingHorizontal: 16, paddingVertical: 12,
-    backgroundColor: Colors.gray50, borderTopWidth: 0.5, borderTopColor: Colors.gray100,
+  btn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    backgroundColor: Colors.primary, borderRadius: 14, paddingVertical: 14,
   },
-  hintText: { flex: 1, fontSize: 12, color: Colors.gray400, lineHeight: 18 },
+  btnDisabled: { opacity: 0.4 },
+  btnText: { fontSize: 15, fontWeight: '700', color: Colors.white },
+
+  warningRow: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: 6,
+    backgroundColor: Colors.warning + '18', borderRadius: 10, padding: 12,
+  },
+  warningText: { flex: 1, fontSize: 12, color: Colors.warning, lineHeight: 18 },
 });
