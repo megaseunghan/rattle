@@ -31,10 +31,14 @@ export async function fetchTossOrderDetail(
       }
       return Number(data.totalAmount ?? data.totalOrderAmount ?? data.totalPrice ?? data.totalOrderPrice ?? data.amount ?? 0);
     })();
+    const detailTotal = rawTotal || detailItems.reduce((sum, item) => sum + item.totalPrice, 0);
+    const { cardAmount, cashAmount } = parsePaymentAmounts(data, detailTotal);
     return {
       orderId:     data.orderId     ?? data.id          ?? orderId,
       orderAt:     data.orderAt     ?? data.createdAt   ?? data.openedAt ?? '',
-      totalAmount: rawTotal || detailItems.reduce((sum, item) => sum + item.totalPrice, 0),
+      totalAmount: detailTotal,
+      cardAmount,
+      cashAmount,
       status:      normalizeOrderStatus(data.status  ?? data.orderState ?? ''),
       items:       detailItems,
     };
@@ -104,6 +108,24 @@ export async function fetchTossOrders(
   return allOrders;
 }
 
+const CASH_TYPES = new Set(['CASH', 'ACCOUNT_TRANSFER']);
+
+function parsePaymentAmounts(o: any, totalAmount: number): { cardAmount: number; cashAmount: number } {
+  const sources: any[] = o.paymentSources ?? o.payments ?? o.paymentSource ?? [];
+  if (!Array.isArray(sources) || sources.length === 0) {
+    return { cardAmount: totalAmount, cashAmount: 0 };
+  }
+  let cash = 0;
+  let card = 0;
+  for (const s of sources) {
+    const type = String(s.paymentSourceType ?? s.type ?? '').toUpperCase();
+    const amount = Number(s.amount ?? s.price ?? 0);
+    if (CASH_TYPES.has(type)) cash += amount;
+    else card += amount;
+  }
+  return { cardAmount: card, cashAmount: cash };
+}
+
 function normalizeTossOrders(raw: unknown[]): TossOrder[] {
   return raw.map((o: any) => {
     const items = normalizeOrderItems(o.lineItems ?? o.items ?? o.orderItems ?? o.menuItems ?? []);
@@ -111,20 +133,20 @@ function normalizeTossOrders(raw: unknown[]): TossOrder[] {
       if (o.chargePrice) {
         const t = Number(o.chargePrice.totalAmount ?? 0);
         if (t > 0) return t;
-        // discountAmount는 음수로 표현됨 (예: -46400)
-        // listPrice + discountAmount = 실제 결제 금액 (전체 할인 시 0)
         return Number(o.chargePrice.listPrice ?? 0) + Number(o.chargePrice.discountAmount ?? 0);
       }
       return Number(o.totalAmount ?? o.totalOrderAmount ?? o.totalPrice ?? o.totalOrderPrice ?? o.amount ?? 0);
     })();
-    // chargePrice가 있으면 0도 유효한 값(전체 할인), 없을 때만 items 합산 fallback
     const totalAmount = o.chargePrice != null
       ? rawTotal
       : (rawTotal || items.reduce((sum, item) => sum + item.totalPrice, 0));
+    const { cardAmount, cashAmount } = parsePaymentAmounts(o, totalAmount);
     return {
       orderId:     o.orderId     ?? o.id          ?? '',
       orderAt:     o.orderAt     ?? o.createdAt   ?? o.openedAt ?? '',
       totalAmount,
+      cardAmount,
+      cashAmount,
       status:      normalizeOrderStatus(o.status  ?? o.orderState ?? ''),
       items,
     };
