@@ -97,9 +97,9 @@ export async function calculatePayroll(employee: Employee): Promise<Omit<Payroll
   // 4대보험 적용
   const taxableBase = calcTaxableBase(employee);
 
-  // 국민연금: min(max(과세기준액, 390,000), 6,170,000) × 4.75% → 천원 미만 버림
+  // 국민연금: min(max(과세기준액, 390,000), 6,170,000) × 4.75% → 10원 미만 버림
   const npBase = Math.min(Math.max(taxableBase, 390_000), 6_170_000);
-  const nationalPension = floorTo(Math.round(npBase * 0.0475), 1_000);
+  const nationalPension = floorTo(Math.round(npBase * 0.0475), 10);
 
   // 건강보험: × 3.595% → 10원 미만 버림
   const healthInsurance = floorTo(Math.round(taxableBase * 0.03595), 10);
