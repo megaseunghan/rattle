@@ -93,9 +93,14 @@ export async function updateStoreLocation(
   latitude: number,
   longitude: number,
 ): Promise<void> {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('stores')
     .update({ latitude, longitude })
-    .eq('id', storeId);
-  if (error) throw new Error(error.message);
+    .eq('id', storeId)
+    .select('id, latitude, longitude');
+
+  if (error) throw new Error(`저장 실패: ${error.message} (code: ${error.code})`);
+  if (!data || data.length === 0) {
+    throw new Error('위치 저장 권한이 없거나 매장을 찾을 수 없습니다. Supabase RLS 정책을 확인해주세요.');
+  }
 }
