@@ -15,12 +15,21 @@ function fmt(v: number | null | undefined): string {
   return `${v.toLocaleString()}원`;
 }
 
-function PnLRow({ label, value, onPress, loading }: {
-  label: string; value: string; onPress?: () => void; loading?: boolean;
+function pct(value: number | null | undefined, total: number | null | undefined): string {
+  if (!value || !total) return '';
+  const p = Math.round((value / total) * 1000) / 10;
+  return `${p}%`;
+}
+
+function PnLRow({ label, value, ratio, onPress, loading }: {
+  label: string; value: string; ratio?: string; onPress?: () => void; loading?: boolean;
 }) {
   const inner = (
     <View style={styles.pnlRow}>
-      <Text style={styles.pnlLabel}>{label}</Text>
+      <View style={styles.pnlLabelRow}>
+        <Text style={styles.pnlLabel}>{label}</Text>
+        {ratio ? <Text style={styles.ratioTag}>{ratio}</Text> : null}
+      </View>
       <View style={styles.pnlRight}>
         {loading
           ? <ActivityIndicator size="small" color={Colors.gray300} />
@@ -34,11 +43,14 @@ function PnLRow({ label, value, onPress, loading }: {
   return inner;
 }
 
-function PnLSubRow({ label, value }: { label: string; value: string }) {
+function PnLSubRow({ label, value, ratio }: { label: string; value: string; ratio?: string }) {
   return (
     <View style={styles.subRow}>
       <Text style={styles.subLabel}>{label}</Text>
-      <Text style={styles.subValue}>{value}</Text>
+      <View style={styles.subRight}>
+        {ratio ? <Text style={styles.subRatio}>{ratio}</Text> : null}
+        <Text style={styles.subValue}>{value}</Text>
+      </View>
     </View>
   );
 }
@@ -50,6 +62,7 @@ function PnLDivider() {
 function PnLCard({ pnl, loading }: { pnl: ProfitLoss | null; loading: boolean }) {
   const cats = pnl?.purchaseByCategory ?? {};
   const catOrder = ['식자재', '비품', '소모품', '주류', '기타'] as const;
+  const rev = pnl?.revenue ?? 0;
   const totalExpense = (pnl?.fixedExpense ?? 0) + (pnl?.variableExpense ?? 0);
   const isProfit = (pnl?.operatingProfit ?? 0) >= 0;
 
@@ -58,40 +71,41 @@ function PnLCard({ pnl, loading }: { pnl: ProfitLoss | null; loading: boolean })
 
       {/* 매출 */}
       <PnLRow label="매출" value={fmt(pnl?.revenue)} onPress={() => router.push('/(tabs)/pos')} loading={loading} />
-      <PnLSubRow label="카드" value={fmt(pnl?.cardRevenue)} />
-      <PnLSubRow label="현금·계좌이체" value={fmt(pnl?.cashRevenue)} />
+      <PnLSubRow label="카드" value={fmt(pnl?.cardRevenue)} ratio={pct(pnl?.cardRevenue, rev)} />
+      <PnLSubRow label="현금·계좌이체" value={fmt(pnl?.cashRevenue)} ratio={pct(pnl?.cashRevenue, rev)} />
 
       <PnLDivider />
 
       {/* 매입 */}
-      <PnLRow label="매입" value={fmt(pnl?.purchaseCost)} onPress={() => router.push('/(tabs)/purchases')} loading={loading} />
+      <PnLRow label="매입" value={fmt(pnl?.purchaseCost)} ratio={pct(pnl?.purchaseCost, rev)} onPress={() => router.push('/(tabs)/purchases')} loading={loading} />
       {catOrder.map(cat => (
-        <PnLSubRow key={cat} label={cat} value={fmt(cats[cat] ?? 0)} />
+        <PnLSubRow key={cat} label={cat} value={fmt(cats[cat] ?? 0)} ratio={pct(cats[cat] ?? 0, pnl?.purchaseCost)} />
       ))}
 
       <PnLDivider />
 
       {/* 인건비 */}
-      <PnLRow label="인건비" value={fmt(pnl?.laborCost)} onPress={() => router.push('/(tabs)/payroll')} loading={loading} />
-      <PnLSubRow label="직원 인건비" value={fmt(pnl?.regularGross)} />
-      <PnLSubRow label="직원 원천징수" value={fmt(pnl?.regularWithholding)} />
-      <PnLSubRow label="파트타이머 인건비" value={fmt(pnl?.partTimeGross)} />
-      <PnLSubRow label="파트타이머 원천징수" value={fmt(pnl?.partTimeWithholding)} />
+      <PnLRow label="인건비" value={fmt(pnl?.laborCost)} ratio={pct(pnl?.laborCost, rev)} onPress={() => router.push('/(tabs)/payroll')} loading={loading} />
+      <PnLSubRow label="직원 인건비" value={fmt(pnl?.regularGross)} ratio={pct(pnl?.regularGross, pnl?.laborCost)} />
+      <PnLSubRow label="직원 원천징수" value={fmt(pnl?.regularWithholding)} ratio={pct(pnl?.regularWithholding, pnl?.laborCost)} />
+      <PnLSubRow label="파트타이머 인건비" value={fmt(pnl?.partTimeGross)} ratio={pct(pnl?.partTimeGross, pnl?.laborCost)} />
+      <PnLSubRow label="파트타이머 원천징수" value={fmt(pnl?.partTimeWithholding)} ratio={pct(pnl?.partTimeWithholding, pnl?.laborCost)} />
 
       <PnLDivider />
 
       {/* 비용 */}
-      <PnLRow label="비용" value={fmt(totalExpense)} onPress={() => router.push('/(tabs)/expenses')} loading={loading} />
-      <PnLSubRow label="고정비" value={fmt(pnl?.fixedExpense)} />
-      <PnLSubRow label="마케팅" value={fmt(pnl?.marketingExpense)} />
-      <PnLSubRow label="시설보수" value={fmt(pnl?.maintenanceExpense)} />
-      <PnLSubRow label="공과금" value={fmt(pnl?.utilitiesExpense)} />
+      <PnLRow label="비용" value={fmt(totalExpense)} ratio={pct(totalExpense, rev)} onPress={() => router.push('/(tabs)/expenses')} loading={loading} />
+      <PnLSubRow label="고정비" value={fmt(pnl?.fixedExpense)} ratio={pct(pnl?.fixedExpense, totalExpense)} />
+      <PnLSubRow label="마케팅" value={fmt(pnl?.marketingExpense)} ratio={pct(pnl?.marketingExpense, totalExpense)} />
+      <PnLSubRow label="시설보수" value={fmt(pnl?.maintenanceExpense)} ratio={pct(pnl?.maintenanceExpense, totalExpense)} />
+      <PnLSubRow label="공과금" value={fmt(pnl?.utilitiesExpense)} ratio={pct(pnl?.utilitiesExpense, totalExpense)} />
 
       {/* 영업이익 */}
       <View style={[styles.profitRow, isProfit ? styles.profitRowPos : styles.profitRowNeg]}>
-        <Text style={[styles.profitLabel, isProfit ? styles.profitLabelPos : styles.profitLabelNeg]}>
-          영업이익
-        </Text>
+        <View style={styles.profitLabelRow}>
+          <Text style={[styles.profitLabel, isProfit ? styles.profitLabelPos : styles.profitLabelNeg]}>영업이익</Text>
+          {rev > 0 && <Text style={[styles.profitRatio, isProfit ? styles.profitRatioPos : styles.profitRatioNeg]}>{pct(pnl?.operatingProfit, rev)}</Text>}
+        </View>
         {loading
           ? <ActivityIndicator size="small" color={Colors.primary} />
           : <Text style={[styles.profitValue, isProfit ? styles.profitValuePos : styles.profitValueNeg]}>
@@ -256,7 +270,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     paddingHorizontal: 16, paddingVertical: 11,
   },
+  pnlLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   pnlLabel: { fontSize: 14, fontWeight: '600', color: Colors.black },
+  ratioTag: { fontSize: 11, color: Colors.gray400, fontWeight: '400' },
   pnlRight: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   pnlValue: { fontSize: 14, fontWeight: '600', color: Colors.black },
 
@@ -264,7 +280,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     paddingHorizontal: 28, paddingVertical: 5,
   },
-  subLabel: { fontSize: 12, color: Colors.gray400 },
+  subLabel: { fontSize: 12, color: Colors.gray400, flex: 1 },
+  subRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  subRatio: { fontSize: 11, color: Colors.gray300 },
   subValue: { fontSize: 12, color: Colors.gray500 },
 
   pnlDivider: { height: 0.5, backgroundColor: Colors.gray100, marginHorizontal: 16, marginVertical: 4 },
@@ -276,9 +294,13 @@ const styles = StyleSheet.create({
   },
   profitRowPos: { backgroundColor: Colors.tinted },
   profitRowNeg: { backgroundColor: '#FEF2F2' },
+  profitLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   profitLabel: { fontSize: 14, fontWeight: '700' },
   profitLabelPos: { color: Colors.deeper },
   profitLabelNeg: { color: '#991B1B' },
+  profitRatio: { fontSize: 12, fontWeight: '500' },
+  profitRatioPos: { color: Colors.primary + 'AA' },
+  profitRatioNeg: { color: '#DC2626AA' },
   profitValue: { fontSize: 17, fontWeight: '800' },
   profitValuePos: { color: Colors.primary },
   profitValueNeg: { color: '#DC2626' },
