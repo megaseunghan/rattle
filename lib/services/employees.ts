@@ -60,6 +60,15 @@ export async function deactivateEmployee(id: string): Promise<void> {
   if (error) throw new Error(error.message);
 }
 
+export async function deleteEmployee(id: string): Promise<void> {
+  const { error } = await supabase
+    .from('employees')
+    .delete()
+    .eq('id', id);
+
+  if (error) throw new Error(error.message);
+}
+
 /** 수습 기간 중인지 여부 (2달 기준) */
 export function isInProbation(employee: Employee): boolean {
   if (!employee.is_probation || !employee.probation_started_at) return false;

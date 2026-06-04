@@ -140,7 +140,7 @@ export default function PayrollScreen() {
   const [month, setMonth] = useState(today.getMonth() + 1);
 
   const yearMonth = toYearMonth(year, month);
-  const { employees, loading: empLoading, refetch: refetchEmp, add, update, deactivate } = useEmployees();
+  const { employees, loading: empLoading, refetch: refetchEmp, add, update, remove } = useEmployees();
   const { payrolls, loading: payLoading, calculating, refetch: refetchPay, calculate } = usePayroll(yearMonth);
 
   const [modalVisible, setModalVisible] = useState(false);
@@ -419,7 +419,7 @@ export default function PayrollScreen() {
                       text: '삭제', style: 'destructive',
                       onPress: async () => {
                         try {
-                          await deactivate(editTarget.id);
+                          await remove(editTarget.id);
                           setModalVisible(false);
                         } catch (e: any) {
                           Alert.alert('삭제 실패', e.message);
