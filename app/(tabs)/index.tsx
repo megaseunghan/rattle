@@ -149,13 +149,22 @@ export default function HomeScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.topBar}>
-        <Text style={styles.title}>오늘의 현황</Text>
-        <View style={styles.storePill}>
-          <Ionicons name="business-outline" size={12} color={Colors.gray500} />
-          <Text style={styles.storePillText} numberOfLines={1}>
-            {store?.name ?? ''} · {monthLabel}
-          </Text>
+        <View>
+          <Text style={styles.title}>오늘의 현황</Text>
+          <View style={styles.storePill}>
+            <Ionicons name="business-outline" size={12} color={Colors.gray500} />
+            <Text style={styles.storePillText} numberOfLines={1}>
+              {store?.name ?? ''} · {monthLabel}
+            </Text>
+          </View>
         </View>
+        <TouchableOpacity
+          onPress={() => router.push('/(tabs)/more')}
+          style={styles.settingsBtn}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="settings-outline" size={22} color={Colors.gray500} />
+        </TouchableOpacity>
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
@@ -218,13 +227,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20, paddingTop: 16, paddingBottom: 14,
     backgroundColor: Colors.white, borderBottomWidth: 0.5, borderBottomColor: Colors.gray100,
   },
-  title: { fontSize: 17, fontWeight: '700', color: Colors.black },
+  title: { fontSize: 17, fontWeight: '700', color: Colors.black, marginBottom: 4 },
   storePill: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
     backgroundColor: Colors.gray100, paddingHorizontal: 10, paddingVertical: 4,
-    borderRadius: 20, maxWidth: 210,
+    borderRadius: 20, alignSelf: 'flex-start',
   },
   storePillText: { fontSize: 12, color: Colors.gray500 },
+  settingsBtn: {
+    width: 38, height: 38, borderRadius: 12,
+    backgroundColor: Colors.gray100, justifyContent: 'center', alignItems: 'center',
+  },
   scroll: { padding: 16, gap: 14, paddingBottom: 48 },
 
   metricRow: { flexDirection: 'row', gap: 10 },
