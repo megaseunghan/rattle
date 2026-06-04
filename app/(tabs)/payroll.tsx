@@ -86,8 +86,12 @@ function EmployeeCard({
                 <Text style={styles.payrollDeduct}>-{payroll.employment_insurance.toLocaleString()}원</Text>
               </View>
               <View style={styles.payrollRow}>
-                <Text style={styles.payrollDeductLabel}>소득세·지방세</Text>
-                <Text style={styles.payrollDeduct}>-{(payroll.income_tax + payroll.local_income_tax).toLocaleString()}원</Text>
+                <Text style={styles.payrollDeductLabel}>소득세</Text>
+                <Text style={styles.payrollDeduct}>-{payroll.income_tax.toLocaleString()}원</Text>
+              </View>
+              <View style={styles.payrollRow}>
+                <Text style={styles.payrollDeductLabel}>지방소득세</Text>
+                <Text style={styles.payrollDeduct}>-{payroll.local_income_tax.toLocaleString()}원</Text>
               </View>
             </>
           ) : (
