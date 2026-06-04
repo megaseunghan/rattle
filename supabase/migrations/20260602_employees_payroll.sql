@@ -126,3 +126,7 @@ ON CONFLICT (year, salary_from) DO NOTHING;
 CREATE INDEX IF NOT EXISTS idx_employees_store    ON employees (store_id, is_active);
 CREATE INDEX IF NOT EXISTS idx_payroll_store_month ON payroll (store_id, year_month);
 CREATE INDEX IF NOT EXISTS idx_payroll_employee    ON payroll (employee_id, year_month);
+
+-- income_tax_table: 공개 데이터이므로 authenticated 사용자 읽기 허용
+ALTER TABLE income_tax_table ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "income_tax_read_all" ON income_tax_table FOR SELECT TO authenticated USING (true);

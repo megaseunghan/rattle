@@ -20,7 +20,7 @@ async function lookupIncomeTax(taxableBase: number, dependents: number): Promise
   const dep = Math.min(Math.max(dependents, 1), 11);
   const colName = `dep_${dep}`;
 
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('income_tax_table')
     .select(`${colName}`)
     .eq('year', 2026)
@@ -28,10 +28,15 @@ async function lookupIncomeTax(taxableBase: number, dependents: number): Promise
     .gt('salary_to', taxableBase)
     .maybeSingle();
 
+  console.log('[급여계산] taxableBase:', taxableBase, 'dep:', dep, 'col:', colName);
+  console.log('[급여계산] income_tax 조회 결과:', data, 'error:', error);
+
   if (data && data[colName] != null) return Number(data[colName]);
 
   // 테이블에 해당 구간 없으면 코드로 근사값 계산
-  return calcIncomeTaxApprox(taxableBase, dependents);
+  const approx = calcIncomeTaxApprox(taxableBase, dependents);
+  console.log('[급여계산] 간이세액표 조회 실패 → 근사값:', approx);
+  return approx;
 }
 
 /** 간이세액표 없을 때 연산 근사값 (국세청 2025년 세율 기준) */
@@ -113,8 +118,8 @@ export async function calculatePayroll(employee: Employee): Promise<Omit<Payroll
   // 소득세 (간이세액표)
   const incomeTax = await lookupIncomeTax(taxableBase, employee.dependents);
 
-  // 지방소득세: 소득세 × 10% → 원 단위
-  const localIncomeTax = Math.floor(incomeTax * 0.1);
+  // 지방소득세: 소득세 × 10% → 10원 미만 버림
+  const localIncomeTax = floorTo(incomeTax * 0.1, 10);
 
   const totalDeduction = nationalPension + healthInsurance + longTermCare
     + employmentInsurance + incomeTax + localIncomeTax;
