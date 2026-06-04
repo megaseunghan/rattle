@@ -8,36 +8,33 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
-import MapView, { Marker, Region } from 'react-native-maps';
 import { Colors } from '../../constants/colors';
 import { useAuth } from '../../lib/contexts/AuthContext';
 import { updateStoreLocation } from '../../lib/services/attendance';
 import { searchKakaoPlaces, reverseGeocode, KakaoPlace } from '../../lib/services/kakaoLocal';
+import KakaoMap, { KakaoMapRef } from '../../lib/components/KakaoMap';
 
-const SEOUL = { latitude: 37.5665, longitude: 126.9780 };
-const DELTA  = { latitudeDelta: 0.003, longitudeDelta: 0.003 };
+const SEOUL = { lat: 37.5665, lng: 126.9780 };
 
 export default function StoreLocationScreen() {
   const { store, refreshStore } = useAuth();
 
-  const initialCoord = store?.latitude != null
-    ? { latitude: store.latitude, longitude: store.longitude! }
-    : SEOUL;
+  const initialLat = store?.latitude ?? SEOUL.lat;
+  const initialLng = store?.longitude ?? SEOUL.lng;
 
-  const [pin, setPin] = useState(initialCoord);
+  const [pin, setPin] = useState({ latitude: initialLat, longitude: initialLng });
   const [address, setAddress] = useState('');
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<KakaoPlace[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
   const [gpsLoading, setGpsLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const mapRef = useRef<MapView>(null);
+
+  const mapRef = useRef<KakaoMapRef>(null);
 
   const moveToCoord = useCallback(async (lat: number, lng: number) => {
     setPin({ latitude: lat, longitude: lng });
-    mapRef.current?.animateToRegion({
-      latitude: lat, longitude: lng, ...DELTA,
-    }, 400);
+    mapRef.current?.moveToCoord(lat, lng);
     const addr = await reverseGeocode(lat, lng);
     setAddress(addr);
   }, []);
@@ -67,9 +64,9 @@ export default function StoreLocationScreen() {
       const list = await searchKakaoPlaces(q);
       if (list.length === 0) {
         Alert.alert('검색 결과 없음', '다른 검색어로 다시 시도해보세요.');
-        return;
+      } else {
+        setResults(list);
       }
-      setResults(list);
     } catch (e: any) {
       Alert.alert('검색 오류', e.message);
     } finally {
@@ -79,15 +76,8 @@ export default function StoreLocationScreen() {
 
   async function handleSelectPlace(place: KakaoPlace) {
     setResults([]);
-    setQuery('');
+    setQuery(place.road_address_name || place.address_name);
     await moveToCoord(place.latitude, place.longitude);
-  }
-
-  async function handleDragEnd(e: any) {
-    const { latitude, longitude } = e.nativeEvent.coordinate;
-    setPin({ latitude, longitude });
-    const addr = await reverseGeocode(latitude, longitude);
-    setAddress(addr);
   }
 
   async function handleSave() {
@@ -104,8 +94,6 @@ export default function StoreLocationScreen() {
       setSaving(false);
     }
   }
-
-  const hasLocation = store?.latitude != null;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -124,8 +112,8 @@ export default function StoreLocationScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* 검색바 */}
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        {/* 검색바 */}
         <View style={styles.searchBar}>
           <Ionicons name="search-outline" size={16} color={Colors.gray400} />
           <TextInput
@@ -161,66 +149,64 @@ export default function StoreLocationScreen() {
                   <Ionicons name="location-outline" size={15} color={Colors.primary} style={{ marginTop: 2 }} />
                   <View style={{ flex: 1 }}>
                     <Text style={styles.placeName} numberOfLines={1}>{item.place_name}</Text>
-                    {item.road_address_name
-                      ? <Text style={styles.placeAddr} numberOfLines={1}>{item.road_address_name}</Text>
-                      : <Text style={styles.placeAddr} numberOfLines={1}>{item.address_name}</Text>
-                    }
+                    <Text style={styles.placeAddr} numberOfLines={1}>
+                      {item.road_address_name || item.address_name}
+                    </Text>
                   </View>
                 </TouchableOpacity>
               )}
             />
           </View>
         )}
-      </KeyboardAvoidingView>
 
-      {/* 지도 */}
-      <View style={styles.mapWrap}>
-        <MapView
-          ref={mapRef}
-          style={styles.map}
-          initialRegion={{ ...initialCoord, ...DELTA }}
-        >
-          <Marker
-            coordinate={pin}
-            draggable
-            onDragEnd={handleDragEnd}
-            pinColor={Colors.primary}
+        {/* 지도 */}
+        <View style={styles.mapWrap}>
+          <KakaoMap
+            ref={mapRef}
+            initialLat={initialLat}
+            initialLng={initialLng}
+            onPinMoved={async (lat, lng) => {
+              setPin({ latitude: lat, longitude: lng });
+              const addr = await reverseGeocode(lat, lng);
+              setAddress(addr);
+            }}
           />
-        </MapView>
 
-        {/* 현재 위치 버튼 */}
-        <TouchableOpacity
-          style={[styles.gpsBtn, gpsLoading && { opacity: 0.5 }]}
-          onPress={handleGps}
-          disabled={gpsLoading}
-          activeOpacity={0.7}
-        >
-          {gpsLoading
-            ? <ActivityIndicator size="small" color={Colors.black} />
-            : <Ionicons name="locate-outline" size={20} color={Colors.black} />
-          }
-        </TouchableOpacity>
+          {/* GPS 버튼 */}
+          <TouchableOpacity
+            style={[styles.gpsBtn, gpsLoading && { opacity: 0.5 }]}
+            onPress={handleGps}
+            disabled={gpsLoading}
+            activeOpacity={0.7}
+          >
+            {gpsLoading
+              ? <ActivityIndicator size="small" color={Colors.black} />
+              : <Ionicons name="locate-outline" size={20} color={Colors.black} />
+            }
+          </TouchableOpacity>
 
-        {/* 좌표/주소 정보 */}
-        <View style={styles.coordBadge}>
-          <Ionicons name="location" size={13} color={Colors.primary} />
-          <Text style={styles.coordText} numberOfLines={1}>
-            {address || `${pin.latitude.toFixed(5)}, ${pin.longitude.toFixed(5)}`}
-          </Text>
+          {/* 주소/좌표 배지 */}
+          <View style={styles.coordBadge}>
+            <Ionicons name="location" size={13} color={Colors.primary} />
+            <Text style={styles.coordText} numberOfLines={1}>
+              {address || `${pin.latitude.toFixed(5)}, ${pin.longitude.toFixed(5)}`}
+            </Text>
+          </View>
         </View>
-      </View>
 
-      {/* 안내 */}
-      <View style={styles.hint}>
-        <Ionicons name="information-circle-outline" size={14} color={Colors.gray400} />
-        <Text style={styles.hintText}>핀을 드래그하거나 검색해서 위치를 조정하세요. 저장 후 40m 이내에서 출퇴근이 가능합니다.</Text>
-      </View>
+        {/* 안내 */}
+        <View style={styles.hint}>
+          <Ionicons name="information-circle-outline" size={14} color={Colors.gray400} />
+          <Text style={styles.hintText}>핀을 드래그하거나 검색해서 위치를 조정하세요. 저장 후 40m 이내에서 출퇴근이 가능합니다.</Text>
+        </View>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.white },
+  flex: { flex: 1 },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 16, paddingVertical: 12,
@@ -228,10 +214,7 @@ const styles = StyleSheet.create({
   },
   backBtn: { width: 36, height: 36, justifyContent: 'center' },
   headerTitle: { fontSize: 16, fontWeight: '700', color: Colors.black },
-  saveBtn: {
-    backgroundColor: Colors.primary, borderRadius: 10,
-    paddingHorizontal: 16, paddingVertical: 7,
-  },
+  saveBtn: { backgroundColor: Colors.primary, borderRadius: 10, paddingHorizontal: 16, paddingVertical: 7 },
   saveBtnText: { fontSize: 13, fontWeight: '700', color: Colors.white },
 
   searchBar: {
@@ -247,7 +230,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.white, maxHeight: 220,
     borderBottomWidth: 0.5, borderBottomColor: Colors.gray100,
     shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08, shadowRadius: 8, elevation: 4,
+    shadowOpacity: 0.08, shadowRadius: 8, elevation: 4, zIndex: 10,
   },
   resultItem: {
     flexDirection: 'row', alignItems: 'flex-start', gap: 8,
@@ -258,14 +241,13 @@ const styles = StyleSheet.create({
   placeAddr: { fontSize: 12, color: Colors.gray400, marginTop: 2 },
 
   mapWrap: { flex: 1, position: 'relative' },
-  map: { flex: 1 },
 
   gpsBtn: {
     position: 'absolute', top: 12, right: 12,
     width: 44, height: 44, borderRadius: 12,
     backgroundColor: Colors.white, justifyContent: 'center', alignItems: 'center',
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.12, shadowRadius: 6, elevation: 4,
+    shadowOpacity: 0.12, shadowRadius: 6, elevation: 4, zIndex: 5,
   },
 
   coordBadge: {
@@ -273,7 +255,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: 6,
     backgroundColor: Colors.white, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10,
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1, shadowRadius: 6, elevation: 3,
+    shadowOpacity: 0.1, shadowRadius: 6, elevation: 3, zIndex: 5,
   },
   coordText: { flex: 1, fontSize: 13, color: Colors.black, fontWeight: '500' },
 
