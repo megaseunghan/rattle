@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, useCallback, ReactNode } from 'react';
 import { Session, User } from '@supabase/supabase-js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../supabase';
@@ -77,18 +77,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setStoresLoaded(true);
   }
 
-  async function switchStore(storeId: string) {
+  const switchStore = useCallback(async (storeId: string) => {
     await AsyncStorage.setItem(LAST_STORE_ID_KEY, storeId);
-    if (user) {
-      await loadStores(user.id);
-    }
-  }
+    if (user) await loadStores(user.id);
+  }, [user]);
 
-  async function refreshStore() {
-    if (user) {
-      await loadStores(user.id);
-    }
-  }
+  const refreshStore = useCallback(async () => {
+    if (user) await loadStores(user.id);
+  }, [user]);
 
   async function signOut() {
     await AsyncStorage.removeItem(LAST_STORE_ID_KEY);
