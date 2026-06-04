@@ -15,166 +15,90 @@ function fmt(v: number | null | undefined): string {
   return `${v.toLocaleString()}원`;
 }
 
-const SECTION_THEME = {
-  revenue:  { icon: 'bar-chart'   as const, color: '#2563EB', bg: '#EFF6FF', border: '#BFDBFE' },
-  purchase: { icon: 'cart'        as const, color: '#EA580C', bg: '#FFF7ED', border: '#FED7AA' },
-  labor:    { icon: 'people'      as const, color: '#7C3AED', bg: '#F5F3FF', border: '#DDD6FE' },
-  expense:  { icon: 'wallet'      as const, color: '#059669', bg: '#ECFDF5', border: '#A7F3D0' },
-};
-
-function PnLSection({
-  theme, label, badge, value, sublabel, subs, loading, onPress,
-}: {
-  theme: keyof typeof SECTION_THEME;
-  label: string;
-  badge?: string;
-  value: string;
-  sublabel?: string;
-  subs?: { label: string; value: string }[];
-  loading: boolean;
-  onPress: () => void;
+function PnLRow({ label, value, onPress, loading }: {
+  label: string; value: string; onPress?: () => void; loading?: boolean;
 }) {
-  const t = SECTION_THEME[theme];
-  const hasSubs = subs && subs.length > 0;
-
-  return (
-    <TouchableOpacity
-      style={[styles.section, { borderLeftColor: t.color, backgroundColor: t.bg, borderColor: t.border }]}
-      onPress={onPress}
-      activeOpacity={0.75}
-    >
-      <View style={styles.sectionTop}>
-        <View style={[styles.sectionIconBg, { backgroundColor: t.color + '20' }]}>
-          <Ionicons name={t.icon} size={16} color={t.color} />
-        </View>
-        <View style={styles.sectionLeft}>
-          <View style={styles.sectionLabelRow}>
-            <Text style={[styles.sectionLabel, { color: t.color }]}>{label}</Text>
-            {badge && <View style={[styles.badge, { backgroundColor: t.color + '18' }]}><Text style={[styles.badgeText, { color: t.color }]}>{badge}</Text></View>}
-          </View>
-          {sublabel && <Text style={styles.sectionSublabel}>{sublabel}</Text>}
-        </View>
-        <View style={styles.sectionRight}>
-          {loading
-            ? <ActivityIndicator size="small" color={t.color} />
-            : <Text style={[styles.sectionValue, { color: t.color }]}>{value}</Text>
-          }
-          <Ionicons name="chevron-forward" size={14} color={t.color + '80'} style={{ marginTop: 2 }} />
-        </View>
+  const inner = (
+    <View style={styles.pnlRow}>
+      <Text style={styles.pnlLabel}>{label}</Text>
+      <View style={styles.pnlRight}>
+        {loading
+          ? <ActivityIndicator size="small" color={Colors.gray300} />
+          : <Text style={styles.pnlValue}>{value}</Text>
+        }
+        {onPress && <Ionicons name="chevron-forward" size={13} color={Colors.gray300} />}
       </View>
-
-      {hasSubs && !loading && (
-        <View style={[styles.subList, { borderTopColor: t.border }]}>
-          {subs!.map((s, i) => (
-            <View key={i} style={styles.subItem}>
-              <View style={[styles.subDot, { backgroundColor: t.color + '60' }]} />
-              <Text style={styles.subItemLabel}>{s.label}</Text>
-              <Text style={[styles.subItemValue, { color: t.color }]}>{s.value}</Text>
-            </View>
-          ))}
-        </View>
-      )}
-    </TouchableOpacity>
+    </View>
   );
+  if (onPress) return <TouchableOpacity onPress={onPress} activeOpacity={0.7}>{inner}</TouchableOpacity>;
+  return inner;
 }
 
-function GrossRow({ value, loading }: { value: string; loading: boolean }) {
+function PnLSubRow({ label, value }: { label: string; value: string }) {
   return (
-    <View style={styles.grossRow}>
-      <View style={styles.grossLeft}>
-        <Ionicons name="remove-circle-outline" size={15} color={Colors.gray400} />
-        <Text style={styles.grossLabel}>매출이익</Text>
-      </View>
-      {loading
-        ? <ActivityIndicator size="small" color={Colors.gray300} />
-        : <Text style={styles.grossValue}>{value}</Text>
-      }
+    <View style={styles.subRow}>
+      <Text style={styles.subLabel}>{label}</Text>
+      <Text style={styles.subValue}>{value}</Text>
     </View>
   );
 }
 
-function ProfitRow({ value, loading }: { value: string | null; loading: boolean }) {
-  const isNeg = value && value.startsWith('-');
-  return (
-    <View style={[styles.profitRow, isNeg ? styles.profitRowNeg : styles.profitRowPos]}>
-      <View style={styles.profitLeft}>
-        <Ionicons
-          name={isNeg ? 'trending-down' : 'trending-up'}
-          size={18}
-          color={isNeg ? '#DC2626' : Colors.primary}
-        />
-        <Text style={[styles.profitLabel, isNeg ? styles.profitLabelNeg : styles.profitLabelPos]}>
-          영업이익
-        </Text>
-      </View>
-      {loading
-        ? <ActivityIndicator size="small" color={Colors.primary} />
-        : <Text style={[styles.profitValue, isNeg ? styles.profitValueNeg : styles.profitValuePos]}>
-            {value ?? '—'}
-          </Text>
-      }
-    </View>
-  );
+function PnLDivider() {
+  return <View style={styles.pnlDivider} />;
 }
 
 function PnLCard({ pnl, loading }: { pnl: ProfitLoss | null; loading: boolean }) {
   const cats = pnl?.purchaseByCategory ?? {};
   const catOrder = ['식자재', '비품', '소모품', '주류', '기타'] as const;
-
   const totalExpense = (pnl?.fixedExpense ?? 0) + (pnl?.variableExpense ?? 0);
+  const isProfit = (pnl?.operatingProfit ?? 0) >= 0;
 
   return (
     <View style={styles.pnlCard}>
-      <PnLSection
-        theme="revenue"
-        label="매출"
-        value={fmt(pnl?.revenue)}
-        subs={[
-          { label: '카드', value: fmt(pnl?.cardRevenue) },
-          { label: '현금·계좌이체', value: fmt(pnl?.cashRevenue) },
-        ]}
-        loading={loading}
-        onPress={() => router.push('/(tabs)/pos')}
-      />
 
-      <PnLSection
-        theme="purchase"
-        label="매입"
-        value={fmt(pnl?.purchaseCost)}
-        subs={catOrder.map(c => ({ label: c, value: fmt(cats[c]) }))}
-        loading={loading}
-        onPress={() => router.push('/(tabs)/purchases')}
-      />
+      {/* 매출 */}
+      <PnLRow label="매출" value={fmt(pnl?.revenue)} onPress={() => router.push('/(tabs)/pos')} loading={loading} />
+      <PnLSubRow label="카드" value={fmt(pnl?.cardRevenue)} />
+      <PnLSubRow label="현금·계좌이체" value={fmt(pnl?.cashRevenue)} />
 
-      <PnLSection
-        theme="labor"
-        label="인건비"
-        value={fmt(pnl?.laborCost)}
-        subs={[
-          { label: '직원 인건비', value: fmt(pnl?.regularGross) },
-          { label: '직원 원천징수', value: fmt(pnl?.regularWithholding) },
-          { label: '파트타이머 인건비', value: fmt(pnl?.partTimeGross) },
-          { label: '파트타이머 원천징수', value: fmt(pnl?.partTimeWithholding) },
-        ]}
-        loading={loading}
-        onPress={() => router.push('/(tabs)/payroll')}
-      />
+      <PnLDivider />
 
-      <PnLSection
-        theme="expense"
-        label="비용"
-        value={fmt(totalExpense)}
-        subs={[
-          { label: '고정비', value: fmt(pnl?.fixedExpense) },
-          { label: '마케팅', value: fmt(pnl?.marketingExpense) },
-          { label: '시설보수', value: fmt(pnl?.maintenanceExpense) },
-          { label: '공과금', value: fmt(pnl?.utilitiesExpense) },
-        ]}
-        loading={loading}
-        onPress={() => router.push('/(tabs)/expenses')}
-      />
+      {/* 매입 */}
+      <PnLRow label="매입" value={fmt(pnl?.purchaseCost)} onPress={() => router.push('/(tabs)/purchases')} loading={loading} />
+      {catOrder.map(cat => (
+        <PnLSubRow key={cat} label={cat} value={fmt(cats[cat] ?? 0)} />
+      ))}
 
-      <ProfitRow value={fmt(pnl?.operatingProfit)} loading={loading} />
+      <PnLDivider />
+
+      {/* 인건비 */}
+      <PnLRow label="인건비" value={fmt(pnl?.laborCost)} onPress={() => router.push('/(tabs)/payroll')} loading={loading} />
+      <PnLSubRow label="직원 인건비" value={fmt(pnl?.regularGross)} />
+      <PnLSubRow label="직원 원천징수" value={fmt(pnl?.regularWithholding)} />
+      <PnLSubRow label="파트타이머 인건비" value={fmt(pnl?.partTimeGross)} />
+      <PnLSubRow label="파트타이머 원천징수" value={fmt(pnl?.partTimeWithholding)} />
+
+      <PnLDivider />
+
+      {/* 비용 */}
+      <PnLRow label="비용" value={fmt(totalExpense)} onPress={() => router.push('/(tabs)/expenses')} loading={loading} />
+      <PnLSubRow label="고정비" value={fmt(pnl?.fixedExpense)} />
+      <PnLSubRow label="마케팅" value={fmt(pnl?.marketingExpense)} />
+      <PnLSubRow label="시설보수" value={fmt(pnl?.maintenanceExpense)} />
+      <PnLSubRow label="공과금" value={fmt(pnl?.utilitiesExpense)} />
+
+      {/* 영업이익 */}
+      <View style={[styles.profitRow, isProfit ? styles.profitRowPos : styles.profitRowNeg]}>
+        <Text style={[styles.profitLabel, isProfit ? styles.profitLabelPos : styles.profitLabelNeg]}>
+          영업이익
+        </Text>
+        {loading
+          ? <ActivityIndicator size="small" color={Colors.primary} />
+          : <Text style={[styles.profitValue, isProfit ? styles.profitValuePos : styles.profitValueNeg]}>
+              {fmt(pnl?.operatingProfit)}
+            </Text>
+        }
+      </View>
     </View>
   );
 }
@@ -323,61 +247,42 @@ const styles = StyleSheet.create({
   sectionLink: { fontSize: 12, color: Colors.primary, fontWeight: '500' },
 
   // 손익 카드
-  pnlCard: { gap: 6 },
-
-  section: {
-    borderRadius: 14, borderWidth: 1, borderLeftWidth: 3,
+  pnlCard: {
+    backgroundColor: Colors.white, borderRadius: 16,
+    borderWidth: 0.5, borderColor: Colors.gray100,
     overflow: 'hidden',
   },
-  sectionTop: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 14, paddingVertical: 12, gap: 10,
-  },
-  sectionIconBg: { width: 32, height: 32, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
-  sectionLeft: { flex: 1 },
-  sectionLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  sectionLabel: { fontSize: 13, fontWeight: '700' },
-  sectionSublabel: { fontSize: 11, color: Colors.gray400, marginTop: 2 },
-  sectionRight: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  sectionValue: { fontSize: 15, fontWeight: '700' },
-
-  badge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8 },
-  badgeText: { fontSize: 10, fontWeight: '600' },
-
-  subList: { borderTopWidth: 0.5, paddingHorizontal: 14, paddingVertical: 8, gap: 5 },
-  subItem: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  subDot: { width: 4, height: 4, borderRadius: 2 },
-  subItemLabel: { flex: 1, fontSize: 12, color: Colors.gray500 },
-  subItemValue: { fontSize: 12, fontWeight: '500' },
-
-  // 매출이익 행
-  grossRow: {
+  pnlRow: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingHorizontal: 14, paddingVertical: 10,
-    backgroundColor: Colors.white, borderRadius: 10,
-    borderWidth: 0.5, borderColor: Colors.gray100,
+    paddingHorizontal: 16, paddingVertical: 11,
   },
-  grossLeft: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  grossLabel: { fontSize: 12, fontWeight: '500', color: Colors.gray500 },
-  grossValue: { fontSize: 13, fontWeight: '600', color: Colors.black },
+  pnlLabel: { fontSize: 14, fontWeight: '600', color: Colors.black },
+  pnlRight: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  pnlValue: { fontSize: 14, fontWeight: '600', color: Colors.black },
 
-  // 영업이익 행
+  subRow: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingHorizontal: 28, paddingVertical: 5,
+  },
+  subLabel: { fontSize: 12, color: Colors.gray400 },
+  subValue: { fontSize: 12, color: Colors.gray500 },
+
+  pnlDivider: { height: 0.5, backgroundColor: Colors.gray100, marginHorizontal: 16, marginVertical: 4 },
+
   profitRow: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     paddingHorizontal: 16, paddingVertical: 14,
-    borderRadius: 14, borderWidth: 1,
+    marginTop: 4,
   },
-  profitRowPos: { backgroundColor: Colors.tinted, borderColor: Colors.pale },
-  profitRowNeg: { backgroundColor: '#FEF2F2', borderColor: '#FECACA' },
-  profitLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  profitRowPos: { backgroundColor: Colors.tinted },
+  profitRowNeg: { backgroundColor: '#FEF2F2' },
   profitLabel: { fontSize: 14, fontWeight: '700' },
   profitLabelPos: { color: Colors.deeper },
   profitLabelNeg: { color: '#991B1B' },
-  profitValue: { fontSize: 18, fontWeight: '800' },
+  profitValue: { fontSize: 17, fontWeight: '800' },
   profitValuePos: { color: Colors.primary },
   profitValueNeg: { color: '#DC2626' },
 
-  // 품절 임박
   card: { backgroundColor: Colors.white, borderRadius: 16, borderWidth: 0.5, borderColor: Colors.gray100 },
   listItem: {
     flexDirection: 'row', alignItems: 'center',
