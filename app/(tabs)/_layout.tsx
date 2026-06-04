@@ -3,18 +3,18 @@ import { View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../constants/colors';
 
-type TabName = 'pos' | 'purchases' | 'home' | 'expenses' | 'payroll';
+type TabName = 'home' | 'pos' | 'purchases' | 'payroll' | 'more';
 
 const TAB_CONFIG: Record<TabName, {
   active: keyof typeof Ionicons.glyphMap;
   inactive: keyof typeof Ionicons.glyphMap;
   label: string;
 }> = {
-  pos:       { active: 'bar-chart',   inactive: 'bar-chart-outline',   label: '매출' },
-  purchases: { active: 'cart',        inactive: 'cart-outline',        label: '매입' },
   home:      { active: 'home',        inactive: 'home-outline',        label: '홈' },
-  expenses:  { active: 'wallet',      inactive: 'wallet-outline',      label: '비용' },
-  payroll:   { active: 'people',      inactive: 'people-outline',      label: '직원관리' },
+  pos:       { active: 'bar-chart',   inactive: 'bar-chart-outline',   label: '매출' },
+  purchases: { active: 'cart',        inactive: 'cart-outline',        label: '매입/비용' },
+  payroll:   { active: 'people',      inactive: 'people-outline',      label: '인건비' },
+  more:      { active: 'settings',    inactive: 'settings-outline',    label: '설정' },
 };
 
 function TabIcon({ tab, focused }: { tab: TabName; focused: boolean }) {
@@ -41,14 +41,14 @@ export default function TabsLayout() {
         tabBarShowLabel: false,
       }}
     >
+      <Tabs.Screen name="index"     options={{ tabBarIcon: ({ focused }) => <TabIcon tab="home"      focused={focused} /> }} />
       <Tabs.Screen name="pos"       options={{ tabBarIcon: ({ focused }) => <TabIcon tab="pos"       focused={focused} /> }} />
       <Tabs.Screen name="purchases" options={{ tabBarIcon: ({ focused }) => <TabIcon tab="purchases" focused={focused} /> }} />
-      <Tabs.Screen name="index"     options={{ tabBarIcon: ({ focused }) => <TabIcon tab="home"      focused={focused} /> }} />
-      <Tabs.Screen name="expenses"  options={{ tabBarIcon: ({ focused }) => <TabIcon tab="expenses"  focused={focused} /> }} />
       <Tabs.Screen name="payroll"   options={{ tabBarIcon: ({ focused }) => <TabIcon tab="payroll"   focused={focused} /> }} />
-      {/* 하단 탭에서 숨기되 라우트는 유지 */}
+      <Tabs.Screen name="more"      options={{ tabBarIcon: ({ focused }) => <TabIcon tab="more"      focused={focused} /> }} />
+      {/* 숨김 라우트 */}
+      <Tabs.Screen name="expenses"  options={{ href: null }} />
       <Tabs.Screen name="stock"     options={{ href: null }} />
-      <Tabs.Screen name="more"      options={{ href: null }} />
       <Tabs.Screen name="orders"    options={{ href: null }} />
       <Tabs.Screen name="recipes"   options={{ href: null }} />
     </Tabs>
