@@ -3,6 +3,31 @@ import { ProfitLoss, PurchaseCategory } from '../../types';
 import { getPurchasesByMonth } from './purchases';
 import { getExpensesByMonth } from './expenses';
 
+export async function getYearlyProfitLoss(
+  storeId: string,
+  year: number,
+  closingTime: string,
+): Promise<{ month: number; data: ProfitLoss }[]> {
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth() + 1;
+  const maxMonth = year === currentYear ? currentMonth : 12;
+
+  const results = await Promise.all(
+    Array.from({ length: maxMonth }, (_, i) => i + 1).map(async (month) => {
+      const yearMonth = `${year}-${String(month).padStart(2, '0')}`;
+      try {
+        const data = await getProfitLossByMonth(storeId, yearMonth, closingTime);
+        return { month, data };
+      } catch {
+        return null;
+      }
+    })
+  );
+
+  return results.filter(Boolean) as { month: number; data: ProfitLoss }[];
+}
+
 export async function getProfitLossByMonth(
   storeId: string,
   yearMonth: string,
