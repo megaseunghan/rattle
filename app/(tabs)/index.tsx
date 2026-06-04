@@ -146,8 +146,6 @@ function PnLCard({ pnl, loading }: { pnl: ProfitLoss | null; loading: boolean })
         onPress={() => router.push('/(tabs)/purchases')}
       />
 
-      <GrossRow value={fmt(pnl?.grossProfit)} loading={loading} />
-
       <PnLSection
         theme="labor"
         label="인건비"
