@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import {
-  getEmployees, createEmployee, updateEmployee, deactivateEmployee,
+  getEmployees, createEmployee, updateEmployee, deactivateEmployee, deleteEmployee,
 } from '../services/employees';
 import { Employee, EmploymentType } from '../../types';
 
@@ -55,5 +55,10 @@ export function useEmployees() {
     setEmployees(prev => prev.filter(e => e.id !== id));
   }, []);
 
-  return { employees, loading, error, refetch, add, update, deactivate };
+  const remove = useCallback(async (id: string) => {
+    await deleteEmployee(id);
+    setEmployees(prev => prev.filter(e => e.id !== id));
+  }, []);
+
+  return { employees, loading, error, refetch, add, update, deactivate, remove };
 }
