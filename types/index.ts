@@ -113,6 +113,8 @@ export interface TossOrder {
   orderId: string;
   orderAt: string;
   totalAmount: number;
+  cardAmount: number;   // CASH, ACCOUNT_TRANSFER 제외
+  cashAmount: number;   // CASH + ACCOUNT_TRANSFER
   status: 'COMPLETED' | 'CANCELLED' | 'REFUNDED';
   items: TossOrderItem[];
 }
@@ -131,6 +133,8 @@ export interface TossOrderRecord {
   toss_order_id: string;
   order_at: string;
   total_amount: number;
+  card_amount: number;
+  cash_amount: number;
   status: 'COMPLETED' | 'CANCELLED' | 'REFUNDED';
   synced_at: string;
 }
@@ -268,12 +272,27 @@ export interface Expense {
 // 손익계산서
 export interface ProfitLoss {
   yearMonth: string;
+  // 1. 매출
+  cardRevenue: number;
+  cashRevenue: number;
   revenue: number;
+  // 2. 매입 (카테고리별)
+  purchaseByCategory: Partial<Record<PurchaseCategory, number>>;
   purchaseCost: number;
   grossProfit: number;
-  laborCost: number;
+  // 3. 인건비
+  regularGross: number;       // 직원 인건비 (세전)
+  regularWithholding: number; // 직원 원천징수 (4대보험+소득세)
+  partTimeGross: number;      // 파트타이머 인건비
+  partTimeWithholding: number;// 파트타이머 3.3% 원천징수
+  laborCost: number;          // 합계
+  // 4. 비용 (카테고리별)
   fixedExpense: number;
-  variableExpense: number;
+  marketingExpense: number;
+  maintenanceExpense: number;
+  utilitiesExpense: number;
+  variableExpense: number;    // 마케팅+시설보수+공과금 합계
+  // 5. 이익
   operatingProfit: number;
   taxReserve: number;
   netProfit: number;

@@ -78,6 +78,12 @@ export function useTossSync(): UseTossSyncResult {
             p_items: o.items,
           });
           if (rpcError) throw new Error(rpcError.message);
+          // card/cash 금액 업데이트
+          await supabase
+            .from('toss_orders')
+            .update({ card_amount: o.cardAmount, cash_amount: o.cashAmount })
+            .eq('store_id', store.id)
+            .eq('toss_order_id', o.orderId);
         }));
       }
 
@@ -152,16 +158,21 @@ export function useTossSync(): UseTossSyncResult {
       const orders = await fetchTossOrders(merchantId, from, to);
 
       if (orders.length > 0) {
-        await Promise.all(orders.map((o) =>
-          supabase.rpc('upsert_toss_order_with_items', {
+        await Promise.all(orders.map(async (o) => {
+          await supabase.rpc('upsert_toss_order_with_items', {
             p_store_id: store.id,
             p_toss_order_id: o.orderId,
             p_order_at: o.orderAt,
             p_total_amount: o.totalAmount,
             p_status: o.status,
             p_items: o.items,
-          })
-        ));
+          });
+          await supabase
+            .from('toss_orders')
+            .update({ card_amount: o.cardAmount, cash_amount: o.cashAmount })
+            .eq('store_id', store.id)
+            .eq('toss_order_id', o.orderId);
+        }));
       }
 
       setLastSyncAt(new Date().toISOString());
@@ -183,10 +194,7 @@ export function useTossSync(): UseTossSyncResult {
       setAutoSyncing(true);
       const [h, m] = closingTime.split(':').map(Number);
 
-      // to: 현재 시각 (오늘 진행 중인 영업일 데이터 포함)
       const to = new Date();
-
-      // from: N일 전 closing time
       const from = new Date();
       from.setDate(from.getDate() - days);
       from.setHours(h, m, 0, 0);
@@ -195,16 +203,21 @@ export function useTossSync(): UseTossSyncResult {
       const orders = await fetchTossOrders(merchantId, from.toISOString(), to.toISOString());
 
       if (orders.length > 0) {
-        await Promise.all(orders.map(o =>
-          supabase.rpc('upsert_toss_order_with_items', {
+        await Promise.all(orders.map(async (o) => {
+          await supabase.rpc('upsert_toss_order_with_items', {
             p_store_id: store.id,
             p_toss_order_id: o.orderId,
             p_order_at: o.orderAt,
             p_total_amount: o.totalAmount,
             p_status: o.status,
             p_items: o.items,
-          })
-        ));
+          });
+          await supabase
+            .from('toss_orders')
+            .update({ card_amount: o.cardAmount, cash_amount: o.cashAmount })
+            .eq('store_id', store.id)
+            .eq('toss_order_id', o.orderId);
+        }));
       }
 
       setLastSyncAt(new Date().toISOString());
