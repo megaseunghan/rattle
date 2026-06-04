@@ -211,7 +211,12 @@ export default function HomeScreen() {
         </View>
 
         {/* 손익계산서 */}
-        <Text style={styles.sectionLabel}>이번 달 손익계산서</Text>
+        <View style={styles.sectionRow}>
+          <Text style={styles.sectionLabel}>이번 달 손익계산서</Text>
+          <TouchableOpacity onPress={() => router.push('/profit-loss')} activeOpacity={0.7}>
+            <Text style={styles.sectionLink}>연간 보기</Text>
+          </TouchableOpacity>
+        </View>
         <PnLCard pnl={pnl} loading={pnlLoading} />
 
         {/* 품절 임박 */}
@@ -261,10 +266,12 @@ const styles = StyleSheet.create({
   metricLoader: { height: 28, justifyContent: 'center', marginBottom: 2 },
   metricSub: { fontSize: 11, color: Colors.gray400 },
 
+  sectionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   sectionLabel: {
     fontSize: 11, fontWeight: '500', color: Colors.gray400,
     textTransform: 'uppercase', letterSpacing: 0.5,
   },
+  sectionLink: { fontSize: 12, color: Colors.primary, fontWeight: '500' },
 
   // 손익계산서 카드
   pnlCard: {
