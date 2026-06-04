@@ -7,6 +7,7 @@ import { Colors } from '../../constants/colors';
 import { useAuth } from '../../lib/contexts/AuthContext';
 import { useIngredients } from '../../lib/hooks/useIngredients';
 import { useProfitLoss } from '../../lib/hooks/useProfitLoss';
+import { useFixedExpenseCheck } from '../../lib/hooks/useFixedExpenseCheck';
 import { Ingredient, ProfitLoss } from '../../types';
 
 function fmt(v: number | null | undefined): string {
@@ -165,11 +166,13 @@ export default function HomeScreen() {
   const today = new Date();
   const yearMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
   const { data: pnl, loading: pnlLoading, refetch: fetchPnl } = useProfitLoss(yearMonth);
+  const { check: checkFixedExpense } = useFixedExpenseCheck();
 
   useFocusEffect(useCallback(() => {
     refetch();
     fetchPnl();
-  }, [refetch, fetchPnl]));
+    checkFixedExpense();
+  }, [refetch, fetchPnl, checkFixedExpense]));
 
   const lowStockItems = ingredients.filter(i => i.current_stock <= i.min_stock).slice(0, 5);
   const monthLabel = today.toLocaleDateString('ko-KR', { year: 'numeric', month: 'long' });
