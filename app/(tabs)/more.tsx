@@ -27,7 +27,7 @@ function SettingRow({
 }
 
 export default function MoreScreen() {
-  const { stores, store: currentStore, switchStore } = useAuth();
+  const { stores, store: currentStore, switchStore, currentRole } = useAuth();
   const [switching, setSwitching] = useState<string | null>(null);
 
   async function handleSwitchStore(storeId: string) {
@@ -83,13 +83,15 @@ export default function MoreScreen() {
             label="출퇴근 기록"
             onPress={() => router.push('/attendance')}
           />
-          <View style={styles.listItemBorder}>
-            <SettingRow
-              icon="location-outline"
-              label="매장 위치 등록"
-              onPress={() => router.push('/settings/store-location')}
-            />
-          </View>
+          {currentRole === 'admin' && (
+            <View style={styles.listItemBorder}>
+              <SettingRow
+                icon="location-outline"
+                label="매장 위치 등록"
+                onPress={() => router.push('/settings/store-location')}
+              />
+            </View>
+          )}
         </View>
 
         <Text style={[styles.sectionLabel, { marginTop: 20 }]}>설정</Text>
