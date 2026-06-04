@@ -77,6 +77,6 @@ const styles = StyleSheet.create({
     borderRadius: 2,
     backgroundColor: Colors.primary,
   },
-  label: { fontSize: 11, fontWeight: '500', color: Colors.gray400 },
+  label: { fontSize: 10, fontWeight: '500', color: Colors.gray400 },
   labelActive: { color: Colors.primary, fontWeight: '700' },
 });
