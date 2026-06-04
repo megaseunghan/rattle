@@ -115,7 +115,8 @@ export default function AttendanceScreen() {
   useFocusEffect(useCallback(() => {
     refreshStore();
     refetchEmp();
-  }, [refreshStore, refetchEmp]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []));
 
   useEffect(() => { loadRecords(); }, [loadRecords]);
 
