@@ -23,12 +23,14 @@ function EmployeeCard({
   isCalculating,
   onCalculate,
   onEdit,
+  onRemovePayroll,
 }: {
   employee: Employee;
   payroll: ReturnType<typeof usePayroll>['payrolls'][0] | undefined;
   isCalculating: boolean;
   onCalculate: () => void;
   onEdit: () => void;
+  onRemovePayroll?: () => void;
 }) {
   const probation = isInProbation(employee);
   const insurance = isInsuranceApplicable(employee);
@@ -100,12 +102,19 @@ function EmployeeCard({
               <Text style={styles.payrollDeduct}>-{payroll.withholding_tax.toLocaleString()}원</Text>
             </View>
           )}
-          <TouchableOpacity style={styles.recalcBtn} onPress={onCalculate} disabled={isCalculating}>
-            {isCalculating
-              ? <ActivityIndicator size="small" color={Colors.gray500} />
-              : <Text style={styles.recalcBtnText}>재계산</Text>
-            }
-          </TouchableOpacity>
+          <View style={styles.payrollActions}>
+            <TouchableOpacity style={styles.recalcBtn} onPress={onCalculate} disabled={isCalculating}>
+              {isCalculating
+                ? <ActivityIndicator size="small" color={Colors.gray500} />
+                : <Text style={styles.recalcBtnText}>재계산</Text>
+              }
+            </TouchableOpacity>
+            {onRemovePayroll && (
+              <TouchableOpacity style={styles.removePayrollBtn} onPress={onRemovePayroll}>
+                <Text style={styles.removePayrollBtnText}>삭제</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
       ) : (
         <TouchableOpacity
@@ -140,8 +149,8 @@ export default function PayrollScreen() {
   const [month, setMonth] = useState(today.getMonth() + 1);
 
   const yearMonth = toYearMonth(year, month);
-  const { employees, loading: empLoading, refetch: refetchEmp, add, update, remove } = useEmployees();
-  const { payrolls, loading: payLoading, calculating, refetch: refetchPay, calculate } = usePayroll(yearMonth);
+  const { employees, loading: empLoading, refetch: refetchEmp, add, update, deactivate } = useEmployees();
+  const { payrolls, loading: payLoading, calculating, refetch: refetchPay, calculate, remove: removePayroll } = usePayroll(yearMonth);
 
   const [modalVisible, setModalVisible] = useState(false);
   const [editTarget, setEditTarget] = useState<Employee | null>(null);
@@ -286,6 +295,17 @@ export default function PayrollScreen() {
               isCalculating={calculating === emp.id}
               onCalculate={() => calculate(emp).catch(e => Alert.alert('계산 실패', e.message))}
               onEdit={() => openEdit(emp)}
+              onRemovePayroll={() => {
+                const p = payrolls.find(pr => pr.employee_id === emp.id);
+                if (!p) return;
+                Alert.alert('인건비 삭제', `${emp.name}의 ${yearMonth} 인건비를 삭제할까요?`, [
+                  { text: '취소', style: 'cancel' },
+                  {
+                    text: '삭제', style: 'destructive',
+                    onPress: () => removePayroll(p.id).catch(e => Alert.alert('삭제 실패', e.message)),
+                  },
+                ]);
+              }}
             />
           ))
         )}
@@ -419,7 +439,7 @@ export default function PayrollScreen() {
                       text: '삭제', style: 'destructive',
                       onPress: async () => {
                         try {
-                          await remove(editTarget.id);
+                          await deactivate(editTarget.id);
                           setModalVisible(false);
                         } catch (e: any) {
                           Alert.alert('삭제 실패', e.message);
@@ -487,8 +507,11 @@ const styles = StyleSheet.create({
   payrollNetPay: { fontSize: 14, fontWeight: '700', color: Colors.primary },
   payrollDeductLabel: { fontSize: 12, color: Colors.gray400 },
   payrollDeduct: { fontSize: 12, color: Colors.gray500 },
-  recalcBtn: { alignItems: 'center', paddingVertical: 8, marginTop: 6 },
+  payrollActions: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 },
+  recalcBtn: { paddingVertical: 8 },
   recalcBtnText: { fontSize: 12, color: Colors.gray400 },
+  removePayrollBtn: { paddingVertical: 8, paddingHorizontal: 4 },
+  removePayrollBtnText: { fontSize: 12, color: '#D94040' },
   emptyCard: { backgroundColor: Colors.white, borderRadius: 16, borderWidth: 0.5, borderColor: Colors.gray100, padding: 40, alignItems: 'center', gap: 8 },
   emptyIconWrap: { width: 60, height: 60, borderRadius: 18, backgroundColor: Colors.gray50, justifyContent: 'center', alignItems: 'center', marginBottom: 8 },
   emptyTitle: { fontSize: 15, fontWeight: '600', color: Colors.gray700 },
