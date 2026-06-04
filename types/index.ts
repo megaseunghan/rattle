@@ -204,10 +204,14 @@ export interface Employee {
   employment_type: EmploymentType;
   base_salary: number;
   non_taxable: number;
+  joined_at: string | null;            // 'YYYY-MM-DD' 입사일 (61일 수습 자동 적용)
+  phone: string | null;
+  bank_name: string | null;
+  account_number: string | null;
   is_probation: boolean;
-  probation_started_at: string | null; // 'YYYY-MM-DD'
+  probation_started_at: string | null;
   is_resigned_during_probation: boolean;
-  weekly_hours: number | null;         // 파트타이머 주 시간
+  weekly_hours: number | null;
   dependents: number;
   is_active: boolean;
   created_at: string;

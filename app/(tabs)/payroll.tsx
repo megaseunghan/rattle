@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   Modal, TextInput, Alert, KeyboardAvoidingView, Platform,
-  ActivityIndicator, Switch,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from 'expo-router';
@@ -137,8 +137,10 @@ const EMPTY_FORM = {
   employment_type: 'regular' as EmploymentType,
   base_salary: '',
   non_taxable: '',
-  is_probation: false,
-  probation_started_at: '',
+  joined_at: '',
+  phone: '',
+  bank_name: '',
+  account_number: '',
   weekly_hours: '',
   dependents: '1',
 };
@@ -184,8 +186,10 @@ export default function PayrollScreen() {
       employment_type: employee.employment_type,
       base_salary: String(employee.base_salary),
       non_taxable: String(employee.non_taxable),
-      is_probation: employee.is_probation,
-      probation_started_at: employee.probation_started_at ?? '',
+      joined_at: employee.joined_at ?? '',
+      phone: employee.phone ?? '',
+      bank_name: employee.bank_name ?? '',
+      account_number: employee.account_number ?? '',
       weekly_hours: employee.weekly_hours != null ? String(employee.weekly_hours) : '',
       dependents: String(employee.dependents),
     });
@@ -209,9 +213,10 @@ export default function PayrollScreen() {
         employment_type: form.employment_type,
         base_salary: salary,
         non_taxable: nonTaxable,
-        is_probation: form.is_probation,
-        probation_started_at: form.is_probation && form.probation_started_at
-          ? form.probation_started_at : null,
+        joined_at: form.joined_at.trim() || null,
+        phone: form.phone.trim() || null,
+        bank_name: form.bank_name.trim() || null,
+        account_number: form.account_number.trim() || null,
         weekly_hours: form.employment_type === 'part_time' ? wh : null,
         dependents: dep,
       };
@@ -392,27 +397,43 @@ export default function PayrollScreen() {
               keyboardType="numeric"
             />
 
-            <View style={styles.switchRow}>
-              <Text style={styles.switchLabel}>수습 중</Text>
-              <Switch
-                value={form.is_probation}
-                onValueChange={v => setForm(f => ({ ...f, is_probation: v }))}
-                trackColor={{ true: Colors.primary }}
-              />
-            </View>
+            <Text style={styles.fieldLabel}>입사일 (YYYY-MM-DD)</Text>
+            <TextInput
+              style={styles.input}
+              value={form.joined_at}
+              onChangeText={v => setForm(f => ({ ...f, joined_at: v }))}
+              placeholder="2026-06-01"
+              placeholderTextColor={Colors.gray300}
+            />
 
-            {form.is_probation && (
-              <>
-                <Text style={styles.fieldLabel}>수습 시작일 (YYYY-MM-DD)</Text>
-                <TextInput
-                  style={styles.input}
-                  value={form.probation_started_at}
-                  onChangeText={v => setForm(f => ({ ...f, probation_started_at: v }))}
-                  placeholder="2026-05-01"
-                  placeholderTextColor={Colors.gray300}
-                />
-              </>
-            )}
+            <Text style={styles.fieldLabel}>연락처</Text>
+            <TextInput
+              style={styles.input}
+              value={form.phone}
+              onChangeText={v => setForm(f => ({ ...f, phone: v }))}
+              placeholder="010-0000-0000"
+              placeholderTextColor={Colors.gray300}
+              keyboardType="phone-pad"
+            />
+
+            <Text style={styles.fieldLabel}>은행</Text>
+            <TextInput
+              style={styles.input}
+              value={form.bank_name}
+              onChangeText={v => setForm(f => ({ ...f, bank_name: v }))}
+              placeholder="국민은행"
+              placeholderTextColor={Colors.gray300}
+            />
+
+            <Text style={styles.fieldLabel}>계좌번호</Text>
+            <TextInput
+              style={styles.input}
+              value={form.account_number}
+              onChangeText={v => setForm(f => ({ ...f, account_number: v }))}
+              placeholder="000-0000-0000-00"
+              placeholderTextColor={Colors.gray300}
+              keyboardType="numeric"
+            />
 
             <View style={styles.modalBtns}>
               <TouchableOpacity style={styles.cancelBtn} onPress={() => setModalVisible(false)}>
