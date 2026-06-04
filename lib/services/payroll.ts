@@ -17,7 +17,7 @@ function calcTaxableBase(employee: Employee): number {
 
 // ─── 소득세 간이세액표 조회 ───────────────────────────────
 async function lookupIncomeTax(taxableBase: number, dependents: number): Promise<number> {
-  const dep = Math.min(Math.max(dependents, 1), 7);
+  const dep = Math.min(Math.max(dependents, 1), 11);
   const colName = `dep_${dep}`;
 
   const { data } = await supabase
