@@ -1,10 +1,10 @@
 import { useState, useCallback, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  Alert, ActivityIndicator, Modal,
+  Alert, ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import { Colors } from '../../constants/colors';
@@ -89,7 +89,7 @@ function EmployeeCard({
 }
 
 export default function AttendanceScreen() {
-  const { store } = useAuth();
+  const { store, refreshStore } = useAuth();
   const { employees, loading: empLoading, refetch: refetchEmp } = useEmployees();
   const [recordsByEmp, setRecordsByEmp] = useState<Record<string, Attendance[]>>({});
   const [loadingRecords, setLoadingRecords] = useState(false);
@@ -112,7 +112,11 @@ export default function AttendanceScreen() {
     }
   }, [store, employees]);
 
-  useEffect(() => { refetchEmp(); }, [refetchEmp]);
+  useFocusEffect(useCallback(() => {
+    refreshStore();
+    refetchEmp();
+  }, [refreshStore, refetchEmp]));
+
   useEffect(() => { loadRecords(); }, [loadRecords]);
 
   async function handleStamp(employee: Employee, type: 'clock_in' | 'clock_out') {
