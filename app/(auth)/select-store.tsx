@@ -22,8 +22,15 @@ export default function SelectStoreScreen() {
   const [loading, setLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(true);
-  const { user, store, stores, storesLoaded, switchStore, refreshStore } = useAuth();
+  const { user, store, stores, storesLoaded, switchStore, refreshStore, signOut } = useAuth();
   const router = useRouter();
+
+  function handleLogout() {
+    Alert.alert('로그아웃', '로그아웃 하시겠습니까?', [
+      { text: '취소', style: 'cancel' },
+      { text: '로그아웃', style: 'destructive', onPress: () => signOut() },
+    ]);
+  }
 
   useFocusEffect(useCallback(() => {
     setIsRefreshing(true);
@@ -67,7 +74,13 @@ export default function SelectStoreScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>{hasStores ? '매장 선택' : '환영합니다'}</Text>
+        <View style={styles.headerRow}>
+          <Text style={styles.title}>{hasStores ? '매장 선택' : '환영합니다'}</Text>
+          <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} hitSlop={8}>
+            <Ionicons name="log-out-outline" size={20} color={Colors.gray500} />
+            <Text style={styles.logoutText}>로그아웃</Text>
+          </TouchableOpacity>
+        </View>
         <Text style={styles.headerSub}>
           {hasStores ? '관리할 매장을 선택하세요' : '어떻게 시작할지 선택해주세요'}
         </Text>
@@ -211,10 +224,27 @@ const styles = StyleSheet.create({
     paddingTop: 16,
     paddingBottom: 8,
   },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
   title: {
     fontSize: 28,
     fontWeight: '800',
     color: Colors.black,
+  },
+  logoutBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+  },
+  logoutText: {
+    fontSize: 14,
+    color: Colors.gray500,
+    fontWeight: '500',
   },
   headerSub: {
     fontSize: 15,
