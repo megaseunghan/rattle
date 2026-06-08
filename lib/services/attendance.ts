@@ -45,9 +45,45 @@ export async function clockOut(
   longitude: number,
   distanceM: number,
 ): Promise<Attendance> {
+  // 오늘 출근 기록 + 직원 시급 조회 → 근무 분·일일급여 즉시 계산
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const [{ data: ins }, { data: emp }] = await Promise.all([
+    supabase
+      .from('attendance')
+      .select('timestamp')
+      .eq('store_id', storeId)
+      .eq('employee_id', employeeId)
+      .eq('type', 'clock_in')
+      .gte('timestamp', today.toISOString())
+      .order('timestamp', { ascending: true })
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from('employees')
+      .select('hourly_wage')
+      .eq('id', employeeId)
+      .maybeSingle(),
+  ]);
+
+  const now = new Date();
+  let workedMinutes: number | null = null;
+  let dailyWage: number | null = null;
+  if (ins?.timestamp) {
+    workedMinutes = Math.max(0, Math.round((now.getTime() - new Date(ins.timestamp).getTime()) / 60000));
+    const hourly = emp?.hourly_wage != null ? Number(emp.hourly_wage) : null;
+    if (hourly != null) {
+      dailyWage = Math.round((hourly / 60) * workedMinutes);
+    }
+  }
+
   const { data, error } = await supabase
     .from('attendance')
-    .insert({ store_id: storeId, employee_id: employeeId, type: 'clock_out', latitude, longitude, distance_m: Math.round(distanceM) })
+    .insert({
+      store_id: storeId, employee_id: employeeId, type: 'clock_out',
+      latitude, longitude, distance_m: Math.round(distanceM),
+      worked_minutes: workedMinutes, daily_wage: dailyWage,
+    })
     .select()
     .single();
   if (error) throw new Error(error.message);

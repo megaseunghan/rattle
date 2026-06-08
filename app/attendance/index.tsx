@@ -163,9 +163,12 @@ export default function AttendanceScreen() {
         [employee.id]: [...(prev[employee.id] ?? []), record],
       }));
 
+      const wageLine = type === 'clock_out' && record.daily_wage != null
+        ? `\n근무 ${record.worked_minutes}분 · 일급 ${record.daily_wage.toLocaleString()}원`
+        : '';
       Alert.alert(
         type === 'clock_in' ? '출근 완료' : '퇴근 완료',
-        `${employee.name} · ${formatTime(record.timestamp)}\n매장까지 ${Math.round(distanceM)}m`,
+        `${employee.name} · ${formatTime(record.timestamp)}\n매장까지 ${Math.round(distanceM)}m${wageLine}`,
       );
     } catch (e: any) {
       Alert.alert('오류', e.message);
