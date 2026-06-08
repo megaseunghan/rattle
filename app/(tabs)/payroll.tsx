@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, Pressable,
   Modal, TextInput, Alert, KeyboardAvoidingView, Platform,
   ActivityIndicator,
 } from 'react-native';
@@ -800,10 +800,10 @@ export default function PayrollScreen() {
         </View>
       </Modal>
 
-      {/* 급여 이력 모달 */}
+      {/* 급여 이력 모달 — 바깥 탭하면 닫힘 */}
       <Modal visible={histTarget != null} animationType="slide" transparent onRequestClose={() => setHistTarget(null)}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalSheet}>
+        <Pressable style={styles.modalOverlay} onPress={() => setHistTarget(null)}>
+          <Pressable style={styles.modalSheet} onPress={() => {}}>
             <View style={styles.modalHandle} />
             <Text style={styles.modalTitle}>{histTarget?.name} · 급여 이력</Text>
             <Text style={styles.fieldHint}>적용일 기준 변경 내역입니다. 과거 손익은 당시 급여로 계산됩니다.</Text>
@@ -830,8 +830,8 @@ export default function PayrollScreen() {
               <Text style={styles.cancelBtnText}>닫기</Text>
             </TouchableOpacity>
             <View style={{ height: 24 }} />
-          </View>
-        </View>
+          </Pressable>
+        </Pressable>
       </Modal>
     </SafeAreaView>
   );
