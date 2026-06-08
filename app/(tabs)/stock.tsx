@@ -199,6 +199,7 @@ export default function StockScreen() {
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
+          style={styles.catScroll}
           contentContainerStyle={styles.catBar}
         >
           {categories.map(cat => (
@@ -319,8 +320,10 @@ const styles = StyleSheet.create({
   contentTabText: { fontSize: 13, color: Colors.gray500 },
   contentTabTextActive: { color: Colors.white, fontWeight: '500' },
 
-  catBar: { paddingHorizontal: 16, paddingVertical: 10, gap: 6, flexDirection: 'row' },
+  catScroll: { flexGrow: 0, flexShrink: 0 },
+  catBar: { paddingHorizontal: 16, paddingVertical: 10, gap: 6, flexDirection: 'row', alignItems: 'center' },
   catTab: {
+    alignSelf: 'center',
     paddingHorizontal: 12,
     paddingVertical: 5,
     borderRadius: 20,
