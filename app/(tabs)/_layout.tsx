@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { Tabs } from 'expo-router';
 import { View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -37,11 +38,15 @@ function TabIcon({ tab, focused }: { tab: TabName; focused: boolean }) {
 
 export default function TabsLayout() {
   const { user, currentRole } = useAuth();
-  const { employees } = useEmployees();
+  const { employees, refetch } = useEmployees();
+
+  // useEmployees는 자동 조회하지 않으므로 진입/매장 변경 시 직접 fetch
+  useEffect(() => { refetch(); }, [refetch]);
 
   // 파트타이머는 하단 탭을 홈·재고·설정으로 간소화
-  const myEmployee = employees.find(e => e.user_id === user?.id);
-  const isPartTime = currentRole !== 'admin' && myEmployee?.employment_type === 'part_time';
+  // (연결된 활성 직원 중 하나라도 part_time이면 파트타이머로 인정)
+  const isPartTime = currentRole !== 'admin'
+    && employees.some(e => e.user_id === user?.id && e.employment_type === 'part_time');
 
   // href: null 이면 탭바에서 숨김
   const hidden = { href: null as null };
