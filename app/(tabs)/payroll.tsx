@@ -14,6 +14,21 @@ import { useEmployees } from '../../lib/hooks/useEmployees';
 import { usePayroll } from '../../lib/hooks/usePayroll';
 import { Employee, EmploymentType, StoreMember } from '../../types';
 import { isInProbation, isInsuranceApplicable } from '../../lib/services/employees';
+import { getMonthlyWageByEmployee } from '../../lib/services/attendance';
+import { probationFactor } from '../../lib/services/payroll';
+
+type WageAccum = { totalWage: number; totalMinutes: number; days: number };
+
+/** 경과일 기준 일할 계수 (손익계산서와 동일): 지난 달 1, 다음 달 0, 진행 중인 달은 경과일/총일수 */
+function accruedFactor(year: number, month: number): number {
+  const now = new Date();
+  const cy = now.getFullYear();
+  const cm = now.getMonth() + 1;
+  if (year > cy || (year === cy && month > cm)) return 0;
+  if (year < cy || (year === cy && month < cm)) return 1;
+  const daysInMonth = new Date(year, month, 0).getDate();
+  return Math.min(1, now.getDate() / daysInMonth);
+}
 
 function toYearMonth(year: number, month: number) {
   return `${year}-${String(month).padStart(2, '0')}`;
@@ -22,6 +37,9 @@ function toYearMonth(year: number, month: number) {
 function EmployeeCard({
   employee,
   payroll,
+  wage,
+  accruedGross,
+  accrualLabel,
   isCalculating,
   onCalculate,
   onEdit,
@@ -29,6 +47,9 @@ function EmployeeCard({
 }: {
   employee: Employee;
   payroll: ReturnType<typeof usePayroll>['payrolls'][0] | undefined;
+  wage?: WageAccum;
+  accruedGross: number;
+  accrualLabel: string;
   isCalculating: boolean;
   onCalculate: () => void;
   onEdit: () => void;
@@ -36,6 +57,7 @@ function EmployeeCard({
 }) {
   const probation = isInProbation(employee);
   const insurance = isInsuranceApplicable(employee);
+  const isPart = employee.employment_type === 'part_time';
 
   return (
     <View style={styles.employeeCard}>
@@ -63,9 +85,43 @@ function EmployeeCard({
         </TouchableOpacity>
       </View>
 
+      {isPart ? (
+        <>
+          <View style={styles.salaryRow}>
+            <Text style={styles.salaryLabel}>시급</Text>
+            <Text style={styles.salaryValue}>
+              {employee.hourly_wage != null ? `${Number(employee.hourly_wage).toLocaleString()}원` : '—'}
+            </Text>
+          </View>
+          <View style={styles.payrollDivider} />
+          <View style={styles.payrollRow}>
+            <Text style={styles.payrollLabel}>세전 누적액</Text>
+            <Text style={styles.payrollNetPay}>{(wage?.totalWage ?? 0).toLocaleString()}원</Text>
+          </View>
+          <View style={styles.payrollRow}>
+            <Text style={styles.payrollDeductLabel}>이번 달 근무</Text>
+            <Text style={styles.payrollDeduct}>
+              {wage && wage.days > 0
+                ? `${wage.days}일 · ${Math.floor(wage.totalMinutes / 60)}시간 ${wage.totalMinutes % 60}분`
+                : '기록 없음'}
+            </Text>
+          </View>
+          <Text style={styles.partHint}>출퇴근 시 분 단위로 자동 적립됩니다</Text>
+        </>
+      ) : (
+      <>
       <View style={styles.salaryRow}>
         <Text style={styles.salaryLabel}>기본급</Text>
         <Text style={styles.salaryValue}>{employee.base_salary.toLocaleString()}원</Text>
+      </View>
+      <View style={styles.payrollDivider} />
+      <View style={styles.payrollRow}>
+        <Text style={styles.payrollLabel}>세전 누적액</Text>
+        <Text style={styles.payrollNetPay}>{accruedGross.toLocaleString()}원</Text>
+      </View>
+      <View style={styles.payrollRow}>
+        <Text style={styles.payrollDeductLabel}>일할 기준</Text>
+        <Text style={styles.payrollDeduct}>{accrualLabel}</Text>
       </View>
 
       {payroll ? (
@@ -130,6 +186,8 @@ function EmployeeCard({
           }
         </TouchableOpacity>
       )}
+      </>
+      )}
     </View>
   );
 }
@@ -165,11 +223,20 @@ export default function PayrollScreen() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [members, setMembers] = useState<StoreMember[]>([]);
+  const [wageMap, setWageMap] = useState<Record<string, WageAccum>>({});
+
+  const refetchWage = useCallback(() => {
+    if (!store) return;
+    getMonthlyWageByEmployee(store.id, yearMonth, store.closing_time ?? '23:00')
+      .then(setWageMap)
+      .catch(() => setWageMap({}));
+  }, [store, yearMonth]);
 
   useFocusEffect(useCallback(() => {
     refetchEmp();
     refetchPay();
-  }, [refetchEmp, refetchPay]));
+    refetchWage();
+  }, [refetchEmp, refetchPay, refetchWage]));
 
   // 계정 연결용 매장 멤버 목록 (관리자만)
   useEffect(() => {
@@ -270,8 +337,18 @@ export default function PayrollScreen() {
     }
   }
 
-  const totalLaborCost = payrolls.reduce((s, p) => s + p.gross, 0);
-  const totalNetPay = payrolls.reduce((s, p) => s + p.net_pay, 0);
+  // 누적 기준 합계 (정규직: 경과일 일할, 파트타이머: 출퇴근 일급 누적)
+  const monthFactor = accruedFactor(year, month);
+  const partTimeWageTotal = Object.values(wageMap).reduce((s, w) => s + w.totalWage, 0);
+  const regularEmps = employees.filter(e => e.employment_type !== 'part_time');
+  const regularAccruedGross = regularEmps.reduce(
+    (s, e) => s + Math.round(Math.floor(e.base_salary * probationFactor(e)) * monthFactor), 0);
+  const regularAccruedNet = payrolls.reduce((s, p) => {
+    const emp = regularEmps.find(e => e.id === p.employee_id);
+    return emp ? s + Math.round(p.net_pay * monthFactor) : s;
+  }, 0);
+  const totalLaborCost = regularAccruedGross + partTimeWageTotal;
+  const totalNetPay = regularAccruedNet + partTimeWageTotal;
   const monthLabel = `${year}년 ${month}월`;
 
   return (
@@ -302,7 +379,7 @@ export default function PayrollScreen() {
               ? <ActivityIndicator size="small" color={Colors.gray300} style={styles.summaryLoader} />
               : <Text style={styles.summaryValue}>{totalLaborCost > 0 ? `${totalLaborCost.toLocaleString()}원` : '—'}</Text>
             }
-            <Text style={styles.summarySub}>세전 지급액</Text>
+            <Text style={styles.summarySub}>세전 누적 (일할)</Text>
           </View>
           <View style={styles.summaryCard}>
             <Text style={styles.summaryLabel}>총 실수령액</Text>
@@ -310,7 +387,7 @@ export default function PayrollScreen() {
               ? <ActivityIndicator size="small" color={Colors.gray300} style={styles.summaryLoader} />
               : <Text style={styles.summaryValue}>{totalNetPay > 0 ? `${totalNetPay.toLocaleString()}원` : '—'}</Text>
             }
-            <Text style={styles.summarySub}>공제 후 지급액</Text>
+            <Text style={styles.summarySub}>공제 후 누적</Text>
           </View>
         </View>
 
@@ -328,11 +405,19 @@ export default function PayrollScreen() {
             <Text style={styles.emptyDesc}>직원을 추가하면 4대보험과 실수령액이 자동으로 계산됩니다</Text>
           </View>
         ) : (
-          employees.map(emp => (
+          employees.map(emp => {
+            const factor = accruedFactor(year, month);
+            const fullGross = Math.floor(emp.base_salary * probationFactor(emp));
+            const daysInMonth = new Date(year, month, 0).getDate();
+            const elapsed = Math.round(factor * daysInMonth);
+            return (
             <EmployeeCard
               key={emp.id}
               employee={emp}
               payroll={payrolls.find(p => p.employee_id === emp.id)}
+              wage={wageMap[emp.id]}
+              accruedGross={Math.round(fullGross * factor)}
+              accrualLabel={`${month}월 ${elapsed}/${daysInMonth}일`}
               isCalculating={calculating === emp.id}
               onCalculate={() => calculate(emp).catch(e => Alert.alert('계산 실패', e.message))}
               onEdit={() => openEdit(emp)}
@@ -348,7 +433,8 @@ export default function PayrollScreen() {
                 ]);
               }}
             />
-          ))
+            );
+          })
         )}
 
         {isAdmin && (
@@ -605,6 +691,7 @@ const styles = StyleSheet.create({
   salaryRow: { flexDirection: 'row', justifyContent: 'space-between' },
   salaryLabel: { fontSize: 13, color: Colors.gray500 },
   salaryValue: { fontSize: 13, fontWeight: '500', color: Colors.black },
+  partHint: { fontSize: 11, color: Colors.gray400, marginTop: 8 },
   calcBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: Colors.black, borderRadius: 10, paddingVertical: 10, marginTop: 12 },
   calcBtnText: { fontSize: 13, fontWeight: '600', color: Colors.white },
   payrollResult: { marginTop: 4 },

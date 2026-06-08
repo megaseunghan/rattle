@@ -113,6 +113,43 @@ export async function getTodayAttendance(
   return (data ?? []) as Attendance[];
 }
 
+/** 월별·직원별 일급 누적 집계 (영업일 범위 = 손익계산서와 동일) */
+export async function getMonthlyWageByEmployee(
+  storeId: string,
+  yearMonth: string, // 'YYYY-MM'
+  closingTime: string, // 'HH:mm'
+): Promise<Record<string, { totalWage: number; totalMinutes: number; days: number }>> {
+  const [h, m] = closingTime.split(':').map(Number);
+  const year = Number(yearMonth.slice(0, 4));
+  const month = Number(yearMonth.slice(5, 7));
+
+  const from = new Date(year, month - 1, 0);
+  from.setHours(h, m, 0, 0);
+  const to = new Date(year, month, 0);
+  to.setHours(h, m, 0, 0);
+  if (to > new Date()) to.setTime(Date.now());
+
+  const { data, error } = await supabase
+    .from('attendance')
+    .select('employee_id, daily_wage, worked_minutes')
+    .eq('store_id', storeId)
+    .eq('type', 'clock_out')
+    .gte('timestamp', from.toISOString())
+    .lte('timestamp', to.toISOString());
+  if (error) throw new Error(error.message);
+
+  const result: Record<string, { totalWage: number; totalMinutes: number; days: number }> = {};
+  for (const r of (data ?? []) as any[]) {
+    if (!r.employee_id) continue;
+    const acc = result[r.employee_id] ?? { totalWage: 0, totalMinutes: 0, days: 0 };
+    acc.totalWage += Number(r.daily_wage ?? 0);
+    acc.totalMinutes += Number(r.worked_minutes ?? 0);
+    acc.days += 1;
+    result[r.employee_id] = acc;
+  }
+  return result;
+}
+
 export async function getAttendanceByDate(
   storeId: string,
   date: string, // 'YYYY-MM-DD'
