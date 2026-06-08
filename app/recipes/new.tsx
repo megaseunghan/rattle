@@ -5,6 +5,7 @@ import {
   StyleSheet,
   TextInput,
   TouchableOpacity,
+  Pressable,
   ScrollView,
   Alert,
   Modal,
@@ -341,8 +342,8 @@ export default function NewRecipeScreen() {
       </KeyboardAvoidingView>
 
       <Modal visible={showPicker} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalSheet}>
+        <Pressable style={styles.modalOverlay} onPress={() => { setShowPicker(false); setShowNewForm(false); }}>
+          <Pressable style={styles.modalSheet} onPress={() => {}}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>식자재 선택</Text>
               <TouchableOpacity onPress={() => { setShowPicker(false); setShowNewForm(false); }}>
@@ -429,8 +430,8 @@ export default function NewRecipeScreen() {
                 }}
               />
             )}
-          </View>
-        </View>
+          </Pressable>
+        </Pressable>
       </Modal>
     </SafeAreaView>
   );
