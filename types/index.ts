@@ -226,6 +226,7 @@ export interface Employee {
   name: string;
   employment_type: EmploymentType;
   base_salary: number;
+  hourly_wage: number | null;          // 파트타이머 시급 (분 단위 일일급여 계산용)
   non_taxable: number;
   joined_at: string | null;            // 'YYYY-MM-DD' 입사일 (61일 수습 자동 적용)
   phone: string | null;
