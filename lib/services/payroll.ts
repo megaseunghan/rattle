@@ -7,12 +7,12 @@ function floorTo(n: number, unit: number): number {
   return Math.floor(n / unit) * unit;
 }
 
-// ─── 과세기준액 계산 ──────────────────────────────────────
-function calcTaxableBase(employee: Employee): number {
-  const gross = employee.base_salary - employee.non_taxable;
-  if (employee.is_resigned_during_probation) return Math.floor(gross * 0.8);
-  if (isInProbation(employee)) return Math.floor(gross * 0.9);
-  return gross;
+// ─── 수습 계수 (실지급 기준) ─────────────────────────────
+// 수습 기간엔 실제로 90% 지급(수습 중 퇴사 80%)이므로 gross 자체에 적용
+export function probationFactor(employee: Pick<Employee, 'is_resigned_during_probation' | 'joined_at'>): number {
+  if (employee.is_resigned_during_probation) return 0.8;
+  if (isInProbation(employee as Employee)) return 0.9;
+  return 1;
 }
 
 // ─── 소득세 간이세액표 조회 ───────────────────────────────
@@ -80,7 +80,8 @@ function calcIncomeTaxApprox(monthly: number, dependents: number): number {
 // ─── 급여 계산 ────────────────────────────────────────────
 export async function calculatePayroll(employee: Employee): Promise<Omit<Payroll, 'id' | 'store_id' | 'employee_id' | 'year_month' | 'created_at'>> {
   const useInsurance = isInsuranceApplicable(employee);
-  const gross = employee.base_salary;
+  // 수습 기간 실지급 90%(중도퇴사 80%)를 gross에 직접 반영
+  const gross = Math.floor(employee.base_salary * probationFactor(employee));
 
   if (!useInsurance) {
     // 3.3% 원천징수 (파트타임 주 15h 미만)
@@ -99,8 +100,8 @@ export async function calculatePayroll(employee: Employee): Promise<Omit<Payroll
     };
   }
 
-  // 4대보험 적용
-  const taxableBase = calcTaxableBase(employee);
+  // 4대보험 적용 (gross에 수습 계수가 이미 반영됨)
+  const taxableBase = Math.max(0, gross - employee.non_taxable);
 
   // 국민연금: min(max(과세기준액, 390,000), 6,170,000) × 4.75% → 10원 미만 버림
   const npBase = Math.min(Math.max(taxableBase, 390_000), 6_170_000);

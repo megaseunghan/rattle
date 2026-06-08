@@ -1,5 +1,6 @@
 import { supabase } from '../supabase';
 import { Attendance, AttendanceType } from '../../types';
+import { probationFactor } from './payroll';
 
 const RADIUS_M = 40;
 
@@ -61,7 +62,7 @@ export async function clockOut(
       .maybeSingle(),
     supabase
       .from('employees')
-      .select('hourly_wage')
+      .select('hourly_wage, joined_at, is_resigned_during_probation')
       .eq('id', employeeId)
       .maybeSingle(),
   ]);
@@ -73,7 +74,12 @@ export async function clockOut(
     workedMinutes = Math.max(0, Math.round((now.getTime() - new Date(ins.timestamp).getTime()) / 60000));
     const hourly = emp?.hourly_wage != null ? Number(emp.hourly_wage) : null;
     if (hourly != null) {
-      dailyWage = Math.round((hourly / 60) * workedMinutes);
+      // 수습 기간이면 일일급에도 90%(중도퇴사 80%) 적용
+      const factor = probationFactor({
+        joined_at: emp?.joined_at ?? null,
+        is_resigned_during_probation: emp?.is_resigned_during_probation ?? false,
+      });
+      dailyWage = Math.round((hourly / 60) * workedMinutes * factor);
     }
   }
 
