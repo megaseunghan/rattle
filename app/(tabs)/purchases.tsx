@@ -7,6 +7,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../constants/colors';
+import { useAuth } from '../../lib/contexts/AuthContext';
 import { usePurchases } from '../../lib/hooks/usePurchases';
 import { useExpenses } from '../../lib/hooks/useExpenses';
 import { PurchaseCategory, PurchaseType, ExpenseCategory } from '../../types';
@@ -227,6 +228,8 @@ function PurchasesView() {
 
 // ─── 비용 뷰 ───────────────────────────────────────────────
 function ExpensesView() {
+  const { currentRole } = useAuth();
+  const isAdmin = currentRole === 'admin';
   const today = new Date();
   const [year, setYear] = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth() + 1);
@@ -277,6 +280,7 @@ function ExpensesView() {
         {EXPENSE_CATEGORIES.map(cat => {
           const catItems = expenses.filter(e => e.category === cat.key);
           const catTotal = catItems.reduce((s, e) => s + e.amount, 0);
+          const locked = cat.key === '고정비' && !isAdmin; // 고정비는 관리자만 수정
           return (
             <View key={cat.key} style={styles.expSection}>
               <View style={styles.expSectionHeader}>
@@ -284,22 +288,30 @@ function ExpensesView() {
                   <Ionicons name={cat.icon} size={16} color={cat.color} />
                 </View>
                 <Text style={styles.catLabel}>{cat.key}</Text>
+                {locked && <Ionicons name="lock-closed" size={12} color={Colors.gray400} style={{ marginLeft: 4 }} />}
                 {catTotal > 0 && <Text style={[styles.catTotal, { color: cat.color }]}>{catTotal.toLocaleString()}원</Text>}
               </View>
               <View style={styles.listCard}>
                 {loading ? <View style={styles.emptyInCard}><ActivityIndicator size="small" color={Colors.gray300} /></View>
                   : catItems.length === 0 ? <View style={styles.emptyInCard}><Text style={styles.emptyInCardText}>등록된 항목이 없어요</Text></View>
                   : catItems.map((item, idx) => (
-                    <TouchableOpacity key={item.id} style={[styles.itemRow, idx < catItems.length - 1 && styles.rowBorder]} onLongPress={() => Alert.alert('삭제', '이 항목을 삭제할까요?', [{ text: '취소', style: 'cancel' }, { text: '삭제', style: 'destructive', onPress: () => remove(item.id).catch(e => Alert.alert('삭제 실패', e.message)) }])} activeOpacity={0.7}>
+                    <TouchableOpacity key={item.id} style={[styles.itemRow, idx < catItems.length - 1 && styles.rowBorder]} onLongPress={locked ? undefined : () => Alert.alert('삭제', '이 항목을 삭제할까요?', [{ text: '취소', style: 'cancel' }, { text: '삭제', style: 'destructive', onPress: () => remove(item.id).catch(e => Alert.alert('삭제 실패', e.message)) }])} activeOpacity={locked ? 1 : 0.7}>
                       <Text style={styles.itemName}>{item.name}</Text>
                       <Text style={styles.itemAmount}>{item.amount.toLocaleString()}원</Text>
                     </TouchableOpacity>
                   ))
                 }
-                <TouchableOpacity style={[styles.addCatRow, catItems.length > 0 && styles.addCatRowBorder]} onPress={() => { setEditTarget(cat.key); setInputName(''); setInputAmount(''); setModalVisible(true); }} activeOpacity={0.7}>
-                  <Ionicons name="add-circle-outline" size={16} color={cat.color} />
-                  <Text style={[styles.addCatRowText, { color: cat.color }]}>항목 추가</Text>
-                </TouchableOpacity>
+                {locked ? (
+                  <View style={[styles.addCatRow, catItems.length > 0 && styles.addCatRowBorder]}>
+                    <Ionicons name="lock-closed-outline" size={14} color={Colors.gray400} />
+                    <Text style={[styles.addCatRowText, { color: Colors.gray400 }]}>관리자만 수정할 수 있어요</Text>
+                  </View>
+                ) : (
+                  <TouchableOpacity style={[styles.addCatRow, catItems.length > 0 && styles.addCatRowBorder]} onPress={() => { setEditTarget(cat.key); setInputName(''); setInputAmount(''); setModalVisible(true); }} activeOpacity={0.7}>
+                    <Ionicons name="add-circle-outline" size={16} color={cat.color} />
+                    <Text style={[styles.addCatRowText, { color: cat.color }]}>항목 추가</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             </View>
           );

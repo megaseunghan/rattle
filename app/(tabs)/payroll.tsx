@@ -158,6 +158,7 @@ export default function PayrollScreen() {
   const { payrolls, loading: payLoading, calculating, refetch: refetchPay, calculate, remove: removePayroll } = usePayroll(yearMonth);
 
   const { store, currentRole } = useAuth();
+  const isAdmin = currentRole === 'admin';
   const [modalVisible, setModalVisible] = useState(false);
   const [editTarget, setEditTarget] = useState<Employee | null>(null);
   const [form, setForm] = useState(EMPTY_FORM);
@@ -196,6 +197,11 @@ export default function PayrollScreen() {
   }
 
   function openEdit(employee: Employee) {
+    // 일반 멤버는 파트타이머만 수정 가능, 정규직은 관리자 전용
+    if (!isAdmin && employee.employment_type !== 'part_time') {
+      Alert.alert('수정 권한 없음', '정규직 직원의 인건비는 관리자만 수정할 수 있어요.');
+      return;
+    }
     setEditTarget(employee);
     setForm({
       name: employee.name,
@@ -333,10 +339,12 @@ export default function PayrollScreen() {
           ))
         )}
 
-        <TouchableOpacity style={styles.addBtn} onPress={openAdd} activeOpacity={0.7}>
-          <Ionicons name="person-add-outline" size={16} color={Colors.gray700} />
-          <Text style={styles.addBtnText}>직원 추가</Text>
-        </TouchableOpacity>
+        {isAdmin && (
+          <TouchableOpacity style={styles.addBtn} onPress={openAdd} activeOpacity={0.7}>
+            <Ionicons name="person-add-outline" size={16} color={Colors.gray700} />
+            <Text style={styles.addBtnText}>직원 추가</Text>
+          </TouchableOpacity>
+        )}
 
       </ScrollView>
 
@@ -494,7 +502,7 @@ export default function PayrollScreen() {
                 }
               </TouchableOpacity>
             </View>
-            {editTarget && (
+            {editTarget && isAdmin && (
               <TouchableOpacity
                 style={styles.deleteBtn}
                 onPress={() => {
