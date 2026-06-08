@@ -2,6 +2,8 @@ import { supabase } from '../supabase';
 import { ProfitLoss, PurchaseCategory } from '../../types';
 import { getPurchasesByMonth } from './purchases';
 import { getExpensesByMonth } from './expenses';
+import { getStoreWageHistory, regularGrossForMonth } from './wageHistory';
+import { probationFactor } from './payroll';
 
 export async function getYearlyProfitLoss(
   storeId: string,
@@ -43,7 +45,7 @@ export async function getProfitLossByMonth(
   to.setHours(h, m, 0, 0);
   if (to > new Date()) to.setTime(Date.now());
 
-  const [revenueResult, purchases, expenses, payrollResult, attendanceResult] = await Promise.all([
+  const [revenueResult, purchases, expenses, payrollResult, attendanceResult, wageHistory, employeesResult] = await Promise.all([
     supabase
       .from('toss_orders')
       .select('total_amount, card_amount, cash_amount')
@@ -66,6 +68,14 @@ export async function getProfitLossByMonth(
       .eq('type', 'clock_out')
       .gte('timestamp', from.toISOString())
       .lte('timestamp', to.toISOString()),
+    // 급여 이력 (정규직 일할 누적 계산용)
+    getStoreWageHistory(storeId),
+    // 활성 직원 (고용형태·수습 판별)
+    supabase
+      .from('employees')
+      .select('id, employment_type, joined_at, is_resigned_during_probation')
+      .eq('store_id', storeId)
+      .eq('is_active', true),
   ]);
 
   // 1. 매출 (카드/현금 분리)
@@ -89,44 +99,44 @@ export async function getProfitLossByMonth(
 
   // 3. 인건비 (직원/파트타이머 분리)
   const payrolls = payrollResult.data ?? [];
+  const employees = employeesResult.data ?? [];
   let regularGross = 0, regularWithholding = 0;
   let partTimeGross = 0, partTimeWithholding = 0;
 
-  // employee_id로 고용형태 조회
-  const empIds = [...new Set(payrolls.map((p: any) => p.employee_id).filter(Boolean))];
-  let empTypes: Record<string, string> = {};
-  if (empIds.length > 0) {
-    const { data: emps } = await supabase
-      .from('employees')
-      .select('id, employment_type')
-      .in('id', empIds);
-    for (const e of (emps ?? [])) empTypes[e.id] = e.employment_type;
+  const empTypes: Record<string, string> = {};
+  for (const e of employees) empTypes[e.id] = e.employment_type;
+
+  // 급여 이력을 직원별로 그룹화
+  const historyByEmp: Record<string, typeof wageHistory> = {};
+  for (const w of wageHistory) {
+    (historyByEmp[w.employee_id] ??= []).push(w);
   }
 
-  // 정규직: payroll 기준 / 파트타이머: 출퇴근 일일급여 기준 (이중계상 방지)
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const monthEnd = new Date(year, month, 0); monthEnd.setHours(h, m, 0, 0);
+  const asOf = Date.now() < monthEnd.getTime() ? new Date() : monthEnd;
+  const monthFactor = Date.now() < monthEnd.getTime()
+    ? Math.min(1, Math.min(new Date().getDate(), daysInMonth) / daysInMonth)
+    : 1;
+
+  // 정규직 세전: 급여 이력 기반 일할 누적 (인상/인하 시점 정확 분할, 과거 보존)
+  for (const e of employees) {
+    if (e.employment_type === 'part_time') continue;
+    regularGross += regularGrossForMonth(historyByEmp[e.id] ?? [], year, month, asOf, probationFactor(e));
+  }
+
+  // 정규직 원천징수: payroll 명세 기준, 경과일 비율로 일할 (gross 정합)
   for (const p of payrolls) {
     if (empTypes[p.employee_id] === 'part_time') continue;
-    const gross = Number(p.gross ?? 0);
     const withholding = Number(p.withholding_tax ?? 0) > 0
       ? Number(p.withholding_tax)
       : Number(p.national_pension ?? 0) + Number(p.health_insurance ?? 0) +
         Number(p.long_term_care ?? 0) + Number(p.employment_insurance ?? 0) +
         Number(p.income_tax ?? 0) + Number(p.local_income_tax ?? 0);
-    regularGross += gross;
-    regularWithholding += withholding;
+    regularWithholding += Math.round(withholding * monthFactor);
   }
 
-  // 정규직: 진행 중인 달이면 경과일 기준 일할 계산 (매출 누적 속도와 정합)
-  const daysInMonth = new Date(year, month, 0).getDate();
-  const monthEnd = new Date(year, month, 0); monthEnd.setHours(h, m, 0, 0);
-  if (Date.now() < monthEnd.getTime()) {
-    const elapsedDay = Math.min(new Date().getDate(), daysInMonth);
-    const laborFactor = Math.min(1, elapsedDay / daysInMonth);
-    regularGross = Math.round(regularGross * laborFactor);
-    regularWithholding = Math.round(regularWithholding * laborFactor);
-  }
-
-  // 파트타이머 인건비: 퇴근 기록 일일급여 합산 (이미 실근무 기준이라 일할 불필요)
+  // 파트타이머 인건비: 퇴근 기록 일일급여 합산 (이미 실근무·당시 시급 기준이라 일할 불필요)
   partTimeGross = (attendanceResult.data ?? []).reduce((s, a: any) => s + Number(a.daily_wage ?? 0), 0);
 
   const laborCost = regularGross + partTimeGross;

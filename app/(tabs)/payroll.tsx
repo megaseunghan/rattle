@@ -16,10 +16,14 @@ import { Employee, EmploymentType, StoreMember } from '../../types';
 import { isInProbation, isInsuranceApplicable } from '../../lib/services/employees';
 import { getMonthlyWageByEmployee } from '../../lib/services/attendance';
 import { probationFactor } from '../../lib/services/payroll';
+import {
+  getStoreWageHistory, addWageChange, regularGrossForMonth, todayISO,
+} from '../../lib/services/wageHistory';
+import { WageHistory } from '../../types';
 
 type WageAccum = { totalWage: number; totalMinutes: number; days: number };
 
-/** 경과일 기준 일할 계수 (손익계산서와 동일): 지난 달 1, 다음 달 0, 진행 중인 달은 경과일/총일수 */
+/** 경과일 기준 일할 계수 (라벨 표기용): 지난 달 1, 다음 달 0, 진행 중인 달은 경과일/총일수 */
 function accruedFactor(year: number, month: number): number {
   const now = new Date();
   const cy = now.getFullYear();
@@ -40,6 +44,7 @@ function EmployeeCard({
   wage,
   accruedGross,
   accrualLabel,
+  onShowHistory,
   isCalculating,
   onCalculate,
   onEdit,
@@ -50,6 +55,7 @@ function EmployeeCard({
   wage?: WageAccum;
   accruedGross: number;
   accrualLabel: string;
+  onShowHistory: () => void;
   isCalculating: boolean;
   onCalculate: () => void;
   onEdit: () => void;
@@ -80,9 +86,14 @@ function EmployeeCard({
             </View>
           )}
         </View>
-        <TouchableOpacity onPress={onEdit} style={styles.editBtn}>
-          <Ionicons name="ellipsis-horizontal" size={16} color={Colors.gray400} />
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          <TouchableOpacity onPress={onShowHistory} style={styles.histBtn}>
+            <Ionicons name="time-outline" size={16} color={Colors.gray400} />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={onEdit} style={styles.editBtn}>
+            <Ionicons name="ellipsis-horizontal" size={16} color={Colors.gray400} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {isPart ? (
@@ -224,6 +235,17 @@ export default function PayrollScreen() {
   const [saving, setSaving] = useState(false);
   const [members, setMembers] = useState<StoreMember[]>([]);
   const [wageMap, setWageMap] = useState<Record<string, WageAccum>>({});
+  const [histMap, setHistMap] = useState<Record<string, WageHistory[]>>({});
+
+  // 급여 변경 확인 모달
+  const [wageChange, setWageChange] = useState<{
+    employee: Employee; isPart: boolean;
+    base_salary: number; hourly_wage: number | null; non_taxable: number;
+    effectiveDate: string; memo: string;
+  } | null>(null);
+  const [applyingWage, setApplyingWage] = useState(false);
+  // 급여 이력 보기 모달
+  const [histTarget, setHistTarget] = useState<Employee | null>(null);
 
   const refetchWage = useCallback(() => {
     if (!store) return;
@@ -232,11 +254,23 @@ export default function PayrollScreen() {
       .catch(() => setWageMap({}));
   }, [store, yearMonth]);
 
+  const refetchHist = useCallback(() => {
+    if (!store) return;
+    getStoreWageHistory(store.id)
+      .then(rows => {
+        const map: Record<string, WageHistory[]> = {};
+        for (const w of rows) (map[w.employee_id] ??= []).push(w);
+        setHistMap(map);
+      })
+      .catch(() => setHistMap({}));
+  }, [store]);
+
   useFocusEffect(useCallback(() => {
     refetchEmp();
     refetchPay();
     refetchWage();
-  }, [refetchEmp, refetchPay, refetchWage]));
+    refetchHist();
+  }, [refetchEmp, refetchPay, refetchWage, refetchHist]));
 
   // 계정 연결용 매장 멤버 목록 (관리자만)
   useEffect(() => {
@@ -307,29 +341,53 @@ export default function PayrollScreen() {
       if (!salary || salary <= 0) { Alert.alert('입력 오류', '기본급을 입력해주세요.'); return; }
     }
 
+    const newBase = isPart ? 0 : salary;
+    const newHourly = isPart ? hourly : null;
+
+    // 급여 외 정보 (이력과 무관 — 즉시 반영)
+    const basePayload = {
+      name,
+      employment_type: form.employment_type,
+      joined_at: form.joined_at.trim() || null,
+      phone: form.phone.trim() || null,
+      bank_name: form.bank_name.trim() || null,
+      account_number: form.account_number.trim() || null,
+      weekly_hours: isPart ? wh : null,
+      dependents: dep,
+      user_id: form.user_id,
+    };
+
     setSaving(true);
     try {
-      const payload = {
-        name,
-        employment_type: form.employment_type,
-        base_salary: isPart ? 0 : salary,
-        hourly_wage: isPart ? hourly : null,
-        non_taxable: nonTaxable,
-        joined_at: form.joined_at.trim() || null,
-        phone: form.phone.trim() || null,
-        bank_name: form.bank_name.trim() || null,
-        account_number: form.account_number.trim() || null,
-        weekly_hours: isPart ? wh : null,
-        dependents: dep,
-        user_id: form.user_id,
-      };
-
       if (editTarget) {
-        await update(editTarget.id, payload);
+        // 급여(시급/월급/비과세) 변경 여부 판별
+        const wageChanged =
+          newBase !== editTarget.base_salary ||
+          (newHourly ?? null) !== (editTarget.hourly_wage ?? null) ||
+          nonTaxable !== editTarget.non_taxable;
+
+        await update(editTarget.id, basePayload);
+
+        if (wageChanged) {
+          // 적용일 확인 팝업으로 이어짐 (이력 보존)
+          setModalVisible(false);
+          setSaving(false);
+          setWageChange({
+            employee: editTarget,
+            isPart,
+            base_salary: newBase,
+            hourly_wage: newHourly,
+            non_taxable: nonTaxable,
+            effectiveDate: todayISO(),
+            memo: '',
+          });
+          return;
+        }
+        setModalVisible(false);
       } else {
-        await add(payload);
+        await add({ ...basePayload, base_salary: newBase, hourly_wage: newHourly, non_taxable: nonTaxable });
+        setModalVisible(false);
       }
-      setModalVisible(false);
     } catch (e: any) {
       Alert.alert('저장 실패', e.message);
     } finally {
@@ -337,12 +395,41 @@ export default function PayrollScreen() {
     }
   }
 
-  // 누적 기준 합계 (정규직: 경과일 일할, 파트타이머: 출퇴근 일급 누적)
+  async function confirmWageChange() {
+    if (!store || !wageChange) return;
+    const dateStr = wageChange.effectiveDate.trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+      Alert.alert('입력 오류', '적용일을 YYYY-MM-DD 형식으로 입력해주세요.');
+      return;
+    }
+    setApplyingWage(true);
+    try {
+      await addWageChange({
+        storeId: store.id,
+        employeeId: wageChange.employee.id,
+        effectiveDate: dateStr,
+        baseSalary: wageChange.base_salary,
+        hourlyWage: wageChange.hourly_wage,
+        nonTaxable: wageChange.non_taxable,
+        memo: wageChange.memo.trim() || null,
+      });
+      setWageChange(null);
+      refetchEmp();
+      refetchHist();
+    } catch (e: any) {
+      Alert.alert('적용 실패', e.message);
+    } finally {
+      setApplyingWage(false);
+    }
+  }
+
+  // 누적 기준 합계 (정규직: 급여 이력 기반 일할, 파트타이머: 출퇴근 일급 누적)
+  const accrualNow = new Date();
   const monthFactor = accruedFactor(year, month);
   const partTimeWageTotal = Object.values(wageMap).reduce((s, w) => s + w.totalWage, 0);
   const regularEmps = employees.filter(e => e.employment_type !== 'part_time');
   const regularAccruedGross = regularEmps.reduce(
-    (s, e) => s + Math.round(Math.floor(e.base_salary * probationFactor(e)) * monthFactor), 0);
+    (s, e) => s + regularGrossForMonth(histMap[e.id] ?? [], year, month, accrualNow, probationFactor(e)), 0);
   const regularAccruedNet = payrolls.reduce((s, p) => {
     const emp = regularEmps.find(e => e.id === p.employee_id);
     return emp ? s + Math.round(p.net_pay * monthFactor) : s;
@@ -407,7 +494,6 @@ export default function PayrollScreen() {
         ) : (
           employees.map(emp => {
             const factor = accruedFactor(year, month);
-            const fullGross = Math.floor(emp.base_salary * probationFactor(emp));
             const daysInMonth = new Date(year, month, 0).getDate();
             const elapsed = Math.round(factor * daysInMonth);
             return (
@@ -416,8 +502,9 @@ export default function PayrollScreen() {
               employee={emp}
               payroll={payrolls.find(p => p.employee_id === emp.id)}
               wage={wageMap[emp.id]}
-              accruedGross={Math.round(fullGross * factor)}
+              accruedGross={regularGrossForMonth(histMap[emp.id] ?? [], year, month, accrualNow, probationFactor(emp))}
               accrualLabel={`${month}월 ${elapsed}/${daysInMonth}일`}
+              onShowHistory={() => setHistTarget(emp)}
               isCalculating={calculating === emp.id}
               onCalculate={() => calculate(emp).catch(e => Alert.alert('계산 실패', e.message))}
               onEdit={() => openEdit(emp)}
@@ -649,6 +736,103 @@ export default function PayrollScreen() {
           </ScrollView>
         </KeyboardAvoidingView>
       </Modal>
+
+      {/* 급여 변경 적용일 확인 모달 */}
+      <Modal visible={wageChange != null} animationType="fade" transparent onRequestClose={() => setWageChange(null)}>
+        <View style={styles.confirmOverlay}>
+          <View style={styles.confirmCard}>
+            {wageChange && (() => {
+              const label = wageChange.isPart ? '시급' : '기본급';
+              const oldVal = wageChange.isPart ? (wageChange.employee.hourly_wage ?? 0) : wageChange.employee.base_salary;
+              const newVal = wageChange.isPart ? (wageChange.hourly_wage ?? 0) : wageChange.base_salary;
+              const up = newVal >= oldVal;
+              return (
+                <>
+                  <Text style={styles.confirmTitle}>{wageChange.employee.name} · {label} 변경</Text>
+                  <View style={styles.confirmAmountRow}>
+                    <Text style={styles.confirmOld}>{oldVal.toLocaleString()}원</Text>
+                    <Ionicons name="arrow-forward" size={16} color={Colors.gray400} />
+                    <Text style={[styles.confirmNew, up ? styles.confirmUp : styles.confirmDown]}>{newVal.toLocaleString()}원</Text>
+                    <View style={[styles.confirmTag, up ? styles.confirmTagUp : styles.confirmTagDown]}>
+                      <Text style={[styles.confirmTagText, up ? styles.confirmUp : styles.confirmDown]}>{up ? '인상' : '인하'}</Text>
+                    </View>
+                  </View>
+
+                  <Text style={styles.fieldLabel}>적용 시작일</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={wageChange.effectiveDate}
+                    onChangeText={v => setWageChange(w => w ? { ...w, effectiveDate: v } : w)}
+                    placeholder="YYYY-MM-DD"
+                    placeholderTextColor={Colors.gray300}
+                  />
+                  <Text style={styles.fieldHint}>
+                    {wageChange.effectiveDate}부터 적용됩니다. 그 이전 급여·손익 내역은 그대로 보존돼요. (소급/인하는 과거 날짜로 지정)
+                  </Text>
+
+                  <Text style={styles.fieldLabel}>사유 (선택)</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={wageChange.memo}
+                    onChangeText={v => setWageChange(w => w ? { ...w, memo: v } : w)}
+                    placeholder="예: 연봉 인상 / 징계 감액"
+                    placeholderTextColor={Colors.gray300}
+                  />
+
+                  <View style={styles.modalBtns}>
+                    <TouchableOpacity style={styles.cancelBtn} onPress={() => setWageChange(null)} disabled={applyingWage}>
+                      <Text style={styles.cancelBtnText}>취소</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.saveBtn, applyingWage && { opacity: 0.5 }]}
+                      onPress={confirmWageChange}
+                      disabled={applyingWage}
+                    >
+                      {applyingWage
+                        ? <ActivityIndicator size="small" color={Colors.white} />
+                        : <Text style={styles.saveBtnText}>적용</Text>}
+                    </TouchableOpacity>
+                  </View>
+                </>
+              );
+            })()}
+          </View>
+        </View>
+      </Modal>
+
+      {/* 급여 이력 모달 */}
+      <Modal visible={histTarget != null} animationType="slide" transparent onRequestClose={() => setHistTarget(null)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalSheet}>
+            <View style={styles.modalHandle} />
+            <Text style={styles.modalTitle}>{histTarget?.name} · 급여 이력</Text>
+            <Text style={styles.fieldHint}>적용일 기준 변경 내역입니다. 과거 손익은 당시 급여로 계산됩니다.</Text>
+            <ScrollView style={{ maxHeight: 360, marginTop: 8 }} showsVerticalScrollIndicator={false}>
+              {(histTarget ? histMap[histTarget.id] ?? [] : []).length === 0 ? (
+                <Text style={styles.histEmpty}>이력이 없어요</Text>
+              ) : (
+                (histMap[histTarget!.id] ?? []).map((h, i) => {
+                  const isPart = histTarget!.employment_type === 'part_time';
+                  const amount = isPart ? (h.hourly_wage ?? 0) : h.base_salary;
+                  return (
+                    <View key={h.id} style={[styles.histRow, i !== (histMap[histTarget!.id] ?? []).length - 1 && styles.histRowBorder]}>
+                      <View style={styles.histLeft}>
+                        <Text style={styles.histDate}>{h.effective_date}</Text>
+                        {h.memo ? <Text style={styles.histMemo}>{h.memo}</Text> : null}
+                      </View>
+                      <Text style={styles.histAmount}>{amount.toLocaleString()}원{isPart ? '/시' : ''}</Text>
+                    </View>
+                  );
+                })
+              )}
+            </ScrollView>
+            <TouchableOpacity style={[styles.cancelBtn, { marginTop: 16 }]} onPress={() => setHistTarget(null)}>
+              <Text style={styles.cancelBtnText}>닫기</Text>
+            </TouchableOpacity>
+            <View style={{ height: 24 }} />
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -687,7 +871,30 @@ const styles = StyleSheet.create({
   probationBadgeText: { fontSize: 11, fontWeight: '500', color: Colors.warning },
   taxBadge: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 8, backgroundColor: Colors.gray100 },
   taxBadgeText: { fontSize: 11, fontWeight: '500', color: Colors.gray500 },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  histBtn: { padding: 4 },
   editBtn: { padding: 4 },
+
+  confirmOverlay: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.4)', padding: 24 },
+  confirmCard: { width: '100%', backgroundColor: Colors.white, borderRadius: 20, padding: 22 },
+  confirmTitle: { fontSize: 16, fontWeight: '700', color: Colors.black, marginBottom: 14 },
+  confirmAmountRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' },
+  confirmOld: { fontSize: 15, color: Colors.gray400, textDecorationLine: 'line-through' },
+  confirmNew: { fontSize: 17, fontWeight: '800' },
+  confirmUp: { color: Colors.primary },
+  confirmDown: { color: '#DC2626' },
+  confirmTag: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8 },
+  confirmTagUp: { backgroundColor: Colors.tinted },
+  confirmTagDown: { backgroundColor: '#FEF2F2' },
+  confirmTagText: { fontSize: 11, fontWeight: '700' },
+
+  histRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12 },
+  histRowBorder: { borderBottomWidth: 0.5, borderBottomColor: Colors.gray100 },
+  histLeft: { gap: 2 },
+  histDate: { fontSize: 14, fontWeight: '600', color: Colors.black },
+  histMemo: { fontSize: 12, color: Colors.gray400 },
+  histAmount: { fontSize: 14, fontWeight: '700', color: Colors.gray700 },
+  histEmpty: { fontSize: 13, color: Colors.gray400, textAlign: 'center', paddingVertical: 32 },
   salaryRow: { flexDirection: 'row', justifyContent: 'space-between' },
   salaryLabel: { fontSize: 13, color: Colors.gray500 },
   salaryValue: { fontSize: 13, fontWeight: '500', color: Colors.black },
