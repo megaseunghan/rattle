@@ -29,6 +29,7 @@ export async function createEmployee(data: {
   probation_started_at?: string | null;
   weekly_hours?: number | null;
   dependents: number;
+  user_id?: string | null;
 }): Promise<Employee> {
   const { data: row, error } = await supabase
     .from('employees')
@@ -71,6 +72,19 @@ export async function deleteEmployee(id: string): Promise<void> {
     .eq('id', id);
 
   if (error) throw new Error(error.message);
+}
+
+/** 로그인 계정에 연결된 본인 직원 레코드 조회 (출퇴근용) */
+export async function getMyEmployee(storeId: string, userId: string): Promise<Employee | null> {
+  const { data, error } = await supabase
+    .from('employees')
+    .select('*')
+    .eq('store_id', storeId)
+    .eq('user_id', userId)
+    .eq('is_active', true)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return (data ?? null) as Employee | null;
 }
 
 /** 수습 기간 중인지 여부 — 입사일 기준 61일 자동 적용 */

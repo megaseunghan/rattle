@@ -89,8 +89,12 @@ function EmployeeCard({
 }
 
 export default function AttendanceScreen() {
-  const { store, refreshStore } = useAuth();
+  const { store, user, refreshStore } = useAuth();
   const { employees, loading: empLoading, refetch: refetchEmp } = useEmployees();
+
+  // 로그인 본인에 연결된 직원만 출퇴근 가능
+  const myEmployees = employees.filter(e => e.user_id === user?.id);
+
   const [recordsByEmp, setRecordsByEmp] = useState<Record<string, Attendance[]>>({});
   const [loadingRecords, setLoadingRecords] = useState(false);
   const [stampingId, setStampingId] = useState<string | null>(null);
@@ -98,11 +102,11 @@ export default function AttendanceScreen() {
   const today = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'short' });
 
   const loadRecords = useCallback(async () => {
-    if (!store || employees.length === 0) return;
+    if (!store || myEmployees.length === 0) return;
     setLoadingRecords(true);
     try {
       const results = await Promise.all(
-        employees.map(emp => getTodayAttendance(store.id, emp.id).then(recs => ({ id: emp.id, recs })))
+        myEmployees.map(emp => getTodayAttendance(store.id, emp.id).then(recs => ({ id: emp.id, recs })))
       );
       const map: Record<string, Attendance[]> = {};
       results.forEach(({ id, recs }) => { map[id] = recs; });
@@ -110,7 +114,8 @@ export default function AttendanceScreen() {
     } finally {
       setLoadingRecords(false);
     }
-  }, [store, employees]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [store, employees, user?.id]);
 
   useFocusEffect(useCallback(() => {
     refreshStore();
@@ -195,14 +200,15 @@ export default function AttendanceScreen() {
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         {empLoading || loadingRecords
           ? <ActivityIndicator color={Colors.primary} style={{ marginTop: 32 }} />
-          : employees.length === 0
+          : myEmployees.length === 0
             ? (
               <View style={styles.empty}>
-                <Ionicons name="people-outline" size={36} color={Colors.gray300} />
-                <Text style={styles.emptyText}>등록된 직원이 없어요</Text>
+                <Ionicons name="person-circle-outline" size={36} color={Colors.gray300} />
+                <Text style={styles.emptyText}>연결된 직원 정보가 없어요</Text>
+                <Text style={styles.emptySub}>관리자에게 계정 연결을 요청해주세요</Text>
               </View>
             )
-            : employees.map(emp => (
+            : myEmployees.map(emp => (
               <EmployeeCard
                 key={emp.id}
                 employee={emp}
@@ -273,6 +279,7 @@ const styles = StyleSheet.create({
   timeLabel: { fontSize: 11, color: Colors.gray400 },
   timeValue: { fontSize: 12, fontWeight: '600', color: Colors.gray600 },
 
-  empty: { alignItems: 'center', paddingTop: 48, gap: 12 },
-  emptyText: { fontSize: 14, color: Colors.gray400 },
+  empty: { alignItems: 'center', paddingTop: 48, gap: 8 },
+  emptyText: { fontSize: 14, color: Colors.gray500, fontWeight: '500' },
+  emptySub: { fontSize: 12, color: Colors.gray400 },
 });

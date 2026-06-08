@@ -220,6 +220,7 @@ export type EmploymentType = 'regular' | 'part_time';
 export interface Employee {
   id: string;
   store_id: string;
+  user_id: string | null;              // 연결된 로그인 계정 (출퇴근 본인 확인용)
   name: string;
   employment_type: EmploymentType;
   base_salary: number;

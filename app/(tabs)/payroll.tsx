@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   Modal, TextInput, Alert, KeyboardAvoidingView, Platform,
@@ -8,9 +8,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../constants/colors';
+import { supabase } from '../../lib/supabase';
+import { useAuth } from '../../lib/contexts/AuthContext';
 import { useEmployees } from '../../lib/hooks/useEmployees';
 import { usePayroll } from '../../lib/hooks/usePayroll';
-import { Employee, EmploymentType } from '../../types';
+import { Employee, EmploymentType, StoreMember } from '../../types';
 import { isInProbation, isInsuranceApplicable } from '../../lib/services/employees';
 
 function toYearMonth(year: number, month: number) {
@@ -143,6 +145,7 @@ const EMPTY_FORM = {
   account_number: '',
   weekly_hours: '',
   dependents: '1',
+  user_id: null as string | null,
 };
 
 export default function PayrollScreen() {
@@ -154,15 +157,28 @@ export default function PayrollScreen() {
   const { employees, loading: empLoading, refetch: refetchEmp, add, update, deactivate } = useEmployees();
   const { payrolls, loading: payLoading, calculating, refetch: refetchPay, calculate, remove: removePayroll } = usePayroll(yearMonth);
 
+  const { store, currentRole } = useAuth();
   const [modalVisible, setModalVisible] = useState(false);
   const [editTarget, setEditTarget] = useState<Employee | null>(null);
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
+  const [members, setMembers] = useState<StoreMember[]>([]);
 
   useFocusEffect(useCallback(() => {
     refetchEmp();
     refetchPay();
   }, [refetchEmp, refetchPay]));
+
+  // 계정 연결용 매장 멤버 목록 (관리자만)
+  useEffect(() => {
+    if (!store || currentRole !== 'admin') return;
+    supabase
+      .from('store_members')
+      .select('*')
+      .eq('store_id', store.id)
+      .eq('status', 'approved')
+      .then(({ data }) => setMembers((data ?? []) as StoreMember[]));
+  }, [store, currentRole]);
 
   function prevMonth() {
     if (month === 1) { setYear(y => y - 1); setMonth(12); }
@@ -192,6 +208,7 @@ export default function PayrollScreen() {
       account_number: employee.account_number ?? '',
       weekly_hours: employee.weekly_hours != null ? String(employee.weekly_hours) : '',
       dependents: String(employee.dependents),
+      user_id: employee.user_id,
     });
     setModalVisible(true);
   }
@@ -219,6 +236,7 @@ export default function PayrollScreen() {
         account_number: form.account_number.trim() || null,
         weekly_hours: form.employment_type === 'part_time' ? wh : null,
         dependents: dep,
+        user_id: form.user_id,
       };
 
       if (editTarget) {
@@ -435,6 +453,32 @@ export default function PayrollScreen() {
               keyboardType="numeric"
             />
 
+            {currentRole === 'admin' && (
+              <>
+                <Text style={styles.fieldLabel}>출퇴근 계정 연결</Text>
+                <Text style={styles.fieldHint}>연결된 계정으로 로그인한 직원만 본인 출퇴근을 찍을 수 있어요.</Text>
+                <View style={styles.memberWrap}>
+                  <TouchableOpacity
+                    style={[styles.memberChip, form.user_id == null && styles.memberChipOn]}
+                    onPress={() => setForm(f => ({ ...f, user_id: null }))}
+                  >
+                    <Text style={[styles.memberChipText, form.user_id == null && styles.memberChipTextOn]}>연결 안함</Text>
+                  </TouchableOpacity>
+                  {members.map(m => (
+                    <TouchableOpacity
+                      key={m.user_id}
+                      style={[styles.memberChip, form.user_id === m.user_id && styles.memberChipOn]}
+                      onPress={() => setForm(f => ({ ...f, user_id: m.user_id }))}
+                    >
+                      <Text style={[styles.memberChipText, form.user_id === m.user_id && styles.memberChipTextOn]}>
+                        {m.user_email ?? m.user_id.slice(0, 8)}{m.role === 'admin' ? ' (관리자)' : ''}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </>
+            )}
+
             <View style={styles.modalBtns}>
               <TouchableOpacity style={styles.cancelBtn} onPress={() => setModalVisible(false)}>
                 <Text style={styles.cancelBtnText}>취소</Text>
@@ -544,7 +588,13 @@ const styles = StyleSheet.create({
   modalHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: Colors.gray200, alignSelf: 'center', marginBottom: 20 },
   modalTitle: { fontSize: 16, fontWeight: '700', color: Colors.black, marginBottom: 4 },
   fieldLabel: { fontSize: 13, fontWeight: '600', color: Colors.gray600, marginBottom: 6, marginTop: 14 },
+  fieldHint: { fontSize: 11, color: Colors.gray400, marginBottom: 8, lineHeight: 16 },
   input: { borderWidth: 1, borderColor: Colors.gray200, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, color: Colors.black, backgroundColor: Colors.gray50 },
+  memberWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  memberChip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, borderWidth: 1, borderColor: Colors.gray200, backgroundColor: Colors.gray50 },
+  memberChipOn: { borderColor: Colors.primary, backgroundColor: Colors.tinted },
+  memberChipText: { fontSize: 12, color: Colors.gray500, fontWeight: '500' },
+  memberChipTextOn: { color: Colors.primary, fontWeight: '700' },
   chipRow: { flexDirection: 'row', gap: 8 },
   chip: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, borderWidth: 1, borderColor: Colors.gray200, backgroundColor: Colors.gray50 },
   chipActive: { backgroundColor: Colors.black, borderColor: Colors.black },
