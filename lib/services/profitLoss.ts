@@ -43,7 +43,7 @@ export async function getProfitLossByMonth(
   to.setHours(h, m, 0, 0);
   if (to > new Date()) to.setTime(Date.now());
 
-  const [revenueResult, purchases, expenses, payrollResult] = await Promise.all([
+  const [revenueResult, purchases, expenses, payrollResult, attendanceResult] = await Promise.all([
     supabase
       .from('toss_orders')
       .select('total_amount, card_amount, cash_amount')
@@ -58,6 +58,14 @@ export async function getProfitLossByMonth(
       .select('gross, national_pension, health_insurance, long_term_care, employment_insurance, income_tax, local_income_tax, withholding_tax, employee_id')
       .eq('store_id', storeId)
       .eq('year_month', yearMonth),
+    // 파트타이머 일일급여: 퇴근 기록의 daily_wage 합산 (영업일 범위)
+    supabase
+      .from('attendance')
+      .select('daily_wage')
+      .eq('store_id', storeId)
+      .eq('type', 'clock_out')
+      .gte('timestamp', from.toISOString())
+      .lte('timestamp', to.toISOString()),
   ]);
 
   // 1. 매출 (카드/현금 분리)
@@ -95,23 +103,22 @@ export async function getProfitLossByMonth(
     for (const e of (emps ?? [])) empTypes[e.id] = e.employment_type;
   }
 
+  // 정규직: payroll 기준 / 파트타이머: 출퇴근 일일급여 기준 (이중계상 방지)
   for (const p of payrolls) {
+    if (empTypes[p.employee_id] === 'part_time') continue;
     const gross = Number(p.gross ?? 0);
-    const isPartTime = empTypes[p.employee_id] === 'part_time';
     const withholding = Number(p.withholding_tax ?? 0) > 0
       ? Number(p.withholding_tax)
       : Number(p.national_pension ?? 0) + Number(p.health_insurance ?? 0) +
         Number(p.long_term_care ?? 0) + Number(p.employment_insurance ?? 0) +
         Number(p.income_tax ?? 0) + Number(p.local_income_tax ?? 0);
-
-    if (isPartTime) {
-      partTimeGross += gross;
-      partTimeWithholding += withholding;
-    } else {
-      regularGross += gross;
-      regularWithholding += withholding;
-    }
+    regularGross += gross;
+    regularWithholding += withholding;
   }
+
+  // 파트타이머 인건비: 퇴근 기록 일일급여 합산
+  partTimeGross = (attendanceResult.data ?? []).reduce((s, a: any) => s + Number(a.daily_wage ?? 0), 0);
+
   const laborCost = regularGross + partTimeGross;
 
   // 4. 비용 (카테고리별)
