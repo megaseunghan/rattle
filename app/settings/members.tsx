@@ -44,6 +44,10 @@ export default function MembersScreen() {
         .eq('id', member.id);
       if (error) throw error;
       await loadMembers();
+      Alert.alert(
+        '승인 완료',
+        `${member.applicant_name ?? member.user_email ?? '신청자'} 님이 직원으로 추가됐어요.\n인건비 탭에서 급여 정보를 입력해주세요.`,
+      );
     } catch (e: unknown) {
       Alert.alert('오류', e instanceof Error ? e.message : '승인에 실패했습니다.');
     }
@@ -124,9 +128,9 @@ export default function MembersScreen() {
                     <View style={styles.rowLeft}>
                       <Ionicons name="person-circle-outline" size={36} color={Colors.gray300} />
                       <View style={styles.rowInfo}>
-                        <Text style={styles.email}>{m.user_email ?? '알 수 없는 사용자'}</Text>
+                        <Text style={styles.email}>{m.applicant_name ?? m.user_email ?? '알 수 없는 사용자'}</Text>
                         <Text style={styles.date}>
-                          {new Date(m.created_at).toLocaleDateString('ko-KR')} 신청
+                          {m.user_email ? `${m.user_email} · ` : ''}{new Date(m.created_at).toLocaleDateString('ko-KR')} 신청
                         </Text>
                       </View>
                     </View>
@@ -155,7 +159,7 @@ export default function MembersScreen() {
                   <View style={styles.rowLeft}>
                     <Ionicons name="person-circle-outline" size={36} color={Colors.gray300} />
                     <View style={styles.rowInfo}>
-                      <Text style={styles.email}>{m.user_email ?? '알 수 없는 사용자'}</Text>
+                      <Text style={styles.email}>{m.applicant_name ?? m.user_email ?? '알 수 없는 사용자'}</Text>
                       <View style={styles.roleBadge}>
                         <Text style={[styles.roleText, m.role === 'admin' && styles.roleAdmin]}>
                           {m.role === 'admin' ? '관리자' : '일반'}

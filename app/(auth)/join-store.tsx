@@ -11,11 +11,18 @@ import { Colors } from '../../constants/colors';
 
 export default function JoinStoreScreen() {
   const [businessNumber, setBusinessNumber] = useState('');
+  const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
   const [loading, setLoading] = useState(false);
   const { user } = useAuth();
 
   async function handleJoin() {
     const cleaned = businessNumber.replace(/[^0-9]/g, '');
+    const trimmedName = name.trim();
+    if (!trimmedName) {
+      Alert.alert('알림', '이름을 입력해주세요.');
+      return;
+    }
     if (cleaned.length !== 10) {
       Alert.alert('알림', '사업자번호 10자리를 입력해주세요.\n예: 1234567890');
       return;
@@ -56,6 +63,8 @@ export default function JoinStoreScreen() {
           store_id: storeData.id,
           user_id: user.id,
           user_email: user.email ?? null,
+          applicant_name: trimmedName,
+          phone: phone.trim() || null,
           role: 'member',
           status: 'pending',
         });
@@ -85,7 +94,22 @@ export default function JoinStoreScreen() {
       </View>
 
       <View style={styles.content}>
-        <Text style={styles.subtitle}>참여할 매장의 사업자번호를 입력하세요</Text>
+        <Text style={styles.subtitle}>참여할 매장 정보와 본인 정보를 입력하세요</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="이름 (출퇴근·급여에 사용)"
+          placeholderTextColor={Colors.gray400}
+          value={name}
+          onChangeText={setName}
+        />
+        <TextInput
+          style={styles.input}
+          placeholder="연락처 (선택)"
+          placeholderTextColor={Colors.gray400}
+          value={phone}
+          onChangeText={setPhone}
+          keyboardType="phone-pad"
+        />
         <TextInput
           style={styles.input}
           placeholder="사업자번호 10자리 (예: 1234567890)"
