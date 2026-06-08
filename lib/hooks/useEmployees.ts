@@ -3,6 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 import {
   getEmployees, createEmployee, updateEmployee, deactivateEmployee, deleteEmployee,
 } from '../services/employees';
+import { seedInitialWage } from '../services/wageHistory';
 import { Employee, EmploymentType } from '../../types';
 
 export function useEmployees() {
@@ -39,6 +40,15 @@ export function useEmployees() {
   }) => {
     if (!store) throw new Error('매장 정보가 없습니다');
     const created = await createEmployee({ is_probation: false, ...data, store_id: store.id });
+    // 초기 급여 이력 시드 (입사일 또는 오늘부터)
+    await seedInitialWage({
+      storeId: store.id,
+      employeeId: created.id,
+      joinedAt: created.joined_at,
+      baseSalary: created.base_salary,
+      hourlyWage: created.hourly_wage,
+      nonTaxable: created.non_taxable,
+    }).catch(() => {});
     setEmployees(prev => [...prev, created]);
     return created;
   }, [store]);

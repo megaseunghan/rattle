@@ -243,6 +243,19 @@ export interface Employee {
   created_at: string;
 }
 
+// 급여 이력 (effective_date 기준 시급/월급 변경 보존)
+export interface WageHistory {
+  id: string;
+  store_id: string;
+  employee_id: string;
+  effective_date: string;          // 'YYYY-MM-DD' 적용 시작일
+  base_salary: number;             // 정규직 월급
+  hourly_wage: number | null;      // 파트타이머 시급
+  non_taxable: number;
+  memo: string | null;             // 사유 (인상/인하/징계 등)
+  created_at: string;
+}
+
 // 급여 명세
 export interface Payroll {
   id: string;
