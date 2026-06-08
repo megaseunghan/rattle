@@ -7,8 +7,51 @@ import { Colors } from '../../constants/colors';
 import { useAuth } from '../../lib/contexts/AuthContext';
 import { useIngredients } from '../../lib/hooks/useIngredients';
 import { useProfitLoss } from '../../lib/hooks/useProfitLoss';
+import { useEmployees } from '../../lib/hooks/useEmployees';
 import { useFixedExpenseCheck } from '../../lib/hooks/useFixedExpenseCheck';
+import { AttendanceCalendar } from '../../lib/components/AttendanceCalendar';
 import { Ingredient, ProfitLoss } from '../../types';
+
+type QuickAction = { key: string; label: string; icon: keyof typeof Ionicons.glyphMap; route: string };
+
+const QUICK_ACTIONS: Record<'admin' | 'member' | 'part_time', QuickAction[]> = {
+  admin: [
+    { key: 'attendance', label: '출퇴근 관리', icon: 'time-outline',   route: '/attendance' },
+    { key: 'employees',  label: '직원 관리',   icon: 'people-outline', route: '/(tabs)/payroll' },
+    { key: 'purchases',  label: '매입 관리',   icon: 'cart-outline',   route: '/(tabs)/purchases' },
+    { key: 'stock',      label: '재고/레시피', icon: 'cube-outline',   route: '/(tabs)/stock' },
+  ],
+  member: [
+    { key: 'attendance', label: '출퇴근 관리',   icon: 'time-outline',   route: '/attendance' },
+    { key: 'parttime',   label: '파트타이머 관리', icon: 'people-outline', route: '/(tabs)/payroll' },
+    { key: 'purchases',  label: '매입 관리',     icon: 'cart-outline',   route: '/(tabs)/purchases' },
+    { key: 'stock',      label: '재고/레시피',   icon: 'cube-outline',   route: '/(tabs)/stock' },
+  ],
+  part_time: [
+    { key: 'attendance', label: '출퇴근 관리', icon: 'time-outline', route: '/attendance' },
+    { key: 'stock',      label: '재고 관리',   icon: 'cube-outline', route: '/(tabs)/stock' },
+  ],
+};
+
+function QuickActionsGrid({ actions }: { actions: QuickAction[] }) {
+  return (
+    <View style={styles.quickGrid}>
+      {actions.map(a => (
+        <TouchableOpacity
+          key={a.key}
+          style={styles.quickCard}
+          activeOpacity={0.75}
+          onPress={() => router.push(a.route as any)}
+        >
+          <View style={styles.quickIconWrap}>
+            <Ionicons name={a.icon} size={22} color={Colors.primary} />
+          </View>
+          <Text style={styles.quickLabel}>{a.label}</Text>
+        </TouchableOpacity>
+      ))}
+    </View>
+  );
+}
 
 function fmt(v: number | null | undefined): string {
   if (v == null) return '—';
@@ -143,19 +186,31 @@ function LowStockRow({ item, isLast }: { item: Ingredient; isLast: boolean }) {
 }
 
 export default function HomeScreen() {
-  const { store } = useAuth();
+  const { store, user, currentRole } = useAuth();
   const { data: ingredients, refetch } = useIngredients();
+  const { employees, refetch: refetchEmp } = useEmployees();
 
   const today = new Date();
   const yearMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
   const { data: pnl, loading: pnlLoading, refetch: fetchPnl } = useProfitLoss(yearMonth);
   const { check: checkFixedExpense } = useFixedExpenseCheck();
 
+  // 로그인 본인에 연결된 직원 → 파트타이머 여부 판별
+  const myEmployee = employees.find(e => e.user_id === user?.id);
+  const effectiveRole: 'admin' | 'member' | 'part_time' =
+    currentRole === 'admin' ? 'admin'
+    : myEmployee?.employment_type === 'part_time' ? 'part_time'
+    : 'member';
+  const isPartTime = effectiveRole === 'part_time';
+
   useFocusEffect(useCallback(() => {
     refetch();
-    fetchPnl();
-    checkFixedExpense();
-  }, [refetch, fetchPnl, checkFixedExpense]));
+    refetchEmp();
+    if (!isPartTime) {
+      fetchPnl();
+      checkFixedExpense();
+    }
+  }, [refetch, refetchEmp, fetchPnl, checkFixedExpense, isPartTime]));
 
   const lowStockItems = ingredients.filter(i => i.current_stock <= i.min_stock).slice(0, 5);
   const monthLabel = today.toLocaleDateString('ko-KR', { year: 'numeric', month: 'long' });
@@ -174,36 +229,28 @@ export default function HomeScreen() {
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
 
-        {/* 요약 카드 */}
-        <View style={styles.metricRow}>
-          <View style={styles.metricCard}>
-            <Text style={styles.metricLabel}>이번 달 매출</Text>
-            {pnlLoading
-              ? <ActivityIndicator size="small" color={Colors.gray300} style={styles.metricLoader} />
-              : <Text style={styles.metricValue}>{fmt(pnl?.revenue)}</Text>
-            }
-            <Text style={styles.metricSub}>{!pnlLoading ? `카드 ${fmt(pnl?.cardRevenue)}` : ''}</Text>
-          </View>
-          <View style={styles.metricCard}>
-            <Text style={styles.metricLabel}>이번 달 영업이익</Text>
-            {pnlLoading
-              ? <ActivityIndicator size="small" color={Colors.gray300} style={styles.metricLoader} />
-              : <Text style={[styles.metricValue, (pnl?.operatingProfit ?? 0) >= 0 ? styles.profitColor : styles.lossColor]}>
-                  {fmt(pnl?.operatingProfit)}
-                </Text>
-            }
-            <Text style={styles.metricSub}>{!pnlLoading ? `매입 ${fmt(pnl?.purchaseCost)}` : ''}</Text>
-          </View>
-        </View>
+        {/* 역할별 빠른 메뉴 */}
+        <QuickActionsGrid actions={QUICK_ACTIONS[effectiveRole]} />
 
-        {/* 손익계산서 */}
-        <View style={styles.sectionRow}>
-          <Text style={styles.sectionHeaderLabel}>이번 달 손익계산서</Text>
-          <TouchableOpacity onPress={() => router.push('/profit-loss')} activeOpacity={0.7}>
-            <Text style={styles.sectionLink}>연간 보기</Text>
-          </TouchableOpacity>
-        </View>
-        <PnLCard pnl={pnl} loading={pnlLoading} />
+        {/* 파트타이머: 개인 출퇴근·급여 캘린더 / 그 외: 손익계산서 */}
+        {isPartTime ? (
+          store && myEmployee ? (
+            <>
+              <Text style={styles.sectionHeaderLabel}>내 출퇴근 · 급여</Text>
+              <AttendanceCalendar storeId={store.id} employeeId={myEmployee.id} />
+            </>
+          ) : null
+        ) : (
+          <>
+            <View style={styles.sectionRow}>
+              <Text style={styles.sectionHeaderLabel}>이번 달 손익계산서</Text>
+              <TouchableOpacity onPress={() => router.push('/profit-loss')} activeOpacity={0.7}>
+                <Text style={styles.sectionLink}>연간 보기</Text>
+              </TouchableOpacity>
+            </View>
+            <PnLCard pnl={pnl} loading={pnlLoading} />
+          </>
+        )}
 
         {/* 품절 임박 */}
         <Text style={styles.sectionHeaderLabel}>품절 임박</Text>
@@ -241,17 +288,23 @@ const styles = StyleSheet.create({
   storePillText: { fontSize: 12, color: Colors.gray500 },
   scroll: { padding: 16, gap: 14, paddingBottom: 48 },
 
-  metricRow: { flexDirection: 'row', gap: 10 },
-  metricCard: {
-    flex: 1, backgroundColor: Colors.white, borderRadius: 14,
-    borderWidth: 0.5, borderColor: Colors.gray100, padding: 14,
-  },
-  metricLabel: { fontSize: 11, color: Colors.gray400, marginBottom: 4 },
-  metricValue: { fontSize: 20, fontWeight: '700', color: Colors.black, marginBottom: 2 },
-  metricLoader: { height: 28, marginBottom: 2 },
-  metricSub: { fontSize: 11, color: Colors.gray400 },
   profitColor: { color: Colors.primary },
   lossColor: { color: '#DC2626' },
+
+  // 빠른 메뉴 그리드
+  quickGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  quickCard: {
+    flexBasis: '47%', flexGrow: 1,
+    backgroundColor: Colors.white, borderRadius: 16,
+    borderWidth: 0.5, borderColor: Colors.gray100,
+    paddingVertical: 18, paddingHorizontal: 16,
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+  },
+  quickIconWrap: {
+    width: 40, height: 40, borderRadius: 12,
+    backgroundColor: Colors.tinted, justifyContent: 'center', alignItems: 'center',
+  },
+  quickLabel: { fontSize: 14, fontWeight: '600', color: Colors.black, flexShrink: 1 },
 
   sectionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   sectionHeaderLabel: {
