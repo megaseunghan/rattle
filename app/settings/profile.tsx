@@ -150,13 +150,6 @@ export default function ProfileScreen() {
         )}
 
         <View style={styles.menuCard}>
-          <TouchableOpacity style={styles.menuItem} onPress={() => router.push('/(auth)/select-store')}>
-            <Ionicons name="storefront-outline" size={20} color={Colors.gray600} />
-            <Text style={styles.menuText}>매장 전환</Text>
-            <Ionicons name="chevron-forward" size={16} color={Colors.gray300} />
-          </TouchableOpacity>
-          <View style={styles.divider} />
-
           {currentRole === 'admin' && (
             <>
               <TouchableOpacity style={styles.menuItem} onPress={() => router.push('/settings/members')}>
