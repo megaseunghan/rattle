@@ -14,6 +14,9 @@ import { useEmployees } from '../../lib/hooks/useEmployees';
 import { usePayroll } from '../../lib/hooks/usePayroll';
 import { Employee, EmploymentType, StoreMember } from '../../types';
 import { isInProbation, isInsuranceApplicable } from '../../lib/services/employees';
+import { getMonthlyWageByEmployee } from '../../lib/services/attendance';
+
+type WageAccum = { totalWage: number; totalMinutes: number; days: number };
 
 function toYearMonth(year: number, month: number) {
   return `${year}-${String(month).padStart(2, '0')}`;
@@ -22,6 +25,7 @@ function toYearMonth(year: number, month: number) {
 function EmployeeCard({
   employee,
   payroll,
+  wage,
   isCalculating,
   onCalculate,
   onEdit,
@@ -29,6 +33,7 @@ function EmployeeCard({
 }: {
   employee: Employee;
   payroll: ReturnType<typeof usePayroll>['payrolls'][0] | undefined;
+  wage?: WageAccum;
   isCalculating: boolean;
   onCalculate: () => void;
   onEdit: () => void;
@@ -36,6 +41,7 @@ function EmployeeCard({
 }) {
   const probation = isInProbation(employee);
   const insurance = isInsuranceApplicable(employee);
+  const isPart = employee.employment_type === 'part_time';
 
   return (
     <View style={styles.employeeCard}>
@@ -63,6 +69,31 @@ function EmployeeCard({
         </TouchableOpacity>
       </View>
 
+      {isPart ? (
+        <>
+          <View style={styles.salaryRow}>
+            <Text style={styles.salaryLabel}>시급</Text>
+            <Text style={styles.salaryValue}>
+              {employee.hourly_wage != null ? `${Number(employee.hourly_wage).toLocaleString()}원` : '—'}
+            </Text>
+          </View>
+          <View style={styles.payrollDivider} />
+          <View style={styles.payrollRow}>
+            <Text style={styles.payrollLabel}>세전 누적액</Text>
+            <Text style={styles.payrollNetPay}>{(wage?.totalWage ?? 0).toLocaleString()}원</Text>
+          </View>
+          <View style={styles.payrollRow}>
+            <Text style={styles.payrollDeductLabel}>이번 달 근무</Text>
+            <Text style={styles.payrollDeduct}>
+              {wage && wage.days > 0
+                ? `${wage.days}일 · ${Math.floor(wage.totalMinutes / 60)}시간 ${wage.totalMinutes % 60}분`
+                : '기록 없음'}
+            </Text>
+          </View>
+          <Text style={styles.partHint}>출퇴근 시 분 단위로 자동 적립됩니다</Text>
+        </>
+      ) : (
+      <>
       <View style={styles.salaryRow}>
         <Text style={styles.salaryLabel}>기본급</Text>
         <Text style={styles.salaryValue}>{employee.base_salary.toLocaleString()}원</Text>
@@ -130,6 +161,8 @@ function EmployeeCard({
           }
         </TouchableOpacity>
       )}
+      </>
+      )}
     </View>
   );
 }
@@ -165,11 +198,20 @@ export default function PayrollScreen() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [members, setMembers] = useState<StoreMember[]>([]);
+  const [wageMap, setWageMap] = useState<Record<string, WageAccum>>({});
+
+  const refetchWage = useCallback(() => {
+    if (!store) return;
+    getMonthlyWageByEmployee(store.id, yearMonth, store.closing_time ?? '23:00')
+      .then(setWageMap)
+      .catch(() => setWageMap({}));
+  }, [store, yearMonth]);
 
   useFocusEffect(useCallback(() => {
     refetchEmp();
     refetchPay();
-  }, [refetchEmp, refetchPay]));
+    refetchWage();
+  }, [refetchEmp, refetchPay, refetchWage]));
 
   // 계정 연결용 매장 멤버 목록 (관리자만)
   useEffect(() => {
@@ -270,8 +312,9 @@ export default function PayrollScreen() {
     }
   }
 
-  const totalLaborCost = payrolls.reduce((s, p) => s + p.gross, 0);
-  const totalNetPay = payrolls.reduce((s, p) => s + p.net_pay, 0);
+  const partTimeWageTotal = Object.values(wageMap).reduce((s, w) => s + w.totalWage, 0);
+  const totalLaborCost = payrolls.reduce((s, p) => s + p.gross, 0) + partTimeWageTotal;
+  const totalNetPay = payrolls.reduce((s, p) => s + p.net_pay, 0) + partTimeWageTotal;
   const monthLabel = `${year}년 ${month}월`;
 
   return (
@@ -333,6 +376,7 @@ export default function PayrollScreen() {
               key={emp.id}
               employee={emp}
               payroll={payrolls.find(p => p.employee_id === emp.id)}
+              wage={wageMap[emp.id]}
               isCalculating={calculating === emp.id}
               onCalculate={() => calculate(emp).catch(e => Alert.alert('계산 실패', e.message))}
               onEdit={() => openEdit(emp)}
@@ -605,6 +649,7 @@ const styles = StyleSheet.create({
   salaryRow: { flexDirection: 'row', justifyContent: 'space-between' },
   salaryLabel: { fontSize: 13, color: Colors.gray500 },
   salaryValue: { fontSize: 13, fontWeight: '500', color: Colors.black },
+  partHint: { fontSize: 11, color: Colors.gray400, marginTop: 8 },
   calcBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: Colors.black, borderRadius: 10, paddingVertical: 10, marginTop: 12 },
   calcBtnText: { fontSize: 13, fontWeight: '600', color: Colors.white },
   payrollResult: { marginTop: 4 },
