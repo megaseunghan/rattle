@@ -52,9 +52,11 @@ function RootNavigator() {
     SplashScreen.hideAsync();
 
     const inAuth = segments[0] === '(auth)';
+    const onLoginFlow = segments.includes('login') || segments.includes('signup');
 
     if (!user) {
-      if (!inAuth) router.replace('/(auth)/login');
+      // 로그인/회원가입 화면이 아니면 로그인으로 (select-store에서 로그아웃 시 빈 화면 방지)
+      if (!onLoginFlow) router.replace('/(auth)/login');
     } else if (!store) {
       if (!segments.includes('select-store')) router.replace('/(auth)/select-store');
     } else {
