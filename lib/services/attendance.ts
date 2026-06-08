@@ -150,6 +150,27 @@ export async function getMonthlyWageByEmployee(
   return result;
 }
 
+/** 특정 직원의 월간 출퇴근 기록 (캘린더용) — 달력 월 기준 */
+export async function getMonthlyAttendanceRecords(
+  storeId: string,
+  employeeId: string,
+  year: number,
+  month: number, // 1-12
+): Promise<Attendance[]> {
+  const from = new Date(year, month - 1, 1, 0, 0, 0, 0);
+  const to = new Date(year, month, 0, 23, 59, 59, 999);
+  const { data, error } = await supabase
+    .from('attendance')
+    .select('*')
+    .eq('store_id', storeId)
+    .eq('employee_id', employeeId)
+    .gte('timestamp', from.toISOString())
+    .lte('timestamp', to.toISOString())
+    .order('timestamp', { ascending: true });
+  if (error) throw new Error(error.message);
+  return (data ?? []) as Attendance[];
+}
+
 export async function getAttendanceByDate(
   storeId: string,
   date: string, // 'YYYY-MM-DD'
