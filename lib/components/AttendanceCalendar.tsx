@@ -130,7 +130,7 @@ export function AttendanceCalendar({ storeId, employeeId }: { storeId: string; e
                     <Text style={[styles.dayNum, worked && styles.dayNumWorked, isToday && styles.dayNumToday]}>{day}</Text>
                   </View>
                   {worked
-                    ? <Text style={styles.cellWage} numberOfLines={1}>{Math.round(d.dailyWage / 1000)}k</Text>
+                    ? <Text style={styles.cellWage} numberOfLines={1} adjustsFontSizeToFit>{d.dailyWage.toLocaleString()}원</Text>
                     : <Text style={styles.cellWage}> </Text>}
                 </View>
               );
