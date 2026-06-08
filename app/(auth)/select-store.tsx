@@ -67,7 +67,10 @@ export default function SelectStoreScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>{hasStores ? '매장 선택' : '매장 등록'}</Text>
+        <Text style={styles.title}>{hasStores ? '매장 선택' : '환영합니다'}</Text>
+        <Text style={styles.headerSub}>
+          {hasStores ? '관리할 매장을 선택하세요' : '어떻게 시작할지 선택해주세요'}
+        </Text>
       </View>
 
       {isRefreshing ? (
@@ -96,44 +99,70 @@ export default function SelectStoreScreen() {
 
         {/* 신규 회원: stores 로드 완료 후 진짜 매장 없을 때만 표시 */}
         {storesLoaded && !hasStores && !showForm && (
-          <View style={styles.actionRow}>
+          <View style={styles.optionGroup}>
             <TouchableOpacity
-              style={[styles.addButton, { flex: 1 }]}
+              style={[styles.optionCard, styles.optionCardPrimary]}
               onPress={() => setShowForm(true)}
-              activeOpacity={0.7}
+              activeOpacity={0.8}
             >
-              <Ionicons name="add" size={20} color={Colors.primary} />
-              <Text style={styles.addButtonText}>매장 등록</Text>
+              <View style={[styles.optionIcon, styles.optionIconPrimary]}>
+                <Ionicons name="storefront" size={24} color={Colors.primary} />
+              </View>
+              <View style={styles.optionTextWrap}>
+                <Text style={styles.optionTitle}>매장 등록</Text>
+                <Text style={styles.optionDesc}>사장님이라면 직접 매장을 만들어 시작하세요</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color={Colors.primary} />
             </TouchableOpacity>
+
             <TouchableOpacity
-              style={[styles.addButton, styles.joinButton, { flex: 1 }]}
+              style={styles.optionCard}
               onPress={() => router.push('/(auth)/join-store')}
-              activeOpacity={0.7}
+              activeOpacity={0.8}
             >
-              <Ionicons name="enter-outline" size={20} color={Colors.gray600} />
-              <Text style={[styles.addButtonText, styles.joinButtonText]}>기존 매장 참여</Text>
+              <View style={styles.optionIcon}>
+                <Ionicons name="people" size={24} color={Colors.gray600} />
+              </View>
+              <View style={styles.optionTextWrap}>
+                <Text style={styles.optionTitle}>기존 매장 참여</Text>
+                <Text style={styles.optionDesc}>직원이라면 사업자번호로 참여를 신청하세요</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color={Colors.gray400} />
             </TouchableOpacity>
           </View>
         )}
 
         {/* 기존 회원: 매장 있을 때 추가/참여 버튼 */}
         {hasStores && !showForm && (
-          <View style={styles.actionRow}>
+          <View style={styles.optionGroup}>
             <TouchableOpacity
-              style={[styles.addButton, { flex: 1 }]}
+              style={styles.optionCard}
               onPress={() => setShowForm(true)}
-              activeOpacity={0.7}
+              activeOpacity={0.8}
             >
-              <Ionicons name="add" size={20} color={Colors.primary} />
-              <Text style={styles.addButtonText}>새 매장 추가</Text>
+              <View style={[styles.optionIcon, styles.optionIconPrimary]}>
+                <Ionicons name="add" size={24} color={Colors.primary} />
+              </View>
+              <View style={styles.optionTextWrap}>
+                <Text style={styles.optionTitle}>새 매장 추가</Text>
+                <Text style={styles.optionDesc}>새로운 매장을 등록합니다</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color={Colors.gray400} />
             </TouchableOpacity>
+
             <TouchableOpacity
-              style={[styles.addButton, styles.joinButton, { flex: 1 }]}
+              style={styles.optionCard}
               onPress={() => router.push('/(auth)/join-store')}
-              activeOpacity={0.7}
+              activeOpacity={0.8}
             >
-              <Ionicons name="enter-outline" size={20} color={Colors.gray600} />
-              <Text style={[styles.addButtonText, styles.joinButtonText]}>기존 매장 참여</Text>
+              <View style={styles.optionIcon}>
+                <Ionicons name="people" size={24} color={Colors.gray600} />
+              </View>
+              <View style={styles.optionTextWrap}>
+                <Text style={styles.optionTitle}>기존 매장 참여</Text>
+                <Text style={styles.optionDesc}>사업자번호로 참여를 신청합니다</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color={Colors.gray400} />
             </TouchableOpacity>
           </View>
         )}
@@ -187,6 +216,11 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: Colors.black,
   },
+  headerSub: {
+    fontSize: 15,
+    color: Colors.gray500,
+    marginTop: 6,
+  },
   scrollContent: {
     paddingHorizontal: 24,
     paddingTop: 16,
@@ -221,32 +255,48 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: Colors.black,
   },
-  actionRow: {
-    flexDirection: 'row',
-    gap: 10,
+  optionGroup: {
+    gap: 12,
     marginTop: 4,
   },
-  addButton: {
+  optionCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1.5,
+    gap: 14,
+    backgroundColor: Colors.white,
+    borderWidth: 1,
+    borderColor: Colors.gray200,
+    borderRadius: 16,
+    padding: 16,
+  },
+  optionCardPrimary: {
     borderColor: Colors.primary,
-    borderStyle: 'dashed',
-    borderRadius: 12,
-    paddingVertical: 14,
-    gap: 6,
+    backgroundColor: Colors.tinted,
   },
-  addButtonText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: Colors.primary,
+  optionIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.gray100,
   },
-  joinButton: {
-    borderColor: Colors.gray300,
+  optionIconPrimary: {
+    backgroundColor: Colors.white,
   },
-  joinButtonText: {
-    color: Colors.gray600,
+  optionTextWrap: {
+    flex: 1,
+    gap: 3,
+  },
+  optionTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: Colors.black,
+  },
+  optionDesc: {
+    fontSize: 13,
+    color: Colors.gray500,
+    lineHeight: 18,
   },
   form: {
     marginTop: 8,
