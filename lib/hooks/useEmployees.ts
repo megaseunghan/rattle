@@ -29,6 +29,7 @@ export function useEmployees() {
     name: string;
     employment_type: EmploymentType;
     base_salary: number;
+    hourly_wage?: number | null;
     non_taxable: number;
     is_probation?: boolean;
     probation_started_at?: string | null;

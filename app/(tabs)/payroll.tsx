@@ -138,6 +138,7 @@ const EMPTY_FORM = {
   name: '',
   employment_type: 'regular' as EmploymentType,
   base_salary: '',
+  hourly_wage: '',
   non_taxable: '',
   joined_at: '',
   phone: '',
@@ -207,6 +208,7 @@ export default function PayrollScreen() {
       name: employee.name,
       employment_type: employee.employment_type,
       base_salary: String(employee.base_salary),
+      hourly_wage: employee.hourly_wage != null ? String(employee.hourly_wage) : '',
       non_taxable: String(employee.non_taxable),
       joined_at: employee.joined_at ?? '',
       phone: employee.phone ?? '',
@@ -221,26 +223,36 @@ export default function PayrollScreen() {
 
   async function handleSave() {
     const name = form.name.trim();
-    const salary = Number(form.base_salary.replace(/,/g, ''));
-    const nonTaxable = Number(form.non_taxable.replace(/,/g, '') || '0');
-    const dep = Number(form.dependents || '1');
+    const isPart = form.employment_type === 'part_time';
     const wh = form.weekly_hours ? Number(form.weekly_hours) : null;
+    // 비과세·부양가족은 정규직 또는 주15h 이상 파트타이머에만 적용
+    const useInsuranceFields = !isPart || (wh != null && wh >= 15);
+
+    const salary = Number(form.base_salary.replace(/,/g, '') || '0');
+    const hourly = Number(form.hourly_wage.replace(/,/g, '') || '0');
+    const nonTaxable = useInsuranceFields ? Number(form.non_taxable.replace(/,/g, '') || '0') : 0;
+    const dep = useInsuranceFields ? Number(form.dependents || '1') : 1;
 
     if (!name) { Alert.alert('입력 오류', '이름을 입력해주세요.'); return; }
-    if (!salary || salary <= 0) { Alert.alert('입력 오류', '기본급을 입력해주세요.'); return; }
+    if (isPart) {
+      if (!hourly || hourly <= 0) { Alert.alert('입력 오류', '시급을 입력해주세요.'); return; }
+    } else {
+      if (!salary || salary <= 0) { Alert.alert('입력 오류', '기본급을 입력해주세요.'); return; }
+    }
 
     setSaving(true);
     try {
       const payload = {
         name,
         employment_type: form.employment_type,
-        base_salary: salary,
+        base_salary: isPart ? 0 : salary,
+        hourly_wage: isPart ? hourly : null,
         non_taxable: nonTaxable,
         joined_at: form.joined_at.trim() || null,
         phone: form.phone.trim() || null,
         bank_name: form.bank_name.trim() || null,
         account_number: form.account_number.trim() || null,
-        weekly_hours: form.employment_type === 'part_time' ? wh : null,
+        weekly_hours: isPart ? wh : null,
         dependents: dep,
         user_id: form.user_id,
       };
@@ -393,35 +405,57 @@ export default function PayrollScreen() {
               </>
             )}
 
-            <Text style={styles.fieldLabel}>기본급</Text>
-            <TextInput
-              style={styles.input}
-              value={form.base_salary}
-              onChangeText={v => setForm(f => ({ ...f, base_salary: v }))}
-              placeholder="2,000,000"
-              placeholderTextColor={Colors.gray300}
-              keyboardType="numeric"
-            />
+            {form.employment_type === 'part_time' ? (
+              <>
+                <Text style={styles.fieldLabel}>시급</Text>
+                <TextInput
+                  style={styles.input}
+                  value={form.hourly_wage}
+                  onChangeText={v => setForm(f => ({ ...f, hourly_wage: v }))}
+                  placeholder="13,000"
+                  placeholderTextColor={Colors.gray300}
+                  keyboardType="numeric"
+                />
+                <Text style={styles.fieldHint}>퇴근 시 실제 근무 시간(분) 기준으로 일일 급여가 계산됩니다.</Text>
+              </>
+            ) : (
+              <>
+                <Text style={styles.fieldLabel}>기본급</Text>
+                <TextInput
+                  style={styles.input}
+                  value={form.base_salary}
+                  onChangeText={v => setForm(f => ({ ...f, base_salary: v }))}
+                  placeholder="2,000,000"
+                  placeholderTextColor={Colors.gray300}
+                  keyboardType="numeric"
+                />
+              </>
+            )}
 
-            <Text style={styles.fieldLabel}>비과세 (식대 등)</Text>
-            <TextInput
-              style={styles.input}
-              value={form.non_taxable}
-              onChangeText={v => setForm(f => ({ ...f, non_taxable: v }))}
-              placeholder="200,000"
-              placeholderTextColor={Colors.gray300}
-              keyboardType="numeric"
-            />
+            {/* 비과세·부양가족: 정규직 또는 주15h 이상 파트타이머만 */}
+            {(form.employment_type === 'regular' || Number(form.weekly_hours || '0') >= 15) && (
+              <>
+                <Text style={styles.fieldLabel}>비과세 (식대 등)</Text>
+                <TextInput
+                  style={styles.input}
+                  value={form.non_taxable}
+                  onChangeText={v => setForm(f => ({ ...f, non_taxable: v }))}
+                  placeholder="200,000"
+                  placeholderTextColor={Colors.gray300}
+                  keyboardType="numeric"
+                />
 
-            <Text style={styles.fieldLabel}>부양가족 수 (본인 포함)</Text>
-            <TextInput
-              style={styles.input}
-              value={form.dependents}
-              onChangeText={v => setForm(f => ({ ...f, dependents: v }))}
-              placeholder="1"
-              placeholderTextColor={Colors.gray300}
-              keyboardType="numeric"
-            />
+                <Text style={styles.fieldLabel}>부양가족 수 (본인 포함)</Text>
+                <TextInput
+                  style={styles.input}
+                  value={form.dependents}
+                  onChangeText={v => setForm(f => ({ ...f, dependents: v }))}
+                  placeholder="1"
+                  placeholderTextColor={Colors.gray300}
+                  keyboardType="numeric"
+                />
+              </>
+            )}
 
             <Text style={styles.fieldLabel}>입사일 (YYYY-MM-DD)</Text>
             <TextInput

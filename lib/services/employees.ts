@@ -20,6 +20,7 @@ export async function createEmployee(data: {
   name: string;
   employment_type: EmploymentType;
   base_salary: number;
+  hourly_wage?: number | null;
   non_taxable: number;
   joined_at?: string | null;
   phone?: string | null;
