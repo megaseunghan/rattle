@@ -116,7 +116,17 @@ export async function getProfitLossByMonth(
     regularWithholding += withholding;
   }
 
-  // 파트타이머 인건비: 퇴근 기록 일일급여 합산
+  // 정규직: 진행 중인 달이면 경과일 기준 일할 계산 (매출 누적 속도와 정합)
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const monthEnd = new Date(year, month, 0); monthEnd.setHours(h, m, 0, 0);
+  if (Date.now() < monthEnd.getTime()) {
+    const elapsedDay = Math.min(new Date().getDate(), daysInMonth);
+    const laborFactor = Math.min(1, elapsedDay / daysInMonth);
+    regularGross = Math.round(regularGross * laborFactor);
+    regularWithholding = Math.round(regularWithholding * laborFactor);
+  }
+
+  // 파트타이머 인건비: 퇴근 기록 일일급여 합산 (이미 실근무 기준이라 일할 불필요)
   partTimeGross = (attendanceResult.data ?? []).reduce((s, a: any) => s + Number(a.daily_wage ?? 0), 0);
 
   const laborCost = regularGross + partTimeGross;
