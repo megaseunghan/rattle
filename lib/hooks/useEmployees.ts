@@ -30,13 +30,14 @@ export function useEmployees() {
     employment_type: EmploymentType;
     base_salary: number;
     non_taxable: number;
-    is_probation: boolean;
+    is_probation?: boolean;
     probation_started_at?: string | null;
     weekly_hours?: number | null;
     dependents: number;
+    user_id?: string | null;
   }) => {
     if (!store) throw new Error('매장 정보가 없습니다');
-    const created = await createEmployee({ ...data, store_id: store.id });
+    const created = await createEmployee({ is_probation: false, ...data, store_id: store.id });
     setEmployees(prev => [...prev, created]);
     return created;
   }, [store]);
