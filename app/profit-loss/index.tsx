@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, Pressable,
   Modal, ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -258,15 +258,17 @@ export default function ProfitLossScreen() {
         transparent
         onRequestClose={() => setSelected(null)}
       >
-        <View style={styles.modalOverlay}>
+        <Pressable style={styles.modalOverlay} onPress={() => setSelected(null)}>
           {selected && (
-            <PnLDetailSheet
-              pnl={selected.data}
-              month={selected.month}
-              onClose={() => setSelected(null)}
-            />
+            <Pressable onPress={() => {}}>
+              <PnLDetailSheet
+                pnl={selected.data}
+                month={selected.month}
+                onClose={() => setSelected(null)}
+              />
+            </Pressable>
           )}
-        </View>
+        </Pressable>
       </Modal>
     </SafeAreaView>
   );
