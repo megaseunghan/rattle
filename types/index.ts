@@ -209,6 +209,8 @@ export interface StoreMember {
   store_id: string;
   user_id: string;
   user_email: string | null;
+  applicant_name: string | null;      // 참여 신청 시 입력한 이름
+  phone: string | null;
   role: 'admin' | 'member';
   status: 'pending' | 'approved' | 'rejected';
   created_at: string;
