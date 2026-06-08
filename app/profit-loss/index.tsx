@@ -19,8 +19,14 @@ function fmt(v: number | null | undefined) {
 const MONTHS = ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
 const CAT_ORDER: PurchaseCategory[] = ['식자재','비품','소모품','주류','기타'];
 
+function ratioOfRevenue(value: number | null | undefined, revenue: number): string {
+  if (!value || !revenue) return '';
+  return `${Math.round((value / revenue) * 1000) / 10}%`;
+}
+
 function PnLDetailSheet({ pnl, month, onClose }: { pnl: ProfitLoss; month: number; onClose: () => void }) {
   const cats = pnl.purchaseByCategory ?? {};
+  const rev = pnl.revenue;
   return (
     <View style={sheet.container}>
       <View style={sheet.handle} />
@@ -39,33 +45,33 @@ function PnLDetailSheet({ pnl, month, onClose }: { pnl: ProfitLoss; month: numbe
         <Sep />
 
         {/* 2. 매입 */}
-        <Group label="2. 매입" value={fmt(pnl.purchaseCost)}>
-          {CAT_ORDER.map(c => (cats[c] ?? 0) > 0 && <Sub key={c} label={c} value={fmt(cats[c])} />)}
+        <Group label="2. 매입" value={fmt(pnl.purchaseCost)} ratio={ratioOfRevenue(pnl.purchaseCost, rev)}>
+          {CAT_ORDER.map(c => (cats[c] ?? 0) > 0 && <Sub key={c} label={c} value={fmt(cats[c])} ratio={ratioOfRevenue(cats[c], rev)} />)}
         </Group>
         <TotalRow label="= 매출이익" value={fmt(pnl.grossProfit)} />
 
         <Sep />
 
         {/* 3. 인건비 */}
-        <Group label="3. 인건비" value={fmt(pnl.laborCost)}>
+        <Group label="3. 인건비" value={fmt(pnl.laborCost)} ratio={ratioOfRevenue(pnl.laborCost, rev)}>
           {pnl.regularGross > 0 && <>
-            <Sub label="직원 인건비" value={fmt(pnl.regularGross)} />
-            <Sub label="직원 원천징수" value={fmt(pnl.regularWithholding)} />
+            <Sub label="직원 인건비" value={fmt(pnl.regularGross)} ratio={ratioOfRevenue(pnl.regularGross, rev)} />
+            <Sub label="직원 원천징수" value={fmt(pnl.regularWithholding)} ratio={ratioOfRevenue(pnl.regularWithholding, rev)} />
           </>}
           {pnl.partTimeGross > 0 && <>
-            <Sub label="파트타이머 인건비" value={fmt(pnl.partTimeGross)} />
-            <Sub label="파트타이머 원천징수" value={fmt(pnl.partTimeWithholding)} />
+            <Sub label="파트타이머 인건비" value={fmt(pnl.partTimeGross)} ratio={ratioOfRevenue(pnl.partTimeGross, rev)} />
+            <Sub label="파트타이머 원천징수" value={fmt(pnl.partTimeWithholding)} ratio={ratioOfRevenue(pnl.partTimeWithholding, rev)} />
           </>}
         </Group>
 
         <Sep />
 
         {/* 4. 비용 */}
-        <Group label="4. 비용" value={fmt(pnl.fixedExpense + pnl.variableExpense)}>
-          {pnl.fixedExpense > 0 && <Sub label="고정비" value={fmt(pnl.fixedExpense)} />}
-          {pnl.marketingExpense > 0 && <Sub label="마케팅" value={fmt(pnl.marketingExpense)} />}
-          {pnl.maintenanceExpense > 0 && <Sub label="시설보수" value={fmt(pnl.maintenanceExpense)} />}
-          {pnl.utilitiesExpense > 0 && <Sub label="공과금" value={fmt(pnl.utilitiesExpense)} />}
+        <Group label="4. 비용" value={fmt(pnl.fixedExpense + pnl.variableExpense)} ratio={ratioOfRevenue(pnl.fixedExpense + pnl.variableExpense, rev)}>
+          {pnl.fixedExpense > 0 && <Sub label="고정비" value={fmt(pnl.fixedExpense)} ratio={ratioOfRevenue(pnl.fixedExpense, rev)} />}
+          {pnl.marketingExpense > 0 && <Sub label="마케팅" value={fmt(pnl.marketingExpense)} ratio={ratioOfRevenue(pnl.marketingExpense, rev)} />}
+          {pnl.maintenanceExpense > 0 && <Sub label="시설보수" value={fmt(pnl.maintenanceExpense)} ratio={ratioOfRevenue(pnl.maintenanceExpense, rev)} />}
+          {pnl.utilitiesExpense > 0 && <Sub label="공과금" value={fmt(pnl.utilitiesExpense)} ratio={ratioOfRevenue(pnl.utilitiesExpense, rev)} />}
         </Group>
 
         {/* 5. 영업이익 */}
@@ -80,11 +86,14 @@ function PnLDetailSheet({ pnl, month, onClose }: { pnl: ProfitLoss; month: numbe
   );
 }
 
-function Group({ label, value, children }: { label: string; value: string; children?: React.ReactNode }) {
+function Group({ label, value, ratio, children }: { label: string; value: string; ratio?: string; children?: React.ReactNode }) {
   return (
     <View style={sheet.group}>
       <View style={sheet.groupRow}>
-        <Text style={sheet.groupLabel}>{label}</Text>
+        <View style={sheet.labelRow}>
+          <Text style={sheet.groupLabel}>{label}</Text>
+          {ratio ? <Text style={sheet.ratioTag}>{ratio}</Text> : null}
+        </View>
         <Text style={sheet.groupValue}>{value}</Text>
       </View>
       {children && <View style={sheet.subs}>{children}</View>}
@@ -92,10 +101,13 @@ function Group({ label, value, children }: { label: string; value: string; child
   );
 }
 
-function Sub({ label, value }: { label: string; value: string }) {
+function Sub({ label, value, ratio }: { label: string; value: string; ratio?: string }) {
   return (
     <View style={sheet.subRow}>
-      <Text style={sheet.subLabel}>{label}</Text>
+      <View style={sheet.labelRow}>
+        <Text style={sheet.subLabel}>{label}</Text>
+        {ratio ? <Text style={sheet.subRatioTag}>{ratio}</Text> : null}
+      </View>
       <Text style={sheet.subValue}>{value}</Text>
     </View>
   );
@@ -334,8 +346,11 @@ const sheet = StyleSheet.create({
 
   group: { paddingVertical: 10 },
   groupRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  labelRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   groupLabel: { fontSize: 13, fontWeight: '600', color: Colors.black },
   groupValue: { fontSize: 13, fontWeight: '600', color: Colors.black },
+  ratioTag: { fontSize: 11, color: Colors.gray400, fontWeight: '400' },
+  subRatioTag: { fontSize: 11, color: Colors.gray300 },
   subs: { paddingLeft: 12, marginTop: 6, gap: 4 },
   subRow: { flexDirection: 'row', justifyContent: 'space-between' },
   subLabel: { fontSize: 12, color: Colors.gray500 },

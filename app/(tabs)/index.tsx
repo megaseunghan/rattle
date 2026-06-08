@@ -122,26 +122,26 @@ function PnLCard({ pnl, loading }: { pnl: ProfitLoss | null; loading: boolean })
       {/* 매입 */}
       <PnLRow label="매입" value={fmt(pnl?.purchaseCost)} ratio={pct(pnl?.purchaseCost, rev)} onPress={() => router.push('/(tabs)/purchases')} loading={loading} />
       {catOrder.map(cat => (
-        <PnLSubRow key={cat} label={cat} value={fmt(cats[cat] ?? 0)} ratio={pct(cats[cat] ?? 0, pnl?.purchaseCost)} />
+        <PnLSubRow key={cat} label={cat} value={fmt(cats[cat] ?? 0)} ratio={pct(cats[cat] ?? 0, rev)} />
       ))}
 
       <PnLDivider />
 
       {/* 인건비 */}
       <PnLRow label="인건비" value={fmt(pnl?.laborCost)} ratio={pct(pnl?.laborCost, rev)} onPress={() => router.push('/(tabs)/payroll')} loading={loading} />
-      <PnLSubRow label="직원 인건비" value={fmt(pnl?.regularGross)} ratio={pct(pnl?.regularGross, pnl?.laborCost)} />
-      <PnLSubRow label="직원 원천징수" value={fmt(pnl?.regularWithholding)} ratio={pct(pnl?.regularWithholding, pnl?.laborCost)} />
-      <PnLSubRow label="파트타이머 인건비" value={fmt(pnl?.partTimeGross)} ratio={pct(pnl?.partTimeGross, pnl?.laborCost)} />
-      <PnLSubRow label="파트타이머 원천징수" value={fmt(pnl?.partTimeWithholding)} ratio={pct(pnl?.partTimeWithholding, pnl?.laborCost)} />
+      <PnLSubRow label="직원 인건비" value={fmt(pnl?.regularGross)} ratio={pct(pnl?.regularGross, rev)} />
+      <PnLSubRow label="직원 원천징수" value={fmt(pnl?.regularWithholding)} ratio={pct(pnl?.regularWithholding, rev)} />
+      <PnLSubRow label="파트타이머 인건비" value={fmt(pnl?.partTimeGross)} ratio={pct(pnl?.partTimeGross, rev)} />
+      <PnLSubRow label="파트타이머 원천징수" value={fmt(pnl?.partTimeWithholding)} ratio={pct(pnl?.partTimeWithholding, rev)} />
 
       <PnLDivider />
 
       {/* 비용 */}
       <PnLRow label="비용" value={fmt(totalExpense)} ratio={pct(totalExpense, rev)} onPress={() => router.push('/(tabs)/expenses')} loading={loading} />
-      <PnLSubRow label="고정비" value={fmt(pnl?.fixedExpense)} ratio={pct(pnl?.fixedExpense, totalExpense)} />
-      <PnLSubRow label="마케팅" value={fmt(pnl?.marketingExpense)} ratio={pct(pnl?.marketingExpense, totalExpense)} />
-      <PnLSubRow label="시설보수" value={fmt(pnl?.maintenanceExpense)} ratio={pct(pnl?.maintenanceExpense, totalExpense)} />
-      <PnLSubRow label="공과금" value={fmt(pnl?.utilitiesExpense)} ratio={pct(pnl?.utilitiesExpense, totalExpense)} />
+      <PnLSubRow label="고정비" value={fmt(pnl?.fixedExpense)} ratio={pct(pnl?.fixedExpense, rev)} />
+      <PnLSubRow label="마케팅" value={fmt(pnl?.marketingExpense)} ratio={pct(pnl?.marketingExpense, rev)} />
+      <PnLSubRow label="시설보수" value={fmt(pnl?.maintenanceExpense)} ratio={pct(pnl?.maintenanceExpense, rev)} />
+      <PnLSubRow label="공과금" value={fmt(pnl?.utilitiesExpense)} ratio={pct(pnl?.utilitiesExpense, rev)} />
 
       {/* 영업이익 */}
       <View style={[styles.profitRow, isProfit ? styles.profitRowPos : styles.profitRowNeg]}>
