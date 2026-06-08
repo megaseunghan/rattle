@@ -479,7 +479,7 @@ export default function PayrollScreen() {
                       onPress={() => setForm(f => ({ ...f, user_id: m.user_id }))}
                     >
                       <Text style={[styles.memberChipText, form.user_id === m.user_id && styles.memberChipTextOn]}>
-                        {m.user_email ?? m.user_id.slice(0, 8)}{m.role === 'admin' ? ' (관리자)' : ''}
+                        {m.applicant_name ?? m.user_email ?? m.user_id.slice(0, 8)}{m.role === 'admin' ? ' (관리자)' : ''}
                       </Text>
                     </TouchableOpacity>
                   ))}
