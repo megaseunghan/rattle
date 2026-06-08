@@ -96,19 +96,23 @@ export default function MoreScreen() {
 
         <Text style={[styles.sectionLabel, { marginTop: 20 }]}>설정</Text>
         <View style={styles.card}>
-          <SettingRow
-            icon="document-text-outline"
-            label="전자세금계산서 연동"
-            onPress={() => {}}
-          />
-          <View style={styles.listItemBorder}>
-            <SettingRow
-              icon="card-outline"
-              label="TossPos 연동"
-              onPress={() => router.push('/settings/pos-sync')}
-            />
-          </View>
-          <View style={styles.listItemBorder}>
+          {currentRole === 'admin' && (
+            <>
+              <SettingRow
+                icon="document-text-outline"
+                label="전자세금계산서 연동"
+                onPress={() => {}}
+              />
+              <View style={styles.listItemBorder}>
+                <SettingRow
+                  icon="card-outline"
+                  label="TossPos 연동"
+                  onPress={() => router.push('/settings/pos-sync')}
+                />
+              </View>
+            </>
+          )}
+          <View style={currentRole === 'admin' ? styles.listItemBorder : undefined}>
             <SettingRow
               icon="person-outline"
               label="프로필 설정"

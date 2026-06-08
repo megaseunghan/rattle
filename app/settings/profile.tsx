@@ -115,37 +115,39 @@ export default function ProfileScreen() {
           )}
         </View>
 
-        <View style={styles.section}>
-          <Text style={styles.label}>매장 이름</Text>
-          <TextInput
-            style={styles.input}
-            value={name}
-            onChangeText={setName}
-            placeholder="매장 이름"
-          />
+        {currentRole === 'admin' && (
+          <View style={styles.section}>
+            <Text style={styles.label}>매장 이름</Text>
+            <TextInput
+              style={styles.input}
+              value={name}
+              onChangeText={setName}
+              placeholder="매장 이름"
+            />
 
-          <Text style={[styles.label, { marginTop: 16 }]}>마감 시간 (HH:MM)</Text>
-          <TextInput
-            style={styles.input}
-            value={closingTime}
-            onChangeText={setClosingTime}
-            placeholder="23:00"
-            keyboardType="numbers-and-punctuation"
-            maxLength={5}
-          />
+            <Text style={[styles.label, { marginTop: 16 }]}>마감 시간 (HH:MM)</Text>
+            <TextInput
+              style={styles.input}
+              value={closingTime}
+              onChangeText={setClosingTime}
+              placeholder="23:00"
+              keyboardType="numbers-and-punctuation"
+              maxLength={5}
+            />
 
-          <TouchableOpacity
-            style={[styles.saveBtn, loading && styles.disabled]}
-            onPress={handleUpdateProfile}
-            disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator size="small" color={Colors.white} />
-            ) : (
-              <Text style={styles.saveBtnText}>정보 수정 저장</Text>
-            )}
-          </TouchableOpacity>
-        </View>
+            <TouchableOpacity
+              style={[styles.saveBtn, loading && styles.disabled]}
+              onPress={handleUpdateProfile}
+              disabled={loading}
+            >
+              {loading ? (
+                <ActivityIndicator size="small" color={Colors.white} />
+              ) : (
+                <Text style={styles.saveBtnText}>정보 수정 저장</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        )}
 
         <View style={styles.menuCard}>
           <TouchableOpacity style={styles.menuItem} onPress={() => router.push('/(auth)/select-store')}>
