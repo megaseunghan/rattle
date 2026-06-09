@@ -21,7 +21,7 @@ import { useAuth } from '../../lib/contexts/AuthContext';
 import { usePurchases } from '../../lib/hooks/usePurchases';
 import { useIngredients } from '../../lib/hooks/useIngredients';
 import { Ingredient, PurchaseCategory, PurchaseType } from '../../types';
-import { stockUnit } from '../../lib/utils/unit';
+import { convertQuantity, recipeUnitOptions } from '../../lib/utils/unit';
 
 const CATEGORIES = ['식자재', '주류', '비품소모품', '기타'];
 const FILTER_CATEGORIES = ['전체', ...CATEGORIES];
@@ -34,7 +34,8 @@ type Mode = '품목별' | '금액만';
 interface PurchaseItemForm {
   ingredient: Ingredient;
   quantity: string;
-  unit_price: string;
+  unit: string;       // 입력 단위 (g/kg, mL/L, 개) — 저장 시 재고 단위로 환산
+  unit_price: string; // 입력 단위당 단가
 }
 
 // 로컬 시간대 기준 YYYY-MM-DD
@@ -101,7 +102,15 @@ export default function NewPurchaseScreen() {
     setItems(prev =>
       prev.some(i => i.ingredient.id === ingredient.id)
         ? prev
-        : [...prev, { ingredient, quantity: '1', unit_price: String(ingredient.last_price ?? 0) }]
+        : [
+            ...prev,
+            {
+              ingredient,
+              quantity: '1',
+              unit: ingredient.unit, // 기본 입력 단위 = 재고 단위
+              unit_price: String(ingredient.last_price ?? 0),
+            },
+          ]
     );
   }
 
@@ -127,6 +136,10 @@ export default function NewPurchaseScreen() {
 
   function updateItem(id: string, field: 'quantity' | 'unit_price', value: string) {
     setItems(prev => prev.map(i => (i.ingredient.id === id ? { ...i, [field]: value } : i)));
+  }
+
+  function setItemUnit(id: string, unit: string) {
+    setItems(prev => prev.map(i => (i.ingredient.id === id ? { ...i, unit } : i)));
   }
 
   async function handleQuickAdd() {
@@ -175,14 +188,20 @@ export default function NewPurchaseScreen() {
           date: formatDate(date),
           supplier: supplier.trim(),
           type: purchaseType,
-          items: items.map(i => ({
-            ingredient_id: i.ingredient.id,
-            name: i.ingredient.name,
-            quantity: parseFloat(i.quantity) || 0,
-            unit: i.ingredient.unit,
-            unit_price: parseFloat(i.unit_price) || 0,
-            category: i.ingredient.category,
-          })),
+          items: items.map(i => {
+            const qty = parseFloat(i.quantity) || 0;
+            const price = parseFloat(i.unit_price) || 0;
+            // 입력 단위 → 재고 단위 환산 (예: 5000g → 5kg)
+            const factor = convertQuantity(1, i.unit, i.ingredient.unit) || 1;
+            return {
+              ingredient_id: i.ingredient.id,
+              name: i.ingredient.name,
+              quantity: qty * factor,             // 재고 단위 기준 수량 → current_stock 증가량
+              unit: i.ingredient.unit,            // 재고 단위로 저장
+              unit_price: factor !== 0 ? price / factor : price, // 재고 단위당 단가 (합계 보존)
+              category: i.ingredient.category,
+            };
+          }),
         });
       } else {
         const amt = Number(amount.replace(/,/g, ''));
@@ -348,26 +367,46 @@ export default function NewPurchaseScreen() {
                         <Text style={styles.removeText}>✕</Text>
                       </TouchableOpacity>
                     </View>
-                    <View style={styles.itemInputs}>
-                      <View style={styles.inputGroup}>
-                        <Text style={styles.inputLabel}>수량 ({stockUnit(item.ingredient)})</Text>
-                        <TextInput
-                          style={styles.smallInput}
-                          value={item.quantity}
-                          onChangeText={v => updateItem(item.ingredient.id, 'quantity', v)}
-                          keyboardType="numeric"
-                        />
-                      </View>
-                      <View style={styles.inputGroup}>
-                        <Text style={styles.inputLabel}>단가 (원)</Text>
-                        <TextInput
-                          style={styles.smallInput}
-                          value={item.unit_price}
-                          onChangeText={v => updateItem(item.ingredient.id, 'unit_price', v)}
-                          keyboardType="numeric"
-                        />
-                      </View>
-                    </View>
+                    {(() => {
+                      const unitOptions = recipeUnitOptions(item.ingredient.unit);
+                      return (
+                        <>
+                          {unitOptions.length > 1 && (
+                            <View style={styles.unitToggleRow}>
+                              {unitOptions.map(u => (
+                                <TouchableOpacity
+                                  key={u}
+                                  style={[styles.unitToggle, item.unit === u && styles.unitToggleActive]}
+                                  onPress={() => setItemUnit(item.ingredient.id, u)}
+                                >
+                                  <Text style={[styles.unitToggleText, item.unit === u && styles.unitToggleTextActive]}>{u}</Text>
+                                </TouchableOpacity>
+                              ))}
+                            </View>
+                          )}
+                          <View style={styles.itemInputs}>
+                            <View style={styles.inputGroup}>
+                              <Text style={styles.inputLabel}>수량 ({item.unit})</Text>
+                              <TextInput
+                                style={styles.smallInput}
+                                value={item.quantity}
+                                onChangeText={v => updateItem(item.ingredient.id, 'quantity', v)}
+                                keyboardType="numeric"
+                              />
+                            </View>
+                            <View style={styles.inputGroup}>
+                              <Text style={styles.inputLabel}>단가 (원/{item.unit})</Text>
+                              <TextInput
+                                style={styles.smallInput}
+                                value={item.unit_price}
+                                onChangeText={v => updateItem(item.ingredient.id, 'unit_price', v)}
+                                keyboardType="numeric"
+                              />
+                            </View>
+                          </View>
+                        </>
+                      );
+                    })()}
                   </View>
                 ))
               )}
@@ -671,6 +710,18 @@ const styles = StyleSheet.create({
   itemName: { fontSize: 15, fontWeight: '600', color: Colors.black },
   itemCategory: { fontSize: 12, color: Colors.gray400, marginTop: 2 },
   removeText: { fontSize: 15, color: Colors.gray400 },
+  unitToggleRow: { flexDirection: 'row', gap: 6, marginBottom: 10 },
+  unitToggle: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Colors.gray200,
+    backgroundColor: Colors.gray50,
+  },
+  unitToggleActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
+  unitToggleText: { fontSize: 13, color: Colors.gray500, fontWeight: '600' },
+  unitToggleTextActive: { color: Colors.white },
   itemInputs: { flexDirection: 'row', gap: 12 },
   inputGroup: { flex: 1 },
   inputLabel: { fontSize: 12, color: Colors.gray500, marginBottom: 4 },
