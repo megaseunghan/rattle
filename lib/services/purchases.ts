@@ -1,5 +1,33 @@
 import { supabase } from '../supabase';
-import { Purchase, PurchaseCategory, PurchaseType } from '../../types';
+import { Purchase, PurchaseCategory, PurchaseType, PurchaseItem, PurchaseItemInput } from '../../types';
+
+// 품목 매입 등록: 카테고리별 매입 분할 + 재고 증가 + last_price 갱신 (원자적, RPC)
+export async function createPurchaseWithItems(input: {
+  store_id: string;
+  date: string;
+  supplier: string;
+  type: PurchaseType;
+  items: PurchaseItemInput[];
+}): Promise<void> {
+  const { error } = await supabase.rpc('create_purchase_with_items', {
+    p_store_id: input.store_id,
+    p_date: input.date,
+    p_supplier: input.supplier,
+    p_type: input.type,
+    p_items: input.items,
+  });
+  if (error) throw new Error(error.message);
+}
+
+export async function getPurchaseItems(purchaseId: string): Promise<PurchaseItem[]> {
+  const { data, error } = await supabase
+    .from('purchase_items')
+    .select('*')
+    .eq('purchase_id', purchaseId)
+    .order('created_at', { ascending: true });
+  if (error) throw new Error(error.message);
+  return (data ?? []) as PurchaseItem[];
+}
 
 export async function getPurchasesByMonth(
   storeId: string,
