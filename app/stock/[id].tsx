@@ -7,7 +7,6 @@ import {
   TouchableOpacity,
   ScrollView,
   Alert,
-  Modal,
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
@@ -15,7 +14,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Colors } from '../../constants/colors';
 import { useIngredients } from '../../lib/hooks/useIngredients';
-import { useOrders } from '../../lib/hooks/useOrders';
 import { useCategories } from '../../lib/hooks/useCategories';
 import { getIngredientById } from '../../lib/services/ingredients';
 import { Ingredient } from '../../types';
@@ -23,12 +21,10 @@ import { LoadingSpinner } from '../../lib/components/LoadingSpinner';
 import { ErrorMessage } from '../../lib/components/ErrorMessage';
 
 const UNIT_PRESETS = ['g', 'kg', '개', 'L', 'mL', '봉', '팩', '병'];
-const CONTAINER_UNIT_PRESETS = ['통', '박스', '봉', '팩'];
 
 export default function EditIngredientScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { update } = useIngredients();
-  const ordersHook = useOrders();
   const { categories } = useCategories();
 
   const [ingredient, setIngredient] = useState<Ingredient | null>(null);
@@ -43,11 +39,7 @@ export default function EditIngredientScreen() {
   const [lastPrice, setLastPrice] = useState('0');
   const [containerUnit, setContainerUnit] = useState('');
   const [containerSize, setContainerSize] = useState('');
-  const [supplierName, setSupplierName] = useState('');
-  const [showSupplierPicker, setShowSupplierPicker] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-
-  const existingSuppliers = [...new Set(ordersHook.data.map(o => o.supplier_name).filter(Boolean))];
 
   useEffect(() => {
     if (!id) return;
@@ -63,7 +55,6 @@ export default function EditIngredientScreen() {
         setLastPrice(String(item.last_price));
         setContainerUnit(item.container_unit ?? '');
         setContainerSize(item.container_size ? String(item.container_size) : '');
-        setSupplierName(item.supplier_name ?? '');
       })
       .catch((e) => setFetchError(e.message ?? '식자재를 불러오지 못했습니다.'))
       .finally(() => setFetchLoading(false));
@@ -83,12 +74,12 @@ export default function EditIngredientScreen() {
       return;
     }
     if (containerUnit.trim() && !containerSize) {
-      Alert.alert('입력 오류', '컨테이너 단위를 설정하려면 크기도 입력해주세요.');
+      Alert.alert('입력 오류', '용량 단위를 입력하려면 1개당 용량도 입력해주세요.');
       return;
     }
     const parsedSize = containerSize ? parseFloat(containerSize) : null;
     if (parsedSize !== null && (isNaN(parsedSize) || parsedSize <= 0)) {
-      Alert.alert('입력 오류', '컨테이너 크기는 0보다 큰 숫자여야 합니다.');
+      Alert.alert('입력 오류', '1개당 용량은 0보다 큰 숫자여야 합니다.');
       return;
     }
     setSubmitting(true);
@@ -102,7 +93,6 @@ export default function EditIngredientScreen() {
         last_price: parseFloat(lastPrice) || 0,
         container_unit: containerUnit.trim() || null,
         container_size: parsedSize,
-        supplier_name: supplierName.trim() || null,
       });
       router.back();
     } catch (e: any) {
@@ -154,22 +144,6 @@ export default function EditIngredientScreen() {
             ))}
           </View>
 
-          <Text style={styles.label}>거래처 (발주 담당)</Text>
-          <View style={styles.supplierRow}>
-            <TextInput
-              style={[styles.input, { flex: 1 }]}
-              value={supplierName}
-              onChangeText={setSupplierName}
-              placeholder="예) 서울식품"
-              placeholderTextColor={Colors.gray400}
-            />
-            {existingSuppliers.length > 0 && (
-              <TouchableOpacity style={styles.supplierPickerBtn} onPress={() => setShowSupplierPicker(true)}>
-                <Text style={styles.supplierPickerBtnText}>목록</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-
           <Text style={styles.label}>단위 *</Text>
           <View style={styles.unitPresets}>
             {UNIT_PRESETS.map(u => (
@@ -192,7 +166,7 @@ export default function EditIngredientScreen() {
 
           <View style={styles.row}>
             <View style={styles.halfField}>
-              <Text style={styles.label}>현재 재고</Text>
+              <Text style={styles.label}>개수 (현재 재고)</Text>
               <TextInput
                 style={styles.input}
                 value={currentStock}
@@ -215,7 +189,7 @@ export default function EditIngredientScreen() {
             </View>
           </View>
 
-          <Text style={styles.label}>최근 단가 (원/{unit || '단위'})</Text>
+          <Text style={styles.label}>가격 (1{unit || '개'}당, 원)</Text>
           <TextInput
             style={styles.input}
             value={lastPrice}
@@ -226,40 +200,29 @@ export default function EditIngredientScreen() {
           />
 
           <View style={styles.containerSection}>
-            <Text style={styles.containerSectionTitle}>컨테이너 단위 설정</Text>
+            <Text style={styles.containerSectionTitle}>개당 용량 & 단위 (선택)</Text>
             <Text style={styles.containerHint}>
-              💡 설정하면 발주·재고를 통/박스 단위로 표시할 수 있어요
+              💡 1{unit || '개'}에 담긴 용량을 입력하면 레시피 원가를 정확히 계산해요 (예: 1박스 = 500 g)
             </Text>
-            <View style={styles.unitPresets}>
-              {CONTAINER_UNIT_PRESETS.map(u => (
-                <TouchableOpacity
-                  key={u}
-                  style={[styles.unitChip, containerUnit === u && styles.unitChipActive]}
-                  onPress={() => setContainerUnit(containerUnit === u ? '' : u)}
-                >
-                  <Text style={[styles.unitChipText, containerUnit === u && styles.unitChipTextActive]}>{u}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
             <View style={styles.row}>
               <View style={styles.halfField}>
-                <Text style={styles.label}>컨테이너 단위</Text>
-                <TextInput
-                  style={styles.input}
-                  value={containerUnit}
-                  onChangeText={setContainerUnit}
-                  placeholder="예) 통, 박스, 봉"
-                  placeholderTextColor={Colors.gray400}
-                />
-              </View>
-              <View style={styles.halfField}>
-                <Text style={styles.label}>1{containerUnit || '단위'} = ({unit})</Text>
+                <Text style={styles.label}>1{unit || '개'}당 용량</Text>
                 <TextInput
                   style={styles.input}
                   value={containerSize}
                   onChangeText={setContainerSize}
                   keyboardType="numeric"
-                  placeholder="예) 5000"
+                  placeholder="예) 500"
+                  placeholderTextColor={Colors.gray400}
+                />
+              </View>
+              <View style={styles.halfField}>
+                <Text style={styles.label}>용량 단위</Text>
+                <TextInput
+                  style={styles.input}
+                  value={containerUnit}
+                  onChangeText={setContainerUnit}
+                  placeholder="예) g, mL"
                   placeholderTextColor={Colors.gray400}
                 />
               </View>
@@ -267,29 +230,6 @@ export default function EditIngredientScreen() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
-
-      <Modal visible={showSupplierPicker} animationType="slide" transparent>
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowSupplierPicker(false)}>
-          <TouchableOpacity activeOpacity={1} style={styles.supplierSheet}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>거래처 선택</Text>
-              <TouchableOpacity onPress={() => setShowSupplierPicker(false)}>
-                <Text style={styles.modalClose}>닫기</Text>
-              </TouchableOpacity>
-            </View>
-            {existingSuppliers.map(s => (
-              <TouchableOpacity
-                key={s}
-                style={styles.supplierItem}
-                onPress={() => { setSupplierName(s); setShowSupplierPicker(false); }}
-              >
-                <Text style={styles.supplierItemText}>{s}</Text>
-                {supplierName === s && <Text style={styles.supplierItemCheck}>✓</Text>}
-              </TouchableOpacity>
-            ))}
-          </TouchableOpacity>
-        </TouchableOpacity>
-      </Modal>
     </SafeAreaView>
   );
 }
@@ -373,25 +313,4 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     lineHeight: 18,
   },
-  supplierRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  supplierPickerBtn: {
-    paddingHorizontal: 12, paddingVertical: 12, borderRadius: 10,
-    backgroundColor: Colors.bg, borderWidth: 1, borderColor: Colors.pale,
-  },
-  supplierPickerBtnText: { fontSize: 13, color: Colors.dark, fontWeight: '600' },
-  modalOverlay: { flex: 1, backgroundColor: Colors.overlay, justifyContent: 'flex-end' },
-  supplierSheet: { backgroundColor: Colors.white, borderTopLeftRadius: 20, borderTopRightRadius: 20 },
-  modalHeader: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    padding: 20, borderBottomWidth: 1, borderBottomColor: Colors.gray100,
-  },
-  modalTitle: { fontSize: 17, fontWeight: '700', color: Colors.black },
-  modalClose: { fontSize: 15, color: Colors.primary, fontWeight: '600' },
-  supplierItem: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingHorizontal: 20, paddingVertical: 16,
-    borderBottomWidth: 1, borderBottomColor: Colors.gray100,
-  },
-  supplierItemText: { fontSize: 15, color: Colors.black },
-  supplierItemCheck: { fontSize: 16, color: Colors.primary, fontWeight: '700' },
 });

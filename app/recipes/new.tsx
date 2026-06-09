@@ -126,7 +126,6 @@ export default function NewRecipeScreen() {
         min_stock: 0,
         container_unit: null,
         container_size: null,
-        supplier_name: null,
       });
       setItems(prev => [...prev, { ingredient: created, quantity: '1' }]);
       setNewName(''); setNewUnit(''); setNewPrice('');
