@@ -4,13 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Colors } from '../../constants/colors';
 import { RecipeWithIngredients } from '../services/recipes';
-import { Ingredient } from '../../types';
-
-function unitPrice(ing: Ingredient): number {
-  const base = ing.last_price ?? 0;
-  if (ing.container_size && ing.container_size > 0) return base / ing.container_size;
-  return base;
-}
+import { recipeLineCost } from '../utils/unit';
 
 /**
  * 레시피 카드 — 재고의 last_price 기준으로 원가·마진율을 실시간 계산해 표시.
@@ -35,7 +29,7 @@ export function RecipeCard({
   const currentCost = useMemo(() => {
     return recipe.recipe_ingredients.reduce((sum, ri) => {
       if (!ri.ingredient) return sum;
-      return sum + ri.quantity * unitPrice(ri.ingredient);
+      return sum + recipeLineCost(ri.quantity, ri.unit ?? ri.ingredient.unit, ri.ingredient);
     }, 0);
   }, [recipe]);
 

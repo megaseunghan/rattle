@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../supabase';
 import { getAutoSyncRange } from '../services/posAnalytics';
+import { recipeLineCost } from '../utils/unit';
 
 const CACHE_TTL = 60_000; // 60초
 
@@ -70,7 +71,7 @@ export function useDashboard(): UseDashboardResult {
           // 레시피 목록 (수 + 실시간 평균 마진율)
           supabase
             .from('recipes')
-            .select('selling_price, recipe_ingredients(quantity, ingredient:ingredients(last_price, container_size))')
+            .select('selling_price, recipe_ingredients(quantity, unit, ingredient:ingredients(last_price, unit))')
             .eq('store_id', store.id),
 
           // 최근 발주 5건
@@ -101,10 +102,8 @@ export function useDashboard(): UseDashboardResult {
       if (recipes.length > 0) {
         const marginRates = recipes.map((r: any) => {
           const cost = (r.recipe_ingredients ?? []).reduce((sum: number, ri: any) => {
-            const base = ri.ingredient?.last_price ?? 0;
-            const containerSize = ri.ingredient?.container_size;
-            const unitPrice = containerSize && containerSize > 0 ? base / containerSize : base;
-            return sum + ri.quantity * unitPrice;
+            if (!ri.ingredient) return sum;
+            return sum + recipeLineCost(ri.quantity, ri.unit ?? ri.ingredient.unit, ri.ingredient);
           }, 0);
           return r.selling_price > 0 ? ((r.selling_price - cost) / r.selling_price) * 100 : 0;
         });
