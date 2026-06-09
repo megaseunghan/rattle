@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   Modal, TextInput, Alert, KeyboardAvoidingView, Platform,
@@ -6,17 +6,19 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { router, useFocusEffect } from 'expo-router';
+import * as ImagePicker from 'expo-image-picker';
+import * as ImageManipulator from 'expo-image-manipulator';
 import { Colors } from '../../constants/colors';
 import { useAuth } from '../../lib/contexts/AuthContext';
 import { usePurchases } from '../../lib/hooks/usePurchases';
 import { useExpenses } from '../../lib/hooks/useExpenses';
-import { PurchaseCategory, PurchaseType, ExpenseCategory } from '../../types';
+import { callOcrEdgeFunction } from '../../lib/services/ocr';
+import { ExpenseCategory } from '../../types';
 
 // ─── 공통 ──────────────────────────────────────────────────
 const PURCHASE_TABS = ['전체', '전자세금계산서', '수기'] as const;
 type PurchaseTab = (typeof PURCHASE_TABS)[number];
-const PURCHASE_CATEGORIES: PurchaseCategory[] = ['식자재', '비품', '소모품', '주류', '기타'];
-const PURCHASE_TYPES: PurchaseType[] = ['전자세금계산서', '쿠팡', '네이버', '수기'];
 
 const EXPENSE_CATEGORIES: { key: ExpenseCategory; icon: keyof typeof Ionicons.glyphMap; color: string; bg: string }[] = [
   { key: '마케팅',  icon: 'megaphone-outline', color: '#7C3AED', bg: '#F3EEFF' },
@@ -65,17 +67,12 @@ function PurchasesView() {
   const [month, setMonth] = useState(today.getMonth());
   const [selectedDay, setSelectedDay] = useState<number | null>(today.getDate());
   const [activeTab, setActiveTab] = useState<PurchaseTab>('전체');
-  const [modalVisible, setModalVisible] = useState(false);
-  const [inputSupplier, setInputSupplier] = useState('');
-  const [inputAmount, setInputAmount] = useState('');
-  const [inputCategory, setInputCategory] = useState<PurchaseCategory>('식자재');
-  const [inputType, setInputType] = useState<PurchaseType>('수기');
-  const [saving, setSaving] = useState(false);
+  const [scanning, setScanning] = useState(false);
 
   const yearMonth = toYearMonth(year, month);
-  const { purchases, loading, refetch, add, remove } = usePurchases(yearMonth);
+  const { purchases, loading, refetch, remove } = usePurchases(yearMonth);
 
-  useEffect(() => { refetch(); }, [refetch]);
+  useFocusEffect(useCallback(() => { refetch(); }, [refetch]));
 
   const days = getCalendarDays(year, month);
   const filtered = purchases.filter(p => activeTab === '전체' || p.type === activeTab);
@@ -99,18 +96,63 @@ function PurchasesView() {
     setSelectedDay(null);
   }
 
-  async function handleSave() {
-    const supplier = inputSupplier.trim();
-    const amount = Number(inputAmount.replace(/,/g, ''));
-    if (!supplier) { Alert.alert('입력 오류', '거래처명을 입력해주세요.'); return; }
-    if (!amount || amount <= 0) { Alert.alert('입력 오류', '금액을 올바르게 입력해주세요.'); return; }
-    setSaving(true);
+  function goNewPurchase() {
+    const dateParam = selectedDay ? toDateKey(year, month, selectedDay) : undefined;
+    router.push({ pathname: '/purchases/new', params: dateParam ? { date: dateParam } : {} });
+  }
+
+  function handleScan() {
+    Alert.alert('매입서 스캔', '이미지를 어떻게 가져올까요?', [
+      {
+        text: '카메라로 촬영',
+        onPress: async () => {
+          const permission = await ImagePicker.requestCameraPermissionsAsync();
+          if (!permission.granted) { Alert.alert('권한 필요', '카메라 권한이 필요합니다. 설정에서 허용해주세요.'); return; }
+          const result = await ImagePicker.launchCameraAsync({ base64: true, quality: 0.8 });
+          if (!result.canceled && result.assets[0].base64) {
+            await processImages([{ uri: result.assets[0].uri, base64: result.assets[0].base64 }]);
+          }
+        },
+      },
+      {
+        text: '앨범에서 선택',
+        onPress: async () => {
+          const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+          if (!permission.granted) { Alert.alert('권한 필요', '사진 접근 권한이 필요합니다. 설정에서 허용해주세요.'); return; }
+          const result = await ImagePicker.launchImageLibraryAsync({ base64: true, quality: 0.8, allowsMultipleSelection: true });
+          if (!result.canceled && result.assets.length > 0) {
+            const assets = result.assets.filter(a => a.base64) as Array<{ uri: string; base64: string }>;
+            if (assets.length > 0) await processImages(assets);
+          }
+        },
+      },
+      { text: '취소', style: 'cancel' },
+    ]);
+  }
+
+  async function processImages(assets: Array<{ uri: string; base64: string }>) {
+    setScanning(true);
     try {
-      await add({ date: selectedDay ? toDateKey(year, month, selectedDay) : toDateKey(year, month, today.getDate()), supplier, amount, category: inputCategory, type: inputType, note: null });
-      setModalVisible(false);
-      setInputSupplier(''); setInputAmount('');
-    } catch (e: any) { Alert.alert('저장 실패', e.message); }
-    finally { setSaving(false); }
+      const allItems: unknown[] = [];
+      for (const asset of assets) {
+        const manipulated = await ImageManipulator.manipulateAsync(
+          asset.uri,
+          [{ resize: { width: 1200 } }],
+          { compress: 0.6, format: ImageManipulator.SaveFormat.JPEG, base64: true }
+        );
+        const ocrText = await callOcrEdgeFunction(manipulated.base64!);
+        const parsed = JSON.parse(ocrText);
+        if (Array.isArray(parsed)) allItems.push(...parsed);
+      }
+      router.push({
+        pathname: '/purchases/ocr-review',
+        params: { imageUri: assets[0].uri, ocrText: JSON.stringify(allItems) },
+      });
+    } catch (e: any) {
+      Alert.alert('OCR 오류', e.message);
+    } finally {
+      setScanning(false);
+    }
   }
 
   return (
@@ -160,7 +202,7 @@ function PurchasesView() {
               {loading ? <View style={styles.emptyInCard}><ActivityIndicator size="small" color={Colors.gray300} /></View>
                 : selectedPurchases.length === 0 ? <View style={styles.emptyInCard}><Text style={styles.emptyInCardText}>매입 내역이 없어요</Text></View>
                 : selectedPurchases.map((p, i) => (
-                  <TouchableOpacity key={p.id} style={[styles.purchaseRow, i < selectedPurchases.length - 1 && styles.rowBorder]} onLongPress={() => Alert.alert('삭제', '이 매입 내역을 삭제할까요?', [{ text: '취소', style: 'cancel' }, { text: '삭제', style: 'destructive', onPress: () => remove(p.id).catch(e => Alert.alert('삭제 실패', e.message)) }])} activeOpacity={0.7}>
+                  <TouchableOpacity key={p.id} style={[styles.purchaseRow, i < selectedPurchases.length - 1 && styles.rowBorder]} onPress={() => router.push(`/purchases/${p.id}`)} onLongPress={() => Alert.alert('삭제', '이 매입 내역을 삭제할까요?', [{ text: '취소', style: 'cancel' }, { text: '삭제', style: 'destructive', onPress: () => remove(p.id).catch(e => Alert.alert('삭제 실패', e.message)) }])} activeOpacity={0.7}>
                     <View style={styles.purchaseLeft}>
                       <Text style={styles.purchaseSupplier}>{p.supplier}</Text>
                       <View style={styles.typePill}><Text style={styles.typeText}>{p.category}</Text></View>
@@ -182,46 +224,16 @@ function PurchasesView() {
           </View>
         )}
 
-        <TouchableOpacity style={styles.addBtn} onPress={() => setModalVisible(true)} activeOpacity={0.7}>
-          <Ionicons name="add" size={16} color={Colors.gray700} />
-          <Text style={styles.addBtnText}>수기 매입 추가</Text>
-        </TouchableOpacity>
+        <View style={styles.actionRow}>
+          <TouchableOpacity style={[styles.scanBtn, scanning && { opacity: 0.5 }]} onPress={handleScan} disabled={scanning} activeOpacity={0.7}>
+            {scanning ? <ActivityIndicator size="small" color={Colors.primary} /> : <Ionicons name="camera-outline" size={18} color={Colors.primary} />}
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.addBtn} onPress={goNewPurchase} activeOpacity={0.7}>
+            <Ionicons name="add" size={16} color={Colors.gray700} />
+            <Text style={styles.addBtnText}>매입 추가</Text>
+          </TouchableOpacity>
+        </View>
       </ScrollView>
-
-      <Modal visible={modalVisible} animationType="slide" transparent onRequestClose={() => setModalVisible(false)}>
-        <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-          <View style={styles.modalSheet}>
-            <View style={styles.modalHandle} />
-            <Text style={styles.modalTitle}>매입 추가</Text>
-            <Text style={styles.fieldLabel}>거래처명</Text>
-            <TextInput style={styles.input} value={inputSupplier} onChangeText={setInputSupplier} placeholder="예: 쿠팡, 농협" placeholderTextColor={Colors.gray300} />
-            <Text style={styles.fieldLabel}>금액</Text>
-            <TextInput style={styles.input} value={inputAmount} onChangeText={setInputAmount} placeholder="0" placeholderTextColor={Colors.gray300} keyboardType="numeric" />
-            <Text style={styles.fieldLabel}>카테고리</Text>
-            <View style={styles.chipRow}>
-              {PURCHASE_CATEGORIES.map(cat => (
-                <TouchableOpacity key={cat} style={[styles.chip, inputCategory === cat && styles.chipActive]} onPress={() => setInputCategory(cat)}>
-                  <Text style={[styles.chipText, inputCategory === cat && styles.chipTextActive]}>{cat}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-            <Text style={styles.fieldLabel}>유형</Text>
-            <View style={styles.chipRow}>
-              {PURCHASE_TYPES.map(t => (
-                <TouchableOpacity key={t} style={[styles.chip, inputType === t && styles.chipActive]} onPress={() => setInputType(t)}>
-                  <Text style={[styles.chipText, inputType === t && styles.chipTextActive]}>{t}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-            <View style={styles.modalBtns}>
-              <TouchableOpacity style={styles.cancelBtn} onPress={() => setModalVisible(false)}><Text style={styles.cancelBtnText}>취소</Text></TouchableOpacity>
-              <TouchableOpacity style={[styles.saveBtn, saving && { opacity: 0.5 }]} onPress={handleSave} disabled={saving}>
-                {saving ? <ActivityIndicator size="small" color={Colors.white} /> : <Text style={styles.saveBtnText}>저장</Text>}
-              </TouchableOpacity>
-            </View>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
     </>
   );
 }
@@ -428,7 +440,9 @@ const styles = StyleSheet.create({
   summaryLabel: { fontSize: 12, color: Colors.gray400 },
   summaryValue: { fontSize: 26, fontWeight: '700', color: Colors.black },
 
-  addBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: Colors.white, borderRadius: 14, borderWidth: 0.5, borderColor: Colors.gray200, paddingVertical: 14 },
+  actionRow: { flexDirection: 'row', gap: 10 },
+  scanBtn: { width: 50, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.tinted, borderRadius: 14, borderWidth: 1.5, borderColor: Colors.primary + '40' },
+  addBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: Colors.white, borderRadius: 14, borderWidth: 0.5, borderColor: Colors.gray200, paddingVertical: 14 },
   addBtnText: { fontSize: 14, color: Colors.gray700 },
 
   expSection: { gap: 8 },

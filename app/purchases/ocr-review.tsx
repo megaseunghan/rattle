@@ -1,35 +1,47 @@
 import { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TextInput,
-  TouchableOpacity, Image, Alert, ActivityIndicator, Modal,
+  TouchableOpacity, Image, Alert, ActivityIndicator, Modal, Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { Colors } from '../../constants/colors';
 import { useAuth } from '../../lib/contexts/AuthContext';
-import { useOrders } from '../../lib/hooks/useOrders';
+import { usePurchases } from '../../lib/hooks/usePurchases';
 import { useIngredients } from '../../lib/hooks/useIngredients';
 import { parseOcrItems } from '../../lib/services/ocr';
-import { OcrLineItem } from '../../types';
+import { OcrLineItem, PurchaseType } from '../../types';
 
 type ReviewItem = OcrLineItem & { _key: string };
 
 const UNITS = ['개', '병', '캔', '팩', '봉', '박스', 'kg', 'g', 'L', 'ml', '장', '묶음'];
 const CATEGORIES = ['식자재', '주류', '비품소모품', '기타'];
+const PURCHASE_TYPES: PurchaseType[] = ['전자세금계산서', '쿠팡', '네이버', '수기'];
 
-export default function OcrReviewScreen() {
+function formatDate(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+export default function PurchaseOcrReviewScreen() {
   const { imageUri, ocrText } = useLocalSearchParams<{ imageUri: string; ocrText: string }>();
   const { store } = useAuth();
-  const orders = useOrders();
-  const { create } = orders;
+  const [date, setDate] = useState(new Date());
+  const yearMonth = formatDate(date).slice(0, 7);
+  const purchasesHook = usePurchases(yearMonth);
+  const { addWithItems } = purchasesHook;
   const { data: ingredients, loading: ingredientsLoading, create: createIngredient } = useIngredients();
 
-  const [supplierName, setSupplierName] = useState('');
-  const [orderDate, setOrderDate] = useState(new Date().toISOString().split('T')[0]);
+  const [supplier, setSupplier] = useState('');
+  const [purchaseType, setPurchaseType] = useState<PurchaseType>('수기');
+  const [showDatePicker, setShowDatePicker] = useState(false);
   const [showSupplierPicker, setShowSupplierPicker] = useState(false);
 
-  const existingSuppliers = [...new Set(orders.data.map(o => o.supplier_name).filter(Boolean))];
+  const existingSuppliers = [...new Set(purchasesHook.purchases.map(p => p.supplier).filter(Boolean))];
   const [items, setItems] = useState<ReviewItem[]>(() =>
     parseOcrItems(ocrText ?? '', ingredients).map(item => ({
       ...item,
@@ -40,7 +52,6 @@ export default function OcrReviewScreen() {
   const [saving, setSaving] = useState(false);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
 
-  // 신규 등록 모달
   const [quickAddTarget, setQuickAddTarget] = useState<number | null>(null);
   const [quickName, setQuickName] = useState('');
   const [quickCategory, setQuickCategory] = useState('식자재');
@@ -56,8 +67,7 @@ export default function OcrReviewScreen() {
         );
         const matched = candidates.length === 1 ? candidates[0] : null;
         const matchedForPrice = matched ?? candidates[0] ?? null;
-        const prev_price = matchedForPrice && matchedForPrice.last_price > 0
-          ? matchedForPrice.last_price : null;
+        const prev_price = matchedForPrice && matchedForPrice.last_price > 0 ? matchedForPrice.last_price : null;
         return {
           ...item,
           matched_ingredient: matched,
@@ -69,11 +79,7 @@ export default function OcrReviewScreen() {
   }, [ingredientsLoading, ingredients]);
 
   function updateItem(index: number, patch: Partial<OcrLineItem>) {
-    setItems(prev =>
-      prev.map((item, i) =>
-        i === index ? { ...item, ...patch } : item
-      )
-    );
+    setItems(prev => prev.map((item, i) => (i === index ? { ...item, ...patch } : item)));
   }
 
   function removeItem(index: number) {
@@ -117,7 +123,7 @@ export default function OcrReviewScreen() {
     if (!store || quickAddTarget === null) return;
     setQuickAdding(true);
     try {
-      await createIngredient({
+      const created = await createIngredient({
         store_id: store.id,
         name: quickName.trim(),
         category: quickCategory,
@@ -126,12 +132,7 @@ export default function OcrReviewScreen() {
         min_stock: 0,
         last_price: 0,
       });
-      // ingredients가 리프레시되면 useEffect에서 자동 매칭됨
-      // 이름이 완전 일치할 경우를 위해 미리 수동 매칭
-      const newIngredient = ingredients.find(i => i.name === quickName.trim());
-      if (newIngredient) {
-        updateItem(quickAddTarget, { matched_ingredient: newIngredient, match_candidates: [] });
-      }
+      updateItem(quickAddTarget, { matched_ingredient: created, match_candidates: [] });
       Alert.alert('등록 완료', `"${quickName.trim()}"이(가) 재고에 추가되었어요.`);
       closeQuickAdd();
     } catch (e: any) {
@@ -142,7 +143,7 @@ export default function OcrReviewScreen() {
   }
 
   async function handleSubmit() {
-    if (!supplierName.trim()) {
+    if (!supplier.trim()) {
       Alert.alert('거래처 필요', '거래처명을 입력해주세요.');
       return;
     }
@@ -153,17 +154,20 @@ export default function OcrReviewScreen() {
     }
     setSaving(true);
     try {
-      await create(
-        supplierName,
-        orderDate,
-        validItems.map(item => ({
+      await addWithItems({
+        date: formatDate(date),
+        supplier: supplier.trim(),
+        type: purchaseType,
+        items: validItems.map(item => ({
           ingredient_id: item.matched_ingredient!.id,
+          name: item.matched_ingredient!.name,
           quantity: item.quantity,
-          unit: item.unit,
+          unit: item.matched_ingredient!.unit,
           unit_price: item.unit_price,
-        }))
-      );
-      router.replace('/(tabs)/orders');
+          category: item.matched_ingredient!.category,
+        })),
+      });
+      router.replace('/(tabs)/purchases');
     } catch (e: any) {
       Alert.alert('오류', e.message);
     } finally {
@@ -172,6 +176,7 @@ export default function OcrReviewScreen() {
   }
 
   const unmatchedCount = items.filter(i => !i.matched_ingredient).length;
+  const matchedCount = items.filter(i => i.matched_ingredient).length;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -179,21 +184,14 @@ export default function OcrReviewScreen() {
         <TouchableOpacity onPress={() => router.back()}>
           <Ionicons name="arrow-back" size={24} color={Colors.black} />
         </TouchableOpacity>
-        <Text style={styles.title}>납품서 검토</Text>
+        <Text style={styles.title}>매입서 검토</Text>
         <View style={{ width: 24 }} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.scroll}>
+      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
         {imageUri && (
-          <TouchableOpacity
-            style={styles.imageToggle}
-            onPress={() => setImageExpanded(prev => !prev)}
-          >
-            <Ionicons
-              name={imageExpanded ? 'chevron-up' : 'chevron-down'}
-              size={16}
-              color={Colors.gray500}
-            />
+          <TouchableOpacity style={styles.imageToggle} onPress={() => setImageExpanded(p => !p)}>
+            <Ionicons name={imageExpanded ? 'chevron-up' : 'chevron-down'} size={16} color={Colors.gray500} />
             <Text style={styles.imageToggleText}>원본 이미지 {imageExpanded ? '접기' : '펼치기'}</Text>
           </TouchableOpacity>
         )}
@@ -206,29 +204,48 @@ export default function OcrReviewScreen() {
           <View style={styles.supplierRow}>
             <TextInput
               style={[styles.input, { flex: 1 }]}
-              value={supplierName}
-              onChangeText={setSupplierName}
+              value={supplier}
+              onChangeText={setSupplier}
               placeholder="거래처명 입력"
               placeholderTextColor={Colors.gray400}
             />
             {existingSuppliers.length > 0 && (
-              <TouchableOpacity
-                style={styles.supplierPickerBtn}
-                onPress={() => setShowSupplierPicker(true)}
-              >
+              <TouchableOpacity style={styles.supplierPickerBtn} onPress={() => setShowSupplierPicker(true)}>
                 <Text style={styles.supplierPickerBtnText}>목록</Text>
               </TouchableOpacity>
             )}
           </View>
-          <Text style={styles.label}>발주일</Text>
-          <TextInput
-            style={styles.input}
-            value={orderDate}
-            onChangeText={setOrderDate}
-            placeholder="YYYY-MM-DD"
-            placeholderTextColor={Colors.gray400}
-            keyboardType="numbers-and-punctuation"
-          />
+
+          <Text style={styles.label}>매입일</Text>
+          <TouchableOpacity style={styles.dateInput} onPress={() => setShowDatePicker(p => !p)} activeOpacity={0.7}>
+            <Text style={styles.dateText}>{formatDate(date)}</Text>
+            <Ionicons name="calendar-outline" size={18} color={Colors.gray500} />
+          </TouchableOpacity>
+          {showDatePicker && (
+            <DateTimePicker
+              value={date}
+              mode="date"
+              locale="ko-KR"
+              display={Platform.OS === 'ios' ? 'inline' : 'default'}
+              onChange={(_, d) => {
+                if (Platform.OS === 'android') setShowDatePicker(false);
+                if (d) setDate(d);
+              }}
+            />
+          )}
+
+          <Text style={styles.label}>유형</Text>
+          <View style={styles.chipRow}>
+            {PURCHASE_TYPES.map(t => (
+              <TouchableOpacity
+                key={t}
+                style={[styles.chip, purchaseType === t && styles.chipActive]}
+                onPress={() => setPurchaseType(t)}
+              >
+                <Text style={[styles.chipText, purchaseType === t && styles.chipTextActive]}>{t}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
         </View>
 
         {unmatchedCount > 0 && (
@@ -267,9 +284,7 @@ export default function OcrReviewScreen() {
           {saving ? (
             <ActivityIndicator color={Colors.white} />
           ) : (
-            <Text style={styles.submitText}>
-              발주 등록 ({items.filter(i => i.matched_ingredient).length}개)
-            </Text>
+            <Text style={styles.submitText}>매입 등록 ({matchedCount}개)</Text>
           )}
         </TouchableOpacity>
       </View>
@@ -288,10 +303,13 @@ export default function OcrReviewScreen() {
               <TouchableOpacity
                 key={name}
                 style={styles.supplierRow2}
-                onPress={() => { setSupplierName(name); setShowSupplierPicker(false); }}
+                onPress={() => {
+                  setSupplier(name);
+                  setShowSupplierPicker(false);
+                }}
               >
                 <Text style={styles.supplierRowText}>{name}</Text>
-                {supplierName === name && <Text style={styles.supplierRowCheck}>✓</Text>}
+                {supplier === name && <Text style={styles.supplierRowCheck}>✓</Text>}
               </TouchableOpacity>
             ))}
           </TouchableOpacity>
@@ -410,17 +428,13 @@ function OcrItemRow({
           <TouchableOpacity
             style={styles.candidateBadge}
             onPress={() => {
-              Alert.alert(
-                '재고 선택',
-                '어느 재고 항목과 연결할까요?',
-                [
-                  ...item.match_candidates.map(c => ({
-                    text: c.name,
-                    onPress: () => onChange({ matched_ingredient: c, match_candidates: [] }),
-                  })),
-                  { text: '취소', style: 'cancel' as const },
-                ]
-              );
+              Alert.alert('재고 선택', '어느 재고 항목과 연결할까요?', [
+                ...item.match_candidates.map(c => ({
+                  text: c.name,
+                  onPress: () => onChange({ matched_ingredient: c, match_candidates: [] }),
+                })),
+                { text: '취소', style: 'cancel' as const },
+              ]);
             }}
           >
             <Text style={styles.candidateBadgeText}>후보 {item.match_candidates.length}개 ▾</Text>
@@ -452,9 +466,7 @@ function OcrItemRow({
               style={[styles.unitChip, item.unit === u && styles.unitChipActive]}
               onPress={() => onChange({ unit: u })}
             >
-              <Text style={[styles.unitChipText, item.unit === u && styles.unitChipTextActive]}>
-                {u}
-              </Text>
+              <Text style={[styles.unitChipText, item.unit === u && styles.unitChipTextActive]}>{u}</Text>
             </TouchableOpacity>
           ))}
         </ScrollView>
@@ -489,10 +501,7 @@ const styles = StyleSheet.create({
   },
   title: { fontSize: 18, fontWeight: '700', color: Colors.black },
   scroll: { padding: 16, paddingBottom: 100 },
-  imageToggle: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    paddingVertical: 10, paddingHorizontal: 4,
-  },
+  imageToggle: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 10, paddingHorizontal: 4 },
   imageToggleText: { fontSize: 14, color: Colors.gray500 },
   receiptImage: { width: '100%', height: 240, borderRadius: 12, marginBottom: 12 },
   section: {
@@ -500,10 +509,20 @@ const styles = StyleSheet.create({
     marginBottom: 12, borderWidth: 1, borderColor: Colors.gray100,
   },
   label: { fontSize: 12, color: Colors.gray500, marginBottom: 4, marginTop: 8 },
-  input: {
-    fontSize: 15, color: Colors.black, borderBottomWidth: 1,
-    borderBottomColor: Colors.gray200, paddingVertical: 6,
+  input: { fontSize: 15, color: Colors.black, borderBottomWidth: 1, borderBottomColor: Colors.gray200, paddingVertical: 6 },
+  dateInput: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    borderBottomWidth: 1, borderBottomColor: Colors.gray200, paddingVertical: 8,
   },
+  dateText: { fontSize: 15, color: Colors.black },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 },
+  chip: {
+    paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20,
+    borderWidth: 1, borderColor: Colors.gray200, backgroundColor: Colors.white,
+  },
+  chipActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
+  chipText: { fontSize: 13, color: Colors.gray600, fontWeight: '600' },
+  chipTextActive: { color: Colors.white },
   warningBanner: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
     backgroundColor: Colors.warning + '15', borderRadius: 10, padding: 12, marginBottom: 12,
@@ -521,17 +540,11 @@ const styles = StyleSheet.create({
     flex: 1, fontSize: 15, fontWeight: '600', color: Colors.black,
     borderBottomWidth: 1, borderBottomColor: Colors.primary, paddingVertical: 2,
   },
-  matchBadge: {
-    backgroundColor: Colors.success + '20', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6,
-  },
+  matchBadge: { backgroundColor: Colors.success + '20', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
   matchBadgeText: { fontSize: 11, fontWeight: '700', color: Colors.success },
-  candidateBadge: {
-    backgroundColor: Colors.warning + '20', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6,
-  },
+  candidateBadge: { backgroundColor: Colors.warning + '20', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
   candidateBadgeText: { fontSize: 11, fontWeight: '700', color: Colors.warning },
-  newBadge: {
-    backgroundColor: Colors.primary + '15', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6,
-  },
+  newBadge: { backgroundColor: Colors.primary + '15', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
   newBadgeText: { fontSize: 11, fontWeight: '700', color: Colors.primary },
   removeBtn: { padding: 4 },
   removeBtnText: { fontSize: 14, color: Colors.gray400 },
@@ -560,15 +573,11 @@ const styles = StyleSheet.create({
     padding: 16, backgroundColor: Colors.white,
     borderTopWidth: 1, borderTopColor: Colors.gray100,
   },
-  submitButton: {
-    backgroundColor: Colors.primary, borderRadius: 12, padding: 16, alignItems: 'center',
-  },
+  submitButton: { backgroundColor: Colors.primary, borderRadius: 12, padding: 16, alignItems: 'center' },
   submitButtonDisabled: { opacity: 0.6 },
   submitText: { color: Colors.white, fontSize: 16, fontWeight: '700' },
   modalOverlay: { flex: 1, backgroundColor: Colors.overlay, justifyContent: 'flex-end' },
-  modalSheet: {
-    backgroundColor: Colors.white, borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '75%',
-  },
+  modalSheet: { backgroundColor: Colors.white, borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '75%' },
   modalHeader: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     padding: 20, borderBottomWidth: 1, borderBottomColor: Colors.gray100,
@@ -581,24 +590,13 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.gray50, borderRadius: 10, borderWidth: 1, borderColor: Colors.gray200,
     paddingHorizontal: 14, paddingVertical: 11, fontSize: 15, color: Colors.black,
   },
-  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chip: {
-    paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20,
-    borderWidth: 1, borderColor: Colors.gray200, backgroundColor: Colors.white,
-  },
-  chipActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
-  chipText: { fontSize: 13, color: Colors.gray600, fontWeight: '600' },
-  chipTextActive: { color: Colors.white },
   modalActions: { flexDirection: 'row', gap: 10, marginTop: 24 },
   cancelBtn: {
     flex: 1, paddingVertical: 13, borderRadius: 10,
     borderWidth: 1, borderColor: Colors.gray200, alignItems: 'center',
   },
   cancelText: { fontSize: 14, color: Colors.gray600, fontWeight: '600' },
-  confirmBtn: {
-    flex: 2, paddingVertical: 13, borderRadius: 10,
-    backgroundColor: Colors.primary, alignItems: 'center',
-  },
+  confirmBtn: { flex: 2, paddingVertical: 13, borderRadius: 10, backgroundColor: Colors.primary, alignItems: 'center' },
   confirmText: { fontSize: 14, color: Colors.white, fontWeight: '700' },
   supplierRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   supplierPickerBtn: {

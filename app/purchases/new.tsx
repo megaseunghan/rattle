@@ -14,26 +14,30 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Colors } from '../../constants/colors';
 import { useAuth } from '../../lib/contexts/AuthContext';
-import { useOrders } from '../../lib/hooks/useOrders';
+import { usePurchases } from '../../lib/hooks/usePurchases';
 import { useIngredients } from '../../lib/hooks/useIngredients';
-import { Ingredient } from '../../types';
+import { Ingredient, PurchaseCategory, PurchaseType } from '../../types';
 import { stockUnit } from '../../lib/utils/unit';
 
 const CATEGORIES = ['식자재', '주류', '비품소모품', '기타'];
 const FILTER_CATEGORIES = ['전체', ...CATEGORIES];
 const COMMON_UNITS = ['g', 'kg', 'ml', 'L', '개', '병', '봉', '박스'];
+const PURCHASE_CATEGORIES: PurchaseCategory[] = ['식자재', '비품', '소모품', '주류', '기타'];
+const PURCHASE_TYPES: PurchaseType[] = ['전자세금계산서', '쿠팡', '네이버', '수기'];
 
-interface OrderItemForm {
+type Mode = '품목별' | '금액만';
+
+interface PurchaseItemForm {
   ingredient: Ingredient;
   quantity: string;
   unit_price: string;
 }
 
-// 로컬 시간대 기준 YYYY-MM-DD (toISOString은 UTC라 자정 근처 날짜가 어긋남)
+// 로컬 시간대 기준 YYYY-MM-DD
 function formatDate(d: Date): string {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');
@@ -41,32 +45,49 @@ function formatDate(d: Date): string {
   return `${y}-${m}-${day}`;
 }
 
-export default function NewOrderScreen() {
+function parseInitialDate(value?: string): Date {
+  if (value && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const [y, m, d] = value.split('-').map(Number);
+    return new Date(y, m - 1, d);
+  }
+  return new Date();
+}
+
+export default function NewPurchaseScreen() {
   const { store } = useAuth();
-  const ordersHook = useOrders();
-  const { create } = ordersHook;
+  const params = useLocalSearchParams<{ date?: string }>();
+  // 이번 달 매입 훅 (등록 후 refetch 위해 화면 진입 달 기준)
+  const yearMonth = formatDate(parseInitialDate(params.date)).slice(0, 7);
+  const { purchases, add, addWithItems } = usePurchases(yearMonth);
   const { data: ingredients, create: createIngredient } = useIngredients();
 
-  const [supplierName, setSupplierName] = useState('');
-  const [orderDate, setOrderDate] = useState(new Date());
+  const [mode, setMode] = useState<Mode>('품목별');
+  const [supplier, setSupplier] = useState('');
+  const [date, setDate] = useState(parseInitialDate(params.date));
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showSupplierPicker, setShowSupplierPicker] = useState(false);
-
-  const existingSuppliers = [...new Set(ordersHook.data.map(o => o.supplier_name).filter(Boolean))];
-  const [items, setItems] = useState<OrderItemForm[]>([]);
+  const [purchaseType, setPurchaseType] = useState<PurchaseType>('수기');
   const [submitting, setSubmitting] = useState(false);
-  const [showPicker, setShowPicker] = useState(false);
 
+  // 품목별 모드
+  const [items, setItems] = useState<PurchaseItemForm[]>([]);
+  const [showPicker, setShowPicker] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState('전체');
   const [selectedIngredients, setSelectedIngredients] = useState<Set<string>>(new Set());
 
-  // 새 식자재 빠른 등록 상태
+  // 금액만 모드
+  const [amount, setAmount] = useState('');
+  const [amountCategory, setAmountCategory] = useState<PurchaseCategory>('식자재');
+
+  // 새 식자재 빠른 등록
   const [showQuickAdd, setShowQuickAdd] = useState(false);
   const [quickName, setQuickName] = useState('');
   const [quickCategory, setQuickCategory] = useState('식자재');
   const [quickUnit, setQuickUnit] = useState('g');
   const [quickAdding, setQuickAdding] = useState(false);
+
+  const existingSuppliers = [...new Set(purchases.map(p => p.supplier).filter(Boolean))];
 
   function closePicker() {
     setShowPicker(false);
@@ -74,6 +95,38 @@ export default function NewOrderScreen() {
     setSearchQuery('');
     setActiveCategory('전체');
     setSelectedIngredients(new Set());
+  }
+
+  function addIngredient(ingredient: Ingredient) {
+    setItems(prev =>
+      prev.some(i => i.ingredient.id === ingredient.id)
+        ? prev
+        : [...prev, { ingredient, quantity: '1', unit_price: String(ingredient.last_price ?? 0) }]
+    );
+  }
+
+  function toggleIngredient(ingredient: Ingredient) {
+    if (items.some(i => i.ingredient.id === ingredient.id)) return;
+    setSelectedIngredients(prev => {
+      const next = new Set(prev);
+      next.has(ingredient.id) ? next.delete(ingredient.id) : next.add(ingredient.id);
+      return next;
+    });
+  }
+
+  function handleBulkAdd() {
+    ingredients
+      .filter(ing => selectedIngredients.has(ing.id) && !items.some(i => i.ingredient.id === ing.id))
+      .forEach(addIngredient);
+    closePicker();
+  }
+
+  function removeItem(id: string) {
+    setItems(prev => prev.filter(i => i.ingredient.id !== id));
+  }
+
+  function updateItem(id: string, field: 'quantity' | 'unit_price', value: string) {
+    setItems(prev => prev.map(i => (i.ingredient.id === id ? { ...i, [field]: value } : i)));
   }
 
   async function handleQuickAdd() {
@@ -93,7 +146,6 @@ export default function NewOrderScreen() {
         min_stock: 0,
         last_price: 0,
       });
-      // 등록 즉시 발주 항목에 추가 (재선택 단계 제거)
       addIngredient(created);
       setQuickName('');
       setQuickCategory('식자재');
@@ -106,77 +158,51 @@ export default function NewOrderScreen() {
     }
   }
 
-  function addIngredient(ingredient: Ingredient) {
-    const alreadyAdded = items.some(i => i.ingredient.id === ingredient.id);
-    if (!alreadyAdded) {
-      setItems(prev => [
-        ...prev,
-        {
-          ingredient,
-          quantity: '1',
-          unit_price: String(ingredient.last_price ?? 0),
-        },
-      ]);
-    }
-  }
-
-  function toggleIngredient(ingredient: Ingredient) {
-    const already = items.some(i => i.ingredient.id === ingredient.id);
-    if (already) return;
-    setSelectedIngredients(prev => {
-      const next = new Set(prev);
-      if (next.has(ingredient.id)) {
-        next.delete(ingredient.id);
-      } else {
-        next.add(ingredient.id);
-      }
-      return next;
-    });
-  }
-
-  function handleBulkAdd() {
-    const toAdd = ingredients.filter(
-      ing => selectedIngredients.has(ing.id) && !items.some(i => i.ingredient.id === ing.id)
-    );
-    toAdd.forEach(ing => addIngredient(ing));
-    closePicker();
-  }
-
-  function removeItem(ingredientId: string) {
-    setItems(prev => prev.filter(i => i.ingredient.id !== ingredientId));
-  }
-
-  function updateItem(ingredientId: string, field: 'quantity' | 'unit_price', value: string) {
-    setItems(prev =>
-      prev.map(i => (i.ingredient.id === ingredientId ? { ...i, [field]: value } : i))
-    );
-  }
-
   async function handleSubmit() {
-    if (!supplierName.trim()) {
+    if (!supplier.trim()) {
       Alert.alert('입력 오류', '거래처명을 입력해주세요.');
       return;
     }
-    if (items.length === 0) {
-      Alert.alert('입력 오류', '발주 항목을 1개 이상 추가해주세요.');
-      return;
-    }
-
     setSubmitting(true);
     try {
-      await create(
-        supplierName.trim(),
-        formatDate(orderDate),
-        items.map(i => ({
-          ingredient_id: i.ingredient.id,
-          quantity: parseFloat(i.quantity) || 0,
-          unit: i.ingredient.unit,
-          unit_price: parseFloat(i.unit_price) || 0,
-        }))
-      );
+      if (mode === '품목별') {
+        if (items.length === 0) {
+          Alert.alert('입력 오류', '매입 품목을 1개 이상 추가해주세요.');
+          setSubmitting(false);
+          return;
+        }
+        await addWithItems({
+          date: formatDate(date),
+          supplier: supplier.trim(),
+          type: purchaseType,
+          items: items.map(i => ({
+            ingredient_id: i.ingredient.id,
+            name: i.ingredient.name,
+            quantity: parseFloat(i.quantity) || 0,
+            unit: i.ingredient.unit,
+            unit_price: parseFloat(i.unit_price) || 0,
+            category: i.ingredient.category,
+          })),
+        });
+      } else {
+        const amt = Number(amount.replace(/,/g, ''));
+        if (!amt || amt <= 0) {
+          Alert.alert('입력 오류', '금액을 올바르게 입력해주세요.');
+          setSubmitting(false);
+          return;
+        }
+        await add({
+          date: formatDate(date),
+          supplier: supplier.trim(),
+          amount: amt,
+          category: amountCategory,
+          type: purchaseType,
+          note: null,
+        });
+      }
       router.back();
     } catch (e: any) {
-      Alert.alert('오류', e.message ?? '발주 등록에 실패했습니다.');
+      Alert.alert('오류', e.message ?? '매입 등록에 실패했습니다.');
     } finally {
       setSubmitting(false);
     }
@@ -188,10 +214,12 @@ export default function NewOrderScreen() {
     return matchSearch && matchCategory;
   });
 
-  const totalAmount = items.reduce(
-    (sum, i) => sum + (parseFloat(i.quantity) || 0) * (parseFloat(i.unit_price) || 0),
-    0,
-  );
+  const totalAmount =
+    mode === '품목별'
+      ? items.reduce((s, i) => s + (parseFloat(i.quantity) || 0) * (parseFloat(i.unit_price) || 0), 0)
+      : Number(amount.replace(/,/g, '')) || 0;
+
+  const canSubmit = mode === '품목별' ? items.length > 0 : (Number(amount.replace(/,/g, '')) || 0) > 0;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -199,19 +227,38 @@ export default function NewOrderScreen() {
         <TouchableOpacity onPress={() => router.back()}>
           <Text style={styles.back}>← 뒤로</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>새 발주</Text>
+        <Text style={styles.title}>매입 등록</Text>
         <View style={styles.headerSpacer} />
       </View>
 
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
-        <ScrollView contentContainerStyle={styles.content}>
+        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+          {/* 모드 토글 */}
+          <View style={styles.modeRow}>
+            {(['품목별', '금액만'] as Mode[]).map(m => (
+              <TouchableOpacity
+                key={m}
+                style={[styles.modeTab, mode === m && styles.modeTabActive]}
+                onPress={() => setMode(m)}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.modeText, mode === m && styles.modeTextActive]}>{m}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          <Text style={styles.modeHint}>
+            {mode === '품목별'
+              ? '품목·수량을 입력하면 재고가 자동으로 늘어나요'
+              : '재고 반영 없이 금액만 손익계산서에 누적돼요'}
+          </Text>
+
           <Text style={styles.label}>거래처명</Text>
           <View style={styles.supplierRow}>
             <TextInput
               style={[styles.input, { flex: 1 }]}
-              value={supplierName}
-              onChangeText={setSupplierName}
-              placeholder="거래처명 입력"
+              value={supplier}
+              onChangeText={setSupplier}
+              placeholder="예: 쿠팡, 농협"
               placeholderTextColor={Colors.gray400}
             />
             {existingSuppliers.length > 0 && (
@@ -221,87 +268,127 @@ export default function NewOrderScreen() {
             )}
           </View>
 
-          <Text style={styles.label}>발주일</Text>
-          <TouchableOpacity
-            style={styles.dateInput}
-            onPress={() => setShowDatePicker(prev => !prev)}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.dateText}>{formatDate(orderDate)}</Text>
+          <Text style={styles.label}>매입일</Text>
+          <TouchableOpacity style={styles.dateInput} onPress={() => setShowDatePicker(p => !p)} activeOpacity={0.7}>
+            <Text style={styles.dateText}>{formatDate(date)}</Text>
             <Ionicons name="calendar-outline" size={18} color={Colors.gray500} />
           </TouchableOpacity>
           {showDatePicker && (
             <DateTimePicker
-              value={orderDate}
+              value={date}
               mode="date"
               locale="ko-KR"
               display={Platform.OS === 'ios' ? 'inline' : 'default'}
               onChange={(_, d) => {
                 if (Platform.OS === 'android') setShowDatePicker(false);
-                if (d) setOrderDate(d);
+                if (d) setDate(d);
               }}
             />
           )}
 
-          <View style={styles.itemsHeader}>
-            <Text style={styles.label}>발주 항목</Text>
-            <TouchableOpacity style={styles.addItemBtn} onPress={() => setShowPicker(true)}>
-              <Text style={styles.addItemText}>+ 추가</Text>
-            </TouchableOpacity>
+          <Text style={styles.label}>유형</Text>
+          <View style={styles.chipRow}>
+            {PURCHASE_TYPES.map(t => (
+              <TouchableOpacity
+                key={t}
+                style={[styles.chip, purchaseType === t && styles.chipActive]}
+                onPress={() => setPurchaseType(t)}
+              >
+                <Text style={[styles.chipText, purchaseType === t && styles.chipTextActive]}>{t}</Text>
+              </TouchableOpacity>
+            ))}
           </View>
 
-          {items.length === 0 ? (
-            <View style={styles.emptyItems}>
-              <Text style={styles.emptyItemsText}>식자재를 추가해주세요</Text>
-            </View>
-          ) : (
-            items.map(item => (
-              <View key={item.ingredient.id} style={styles.orderItem}>
-                <View style={styles.orderItemTop}>
-                  <Text style={styles.orderItemName}>{item.ingredient.name}</Text>
-                  <TouchableOpacity onPress={() => removeItem(item.ingredient.id)}>
-                    <Text style={styles.removeText}>✕</Text>
+          {mode === '금액만' ? (
+            <>
+              <Text style={styles.label}>금액</Text>
+              <TextInput
+                style={styles.input}
+                value={amount}
+                onChangeText={setAmount}
+                placeholder="0"
+                placeholderTextColor={Colors.gray400}
+                keyboardType="numeric"
+              />
+              <Text style={styles.label}>카테고리</Text>
+              <View style={styles.chipRow}>
+                {PURCHASE_CATEGORIES.map(cat => (
+                  <TouchableOpacity
+                    key={cat}
+                    style={[styles.chip, amountCategory === cat && styles.chipActive]}
+                    onPress={() => setAmountCategory(cat)}
+                  >
+                    <Text style={[styles.chipText, amountCategory === cat && styles.chipTextActive]}>{cat}</Text>
                   </TouchableOpacity>
-                </View>
-                <View style={styles.orderItemInputs}>
-                  <View style={styles.inputGroup}>
-                    <Text style={styles.inputLabel}>수량 ({stockUnit(item.ingredient)})</Text>
-                    <TextInput
-                      style={styles.smallInput}
-                      value={item.quantity}
-                      onChangeText={v => updateItem(item.ingredient.id, 'quantity', v)}
-                      keyboardType="numeric"
-                    />
-                  </View>
-                  <View style={styles.inputGroup}>
-                    <Text style={styles.inputLabel}>단가 (원)</Text>
-                    <TextInput
-                      style={styles.smallInput}
-                      value={item.unit_price}
-                      onChangeText={v => updateItem(item.ingredient.id, 'unit_price', v)}
-                      keyboardType="numeric"
-                    />
-                  </View>
-                </View>
+                ))}
               </View>
-            ))
+            </>
+          ) : (
+            <>
+              <View style={styles.itemsHeader}>
+                <Text style={styles.label}>매입 품목</Text>
+                <TouchableOpacity style={styles.addItemBtn} onPress={() => setShowPicker(true)}>
+                  <Text style={styles.addItemText}>+ 추가</Text>
+                </TouchableOpacity>
+              </View>
+
+              {items.length === 0 ? (
+                <View style={styles.emptyItems}>
+                  <Text style={styles.emptyItemsText}>품목을 추가해주세요</Text>
+                </View>
+              ) : (
+                items.map(item => (
+                  <View key={item.ingredient.id} style={styles.itemCard}>
+                    <View style={styles.itemCardTop}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.itemName}>{item.ingredient.name}</Text>
+                        <Text style={styles.itemCategory}>{item.ingredient.category}</Text>
+                      </View>
+                      <TouchableOpacity onPress={() => removeItem(item.ingredient.id)}>
+                        <Text style={styles.removeText}>✕</Text>
+                      </TouchableOpacity>
+                    </View>
+                    <View style={styles.itemInputs}>
+                      <View style={styles.inputGroup}>
+                        <Text style={styles.inputLabel}>수량 ({stockUnit(item.ingredient)})</Text>
+                        <TextInput
+                          style={styles.smallInput}
+                          value={item.quantity}
+                          onChangeText={v => updateItem(item.ingredient.id, 'quantity', v)}
+                          keyboardType="numeric"
+                        />
+                      </View>
+                      <View style={styles.inputGroup}>
+                        <Text style={styles.inputLabel}>단가 (원)</Text>
+                        <TextInput
+                          style={styles.smallInput}
+                          value={item.unit_price}
+                          onChangeText={v => updateItem(item.ingredient.id, 'unit_price', v)}
+                          keyboardType="numeric"
+                        />
+                      </View>
+                    </View>
+                  </View>
+                ))
+              )}
+            </>
           )}
         </ScrollView>
       </KeyboardAvoidingView>
 
-      {/* 하단 고정 바: 실시간 합계 + 등록 */}
+      {/* 하단 고정 바 */}
       <View style={styles.bottomBar}>
         <View style={styles.bottomTotal}>
           <Text style={styles.bottomTotalLabel}>합계</Text>
           <Text style={styles.bottomTotalValue}>{Math.round(totalAmount).toLocaleString('ko-KR')}원</Text>
         </View>
         <TouchableOpacity
-          style={[styles.bottomSubmit, (submitting || items.length === 0) && styles.bottomSubmitDisabled]}
+          style={[styles.bottomSubmit, (submitting || !canSubmit) && styles.bottomSubmitDisabled]}
           onPress={handleSubmit}
-          disabled={submitting || items.length === 0}
+          disabled={submitting || !canSubmit}
         >
           <Text style={styles.bottomSubmitText}>
-            {submitting ? '등록 중...' : `발주 등록${items.length > 0 ? ` (${items.length})` : ''}`}
+            {submitting ? '등록 중...' : mode === '품목별' && items.length > 0 ? `매입 등록 (${items.length})` : '매입 등록'}
           </Text>
         </TouchableOpacity>
       </View>
@@ -320,10 +407,13 @@ export default function NewOrderScreen() {
               <TouchableOpacity
                 key={name}
                 style={styles.supplierItem}
-                onPress={() => { setSupplierName(name); setShowSupplierPicker(false); }}
+                onPress={() => {
+                  setSupplier(name);
+                  setShowSupplierPicker(false);
+                }}
               >
                 <Text style={styles.supplierItemText}>{name}</Text>
-                {supplierName === name && <Text style={styles.supplierItemCheck}>✓</Text>}
+                {supplier === name && <Text style={styles.supplierItemCheck}>✓</Text>}
               </TouchableOpacity>
             ))}
           </TouchableOpacity>
@@ -332,14 +422,10 @@ export default function NewOrderScreen() {
 
       {/* 식자재 선택 모달 */}
       <Modal visible={showPicker} animationType="slide" transparent>
-        <TouchableOpacity
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={closePicker}
-        >
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={closePicker}>
           <TouchableOpacity activeOpacity={1} onPress={() => {}} style={styles.modalSheet}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>식자재 선택</Text>
+              <Text style={styles.modalTitle}>품목 선택</Text>
               <TouchableOpacity onPress={closePicker}>
                 <Text style={styles.modalClose}>닫기</Text>
               </TouchableOpacity>
@@ -347,14 +433,14 @@ export default function NewOrderScreen() {
 
             {showQuickAdd ? (
               <ScrollView contentContainerStyle={styles.quickAddForm}>
-                <Text style={styles.quickAddTitle}>새 식자재 등록</Text>
+                <Text style={styles.quickAddTitle}>새 품목 등록</Text>
 
                 <Text style={styles.quickLabel}>품목명</Text>
                 <TextInput
                   style={styles.quickInput}
                   value={quickName}
                   onChangeText={setQuickName}
-                  placeholder="예: 삼겹살 500g"
+                  placeholder="예: 삼겹살"
                   placeholderTextColor={Colors.gray400}
                   autoFocus
                 />
@@ -405,7 +491,7 @@ export default function NewOrderScreen() {
                     style={styles.searchInput}
                     value={searchQuery}
                     onChangeText={setSearchQuery}
-                    placeholder="식자재 검색..."
+                    placeholder="품목 검색..."
                     placeholderTextColor={Colors.gray400}
                   />
                 </View>
@@ -432,7 +518,7 @@ export default function NewOrderScreen() {
                 {filteredIngredients.length === 0 ? (
                   <View style={styles.emptyItems}>
                     <Text style={styles.emptyItemsText}>
-                      {ingredients.length === 0 ? '등록된 식자재가 없어요' : '검색 결과가 없어요'}
+                      {ingredients.length === 0 ? '등록된 품목이 없어요' : '검색 결과가 없어요'}
                     </Text>
                   </View>
                 ) : (
@@ -449,16 +535,12 @@ export default function NewOrderScreen() {
                           disabled={already}
                         >
                           <View style={styles.pickerRowLeft}>
-                            <Text style={[styles.pickerName, already && styles.pickerNameAdded]}>
-                              {item.name}
-                            </Text>
+                            <Text style={[styles.pickerName, already && styles.pickerNameAdded]}>{item.name}</Text>
                             <Text style={styles.pickerCategory}>{item.category}</Text>
                           </View>
                           <View style={styles.pickerRowRight}>
                             <Text style={styles.pickerUnit}>{item.unit}</Text>
-                            {checked && !already && (
-                              <Text style={styles.checkMark}>✓</Text>
-                            )}
+                            {checked && !already && <Text style={styles.checkMark}>✓</Text>}
                           </View>
                         </TouchableOpacity>
                       );
@@ -501,7 +583,20 @@ const styles = StyleSheet.create({
   headerSpacer: { width: 48 },
   content: { padding: 20, paddingBottom: 32 },
 
-  // 날짜 입력
+  modeRow: { flexDirection: 'row', gap: 4, backgroundColor: Colors.gray100, borderRadius: 12, padding: 3 },
+  modeTab: { flex: 1, paddingVertical: 9, borderRadius: 10, alignItems: 'center' },
+  modeTabActive: {
+    backgroundColor: Colors.white,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  modeText: { fontSize: 14, fontWeight: '500', color: Colors.gray400 },
+  modeTextActive: { color: Colors.black, fontWeight: '700' },
+  modeHint: { fontSize: 12, color: Colors.gray400, marginTop: 8 },
+
   dateInput: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -515,7 +610,6 @@ const styles = StyleSheet.create({
   },
   dateText: { fontSize: 15, color: Colors.black },
 
-  // 하단 고정 바
   bottomBar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -530,14 +624,10 @@ const styles = StyleSheet.create({
   bottomTotal: { flex: 1 },
   bottomTotalLabel: { fontSize: 12, color: Colors.gray500, marginBottom: 2 },
   bottomTotalValue: { fontSize: 20, fontWeight: '800', color: Colors.black, letterSpacing: -0.3 },
-  bottomSubmit: {
-    backgroundColor: Colors.primary,
-    paddingHorizontal: 22,
-    paddingVertical: 14,
-    borderRadius: 12,
-  },
+  bottomSubmit: { backgroundColor: Colors.primary, paddingHorizontal: 22, paddingVertical: 14, borderRadius: 12 },
   bottomSubmitDisabled: { opacity: 0.4 },
   bottomSubmitText: { color: Colors.white, fontSize: 15, fontWeight: '700' },
+
   label: { fontSize: 14, fontWeight: '600', color: Colors.gray700, marginBottom: 6, marginTop: 16 },
   input: {
     backgroundColor: Colors.white,
@@ -549,12 +639,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: Colors.black,
   },
-  itemsHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: 16,
-  },
+  itemsHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 16 },
   addItemBtn: {
     backgroundColor: Colors.bg,
     paddingHorizontal: 12,
@@ -574,7 +659,7 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   emptyItemsText: { color: Colors.gray400, fontSize: 14 },
-  orderItem: {
+  itemCard: {
     backgroundColor: Colors.white,
     borderRadius: 12,
     borderWidth: 1,
@@ -582,15 +667,11 @@ const styles = StyleSheet.create({
     padding: 14,
     marginTop: 8,
   },
-  orderItemTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  orderItemName: { fontSize: 15, fontWeight: '600', color: Colors.black },
+  itemCardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 },
+  itemName: { fontSize: 15, fontWeight: '600', color: Colors.black },
+  itemCategory: { fontSize: 12, color: Colors.gray400, marginTop: 2 },
   removeText: { fontSize: 15, color: Colors.gray400 },
-  orderItemInputs: { flexDirection: 'row', gap: 12 },
+  itemInputs: { flexDirection: 'row', gap: 12 },
   inputGroup: { flex: 1 },
   inputLabel: { fontSize: 12, color: Colors.gray500, marginBottom: 4 },
   smallInput: {
@@ -604,13 +685,22 @@ const styles = StyleSheet.create({
     color: Colors.black,
     textAlign: 'right',
   },
-  modalOverlay: { flex: 1, backgroundColor: Colors.overlay, justifyContent: 'flex-end' },
-  modalSheet: {
+
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  chip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: Colors.gray200,
     backgroundColor: Colors.white,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: '80%',
   },
+  chipActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
+  chipText: { fontSize: 13, color: Colors.gray600, fontWeight: '600' },
+  chipTextActive: { color: Colors.white },
+
+  modalOverlay: { flex: 1, backgroundColor: Colors.overlay, justifyContent: 'flex-end' },
+  modalSheet: { backgroundColor: Colors.white, borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '80%' },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -621,12 +711,7 @@ const styles = StyleSheet.create({
   },
   modalTitle: { fontSize: 17, fontWeight: '700', color: Colors.black },
   modalClose: { fontSize: 15, color: Colors.primary, fontWeight: '600' },
-  searchContainer: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.gray100,
-  },
+  searchContainer: { paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: Colors.gray100 },
   searchInput: {
     backgroundColor: Colors.gray50,
     borderRadius: 10,
@@ -637,15 +722,8 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.black,
   },
-  filterTabsContainer: {
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.gray100,
-  },
-  filterTabsContent: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    gap: 6,
-  },
+  filterTabsContainer: { borderBottomWidth: 1, borderBottomColor: Colors.gray100 },
+  filterTabsContent: { paddingHorizontal: 12, paddingVertical: 8, gap: 6 },
   filterTab: {
     paddingHorizontal: 14,
     paddingVertical: 6,
@@ -654,10 +732,7 @@ const styles = StyleSheet.create({
     borderColor: Colors.gray200,
     backgroundColor: Colors.white,
   },
-  filterTabActive: {
-    backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
-  },
+  filterTabActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
   filterTabText: { fontSize: 13, color: Colors.gray600, fontWeight: '600' },
   filterTabTextActive: { color: Colors.white },
   pickerRow: {
@@ -671,22 +746,13 @@ const styles = StyleSheet.create({
   },
   pickerRowAdded: { opacity: 0.4 },
   pickerRowLeft: { flex: 1 },
-  pickerRowRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
+  pickerRowRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   pickerName: { fontSize: 15, color: Colors.black, fontWeight: '500' },
   pickerNameAdded: { color: Colors.gray400 },
   pickerCategory: { fontSize: 12, color: Colors.gray400, marginTop: 2 },
   pickerUnit: { fontSize: 13, color: Colors.gray500 },
   checkMark: { fontSize: 16, color: Colors.primary, fontWeight: '700' },
-  quickAddTrigger: {
-    padding: 16,
-    alignItems: 'center',
-    borderTopWidth: 1,
-    borderTopColor: Colors.gray100,
-  },
+  quickAddTrigger: { padding: 16, alignItems: 'center', borderTopWidth: 1, borderTopColor: Colors.gray100 },
   quickAddTriggerText: { fontSize: 14, color: Colors.primary, fontWeight: '700' },
   bulkAddBtn: {
     margin: 12,
@@ -710,18 +776,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: Colors.black,
   },
-  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: Colors.gray200,
-    backgroundColor: Colors.white,
-  },
-  chipActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
-  chipText: { fontSize: 13, color: Colors.gray600, fontWeight: '600' },
-  chipTextActive: { color: Colors.white },
   quickActions: { flexDirection: 'row', gap: 10, marginTop: 24 },
   quickCancelBtn: {
     flex: 1,
@@ -732,27 +786,27 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   quickCancelText: { fontSize: 14, color: Colors.gray600, fontWeight: '600' },
-  quickSubmitBtn: {
-    flex: 2,
-    paddingVertical: 13,
-    borderRadius: 10,
-    backgroundColor: Colors.primary,
-    alignItems: 'center',
-  },
+  quickSubmitBtn: { flex: 2, paddingVertical: 13, borderRadius: 10, backgroundColor: Colors.primary, alignItems: 'center' },
   quickSubmitText: { fontSize: 14, color: Colors.white, fontWeight: '700' },
   supplierRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   supplierPickerBtn: {
-    paddingHorizontal: 12, paddingVertical: 12, borderRadius: 10,
-    backgroundColor: Colors.bg, borderWidth: 1, borderColor: Colors.pale,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: Colors.bg,
+    borderWidth: 1,
+    borderColor: Colors.pale,
   },
   supplierPickerBtnText: { fontSize: 13, color: Colors.dark, fontWeight: '600' },
-  supplierSheet: {
-    backgroundColor: Colors.white, borderTopLeftRadius: 20, borderTopRightRadius: 20,
-  },
+  supplierSheet: { backgroundColor: Colors.white, borderTopLeftRadius: 20, borderTopRightRadius: 20 },
   supplierItem: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingHorizontal: 20, paddingVertical: 16,
-    borderBottomWidth: 1, borderBottomColor: Colors.gray100,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.gray100,
   },
   supplierItemText: { fontSize: 15, color: Colors.black },
   supplierItemCheck: { fontSize: 16, color: Colors.primary, fontWeight: '700' },
