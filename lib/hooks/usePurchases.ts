@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { getPurchasesByMonth, createPurchase, deletePurchase } from '../services/purchases';
-import { Purchase, PurchaseCategory, PurchaseType } from '../../types';
+import { getPurchasesByMonth, createPurchase, deletePurchase, createPurchaseWithItems } from '../services/purchases';
+import { Purchase, PurchaseCategory, PurchaseType, PurchaseItemInput } from '../../types';
 
 export function usePurchases(yearMonth: string) {
   const { store } = useAuth();
@@ -37,10 +37,21 @@ export function usePurchases(yearMonth: string) {
     return created;
   }, [store]);
 
+  const addWithItems = useCallback(async (data: {
+    date: string;
+    supplier: string;
+    type: PurchaseType;
+    items: PurchaseItemInput[];
+  }) => {
+    if (!store) throw new Error('매장 정보가 없습니다');
+    await createPurchaseWithItems({ ...data, store_id: store.id });
+    await refetch();
+  }, [store, refetch]);
+
   const remove = useCallback(async (id: string) => {
     await deletePurchase(id);
     setPurchases(prev => prev.filter(p => p.id !== id));
   }, []);
 
-  return { purchases, loading, error, refetch, add, remove };
+  return { purchases, loading, error, refetch, add, addWithItems, remove };
 }

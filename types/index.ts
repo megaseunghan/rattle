@@ -288,6 +288,29 @@ export interface Purchase {
   created_at: string;
 }
 
+export interface PurchaseItem {
+  id: string;
+  purchase_id: string;
+  store_id: string;
+  ingredient_id: string | null;
+  name: string;
+  quantity: number;
+  unit: string;
+  unit_price: number;
+  subtotal: number;
+  created_at: string;
+}
+
+// 매입 등록 입력용 품목 라인 (재고 연결 시 ingredient_id 채움)
+export interface PurchaseItemInput {
+  ingredient_id: string | null;
+  name: string;
+  quantity: number;
+  unit: string;
+  unit_price: number;
+  category: string;
+}
+
 // 비용
 export type ExpenseCategory = '마케팅' | '고정비' | '시설보수' | '공과금';
 
