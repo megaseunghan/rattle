@@ -12,6 +12,7 @@ import { useAuth } from '../../lib/contexts/AuthContext';
 import { usePurchases } from '../../lib/hooks/usePurchases';
 import { useIngredients } from '../../lib/hooks/useIngredients';
 import { parseOcrItems } from '../../lib/services/ocr';
+import { convertQuantity } from '../../lib/utils/unit';
 import { OcrLineItem, PurchaseType } from '../../types';
 
 type ReviewItem = OcrLineItem & { _key: string };
@@ -158,14 +159,19 @@ export default function PurchaseOcrReviewScreen() {
         date: formatDate(date),
         supplier: supplier.trim(),
         type: purchaseType,
-        items: validItems.map(item => ({
-          ingredient_id: item.matched_ingredient!.id,
-          name: item.matched_ingredient!.name,
-          quantity: item.quantity,
-          unit: item.matched_ingredient!.unit,
-          unit_price: item.unit_price,
-          category: item.matched_ingredient!.category,
-        })),
+        items: validItems.map(item => {
+          const ing = item.matched_ingredient!;
+          // OCR 단위 → 재고 단위 환산 (g/kg, mL/L). 차원이 다르면(박스 등) 1:1로 처리됨.
+          const factor = convertQuantity(1, item.unit, ing.unit) || 1;
+          return {
+            ingredient_id: ing.id,
+            name: ing.name,
+            quantity: item.quantity * factor,
+            unit: ing.unit,
+            unit_price: factor !== 0 ? item.unit_price / factor : item.unit_price,
+            category: ing.category,
+          };
+        }),
       });
       router.replace('/(tabs)/purchases');
     } catch (e: any) {
