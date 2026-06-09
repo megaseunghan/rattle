@@ -19,6 +19,16 @@ export async function createPurchaseWithItems(input: {
   if (error) throw new Error(error.message);
 }
 
+export async function getPurchaseById(id: string): Promise<Purchase> {
+  const { data, error } = await supabase
+    .from('purchases')
+    .select('*')
+    .eq('id', id)
+    .single();
+  if (error) throw new Error(error.message);
+  return data as Purchase;
+}
+
 export async function getPurchaseItems(purchaseId: string): Promise<PurchaseItem[]> {
   const { data, error } = await supabase
     .from('purchase_items')

@@ -10,14 +10,12 @@ import { router } from 'expo-router';
 import { Colors } from '../../constants/colors';
 import { useStorePermissions } from '../../lib/hooks/useStorePermissions';
 import { useIngredients } from '../../lib/hooks/useIngredients';
-import { useOrders } from '../../lib/hooks/useOrders';
 import { useRecipes } from '../../lib/hooks/useRecipes';
 import { Ingredient } from '../../types';
 import { formatStock } from '../../lib/utils/unit';
 import { RecipeCard } from '../../lib/components/RecipeCard';
-import { OrderCard } from '../../lib/components/OrderCard';
 
-type ContentTab = '재고현황' | '발주내역' | '레시피';
+type ContentTab = '재고현황' | '레시피';
 
 // ─── 재고 행 (프로그레스 바 포함) ───────────────────────────────
 function IngredientRow({ item }: { item: Ingredient }) {
@@ -77,20 +75,18 @@ export default function StockScreen() {
     data: ingredients, loading: ingLoading,
     loadingMore, hasMore, loadMore, refetch: refetchIng,
   } = useIngredients();
-  const { data: orders, loading: ordLoading, refetch: refetchOrd, deliver: deliverOrder, remove: removeOrder } = useOrders();
   const { data: recipes, loading: recLoading, refetch: refetchRec, remove: removeRecipe } = useRecipes();
   const { canManageRecipes } = useStorePermissions();
 
   // 파트타이머는 레시피 세그먼트 접근 불가
   const contentTabs: ContentTab[] = canManageRecipes
-    ? ['재고현황', '발주내역', '레시피']
-    : ['재고현황', '발주내역'];
+    ? ['재고현황', '레시피']
+    : ['재고현황'];
 
   useFocusEffect(useCallback(() => {
     if (activeTab === '재고현황') refetchIng();
-    else if (activeTab === '발주내역') refetchOrd();
     else refetchRec();
-  }, [activeTab, refetchIng, refetchOrd, refetchRec]));
+  }, [activeTab, refetchIng, refetchRec]));
 
   const categories = ['전체', ...Array.from(new Set(ingredients.map(i => i.category))).sort()];
   const filtered = (activeCategory === '전체' ? ingredients : ingredients.filter(i => i.category === activeCategory))
@@ -102,11 +98,10 @@ export default function StockScreen() {
     });
 
   const lowStockCount = ingredients.filter(i => i.current_stock <= i.min_stock).length;
-  const isLoading = activeTab === '재고현황' ? ingLoading : activeTab === '발주내역' ? ordLoading : recLoading;
+  const isLoading = activeTab === '재고현황' ? ingLoading : recLoading;
 
   function handleFab() {
     if (activeTab === '재고현황') router.push('/stock/new');
-    else if (activeTab === '발주내역') router.push('/orders/new');
     else router.push('/recipes/new');
   }
 
@@ -115,7 +110,7 @@ export default function StockScreen() {
       {/* 헤더 */}
       <View style={styles.topBar}>
         <View>
-          <Text style={styles.title}>재고 · 발주</Text>
+          <Text style={styles.title}>재고</Text>
           {lowStockCount > 0 && (
             <Text style={styles.lowStockHint}>품절 임박 {lowStockCount}개</Text>
           )}
@@ -175,15 +170,6 @@ export default function StockScreen() {
           onEndReachedThreshold={0.5}
           ListEmptyComponent={<EmptyState icon="cube-outline" text="재고 데이터가 없어요" />}
           ListFooterComponent={loadingMore ? <ActivityIndicator style={{ padding: 16 }} color={Colors.primary} /> : null}
-        />
-      ) : activeTab === '발주내역' ? (
-        <FlatList
-          data={orders}
-          keyExtractor={item => item.id}
-          contentContainerStyle={styles.listContent}
-          showsVerticalScrollIndicator={false}
-          renderItem={({ item }) => <OrderCard order={item} onDeliver={deliverOrder} onDelete={removeOrder} />}
-          ListEmptyComponent={<EmptyState icon="document-text-outline" text="발주 내역이 없어요" />}
         />
       ) : (
         <FlatList

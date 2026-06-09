@@ -70,7 +70,6 @@ export default function TabsLayout() {
       {/* 숨김 라우트 (매출은 홈에서 진입) */}
       <Tabs.Screen name="pos"       options={{ href: null }} />
       <Tabs.Screen name="expenses"  options={{ href: null }} />
-      <Tabs.Screen name="orders"    options={{ href: null }} />
       <Tabs.Screen name="recipes"   options={{ href: null }} />
     </Tabs>
   );
