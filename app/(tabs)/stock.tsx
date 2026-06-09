@@ -8,7 +8,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Colors } from '../../constants/colors';
-import { useAuth } from '../../lib/contexts/AuthContext';
+import { useStorePermissions } from '../../lib/hooks/useStorePermissions';
 import { useIngredients } from '../../lib/hooks/useIngredients';
 import { useOrders } from '../../lib/hooks/useOrders';
 import { useRecipes } from '../../lib/hooks/useRecipes';
@@ -79,8 +79,12 @@ export default function StockScreen() {
   } = useIngredients();
   const { data: orders, loading: ordLoading, refetch: refetchOrd, deliver: deliverOrder, remove: removeOrder } = useOrders();
   const { data: recipes, loading: recLoading, refetch: refetchRec, remove: removeRecipe } = useRecipes();
-  const { currentRole } = useAuth();
-  const isAdmin = currentRole === 'admin';
+  const { canManageRecipes } = useStorePermissions();
+
+  // 파트타이머는 레시피 세그먼트 접근 불가
+  const contentTabs: ContentTab[] = canManageRecipes
+    ? ['재고현황', '발주내역', '레시피']
+    : ['재고현황', '발주내역'];
 
   useFocusEffect(useCallback(() => {
     if (activeTab === '재고현황') refetchIng();
@@ -116,19 +120,11 @@ export default function StockScreen() {
             <Text style={styles.lowStockHint}>품절 임박 {lowStockCount}개</Text>
           )}
         </View>
-        <TouchableOpacity
-          style={styles.orderBtn}
-          onPress={() => router.push('/orders/new')}
-          activeOpacity={0.7}
-        >
-          <Ionicons name="add" size={14} color={Colors.gray600} />
-          <Text style={styles.orderBtnText}>발주 등록</Text>
-        </TouchableOpacity>
       </View>
 
       {/* 콘텐츠 탭 */}
       <View style={styles.contentTabRow}>
-        {(['재고현황', '발주내역', '레시피'] as ContentTab[]).map(tab => (
+        {contentTabs.map(tab => (
           <TouchableOpacity
             key={tab}
             style={[styles.contentTab, activeTab === tab && styles.contentTabActive]}
@@ -195,15 +191,17 @@ export default function StockScreen() {
           keyExtractor={item => item.id}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
-          renderItem={({ item }) => <RecipeCard recipe={item} onDelete={removeRecipe} isAdmin={isAdmin} />}
+          renderItem={({ item }) => <RecipeCard recipe={item} onDelete={removeRecipe} isAdmin={canManageRecipes} />}
           ListEmptyComponent={<EmptyState icon="restaurant-outline" text="레시피가 없어요" />}
         />
       )}
 
-      {/* FAB */}
-      <TouchableOpacity style={styles.fab} onPress={handleFab} activeOpacity={0.85}>
-        <Ionicons name="add" size={26} color={Colors.white} />
-      </TouchableOpacity>
+      {/* FAB (레시피 세그먼트는 파트타이머에게 숨김) */}
+      {!(activeTab === '레시피' && !canManageRecipes) && (
+        <TouchableOpacity style={styles.fab} onPress={handleFab} activeOpacity={0.85}>
+          <Ionicons name="add" size={26} color={Colors.white} />
+        </TouchableOpacity>
+      )}
     </SafeAreaView>
   );
 }
@@ -233,18 +231,6 @@ const styles = StyleSheet.create({
   },
   title: { fontSize: 17, fontWeight: '600', color: Colors.black },
   lowStockHint: { fontSize: 11, color: Colors.warning, marginTop: 1 },
-  orderBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 20,
-    borderWidth: 0.5,
-    borderColor: Colors.gray200,
-    backgroundColor: Colors.white,
-  },
-  orderBtnText: { fontSize: 13, color: Colors.gray600 },
 
   contentTabRow: {
     flexDirection: 'row',

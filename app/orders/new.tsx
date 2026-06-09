@@ -13,7 +13,9 @@ import {
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { Colors } from '../../constants/colors';
 import { useAuth } from '../../lib/contexts/AuthContext';
 import { useOrders } from '../../lib/hooks/useOrders';
@@ -31,6 +33,14 @@ interface OrderItemForm {
   unit_price: string;
 }
 
+// 로컬 시간대 기준 YYYY-MM-DD (toISOString은 UTC라 자정 근처 날짜가 어긋남)
+function formatDate(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 export default function NewOrderScreen() {
   const { store } = useAuth();
   const ordersHook = useOrders();
@@ -38,7 +48,8 @@ export default function NewOrderScreen() {
   const { data: ingredients, create: createIngredient } = useIngredients();
 
   const [supplierName, setSupplierName] = useState('');
-  const [orderDate, setOrderDate] = useState(new Date().toISOString().split('T')[0]);
+  const [orderDate, setOrderDate] = useState(new Date());
+  const [showDatePicker, setShowDatePicker] = useState(false);
   const [showSupplierPicker, setShowSupplierPicker] = useState(false);
 
   const existingSuppliers = [...new Set(ordersHook.data.map(o => o.supplier_name).filter(Boolean))];
@@ -73,7 +84,7 @@ export default function NewOrderScreen() {
     if (!store) return;
     setQuickAdding(true);
     try {
-      await createIngredient({
+      const created = await createIngredient({
         store_id: store.id,
         name: quickName.trim(),
         category: quickCategory,
@@ -85,11 +96,12 @@ export default function NewOrderScreen() {
         container_size: null,
         supplier_name: null,
       });
-      setShowQuickAdd(false);
+      // 등록 즉시 발주 항목에 추가 (재선택 단계 제거)
+      addIngredient(created);
       setQuickName('');
       setQuickCategory('식자재');
       setQuickUnit('g');
-      Alert.alert('등록 완료', `"${quickName.trim()}"이(가) 재고에 추가되었어요.\n목록에서 선택해주세요.`);
+      closePicker();
     } catch (e: any) {
       Alert.alert('오류', e.message);
     } finally {
@@ -157,7 +169,7 @@ export default function NewOrderScreen() {
     try {
       await create(
         supplierName.trim(),
-        orderDate,
+        formatDate(orderDate),
         items.map(i => ({
           ingredient_id: i.ingredient.id,
           quantity: parseFloat(i.quantity) || 0,
@@ -179,6 +191,11 @@ export default function NewOrderScreen() {
     return matchSearch && matchCategory;
   });
 
+  const totalAmount = items.reduce(
+    (sum, i) => sum + (parseFloat(i.quantity) || 0) * (parseFloat(i.unit_price) || 0),
+    0,
+  );
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
@@ -186,13 +203,7 @@ export default function NewOrderScreen() {
           <Text style={styles.back}>← 뒤로</Text>
         </TouchableOpacity>
         <Text style={styles.title}>새 발주</Text>
-        <TouchableOpacity
-          style={[styles.submitBtn, submitting && styles.submitBtnDisabled]}
-          onPress={handleSubmit}
-          disabled={submitting}
-        >
-          <Text style={styles.submitText}>{submitting ? '등록 중...' : '등록'}</Text>
-        </TouchableOpacity>
+        <View style={styles.headerSpacer} />
       </View>
 
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
@@ -214,13 +225,26 @@ export default function NewOrderScreen() {
           </View>
 
           <Text style={styles.label}>발주일</Text>
-          <TextInput
-            style={styles.input}
-            value={orderDate}
-            onChangeText={setOrderDate}
-            placeholder="YYYY-MM-DD"
-            placeholderTextColor={Colors.gray400}
-          />
+          <TouchableOpacity
+            style={styles.dateInput}
+            onPress={() => setShowDatePicker(prev => !prev)}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.dateText}>{formatDate(orderDate)}</Text>
+            <Ionicons name="calendar-outline" size={18} color={Colors.gray500} />
+          </TouchableOpacity>
+          {showDatePicker && (
+            <DateTimePicker
+              value={orderDate}
+              mode="date"
+              locale="ko-KR"
+              display={Platform.OS === 'ios' ? 'inline' : 'default'}
+              onChange={(_, d) => {
+                if (Platform.OS === 'android') setShowDatePicker(false);
+                if (d) setOrderDate(d);
+              }}
+            />
+          )}
 
           <View style={styles.itemsHeader}>
             <Text style={styles.label}>발주 항목</Text>
@@ -267,6 +291,23 @@ export default function NewOrderScreen() {
           )}
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* 하단 고정 바: 실시간 합계 + 등록 */}
+      <View style={styles.bottomBar}>
+        <View style={styles.bottomTotal}>
+          <Text style={styles.bottomTotalLabel}>합계</Text>
+          <Text style={styles.bottomTotalValue}>{Math.round(totalAmount).toLocaleString('ko-KR')}원</Text>
+        </View>
+        <TouchableOpacity
+          style={[styles.bottomSubmit, (submitting || items.length === 0) && styles.bottomSubmitDisabled]}
+          onPress={handleSubmit}
+          disabled={submitting || items.length === 0}
+        >
+          <Text style={styles.bottomSubmitText}>
+            {submitting ? '등록 중...' : `발주 등록${items.length > 0 ? ` (${items.length})` : ''}`}
+          </Text>
+        </TouchableOpacity>
+      </View>
 
       {/* 거래처 선택 모달 */}
       <Modal visible={showSupplierPicker} animationType="slide" transparent>
@@ -460,15 +501,46 @@ const styles = StyleSheet.create({
   },
   back: { fontSize: 15, color: Colors.primary, fontWeight: '600' },
   title: { fontSize: 17, fontWeight: '700', color: Colors.black },
-  submitBtn: {
-    backgroundColor: Colors.primary,
-    paddingHorizontal: 16,
-    paddingVertical: 7,
-    borderRadius: 9,
+  headerSpacer: { width: 48 },
+  content: { padding: 20, paddingBottom: 32 },
+
+  // 날짜 입력
+  dateInput: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: Colors.white,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Colors.gray200,
+    paddingHorizontal: 14,
+    paddingVertical: 13,
   },
-  submitBtnDisabled: { opacity: 0.5 },
-  submitText: { color: Colors.white, fontSize: 14, fontWeight: '700' },
-  content: { padding: 20, paddingBottom: 40 },
+  dateText: { fontSize: 15, color: Colors.black },
+
+  // 하단 고정 바
+  bottomBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 12,
+    backgroundColor: Colors.white,
+    borderTopWidth: 1,
+    borderTopColor: Colors.gray100,
+  },
+  bottomTotal: { flex: 1 },
+  bottomTotalLabel: { fontSize: 12, color: Colors.gray500, marginBottom: 2 },
+  bottomTotalValue: { fontSize: 20, fontWeight: '800', color: Colors.black, letterSpacing: -0.3 },
+  bottomSubmit: {
+    backgroundColor: Colors.primary,
+    paddingHorizontal: 22,
+    paddingVertical: 14,
+    borderRadius: 12,
+  },
+  bottomSubmitDisabled: { opacity: 0.4 },
+  bottomSubmitText: { color: Colors.white, fontSize: 15, fontWeight: '700' },
   label: { fontSize: 14, fontWeight: '600', color: Colors.gray700, marginBottom: 6, marginTop: 16 },
   input: {
     backgroundColor: Colors.white,

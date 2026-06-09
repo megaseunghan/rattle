@@ -6,6 +6,7 @@ import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { Colors } from '../../constants/colors';
 import { useRecipes } from '../../lib/hooks/useRecipes';
 import { useAuth } from '../../lib/contexts/AuthContext';
+import { useStorePermissions } from '../../lib/hooks/useStorePermissions';
 import { useTossSync } from '../../lib/hooks/useTossSync';
 import { LoadingSpinner } from '../../lib/components/LoadingSpinner';
 import { ErrorMessage } from '../../lib/components/ErrorMessage';
@@ -25,8 +26,8 @@ const SORT_OPTIONS: { key: SortKey; label: string }[] = [
 ];
 
 export default function RecipesScreen() {
-  const { store, currentRole } = useAuth();
-  const isAdmin = currentRole === 'admin';
+  const { store } = useAuth();
+  const { canManageRecipes } = useStorePermissions();
   const { data, loading, loadingMore, hasMore, loadMore, error, refetch, remove, bulkUpdateCategory } = useRecipes();
   const { syncCatalog } = useTossSync();
   const { sort: sortParam } = useLocalSearchParams<{ sort?: string }>();
@@ -192,10 +193,12 @@ export default function RecipesScreen() {
               : <Ionicons name="sync-outline" size={17} color={Colors.primary} />
             }
           </TouchableOpacity>
-          <TouchableOpacity style={styles.addButton} onPress={() => router.push('/recipes/new')}>
-            <Ionicons name="add" size={16} color={Colors.white} />
-            <Text style={styles.addText}>새 레시피</Text>
-          </TouchableOpacity>
+          {canManageRecipes && (
+            <TouchableOpacity style={styles.addButton} onPress={() => router.push('/recipes/new')}>
+              <Ionicons name="add" size={16} color={Colors.white} />
+              <Text style={styles.addText}>새 레시피</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
 
@@ -215,9 +218,11 @@ export default function RecipesScreen() {
           <Text style={styles.emptySubtext}>
             레시피를 등록하면 원가와{'\n'}마진율을 자동으로 계산해드려요
           </Text>
-          <TouchableOpacity style={styles.addFirstButton} onPress={() => router.push('/recipes/new')}>
-            <Text style={styles.addFirstText}>첫 레시피 등록하기</Text>
-          </TouchableOpacity>
+          {canManageRecipes && (
+            <TouchableOpacity style={styles.addFirstButton} onPress={() => router.push('/recipes/new')}>
+              <Text style={styles.addFirstText}>첫 레시피 등록하기</Text>
+            </TouchableOpacity>
+          )}
         </View>
       ) : (
         <>
@@ -326,7 +331,7 @@ export default function RecipesScreen() {
                         <Text style={styles.catName}>{cat}</Text>
                       )}
 
-                      {isAdmin && (
+                      {canManageRecipes && (
                         <View style={styles.catActions}>
                           {editingCat === cat ? (
                             <TouchableOpacity
@@ -366,7 +371,7 @@ export default function RecipesScreen() {
             keyExtractor={item => item.id}
             contentContainerStyle={styles.listContent}
             showsVerticalScrollIndicator={false}
-            renderItem={({ item }) => <RecipeCard recipe={item} onDelete={remove} isAdmin={isAdmin} />}
+            renderItem={({ item }) => <RecipeCard recipe={item} onDelete={remove} isAdmin={canManageRecipes} />}
             onEndReached={hasMore ? loadMore : undefined}
             onEndReachedThreshold={0.5}
             ListFooterComponent={loadingMore ? <ActivityIndicator style={{ padding: 16 }} color={Colors.primary} /> : null}
