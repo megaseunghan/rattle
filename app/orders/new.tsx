@@ -94,7 +94,6 @@ export default function NewOrderScreen() {
         last_price: 0,
         container_unit: null,
         container_size: null,
-        supplier_name: null,
       });
       // 등록 즉시 발주 항목에 추가 (재선택 단계 제거)
       addIngredient(created);

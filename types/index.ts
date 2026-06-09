@@ -65,7 +65,6 @@ export interface Ingredient {
   last_price: number;
   container_unit: string | null;
   container_size: number | null;
-  supplier_name: string | null;
   updated_at: string;
   created_at: string;
 }
