@@ -8,11 +8,14 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Colors } from '../../constants/colors';
+import { useAuth } from '../../lib/contexts/AuthContext';
 import { useIngredients } from '../../lib/hooks/useIngredients';
 import { useOrders } from '../../lib/hooks/useOrders';
 import { useRecipes } from '../../lib/hooks/useRecipes';
 import { Ingredient } from '../../types';
 import { formatStock } from '../../lib/utils/unit';
+import { RecipeCard } from '../../lib/components/RecipeCard';
+import { OrderCard } from '../../lib/components/OrderCard';
 
 type ContentTab = '재고현황' | '발주내역' | '레시피';
 
@@ -65,64 +68,6 @@ function IngredientRow({ item }: { item: Ingredient }) {
   );
 }
 
-// ─── 발주 행 ──────────────────────────────────────────────────
-function OrderRow({ item }: { item: any }) {
-  const statusMap = { pending: '대기', confirmed: '확인', delivered: '납품' } as const;
-  const colorMap = { pending: Colors.warning, confirmed: Colors.info, delivered: Colors.success } as const;
-  const status = item.status as keyof typeof statusMap;
-
-  return (
-    <TouchableOpacity
-      style={styles.orderRow}
-      onPress={() => router.push(`/orders/${item.id}`)}
-      activeOpacity={0.7}
-    >
-      <View style={[styles.rowIcon, { backgroundColor: Colors.gray100 }]}>
-        <Ionicons name="document-text-outline" size={18} color={Colors.gray500} />
-      </View>
-      <View style={styles.rowInfo}>
-        <Text style={styles.rowName}>{item.supplier_name}</Text>
-        <Text style={styles.rowSub}>
-          {item.order_date} · {item.items?.length ?? 0}품목
-        </Text>
-      </View>
-      <View style={styles.orderRight}>
-        <Text style={styles.orderAmount}>
-          {item.total_amount > 0 ? `${(item.total_amount / 10000).toFixed(1)}만원` : '—'}
-        </Text>
-        <View style={[styles.statusPill, { backgroundColor: colorMap[status] + '18' }]}>
-          <Text style={[styles.statusText, { color: colorMap[status] }]}>
-            {statusMap[status]}
-          </Text>
-        </View>
-      </View>
-    </TouchableOpacity>
-  );
-}
-
-// ─── 레시피 행 ────────────────────────────────────────────────
-function RecipeRow({ item }: { item: any }) {
-  return (
-    <TouchableOpacity
-      style={styles.recipeRow}
-      onPress={() => router.push(`/recipes/${item.id}`)}
-      activeOpacity={0.7}
-    >
-      <View style={[styles.rowIcon, { backgroundColor: Colors.tinted }]}>
-        <Ionicons name="restaurant-outline" size={18} color={Colors.primary} />
-      </View>
-      <View style={styles.rowInfo}>
-        <Text style={styles.rowName}>{item.name}</Text>
-        <Text style={styles.rowSub}>{item.category}</Text>
-      </View>
-      <View style={styles.recipeRight}>
-        <Text style={styles.recipePrice}>{item.selling_price?.toLocaleString()}원</Text>
-        <Text style={styles.recipeMargin}>마진 {item.margin_rate ?? 0}%</Text>
-      </View>
-    </TouchableOpacity>
-  );
-}
-
 // ─── 메인 스크린 ──────────────────────────────────────────────
 export default function StockScreen() {
   const [activeTab, setActiveTab] = useState<ContentTab>('재고현황');
@@ -132,8 +77,10 @@ export default function StockScreen() {
     data: ingredients, loading: ingLoading,
     loadingMore, hasMore, loadMore, refetch: refetchIng,
   } = useIngredients();
-  const { data: orders, loading: ordLoading, refetch: refetchOrd } = useOrders();
-  const { data: recipes, loading: recLoading, refetch: refetchRec } = useRecipes();
+  const { data: orders, loading: ordLoading, refetch: refetchOrd, deliver: deliverOrder, remove: removeOrder } = useOrders();
+  const { data: recipes, loading: recLoading, refetch: refetchRec, remove: removeRecipe } = useRecipes();
+  const { currentRole } = useAuth();
+  const isAdmin = currentRole === 'admin';
 
   useFocusEffect(useCallback(() => {
     if (activeTab === '재고현황') refetchIng();
@@ -175,7 +122,7 @@ export default function StockScreen() {
           activeOpacity={0.7}
         >
           <Ionicons name="add" size={14} color={Colors.gray600} />
-          <Text style={styles.orderBtnText}>발주 요청</Text>
+          <Text style={styles.orderBtnText}>발주 등록</Text>
         </TouchableOpacity>
       </View>
 
@@ -239,7 +186,7 @@ export default function StockScreen() {
           keyExtractor={item => item.id}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
-          renderItem={({ item }) => <OrderRow item={item} />}
+          renderItem={({ item }) => <OrderCard order={item} onDeliver={deliverOrder} onDelete={removeOrder} />}
           ListEmptyComponent={<EmptyState icon="document-text-outline" text="발주 내역이 없어요" />}
         />
       ) : (
@@ -248,7 +195,7 @@ export default function StockScreen() {
           keyExtractor={item => item.id}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
-          renderItem={({ item }) => <RecipeRow item={item} />}
+          renderItem={({ item }) => <RecipeCard recipe={item} onDelete={removeRecipe} isAdmin={isAdmin} />}
           ListEmptyComponent={<EmptyState icon="restaurant-outline" text="레시피가 없어요" />}
         />
       )}
@@ -364,42 +311,6 @@ const styles = StyleSheet.create({
   ingredientSub: { fontSize: 11, color: Colors.gray400, marginBottom: 6 },
   progressBg: { height: 4, backgroundColor: Colors.gray100, borderRadius: 2, overflow: 'hidden' },
   progressFill: { height: 4, borderRadius: 2 },
-
-  // 발주 행
-  orderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.white,
-    borderRadius: 14,
-    borderWidth: 0.5,
-    borderColor: Colors.gray100,
-    padding: 12,
-    marginBottom: 8,
-    gap: 12,
-  },
-  rowInfo: { flex: 1 },
-  rowName: { fontSize: 14, fontWeight: '500', color: Colors.black },
-  rowSub: { fontSize: 11, color: Colors.gray400, marginTop: 1 },
-  orderRight: { alignItems: 'flex-end', gap: 4 },
-  orderAmount: { fontSize: 14, fontWeight: '600', color: Colors.black },
-  statusPill: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 },
-  statusText: { fontSize: 11, fontWeight: '600' },
-
-  // 레시피 행
-  recipeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.white,
-    borderRadius: 14,
-    borderWidth: 0.5,
-    borderColor: Colors.gray100,
-    padding: 12,
-    marginBottom: 8,
-    gap: 12,
-  },
-  recipeRight: { alignItems: 'flex-end' },
-  recipePrice: { fontSize: 14, fontWeight: '600', color: Colors.black },
-  recipeMargin: { fontSize: 11, color: Colors.primary, marginTop: 1 },
 
   // 뱃지
   badge: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 10 },

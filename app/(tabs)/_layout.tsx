@@ -15,7 +15,7 @@ const TAB_CONFIG: Record<TabName, {
 }> = {
   home:      { active: 'home',        inactive: 'home-outline',        label: '홈' },
   pos:       { active: 'bar-chart',   inactive: 'bar-chart-outline',   label: '매출' },
-  purchases: { active: 'cart',        inactive: 'cart-outline',        label: '매입/비용' },
+  purchases: { active: 'cart',        inactive: 'cart-outline',        label: '매입' },
   payroll:   { active: 'people',      inactive: 'people-outline',      label: '인건비' },
   stock:     { active: 'cube',        inactive: 'cube-outline',        label: '재고' },
   more:      { active: 'settings',    inactive: 'settings-outline',    label: '설정' },
@@ -60,14 +60,15 @@ export default function TabsLayout() {
         tabBarShowLabel: false,
       }}
     >
+      {/* 탭 순서: 홈 · 재고 · 매입/비용 · 인건비 · 설정 (매출은 홈 손익카드에서 진입) */}
       <Tabs.Screen name="index"     options={{ tabBarIcon: ({ focused }) => <TabIcon tab="home"      focused={focused} /> }} />
-      <Tabs.Screen name="pos"       options={{ ...(isPartTime ? hidden : visible), tabBarIcon: ({ focused }) => <TabIcon tab="pos"       focused={focused} /> }} />
+      {/* 재고: 모든 역할에 노출, 홈 다음 자리 (기존 매출 탭 자리 대체) */}
+      <Tabs.Screen name="stock"     options={{ tabBarIcon: ({ focused }) => <TabIcon tab="stock"     focused={focused} /> }} />
       <Tabs.Screen name="purchases" options={{ ...(isPartTime ? hidden : visible), tabBarIcon: ({ focused }) => <TabIcon tab="purchases" focused={focused} /> }} />
       <Tabs.Screen name="payroll"   options={{ ...(isPartTime ? hidden : visible), tabBarIcon: ({ focused }) => <TabIcon tab="payroll"   focused={focused} /> }} />
-      {/* 재고: 파트타이머에게만 탭으로 노출 */}
-      <Tabs.Screen name="stock"     options={{ ...(isPartTime ? visible : hidden),  tabBarIcon: ({ focused }) => <TabIcon tab="stock"     focused={focused} /> }} />
       <Tabs.Screen name="more"      options={{ tabBarIcon: ({ focused }) => <TabIcon tab="more"      focused={focused} /> }} />
-      {/* 숨김 라우트 */}
+      {/* 숨김 라우트 (매출은 홈에서 진입) */}
+      <Tabs.Screen name="pos"       options={{ href: null }} />
       <Tabs.Screen name="expenses"  options={{ href: null }} />
       <Tabs.Screen name="orders"    options={{ href: null }} />
       <Tabs.Screen name="recipes"   options={{ href: null }} />
