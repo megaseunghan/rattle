@@ -17,7 +17,7 @@ import { useIngredients } from '../../lib/hooks/useIngredients';
 import { useCategories } from '../../lib/hooks/useCategories';
 import { useAuth } from '../../lib/contexts/AuthContext';
 
-const UNIT_PRESETS = ['g', 'kg', '개', 'L', 'mL', '봉', '팩', '병'];
+import { STOCK_UNITS } from '../../lib/utils/unit';
 
 export default function NewIngredientScreen() {
   const { store } = useAuth();
@@ -26,12 +26,10 @@ export default function NewIngredientScreen() {
 
   const [name, setName] = useState('');
   const [category, setCategory] = useState('');
-  const [unit, setUnit] = useState('g');
+  const [unit, setUnit] = useState<string>(STOCK_UNITS[0]);
   const [currentStock, setCurrentStock] = useState('0');
   const [minStock, setMinStock] = useState('0');
   const [lastPrice, setLastPrice] = useState('0');
-  const [containerUnit, setContainerUnit] = useState('');
-  const [containerSize, setContainerSize] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   async function handleSubmit() {
@@ -39,22 +37,7 @@ export default function NewIngredientScreen() {
       Alert.alert('입력 오류', '식자재명을 입력해주세요.');
       return;
     }
-    if (!unit.trim()) {
-      Alert.alert('입력 오류', '단위를 입력해주세요.');
-      return;
-    }
     if (!store) return;
-
-    if (containerUnit.trim() && !containerSize) {
-      Alert.alert('입력 오류', '용량 단위를 입력하려면 1개당 용량도 입력해주세요.');
-      return;
-    }
-
-    const parsedSize = containerSize ? parseFloat(containerSize) : null;
-    if (parsedSize !== null && (isNaN(parsedSize) || parsedSize <= 0)) {
-      Alert.alert('입력 오류', '1개당 용량은 0보다 큰 숫자여야 합니다.');
-      return;
-    }
 
     setSubmitting(true);
     try {
@@ -62,12 +45,10 @@ export default function NewIngredientScreen() {
         store_id: store.id,
         name: name.trim(),
         category: category.trim() || '기타',
-        unit: unit.trim(),
+        unit,
         current_stock: parseFloat(currentStock) || 0,
         min_stock: parseFloat(minStock) || 0,
         last_price: parseFloat(lastPrice) || 0,
-        container_unit: containerUnit.trim() || null,
-        container_size: parsedSize,
       });
       router.back();
     } catch (e: any) {
@@ -121,7 +102,7 @@ export default function NewIngredientScreen() {
 
           <Text style={styles.label}>단위 *</Text>
           <View style={styles.unitPresets}>
-            {UNIT_PRESETS.map(u => (
+            {STOCK_UNITS.map(u => (
               <TouchableOpacity
                 key={u}
                 style={[styles.unitChip, unit === u && styles.unitChipActive]}
@@ -133,13 +114,7 @@ export default function NewIngredientScreen() {
               </TouchableOpacity>
             ))}
           </View>
-          <TextInput
-            style={[styles.input, styles.unitInput]}
-            value={unit}
-            onChangeText={setUnit}
-            placeholder="직접 입력"
-            placeholderTextColor={Colors.gray400}
-          />
+          <Text style={styles.unitHelp}>레시피에서는 g·mL 등으로 입력하면 자동 환산돼요</Text>
 
           <View style={styles.row}>
             <View style={styles.halfField}>
@@ -175,36 +150,6 @@ export default function NewIngredientScreen() {
             placeholder="0"
             placeholderTextColor={Colors.gray400}
           />
-
-          <View style={styles.containerSection}>
-            <Text style={styles.containerSectionTitle}>개당 용량 & 단위 (선택)</Text>
-            <Text style={styles.containerHint}>
-              💡 1{unit || '개'}에 담긴 용량을 입력하면 레시피 원가를 정확히 계산해요 (예: 1박스 = 500 g)
-            </Text>
-            <View style={styles.row}>
-              <View style={styles.halfField}>
-                <Text style={styles.label}>1{unit || '개'}당 용량</Text>
-                <TextInput
-                  style={styles.input}
-                  value={containerSize}
-                  onChangeText={setContainerSize}
-                  keyboardType="numeric"
-                  placeholder="예) 500"
-                  placeholderTextColor={Colors.gray400}
-                />
-              </View>
-              <View style={styles.halfField}>
-                <Text style={styles.label}>용량 단위</Text>
-                <TextInput
-                  style={styles.input}
-                  value={containerUnit}
-                  onChangeText={setContainerUnit}
-                  placeholder="예) g, mL"
-                  placeholderTextColor={Colors.gray400}
-                />
-              </View>
-            </View>
-          </View>
 
           <View style={styles.hint}>
             <Text style={styles.hintText}>
@@ -275,7 +220,7 @@ const styles = StyleSheet.create({
   unitChipActive: { borderColor: Colors.primary, backgroundColor: Colors.bg },
   unitChipText: { fontSize: 14, color: Colors.gray600 },
   unitChipTextActive: { color: Colors.primary, fontWeight: '700' },
-  unitInput: { marginTop: 0 },
+  unitHelp: { fontSize: 12, color: Colors.gray400, marginTop: 2 },
   row: { flexDirection: 'row', gap: 12 },
   halfField: { flex: 1 },
   hint: {
@@ -285,22 +230,4 @@ const styles = StyleSheet.create({
     padding: 14,
   },
   hintText: { fontSize: 13, color: Colors.dark, lineHeight: 18 },
-  containerSection: {
-    marginTop: 24,
-    backgroundColor: Colors.bg,
-    borderRadius: 12,
-    padding: 14,
-  },
-  containerSectionTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: Colors.dark,
-    marginBottom: 4,
-  },
-  containerHint: {
-    fontSize: 13,
-    color: Colors.dark,
-    marginBottom: 12,
-    lineHeight: 18,
-  },
 });

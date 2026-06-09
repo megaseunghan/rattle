@@ -16,6 +16,7 @@ import { Modal, TextInput } from 'react-native';
 import { RecipeWithIngredients, upsertRecipesFromCatalog, getRecipesByCategory, renameRecipeCategory, deleteRecipeCategory } from '../../lib/services/recipes';
 import { Ingredient, TossCatalogItem } from '../../types';
 import { RecipeCard } from '../../lib/components/RecipeCard';
+import { recipeLineCost } from '../../lib/utils/unit';
 
 type SortKey = 'name' | 'margin_desc' | 'cost_asc';
 
@@ -148,19 +149,13 @@ export default function RecipesScreen() {
     ]);
   }
 
-  function unitPrice(ing: Ingredient): number {
-    const base = ing.last_price ?? 0;
-    if (ing.container_size && ing.container_size > 0) return base / ing.container_size;
-    return base;
-  }
-
   const displayed = useMemo(() => {
     return data
       .filter(r => activeCategory === '전체' || r.category === activeCategory)
       .map(r => {
         const cost = r.recipe_ingredients.reduce((sum, ri) => {
           if (!ri.ingredient) return sum;
-          return sum + ri.quantity * unitPrice(ri.ingredient);
+          return sum + recipeLineCost(ri.quantity, ri.unit ?? ri.ingredient.unit, ri.ingredient);
         }, 0);
         const marginRate = r.selling_price > 0 ? ((r.selling_price - cost) / r.selling_price) * 100 : 0;
         return { ...r, calculatedCost: cost, calculatedMarginRate: marginRate };

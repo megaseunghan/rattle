@@ -12,7 +12,7 @@ import { useAuth } from '../../lib/contexts/AuthContext';
 import { LoadingSpinner } from '../../lib/components/LoadingSpinner';
 import { ErrorMessage } from '../../lib/components/ErrorMessage';
 import { RecipeWithIngredients } from '../../lib/services/recipes';
-import { Ingredient } from '../../types';
+import { recipeLineCost } from '../../lib/utils/unit';
 
 export default function RecipeDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -37,12 +37,6 @@ export default function RecipeDetailScreen() {
   useFocusEffect(useCallback(() => {
     loadRecipe();
   }, [loadRecipe]));
-
-  function unitPrice(ing: Ingredient): number {
-    const base = ing.last_price ?? 0;
-    if (ing.container_size && ing.container_size > 0) return base / ing.container_size;
-    return base;
-  }
 
   async function handleDelete() {
     Alert.alert('레시피 삭제', `"${recipe?.name}" 레시피를 삭제하시겠습니까?`, [
@@ -129,7 +123,7 @@ export default function RecipeDetailScreen() {
               </View>
               <View style={styles.riRight}>
                 <Text style={styles.riCost}>
-                  {(unitPrice(ri.ingredient!) * ri.quantity).toLocaleString(undefined, { maximumFractionDigits: 0 })}원
+                  {recipeLineCost(ri.quantity, ri.unit ?? ri.ingredient!.unit, ri.ingredient!).toLocaleString(undefined, { maximumFractionDigits: 0 })}원
                 </Text>
               </View>
             </View>

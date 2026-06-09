@@ -23,10 +23,12 @@ import { useIngredients } from '../../lib/hooks/useIngredients';
 import { useAuth } from '../../lib/contexts/AuthContext';
 import { getRecipeById, updateRecipeFull } from '../../lib/services/recipes';
 import { Ingredient } from '../../types';
+import { recipeLineCost, recipeUnitOptions } from '../../lib/utils/unit';
 
 interface RecipeIngredientForm {
   ingredient: Ingredient;
   quantity: string;
+  unit: string;
 }
 
 export default function NewRecipeScreen() {
@@ -73,6 +75,7 @@ export default function NewRecipeScreen() {
       setItems(data.recipe_ingredients.map(ri => ({
         ingredient: ri.ingredient!,
         quantity: String(ri.quantity),
+        unit: ri.unit ?? ri.ingredient!.unit,
       })));
     } catch (e: any) {
       Alert.alert('오류', '레시피 정보를 불러오는데 실패했습니다.');
@@ -82,16 +85,10 @@ export default function NewRecipeScreen() {
     }
   }
 
-  function unitPrice(ing: Ingredient): number {
-    const base = ing.last_price ?? 0;
-    if (ing.container_size && ing.container_size > 0) return base / ing.container_size;
-    return base;
-  }
-
   const cost = useMemo(() => {
     return items.reduce((sum, item) => {
       const qty = parseFloat(item.quantity) || 0;
-      return sum + qty * unitPrice(item.ingredient);
+      return sum + recipeLineCost(qty, item.unit, item.ingredient);
     }, 0);
   }, [items]);
 
@@ -124,10 +121,8 @@ export default function NewRecipeScreen() {
         category: '기타',
         current_stock: 0,
         min_stock: 0,
-        container_unit: null,
-        container_size: null,
       });
-      setItems(prev => [...prev, { ingredient: created, quantity: '1' }]);
+      setItems(prev => [...prev, { ingredient: created, quantity: '1', unit: created.unit }]);
       setNewName(''); setNewUnit(''); setNewPrice('');
       setShowNewForm(false);
       setShowPicker(false);
@@ -141,7 +136,7 @@ export default function NewRecipeScreen() {
   function addIngredient(ingredient: Ingredient) {
     const alreadyAdded = items.some(i => i.ingredient.id === ingredient.id);
     if (!alreadyAdded) {
-      setItems(prev => [...prev, { ingredient, quantity: '1' }]);
+      setItems(prev => [...prev, { ingredient, quantity: '1', unit: ingredient.unit }]);
     }
     setShowPicker(false);
   }
@@ -153,6 +148,12 @@ export default function NewRecipeScreen() {
   function updateQuantity(ingredientId: string, value: string) {
     setItems(prev =>
       prev.map(i => (i.ingredient.id === ingredientId ? { ...i, quantity: value } : i))
+    );
+  }
+
+  function updateUnit(ingredientId: string, value: string) {
+    setItems(prev =>
+      prev.map(i => (i.ingredient.id === ingredientId ? { ...i, unit: value } : i))
     );
   }
 
@@ -176,7 +177,7 @@ export default function NewRecipeScreen() {
       const ingredientData = items.map(i => ({
         ingredient_id: i.ingredient.id,
         quantity: parseFloat(i.quantity) || 0,
-        unit: i.ingredient.unit,
+        unit: i.unit,
       }));
 
       if (isEdit && id) {
@@ -318,7 +319,7 @@ export default function NewRecipeScreen() {
                   <Text style={styles.recipeItemName}>{item.ingredient.name}</Text>
                   <Text style={styles.recipeItemPrice}>
                     {item.ingredient.last_price != null
-                      ? `단가 ${unitPrice(item.ingredient).toLocaleString('ko-KR', { maximumFractionDigits: 2 })}원/${item.ingredient.unit}`
+                      ? `단가 ${(item.ingredient.last_price ?? 0).toLocaleString('ko-KR')}원/${item.ingredient.unit}`
                       : '단가 미설정'}
                   </Text>
                 </View>
@@ -329,7 +330,21 @@ export default function NewRecipeScreen() {
                     onChangeText={v => updateQuantity(item.ingredient.id, v)}
                     keyboardType="numeric"
                   />
-                  <Text style={styles.unitText}>{item.ingredient.unit}</Text>
+                  {recipeUnitOptions(item.ingredient.unit).length > 1 ? (
+                    <View style={styles.unitToggle}>
+                      {recipeUnitOptions(item.ingredient.unit).map(u => (
+                        <TouchableOpacity
+                          key={u}
+                          style={[styles.unitToggleChip, item.unit === u && styles.unitToggleChipActive]}
+                          onPress={() => updateUnit(item.ingredient.id, u)}
+                        >
+                          <Text style={[styles.unitToggleText, item.unit === u && styles.unitToggleTextActive]}>{u}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  ) : (
+                    <Text style={styles.unitText}>{item.unit}</Text>
+                  )}
                   <TouchableOpacity onPress={() => removeItem(item.ingredient.id)}>
                     <Text style={styles.removeText}>✕</Text>
                   </TouchableOpacity>
@@ -569,6 +584,16 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
   unitText: { fontSize: 13, color: Colors.gray500 },
+  unitToggle: { flexDirection: 'row', gap: 4 },
+  unitToggleChip: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    backgroundColor: Colors.gray100,
+  },
+  unitToggleChipActive: { backgroundColor: Colors.primary },
+  unitToggleText: { fontSize: 12, color: Colors.gray500, fontWeight: '600' },
+  unitToggleTextActive: { color: Colors.white },
   removeText: { fontSize: 15, color: Colors.gray400 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
   modalSheet: {

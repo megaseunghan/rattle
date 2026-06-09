@@ -92,8 +92,6 @@ export default function NewOrderScreen() {
         current_stock: 0,
         min_stock: 0,
         last_price: 0,
-        container_unit: null,
-        container_size: null,
       });
       // 등록 즉시 발주 항목에 추가 (재선택 단계 제거)
       addIngredient(created);
@@ -172,7 +170,7 @@ export default function NewOrderScreen() {
         items.map(i => ({
           ingredient_id: i.ingredient.id,
           quantity: parseFloat(i.quantity) || 0,
-          unit: i.ingredient.container_unit ?? i.ingredient.unit,
+          unit: i.ingredient.unit,
           unit_price: parseFloat(i.unit_price) || 0,
         }))
       );
