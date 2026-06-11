@@ -22,8 +22,9 @@ import { useRecipes } from '../../lib/hooks/useRecipes';
 import { useIngredients } from '../../lib/hooks/useIngredients';
 import { useAuth } from '../../lib/contexts/AuthContext';
 import { getRecipeById, updateRecipeFull } from '../../lib/services/recipes';
+import { updateIngredient } from '../../lib/services/ingredients';
 import { Ingredient } from '../../types';
-import { recipeLineCost, recipeUnitOptions } from '../../lib/utils/unit';
+import { recipeLineCost, recipeUnitOptionsFor } from '../../lib/utils/unit';
 
 interface RecipeIngredientForm {
   ingredient: Ingredient;
@@ -58,6 +59,35 @@ export default function NewRecipeScreen() {
   const [newUnit, setNewUnit] = useState('');
   const [newPrice, setNewPrice] = useState('');
   const [savingNew, setSavingNew] = useState(false);
+
+  // 개수 재고의 "개당 용량" 입력 (레시피에서 g/mL로 쓰기 위함)
+  const [volumeTarget, setVolumeTarget] = useState<Ingredient | null>(null);
+  const [volInput, setVolInput] = useState('');
+  const [volUnit, setVolUnit] = useState<'g' | 'mL'>('g');
+  const [savingVol, setSavingVol] = useState(false);
+
+  async function handleSaveVolume() {
+    if (!volumeTarget) return;
+    const v = parseFloat(volInput);
+    if (!v || v <= 0) {
+      Alert.alert('입력 오류', '개당 용량을 올바르게 입력해주세요.');
+      return;
+    }
+    setSavingVol(true);
+    try {
+      const updated = await updateIngredient(volumeTarget.id, { unit_volume: v, unit_volume_unit: volUnit });
+      // 해당 재료의 ingredient를 갱신하고 입력 단위를 용량 단위로 전환
+      setItems(prev =>
+        prev.map(i => (i.ingredient.id === updated.id ? { ...i, ingredient: updated, unit: volUnit } : i))
+      );
+      setVolumeTarget(null);
+      setVolInput('');
+    } catch (e: any) {
+      Alert.alert('오류', e.message);
+    } finally {
+      setSavingVol(false);
+    }
+  }
 
   useEffect(() => {
     if (isEdit) {
@@ -139,6 +169,12 @@ export default function NewRecipeScreen() {
       setItems(prev => [...prev, { ingredient, quantity: '1', unit: ingredient.unit }]);
     }
     setShowPicker(false);
+    // 개수 재고인데 개당 용량이 아직 없으면 입력 유도 (g/mL로 원가 환산 가능하게)
+    if (!alreadyAdded && ingredient.unit === '개' && !ingredient.unit_volume) {
+      setVolumeTarget(ingredient);
+      setVolInput('');
+      setVolUnit('g');
+    }
   }
 
   function removeItem(ingredientId: string) {
@@ -330,9 +366,9 @@ export default function NewRecipeScreen() {
                     onChangeText={v => updateQuantity(item.ingredient.id, v)}
                     keyboardType="numeric"
                   />
-                  {recipeUnitOptions(item.ingredient.unit).length > 1 ? (
+                  {recipeUnitOptionsFor(item.ingredient).length > 1 ? (
                     <View style={styles.unitToggle}>
-                      {recipeUnitOptions(item.ingredient.unit).map(u => (
+                      {recipeUnitOptionsFor(item.ingredient).map(u => (
                         <TouchableOpacity
                           key={u}
                           style={[styles.unitToggleChip, item.unit === u && styles.unitToggleChipActive]}
@@ -444,6 +480,54 @@ export default function NewRecipeScreen() {
                 }}
               />
             )}
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* 개당 용량 입력 모달 */}
+      <Modal visible={volumeTarget !== null} animationType="fade" transparent>
+        <Pressable style={styles.volOverlay} onPress={() => setVolumeTarget(null)}>
+          <Pressable style={styles.volSheet} onPress={() => {}}>
+            <Text style={styles.volTitle}>{volumeTarget?.name} 개당 용량</Text>
+            <Text style={styles.volDesc}>
+              개수로 관리하는 품목이에요. 레시피에서 g·mL로 쓰려면 1개의 용량을 알려주세요.
+            </Text>
+            <View style={styles.volInputRow}>
+              <TextInput
+                style={styles.volInput}
+                value={volInput}
+                onChangeText={setVolInput}
+                placeholder="예: 500"
+                placeholderTextColor={Colors.gray400}
+                keyboardType="numeric"
+                autoFocus
+              />
+              <View style={styles.volUnitToggle}>
+                {(['g', 'mL'] as const).map(u => (
+                  <TouchableOpacity
+                    key={u}
+                    style={[styles.volUnitChip, volUnit === u && styles.volUnitChipActive]}
+                    onPress={() => setVolUnit(u)}
+                  >
+                    <Text style={[styles.volUnitText, volUnit === u && styles.volUnitTextActive]}>{u}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+            <View style={styles.volActions}>
+              <TouchableOpacity style={styles.volSkipBtn} onPress={() => setVolumeTarget(null)}>
+                <Text style={styles.volSkipText}>나중에 (개 단위로)</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.volSaveBtn, savingVol && { opacity: 0.5 }]}
+                onPress={handleSaveVolume}
+                disabled={savingVol}
+              >
+                {savingVol
+                  ? <ActivityIndicator size="small" color={Colors.white} />
+                  : <Text style={styles.volSaveText}>저장</Text>}
+              </TouchableOpacity>
+            </View>
           </Pressable>
         </Pressable>
       </Modal>
@@ -650,4 +734,30 @@ const styles = StyleSheet.create({
   },
   newSaveText: { fontSize: 14, fontWeight: '700', color: Colors.white },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+
+  volOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', paddingHorizontal: 28 },
+  volSheet: { backgroundColor: Colors.white, borderRadius: 18, padding: 22 },
+  volTitle: { fontSize: 17, fontWeight: '700', color: Colors.black },
+  volDesc: { fontSize: 13, color: Colors.gray500, marginTop: 8, lineHeight: 19 },
+  volInputRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 18 },
+  volInput: {
+    flex: 1, backgroundColor: Colors.gray50, borderRadius: 10, borderWidth: 1, borderColor: Colors.gray200,
+    paddingHorizontal: 14, paddingVertical: 11, fontSize: 15, color: Colors.black,
+  },
+  volUnitToggle: { flexDirection: 'row', gap: 4 },
+  volUnitChip: {
+    paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10,
+    borderWidth: 1, borderColor: Colors.gray200, backgroundColor: Colors.gray50,
+  },
+  volUnitChipActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
+  volUnitText: { fontSize: 14, fontWeight: '600', color: Colors.gray500 },
+  volUnitTextActive: { color: Colors.white },
+  volActions: { flexDirection: 'row', gap: 10, marginTop: 22 },
+  volSkipBtn: {
+    flex: 1, paddingVertical: 12, borderRadius: 10,
+    borderWidth: 1, borderColor: Colors.gray200, alignItems: 'center',
+  },
+  volSkipText: { fontSize: 13, fontWeight: '600', color: Colors.gray500 },
+  volSaveBtn: { flex: 1, paddingVertical: 12, borderRadius: 10, backgroundColor: Colors.primary, alignItems: 'center' },
+  volSaveText: { fontSize: 14, fontWeight: '700', color: Colors.white },
 });
