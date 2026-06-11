@@ -29,6 +29,19 @@ export function recipeUnitOptions(stockUnit: string): string[] {
 }
 
 /**
+ * 레시피에서 한 재료에 선택 가능한 입력 단위.
+ * 개수 재고라도 "개당 용량"이 등록돼 있으면 g/mL로도 입력 가능.
+ */
+export function recipeUnitOptionsFor(
+  ingredient: Pick<Ingredient, 'unit' | 'unit_volume' | 'unit_volume_unit'>,
+): string[] {
+  if (ingredient.unit === '개' && ingredient.unit_volume && ingredient.unit_volume_unit) {
+    return ['개', ingredient.unit_volume_unit];
+  }
+  return recipeUnitOptions(ingredient.unit);
+}
+
+/**
  * fromUnit 기준 수량을 stockUnit(재고 기준 단위) 기준 수량으로 환산.
  * 예) convertQuantity(200, 'g', 'kg') === 0.2
  * 차원이 다른 단위를 섞으면 의미가 없으므로 호출 측에서 같은 차원으로 맞춘다.
@@ -46,8 +59,19 @@ export function convertQuantity(qty: number, fromUnit: string, stockUnit: string
 export function recipeLineCost(
   quantity: number,
   lineUnit: string,
-  ingredient: Pick<Ingredient, 'unit' | 'last_price'>,
+  ingredient: Pick<Ingredient, 'unit' | 'last_price' | 'unit_volume' | 'unit_volume_unit'>,
 ): number {
+  // 개수 재고를 g/mL로 입력한 경우: 개당 용량으로 나눠 "개" 환산 후 개당 단가 곱.
+  if (
+    ingredient.unit === '개' &&
+    lineUnit !== '개' &&
+    ingredient.unit_volume &&
+    ingredient.unit_volume_unit
+  ) {
+    const inVolUnit = convertQuantity(quantity, lineUnit, ingredient.unit_volume_unit);
+    const countFraction = inVolUnit / ingredient.unit_volume;
+    return countFraction * (ingredient.last_price ?? 0);
+  }
   const converted = convertQuantity(quantity, lineUnit, ingredient.unit);
   return converted * (ingredient.last_price ?? 0);
 }
