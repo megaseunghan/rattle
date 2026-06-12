@@ -14,23 +14,14 @@ export default function ProfileScreen() {
   const { user, store, stores, currentRole, signOut, refreshStore } = useAuth();
   const [loading, setLoading] = useState(false);
   const [name, setName] = useState(store?.name || '');
-  const [closingTime, setClosingTime] = useState(
-    (store?.closing_time as string | null | undefined)?.slice(0, 5) ?? '23:00'
-  );
 
   useEffect(() => {
     if (!store) return;
     setName(store.name || '');
-    setClosingTime((store.closing_time as string | null | undefined)?.slice(0, 5) ?? '23:00');
   }, [store?.id]);
 
   async function handleUpdateProfile() {
     if (!store || !name.trim()) return;
-
-    if (!/^\d{2}:\d{2}$/.test(closingTime)) {
-      Alert.alert('형식 오류', '마감 시간을 HH:MM 형식으로 입력해주세요. (예: 23:00)');
-      return;
-    }
 
     setLoading(true);
     try {
@@ -38,7 +29,6 @@ export default function ProfileScreen() {
         .from('stores')
         .update({
           name: name.trim(),
-          closing_time: closingTime,
         })
         .eq('id', store.id);
 
@@ -125,16 +115,6 @@ export default function ProfileScreen() {
               placeholder="매장 이름"
             />
 
-            <Text style={[styles.label, { marginTop: 16 }]}>마감 시간 (HH:MM)</Text>
-            <TextInput
-              style={styles.input}
-              value={closingTime}
-              onChangeText={setClosingTime}
-              placeholder="23:00"
-              keyboardType="numbers-and-punctuation"
-              maxLength={5}
-            />
-
             <TouchableOpacity
               style={[styles.saveBtn, loading && styles.disabled]}
               onPress={handleUpdateProfile}
@@ -152,6 +132,12 @@ export default function ProfileScreen() {
         <View style={styles.menuCard}>
           {currentRole === 'admin' && (
             <>
+              <TouchableOpacity style={styles.menuItem} onPress={() => router.push('/settings/sales')}>
+                <Ionicons name="receipt-outline" size={20} color={Colors.gray600} />
+                <Text style={styles.menuText}>매출 설정</Text>
+                <Ionicons name="chevron-forward" size={16} color={Colors.gray300} />
+              </TouchableOpacity>
+              <View style={styles.divider} />
               <TouchableOpacity style={styles.menuItem} onPress={() => router.push('/settings/members')}>
                 <Ionicons name="people-outline" size={20} color={Colors.gray600} />
                 <Text style={styles.menuText}>멤버 관리</Text>
