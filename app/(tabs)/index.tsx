@@ -104,7 +104,7 @@ function PnLDivider() {
 
 function PnLCard({ pnl, loading }: { pnl: ProfitLoss | null; loading: boolean }) {
   const cats = pnl?.purchaseByCategory ?? {};
-  const catOrder = ['식자재', '비품', '소모품', '주류', '기타'] as const;
+  const catOrder = ['식자재', '비품소모품', '주류', '기타'] as const;
   const rev = pnl?.revenue ?? 0;
   const totalExpense = (pnl?.fixedExpense ?? 0) + (pnl?.variableExpense ?? 0);
   const isProfit = (pnl?.operatingProfit ?? 0) >= 0;
@@ -142,6 +142,7 @@ function PnLCard({ pnl, loading }: { pnl: ProfitLoss | null; loading: boolean })
       <PnLSubRow label="마케팅" value={fmt(pnl?.marketingExpense)} ratio={pct(pnl?.marketingExpense, rev)} />
       <PnLSubRow label="시설보수" value={fmt(pnl?.maintenanceExpense)} ratio={pct(pnl?.maintenanceExpense, rev)} />
       <PnLSubRow label="공과금" value={fmt(pnl?.utilitiesExpense)} ratio={pct(pnl?.utilitiesExpense, rev)} />
+      <PnLSubRow label="카드 수수료" value={fmt(pnl?.cardFeeExpense)} ratio={pct(pnl?.cardFeeExpense, rev)} />
 
       {/* 영업이익 */}
       <View style={[styles.profitRow, isProfit ? styles.profitRowPos : styles.profitRowNeg]}>

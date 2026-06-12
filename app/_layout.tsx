@@ -19,7 +19,7 @@ function RootNavigator() {
   const { user, store, currentRole, loading } = useAuth();
   const router = useRouter();
   const segments = useSegments();
-  const { autoSync } = useTossSync();
+  const { autoSyncOnForeground } = useTossSync();
   const lastCheckedAt = useRef<number>(0);
 
   async function checkPendingMembers() {
@@ -74,12 +74,12 @@ function RootNavigator() {
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextState) => {
       if (nextState === 'active') {
-        autoSync();
+        autoSyncOnForeground();
         checkPendingMembers();
       }
     });
     return () => subscription.remove();
-  }, [autoSync, store, currentRole]);
+  }, [autoSyncOnForeground, store, currentRole]);
 
   // OAuth 콜백 딥링크 처리 (카카오 로그인)
   useEffect(() => {

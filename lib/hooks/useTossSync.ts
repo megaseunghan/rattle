@@ -19,6 +19,7 @@ interface UseTossSyncResult extends TossSyncState {
   loadTodaySales: () => Promise<void>;
   autoSync: () => Promise<void>;
   autoSyncRecent: (closingTime: string, days?: number) => Promise<void>;
+  autoSyncOnForeground: () => Promise<void>;
   syncByDate: (date: string) => Promise<void>;
   syncByMonth: (year: number, month: number) => Promise<void>;
   autoSyncing: boolean;
@@ -258,6 +259,33 @@ export function useTossSync(): UseTossSyncResult {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [store, syncOrders]);
 
+  /**
+   * 앱 포그라운드 진입 시 자동 동기화.
+   * 마감시간이 지났으면 방금 마감된 영업일의 최종 매출까지 다시 받아오고,
+   * 아직 영업 중이면 오늘 영업일 데이터만 보충한다. (서버 크론 없이 클라이언트에서 보강)
+   */
+  const autoSyncOnForeground = useCallback(async (): Promise<void> => {
+    if (!store) return;
+    try {
+      const closingTime = await getClosingTime();
+      const [h, m] = closingTime.split(':').map(Number);
+      const now = new Date();
+      const todayClose = new Date();
+      todayClose.setHours(h, m, 0, 0);
+
+      if (now >= todayClose) {
+        // 마감 지남 → 최근 영업일 최종 동기화 (30분 캐시 게이트)
+        await autoSyncRecent(closingTime, 2);
+      } else {
+        // 영업 중 → 오늘 영업일 데이터 없으면 동기화
+        await autoSync();
+      }
+    } catch {
+      // 자동 동기화 실패는 조용히 무시
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [store, autoSync, autoSyncRecent]);
+
   return {
     loading,
     error,
@@ -269,6 +297,7 @@ export function useTossSync(): UseTossSyncResult {
     loadTodaySales,
     autoSync,
     autoSyncRecent,
+    autoSyncOnForeground,
     syncByDate,
     syncByMonth,
     autoSyncing,

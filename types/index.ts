@@ -275,7 +275,7 @@ export interface Payroll {
 }
 
 // 매입
-export type PurchaseCategory = '식자재' | '비품' | '소모품' | '주류' | '기타';
+export type PurchaseCategory = '식자재' | '비품소모품' | '주류' | '기타';
 export type PurchaseType = '전자세금계산서' | '쿠팡' | '네이버' | '수기';
 
 export interface Purchase {
@@ -348,7 +348,8 @@ export interface ProfitLoss {
   marketingExpense: number;
   maintenanceExpense: number;
   utilitiesExpense: number;
-  variableExpense: number;    // 마케팅+시설보수+공과금 합계
+  cardFeeExpense: number;     // 카드 수수료 (카드매출 × 1.25%, 자동 계산)
+  variableExpense: number;    // 마케팅+시설보수+공과금+카드수수료 합계
   // 5. 이익
   operatingProfit: number;
   taxReserve: number;
