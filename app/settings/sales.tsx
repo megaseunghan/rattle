@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
-  Modal, Pressable, ActivityIndicator, Alert,
+  ActivityIndicator, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -12,26 +12,23 @@ import { supabase } from '../../lib/supabase';
 
 type Meridiem = '오전' | '오후';
 
-// "HH:MM" → 24시간 정수 (분은 무시, 정시 기준)
+// "HH:MM" → 24시간 정수 (정시 기준, 분 무시)
 function parseHour24(time: string | null | undefined): number {
   const h = Number((time ?? '23:00').slice(0, 2));
   return Number.isFinite(h) ? h : 23;
 }
 
-// 24시간 → { 오전/오후, 12시간제 시 }
 function to12h(hour24: number): { meridiem: Meridiem; hour12: number } {
   const meridiem: Meridiem = hour24 < 12 ? '오전' : '오후';
   const raw = hour24 % 12;
   return { meridiem, hour12: raw === 0 ? 12 : raw };
 }
 
-// { 오전/오후, 12시간제 시 } → 24시간
 function to24h(meridiem: Meridiem, hour12: number): number {
   if (meridiem === '오전') return hour12 === 12 ? 0 : hour12;
   return hour12 === 12 ? 12 : hour12 + 12;
 }
 
-// 24시간 → "오전/오후 N시" 라벨
 function formatLabel(hour24: number): string {
   const { meridiem, hour12 } = to12h(hour24);
   return `${meridiem} ${hour12}시`;
@@ -39,29 +36,31 @@ function formatLabel(hour24: number): string {
 
 const HOURS_12 = Array.from({ length: 12 }, (_, i) => i + 1); // 1~12
 
+// 빠른 선택 프리셋 (우리만의 구성)
+const PRESETS: { label: string; hour24: number }[] = [
+  { label: '자정 마감', hour24: 0 },
+  { label: '새벽 2시', hour24: 2 },
+  { label: '오전 6시', hour24: 6 },
+  { label: '오후 4시', hour24: 16 },
+];
+
 export default function SalesSettingsScreen() {
   const { store, refreshStore } = useAuth();
   const initialHour = parseHour24(store?.closing_time as string | null | undefined);
 
-  // 모드: 'midnight'(오전 12시 프리셋) | 'custom'(직접 입력)
-  const [mode, setMode] = useState<'midnight' | 'custom'>(initialHour === 0 ? 'midnight' : 'custom');
   const [meridiem, setMeridiem] = useState<Meridiem>(to12h(initialHour).meridiem);
   const [hour12, setHour12] = useState<number>(to12h(initialHour).hour12);
   const [saving, setSaving] = useState(false);
-  const [picker, setPicker] = useState<null | 'meridiem' | 'hour'>(null);
 
   useEffect(() => {
     const h = parseHour24(store?.closing_time as string | null | undefined);
-    setMode(h === 0 ? 'midnight' : 'custom');
     setMeridiem(to12h(h).meridiem);
     setHour12(to12h(h).hour12);
   }, [store?.id]);
 
-  const selectedHour24 = mode === 'midnight' ? 0 : to24h(meridiem, hour12);
+  const selectedHour24 = to24h(meridiem, hour12);
   const dirty = selectedHour24 !== initialHour;
-
-  const closingLabel = useMemo(() => formatLabel(selectedHour24), [selectedHour24]);
-  const nextLabel = `익일 ${closingLabel}`;
+  const label = useMemo(() => formatLabel(selectedHour24), [selectedHour24]);
 
   async function handleSave() {
     if (!store) return;
@@ -100,121 +99,96 @@ export default function SalesSettingsScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        <Text style={styles.sectionTitle}>매장의 운영 시간에 따라 설정해주세요</Text>
+        {/* 선택값 미리보기 카드 */}
+        <View style={styles.heroCard}>
+          <Text style={styles.heroCaption}>이 시각에 하루 장부를 끊어요</Text>
+          <Text style={styles.heroValue}>{label}</Text>
+          <View style={styles.heroRange}>
+            <Ionicons name="time-outline" size={14} color={Colors.primary} />
+            <Text style={styles.heroRangeText}>{label} → 익일 {label}</Text>
+          </View>
+        </View>
 
-        {/* 프리셋: 오전 12시 */}
-        <OptionCard
-          caption="저녁에 마감하는 매장이라면"
-          title="오전 12시"
-          selected={mode === 'midnight'}
-          onPress={() => setMode('midnight')}
-        />
+        {/* 빠른 선택 */}
+        <Text style={styles.sectionLabel}>빠른 선택</Text>
+        <View style={styles.presetRow}>
+          {PRESETS.map(p => {
+            const active = selectedHour24 === p.hour24;
+            return (
+              <TouchableOpacity
+                key={p.label}
+                style={[styles.presetChip, active && styles.presetChipActive]}
+                onPress={() => {
+                  const t = to12h(p.hour24);
+                  setMeridiem(t.meridiem);
+                  setHour12(t.hour12);
+                }}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.presetText, active && styles.presetTextActive]}>{p.label}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
 
-        {/* 직접 입력 */}
-        <OptionCard
-          caption="새벽까지 운영하는 매장이라면"
-          title="직접 입력"
-          selected={mode === 'custom'}
-          onPress={() => setMode('custom')}
-        >
-          {mode === 'custom' && (
-            <>
-              <View style={styles.selectRow}>
-                <SelectField value={meridiem} onPress={() => setPicker('meridiem')} flex={1} />
-                <SelectField value={`${hour12}시`} onPress={() => setPicker('hour')} flex={1.4} />
-              </View>
-              <Text style={styles.helperText}>실제 매장의 운영 마감시간보다 3시간 늦은 시간으로 선택해주세요.</Text>
-            </>
-          )}
-        </OptionCard>
+        {/* 직접 선택 */}
+        <Text style={styles.sectionLabel}>직접 고르기</Text>
+        <View style={styles.pickerCard}>
+          {/* 오전/오후 세그먼트 */}
+          <View style={styles.segment}>
+            {(['오전', '오후'] as Meridiem[]).map(mr => (
+              <TouchableOpacity
+                key={mr}
+                style={[styles.segmentBtn, meridiem === mr && styles.segmentBtnActive]}
+                onPress={() => setMeridiem(mr)}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.segmentText, meridiem === mr && styles.segmentTextActive]}>{mr}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          {/* 시 그리드 */}
+          <View style={styles.hourGrid}>
+            {HOURS_12.map(h => {
+              const active = hour12 === h;
+              return (
+                <TouchableOpacity
+                  key={h}
+                  style={[styles.hourCell, active && styles.hourCellActive]}
+                  onPress={() => setHour12(h)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.hourText, active && styles.hourTextActive]}>{h}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+
+        <Text style={styles.tip}>
+          💡 영업 종료 후 2~3시간 뒤로 잡으면 마감 직전 주문까지 그날 매출에 들어가요.
+        </Text>
 
         {/* 설명 */}
-        <Text style={styles.explainTitle}>매출 마감 시간을 왜 정하나요?</Text>
-        <Text style={styles.explainDesc}>하루의 매출로 삼을 기준 시각이 필요하기 때문이에요.</Text>
-
-        <View style={styles.diagram}>
-          <View style={styles.diagramLabels}>
-            <Text style={styles.diagramTime}>{closingLabel}</Text>
-            <Text style={styles.diagramTime}>{nextLabel}</Text>
+        <View style={styles.explainCard}>
+          <Text style={styles.explainTitle}>이 시각이 왜 필요한가요?</Text>
+          <Text style={styles.explainDesc}>
+            하루 매출을 어디서 끊을지 정하는 기준이에요. 선택한 시각부터 다음 날 같은 시각까지의
+            주문을 하루치 매출로 모아 보여드려요.
+          </Text>
+          <View style={styles.timeline}>
+            <View style={styles.timelineDot} />
+            <View style={styles.timelineLine} />
+            <View style={styles.timelineDot} />
           </View>
-          <View style={styles.diagramBar} />
-          <Text style={styles.diagramCaption}>하루 매출</Text>
+          <View style={styles.timelineLabels}>
+            <Text style={styles.timelineLabel}>{label}</Text>
+            <Text style={styles.timelineLabel}>익일 {label}</Text>
+          </View>
         </View>
       </ScrollView>
-
-      {/* 셀렉트 모달 */}
-      <Modal visible={picker !== null} transparent animationType="fade" onRequestClose={() => setPicker(null)}>
-        <Pressable style={styles.modalOverlay} onPress={() => setPicker(null)}>
-          <Pressable style={styles.modalSheet} onPress={() => {}}>
-            <Text style={styles.modalTitle}>{picker === 'meridiem' ? '오전 / 오후' : '시간 선택'}</Text>
-            <ScrollView style={{ maxHeight: 320 }}>
-              {picker === 'meridiem'
-                ? (['오전', '오후'] as Meridiem[]).map(opt => (
-                    <SelectOption
-                      key={opt}
-                      label={opt}
-                      selected={meridiem === opt}
-                      onPress={() => { setMeridiem(opt); setPicker(null); }}
-                    />
-                  ))
-                : HOURS_12.map(h => (
-                    <SelectOption
-                      key={h}
-                      label={`${h}시`}
-                      selected={hour12 === h}
-                      onPress={() => { setHour12(h); setPicker(null); }}
-                    />
-                  ))}
-            </ScrollView>
-          </Pressable>
-        </Pressable>
-      </Modal>
     </SafeAreaView>
-  );
-}
-
-function OptionCard({
-  caption, title, selected, onPress, children,
-}: {
-  caption: string; title: string; selected: boolean; onPress: () => void; children?: React.ReactNode;
-}) {
-  return (
-    <TouchableOpacity
-      style={[styles.optionCard, selected && styles.optionCardActive]}
-      onPress={onPress}
-      activeOpacity={0.8}
-    >
-      <View style={styles.optionRow}>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.optionCaption}>{caption}</Text>
-          <Text style={[styles.optionTitle, selected && styles.optionTitleActive]}>{title}</Text>
-        </View>
-        <Ionicons
-          name={selected ? 'checkmark-circle' : 'ellipse-outline'}
-          size={24}
-          color={selected ? Colors.primary : Colors.gray300}
-        />
-      </View>
-      {children}
-    </TouchableOpacity>
-  );
-}
-
-function SelectField({ value, onPress, flex }: { value: string; onPress: () => void; flex: number }) {
-  return (
-    <TouchableOpacity style={[styles.selectField, { flex }]} onPress={onPress} activeOpacity={0.7}>
-      <Text style={styles.selectValue}>{value}</Text>
-      <Ionicons name="chevron-down" size={16} color={Colors.gray400} />
-    </TouchableOpacity>
-  );
-}
-
-function SelectOption({ label, selected, onPress }: { label: string; selected: boolean; onPress: () => void }) {
-  return (
-    <TouchableOpacity style={styles.optionItem} onPress={onPress} activeOpacity={0.7}>
-      <Text style={[styles.optionItemText, selected && styles.optionItemTextActive]}>{label}</Text>
-      {selected && <Ionicons name="checkmark" size={18} color={Colors.primary} />}
-    </TouchableOpacity>
   );
 }
 
@@ -232,48 +206,62 @@ const styles = StyleSheet.create({
   saveBtnText: { color: Colors.white, fontSize: 14, fontWeight: '700' },
 
   scroll: { padding: 20, paddingBottom: 48 },
-  sectionTitle: { fontSize: 15, fontWeight: '700', color: Colors.black, marginBottom: 16 },
 
-  optionCard: {
-    backgroundColor: Colors.white, borderRadius: 16, borderWidth: 1, borderColor: Colors.gray100,
-    padding: 18, marginBottom: 12,
+  heroCard: {
+    backgroundColor: Colors.tinted, borderRadius: 20, padding: 24, alignItems: 'center',
+    borderWidth: 1, borderColor: Colors.primary + '22',
   },
-  optionCardActive: { borderColor: Colors.primary, backgroundColor: Colors.tinted },
-  optionRow: { flexDirection: 'row', alignItems: 'center' },
-  optionCaption: { fontSize: 12, color: Colors.gray400, marginBottom: 4 },
-  optionTitle: { fontSize: 17, fontWeight: '700', color: Colors.gray500 },
-  optionTitleActive: { color: Colors.black },
+  heroCaption: { fontSize: 13, color: Colors.primary, fontWeight: '500' },
+  heroValue: { fontSize: 40, fontWeight: '800', color: Colors.primary, marginTop: 6, letterSpacing: -1 },
+  heroRange: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 10 },
+  heroRangeText: { fontSize: 13, color: Colors.primary, fontWeight: '600' },
 
-  selectRow: { flexDirection: 'row', gap: 10, marginTop: 16 },
-  selectField: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+  sectionLabel: { fontSize: 13, fontWeight: '700', color: Colors.gray600, marginTop: 24, marginBottom: 10 },
+
+  presetRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  presetChip: {
+    paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12,
     backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.gray200,
-    borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12,
   },
-  selectValue: { fontSize: 15, color: Colors.black, fontWeight: '500' },
-  helperText: { fontSize: 12, color: Colors.gray400, marginTop: 10 },
+  presetChipActive: { backgroundColor: Colors.black, borderColor: Colors.black },
+  presetText: { fontSize: 13, fontWeight: '600', color: Colors.gray600 },
+  presetTextActive: { color: Colors.white },
 
-  explainTitle: { fontSize: 15, fontWeight: '700', color: Colors.black, marginTop: 28 },
-  explainDesc: { fontSize: 13, color: Colors.gray500, marginTop: 6 },
-  diagram: { marginTop: 24, alignItems: 'center' },
-  diagramLabels: { flexDirection: 'row', justifyContent: 'space-between', width: '70%' },
-  diagramTime: { fontSize: 13, fontWeight: '600', color: Colors.gray700 },
-  diagramBar: {
-    width: '70%', height: 8, backgroundColor: Colors.primary, borderRadius: 4, marginTop: 8,
-    opacity: 0.85,
+  pickerCard: {
+    backgroundColor: Colors.white, borderRadius: 18, borderWidth: 1, borderColor: Colors.gray100,
+    padding: 16,
   },
-  diagramCaption: { fontSize: 13, color: Colors.gray500, marginTop: 10 },
+  segment: {
+    flexDirection: 'row', backgroundColor: Colors.gray100, borderRadius: 12, padding: 3, marginBottom: 16,
+  },
+  segmentBtn: { flex: 1, paddingVertical: 9, borderRadius: 10, alignItems: 'center' },
+  segmentBtnActive: {
+    backgroundColor: Colors.white,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.08, shadowRadius: 4, elevation: 2,
+  },
+  segmentText: { fontSize: 14, fontWeight: '600', color: Colors.gray400 },
+  segmentTextActive: { color: Colors.black, fontWeight: '700' },
 
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
-  modalSheet: {
-    backgroundColor: Colors.white, borderTopLeftRadius: 20, borderTopRightRadius: 20,
-    padding: 20, paddingBottom: 36,
+  hourGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  hourCell: {
+    width: '22.5%', aspectRatio: 1.6, borderRadius: 12, backgroundColor: Colors.gray50,
+    borderWidth: 1, borderColor: Colors.gray100, alignItems: 'center', justifyContent: 'center',
   },
-  modalTitle: { fontSize: 16, fontWeight: '700', color: Colors.black, marginBottom: 12 },
-  optionItem: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingVertical: 14, borderBottomWidth: 0.5, borderBottomColor: Colors.gray100,
+  hourCellActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
+  hourText: { fontSize: 16, fontWeight: '600', color: Colors.gray600 },
+  hourTextActive: { color: Colors.white, fontWeight: '800' },
+
+  tip: { fontSize: 12, color: Colors.gray400, marginTop: 14, lineHeight: 18 },
+
+  explainCard: {
+    backgroundColor: Colors.white, borderRadius: 18, borderWidth: 1, borderColor: Colors.gray100,
+    padding: 20, marginTop: 24,
   },
-  optionItemText: { fontSize: 16, color: Colors.gray700 },
-  optionItemTextActive: { color: Colors.primary, fontWeight: '700' },
+  explainTitle: { fontSize: 15, fontWeight: '700', color: Colors.black },
+  explainDesc: { fontSize: 13, color: Colors.gray500, marginTop: 8, lineHeight: 20 },
+  timeline: { flexDirection: 'row', alignItems: 'center', marginTop: 20, paddingHorizontal: 4 },
+  timelineDot: { width: 12, height: 12, borderRadius: 6, backgroundColor: Colors.primary },
+  timelineLine: { flex: 1, height: 3, backgroundColor: Colors.primary + '55', marginHorizontal: 2 },
+  timelineLabels: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 8, paddingHorizontal: 2 },
+  timelineLabel: { fontSize: 12, fontWeight: '600', color: Colors.gray600 },
 });
