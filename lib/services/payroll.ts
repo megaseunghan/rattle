@@ -20,19 +20,20 @@ async function lookupIncomeTax(taxableBase: number, dependents: number): Promise
   const dep = Math.min(Math.max(dependents, 1), 11);
   const colName = `dep_${dep}`;
 
+  // 동적 컬럼(dep_N)을 고정 별칭 amount로 받아 타입을 명확히 한다
   const { data, error } = await supabase
     .from('income_tax_table')
-    .select(`${colName}`)
+    .select(`amount:${colName}`)
     .eq('year', 2026)
     .lte('salary_from', taxableBase)
     .gt('salary_to', taxableBase)
-    .maybeSingle();
+    .maybeSingle()
+    .overrideTypes<{ amount: number | null }>();
 
   console.log('[급여계산] taxableBase:', taxableBase, 'dep:', dep, 'col:', colName);
   console.log('[급여계산] income_tax 조회 결과:', data, 'error:', error);
 
-  const row = data as Record<string, number | null> | null;
-  if (row && row[colName] != null) return Number(row[colName]);
+  if (data && data.amount != null) return Number(data.amount);
 
   // 테이블에 해당 구간 없으면 코드로 근사값 계산
   const approx = calcIncomeTaxApprox(taxableBase, dependents);
