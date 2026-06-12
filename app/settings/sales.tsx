@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
-  ActivityIndicator, Alert,
+  Modal, Pressable, ActivityIndicator, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -43,6 +43,7 @@ export default function SalesSettingsScreen() {
   const [meridiem, setMeridiem] = useState<Meridiem>(to12h(initialHour).meridiem);
   const [hour12, setHour12] = useState<number>(to12h(initialHour).hour12);
   const [saving, setSaving] = useState(false);
+  const [picker, setPicker] = useState<null | 'meridiem' | 'hour'>(null);
 
   useEffect(() => {
     const h = parseHour24(store?.closing_time as string | null | undefined);
@@ -101,39 +102,59 @@ export default function SalesSettingsScreen() {
           </View>
         </View>
 
-        {/* 마감 시각 선택 (picker) */}
-        <View style={styles.pickerCard}>
-          <View style={styles.segment}>
-            {(['오전', '오후'] as Meridiem[]).map(mr => (
-              <TouchableOpacity
-                key={mr}
-                style={[styles.segmentBtn, meridiem === mr && styles.segmentBtnActive]}
-                onPress={() => setMeridiem(mr)}
-                activeOpacity={0.8}
-              >
-                <Text style={[styles.segmentText, meridiem === mr && styles.segmentTextActive]}>{mr}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          <View style={styles.hourGrid}>
-            {HOURS_12.map(h => {
-              const active = hour12 === h;
-              return (
-                <TouchableOpacity
-                  key={h}
-                  style={[styles.hourCell, active && styles.hourCellActive]}
-                  onPress={() => setHour12(h)}
-                  activeOpacity={0.8}
-                >
-                  <Text style={[styles.hourText, active && styles.hourTextActive]}>{h}</Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
+        {/* 마감 시각 선택 (드롭다운) */}
+        <View style={styles.selectRow}>
+          <SelectField value={meridiem} onPress={() => setPicker('meridiem')} flex={1} />
+          <SelectField value={`${hour12}시`} onPress={() => setPicker('hour')} flex={1.2} />
         </View>
       </ScrollView>
+
+      {/* 셀렉트 모달 */}
+      <Modal visible={picker !== null} transparent animationType="fade" onRequestClose={() => setPicker(null)}>
+        <Pressable style={styles.modalOverlay} onPress={() => setPicker(null)}>
+          <Pressable style={styles.modalSheet} onPress={() => {}}>
+            <Text style={styles.modalTitle}>{picker === 'meridiem' ? '오전 / 오후' : '시간 선택'}</Text>
+            <ScrollView style={{ maxHeight: 320 }}>
+              {picker === 'meridiem'
+                ? (['오전', '오후'] as Meridiem[]).map(opt => (
+                    <SelectOption
+                      key={opt}
+                      label={opt}
+                      selected={meridiem === opt}
+                      onPress={() => { setMeridiem(opt); setPicker(null); }}
+                    />
+                  ))
+                : HOURS_12.map(h => (
+                    <SelectOption
+                      key={h}
+                      label={`${h}시`}
+                      selected={hour12 === h}
+                      onPress={() => { setHour12(h); setPicker(null); }}
+                    />
+                  ))}
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
+  );
+}
+
+function SelectField({ value, onPress, flex }: { value: string; onPress: () => void; flex: number }) {
+  return (
+    <TouchableOpacity style={[styles.selectField, { flex }]} onPress={onPress} activeOpacity={0.7}>
+      <Text style={styles.selectValue}>{value}</Text>
+      <Ionicons name="chevron-down" size={18} color={Colors.gray400} />
+    </TouchableOpacity>
+  );
+}
+
+function SelectOption({ label, selected, onPress }: { label: string; selected: boolean; onPress: () => void }) {
+  return (
+    <TouchableOpacity style={styles.optionItem} onPress={onPress} activeOpacity={0.7}>
+      <Text style={[styles.optionItemText, selected && styles.optionItemTextActive]}>{label}</Text>
+      {selected && <Ionicons name="checkmark" size={18} color={Colors.primary} />}
+    </TouchableOpacity>
   );
 }
 
@@ -161,27 +182,24 @@ const styles = StyleSheet.create({
   heroRange: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 10 },
   heroRangeText: { fontSize: 13, color: Colors.primary, fontWeight: '600' },
 
-  pickerCard: {
-    backgroundColor: Colors.white, borderRadius: 18, borderWidth: 1, borderColor: Colors.gray100,
-    padding: 16, marginTop: 20,
+  selectRow: { flexDirection: 'row', gap: 10, marginTop: 20 },
+  selectField: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.gray200,
+    borderRadius: 14, paddingHorizontal: 16, paddingVertical: 16,
   },
-  segment: {
-    flexDirection: 'row', backgroundColor: Colors.gray100, borderRadius: 12, padding: 3, marginBottom: 16,
-  },
-  segmentBtn: { flex: 1, paddingVertical: 9, borderRadius: 10, alignItems: 'center' },
-  segmentBtnActive: {
-    backgroundColor: Colors.white,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.08, shadowRadius: 4, elevation: 2,
-  },
-  segmentText: { fontSize: 14, fontWeight: '600', color: Colors.gray400 },
-  segmentTextActive: { color: Colors.black, fontWeight: '700' },
+  selectValue: { fontSize: 16, color: Colors.black, fontWeight: '600' },
 
-  hourGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  hourCell: {
-    width: '22.5%', aspectRatio: 1.6, borderRadius: 12, backgroundColor: Colors.gray50,
-    borderWidth: 1, borderColor: Colors.gray100, alignItems: 'center', justifyContent: 'center',
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
+  modalSheet: {
+    backgroundColor: Colors.white, borderTopLeftRadius: 20, borderTopRightRadius: 20,
+    padding: 20, paddingBottom: 36,
   },
-  hourCellActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
-  hourText: { fontSize: 16, fontWeight: '600', color: Colors.gray600 },
-  hourTextActive: { color: Colors.white, fontWeight: '800' },
+  modalTitle: { fontSize: 16, fontWeight: '700', color: Colors.black, marginBottom: 12 },
+  optionItem: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingVertical: 14, borderBottomWidth: 0.5, borderBottomColor: Colors.gray100,
+  },
+  optionItemText: { fontSize: 16, color: Colors.gray700 },
+  optionItemTextActive: { color: Colors.primary, fontWeight: '700' },
 });
