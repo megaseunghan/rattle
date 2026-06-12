@@ -1,8 +1,9 @@
 import { supabase } from '../supabase';
 import { DailySummary, DailyItem } from '../../types';
 
-/** 영업일 날짜 레이블 계산
- * closing_time이 23:00이면 23:00 이후 주문은 다음 날 영업일로 분류
+/** 영업일 날짜 레이블 계산 (토스포스 정산 기준: 마감시간이 하루의 시작)
+ * closing_time이 16:00이면 영업일 D = [D 16:00, D+1 16:00).
+ * 즉 마감시간 이전 주문은 전날 영업일에 속한다.
  * getHours()/getMinutes()는 로컬 시간 기준 — closingHour/closingMin과 동일 기준
  */
 function getBusinessDateLabel(orderAt: Date, closingHour: number, closingMin: number): string {
@@ -10,8 +11,9 @@ function getBusinessDateLabel(orderAt: Date, closingHour: number, closingMin: nu
   const closingMins = closingHour * 60 + closingMin;
 
   const label = new Date(orderAt);
-  if (orderMins >= closingMins) {
-    label.setDate(label.getDate() + 1);
+  // 마감시간 이전 주문은 전날 영업일에 포함
+  if (orderMins < closingMins) {
+    label.setDate(label.getDate() - 1);
   }
   // 로컬 날짜로 반환 (toISOString()은 UTC 기준이라 KST에서 날짜 오차 발생)
   const y = label.getFullYear();
@@ -20,8 +22,8 @@ function getBusinessDateLabel(orderAt: Date, closingHour: number, closingMin: nu
   return `${y}-${mo}-${d}`;
 }
 
-/** 특정 날짜의 영업일 범위 반환
- * date 'YYYY-MM-DD' → { from: 전날 closingTime ISO, to: 당일 closingTime ISO }
+/** 특정 날짜의 영업일 범위 반환 (토스 기준: 마감시간이 하루의 시작)
+ * date 'YYYY-MM-DD' → { from: 당일 closingTime ISO, to: 익일 closingTime ISO }
  */
 export function getBusinessDayRange(
   date: string,
@@ -29,25 +31,30 @@ export function getBusinessDayRange(
 ): { from: string; to: string } {
   const [h, m] = closingTime.split(':').map(Number);
 
-  const to = new Date(date);
-  to.setHours(h, m, 0, 0);
-
   const from = new Date(date);
-  from.setDate(from.getDate() - 1);
   from.setHours(h, m, 0, 0);
+
+  const to = new Date(date);
+  to.setDate(to.getDate() + 1);
+  to.setHours(h, m, 0, 0);
 
   return { from: from.toISOString(), to: to.toISOString() };
 }
 
-/** 오늘 기준 자동 동기화용 범위: 전날 closingTime ~ 지금 */
+/** 현재 영업일 자동 동기화용 범위: 현재 영업일 시작(직전 마감시간) ~ 지금
+ * (토스 기준이므로 지금이 마감 이후면 오늘 마감시간, 이전이면 어제 마감시간이 시작)
+ */
 export function getAutoSyncRange(closingTime: string): { from: string; to: string } {
   const [h, m] = closingTime.split(':').map(Number);
 
-  const from = new Date();
-  from.setDate(from.getDate() - 1);
+  const now = new Date();
+  const from = new Date(now);
+  if (now.getHours() * 60 + now.getMinutes() < h * 60 + m) {
+    from.setDate(from.getDate() - 1);
+  }
   from.setHours(h, m, 0, 0);
 
-  return { from: from.toISOString(), to: new Date().toISOString() };
+  return { from: from.toISOString(), to: now.toISOString() };
 }
 
 /** 최근 N일 영업일 요약 목록
@@ -61,12 +68,16 @@ export async function getDailySummaries(
 ): Promise<DailySummary[]> {
   const [h, m] = closingTime.split(':').map(Number);
 
+  // 상한: 페이지 0은 지금까지(진행 중인 영업일 포함), 과거 페이지는 마감 경계로 스냅
   const latest = new Date();
-  if (offsetDays > 0) latest.setDate(latest.getDate() - offsetDays);
-  latest.setHours(h, m, 0, 0);
+  if (offsetDays > 0) {
+    latest.setDate(latest.getDate() - offsetDays);
+    latest.setHours(h, m, 0, 0);
+  }
 
   const earliest = new Date(latest);
   earliest.setDate(earliest.getDate() - days);
+  earliest.setHours(h, m, 0, 0);
 
   const { data, error } = await supabase
     .from('toss_orders')

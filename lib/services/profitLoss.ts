@@ -42,9 +42,10 @@ export async function getProfitLossByMonth(
   const year = Number(yearMonth.slice(0, 4));
   const month = Number(yearMonth.slice(5, 7));
 
-  const from = new Date(year, month - 1, 0);
+  // 토스 기준: 영업일 D = [D 마감, D+1 마감) → 월 매출 범위 = [M/1 마감, (M+1)/1 마감)
+  const from = new Date(year, month - 1, 1);
   from.setHours(h, m, 0, 0);
-  const to = new Date(year, month, 0);
+  const to = new Date(year, month, 1);
   to.setHours(h, m, 0, 0);
   if (to > new Date()) to.setTime(Date.now());
 

@@ -245,13 +245,11 @@ export function useTossSync(): UseTossSyncResult {
     const closingTime = await getClosingTime();
     const [h, m] = closingTime.split(':').map(Number);
 
-    // from: 해당 월 1일 영업일 시작 = 전달 말일 closing_time
-    const from = new Date(year, month - 1, 0); // month-1은 JS month, 0은 전달 말일
+    // 토스 기준: 영업일 D = [D 마감, D+1 마감) → 월 범위 = [M/1 마감, (M+1)/1 마감)
+    const from = new Date(year, month - 1, 1);
     from.setHours(h, m, 0, 0);
 
-    // to: 해당 월 말일 영업일 종료 = 해당 월 말일 closing_time (미래면 현재 시각)
-    const lastDay = new Date(year, month, 0).getDate();
-    const to = new Date(year, month - 1, lastDay);
+    const to = new Date(year, month, 1);
     to.setHours(h, m, 0, 0);
     if (to > new Date()) to.setTime(Date.now());
 

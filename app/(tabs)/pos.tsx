@@ -96,9 +96,10 @@ export default function PosScreen() {
 
   function getMonthRange(year: number, month: number, ct: string): { from: Date; to: Date } {
     const [h, m] = ct.split(':').map(Number);
-    const from = new Date(year, month - 1, 0);
+    // 토스 기준: 영업일 D = [D 마감, D+1 마감) → 월 범위 = [M/1 마감, (M+1)/1 마감)
+    const from = new Date(year, month - 1, 1);
     from.setHours(h, m, 0, 0);
-    const to = new Date(year, month, 0);
+    const to = new Date(year, month, 1);
     to.setHours(h, m, 0, 0);
     if (to > new Date()) to.setTime(Date.now());
     return { from, to };
