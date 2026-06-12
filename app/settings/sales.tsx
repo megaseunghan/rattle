@@ -81,7 +81,7 @@ export default function SalesSettingsScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="chevron-back" size={24} color={Colors.black} />
         </TouchableOpacity>
-        <Text style={styles.title}>하루 매출 사이클 설정하기</Text>
+        <Text style={styles.title}>매출 정산 설정하기</Text>
         <TouchableOpacity
           style={[styles.saveBtn, (!dirty || saving) && styles.saveBtnDisabled]}
           onPress={handleSave}
@@ -94,7 +94,7 @@ export default function SalesSettingsScreen() {
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         {/* 선택값 미리보기 */}
         <View style={styles.heroCard}>
-          <Text style={styles.heroCaption}>이 시각에 하루 장부를 끊어요</Text>
+          <Text style={styles.heroCaption}>설정된 시간 기준으로 매장의 하루 매출을 정산합니다.</Text>
           <Text style={styles.heroValue}>{label}</Text>
           <View style={styles.heroRange}>
             <Ionicons name="time-outline" size={14} color={Colors.primary} />
@@ -178,7 +178,7 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: Colors.primary + '22',
   },
   heroCaption: { fontSize: 13, color: Colors.primary, fontWeight: '500' },
-  heroValue: { fontSize: 40, fontWeight: '800', color: Colors.primary, marginTop: 6, letterSpacing: -1 },
+  heroValue: { fontSize: 25, fontWeight: '800', color: Colors.primary, marginTop: 6, letterSpacing: -1 },
   heroRange: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 10 },
   heroRangeText: { fontSize: 13, color: Colors.primary, fontWeight: '600' },
 
