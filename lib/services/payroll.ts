@@ -31,7 +31,8 @@ async function lookupIncomeTax(taxableBase: number, dependents: number): Promise
   console.log('[급여계산] taxableBase:', taxableBase, 'dep:', dep, 'col:', colName);
   console.log('[급여계산] income_tax 조회 결과:', data, 'error:', error);
 
-  if (data && data[colName] != null) return Number(data[colName]);
+  const row = data as Record<string, number | null> | null;
+  if (row && row[colName] != null) return Number(row[colName]);
 
   // 테이블에 해당 구간 없으면 코드로 근사값 계산
   const approx = calcIncomeTaxApprox(taxableBase, dependents);
