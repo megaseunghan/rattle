@@ -26,7 +26,7 @@ import { convertQuantity, recipeUnitOptions } from '../../lib/utils/unit';
 const CATEGORIES = ['식자재', '주류', '비품소모품', '기타'];
 const FILTER_CATEGORIES = ['전체', ...CATEGORIES];
 const COMMON_UNITS = ['g', 'kg', 'ml', 'L', '개', '병', '봉', '박스'];
-const PURCHASE_CATEGORIES: PurchaseCategory[] = ['식자재', '비품', '소모품', '주류', '기타'];
+const PURCHASE_CATEGORIES: PurchaseCategory[] = ['식자재', '비품소모품', '주류', '기타'];
 const PURCHASE_TYPES: PurchaseType[] = ['전자세금계산서', '쿠팡', '네이버', '수기'];
 
 type Mode = '품목별' | '금액만';

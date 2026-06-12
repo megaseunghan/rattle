@@ -17,7 +17,7 @@ function fmt(v: number | null | undefined) {
 }
 
 const MONTHS = ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
-const CAT_ORDER: PurchaseCategory[] = ['식자재','비품','소모품','주류','기타'];
+const CAT_ORDER: PurchaseCategory[] = ['식자재','비품소모품','주류','기타'];
 
 function ratioOfRevenue(value: number | null | undefined, revenue: number): string {
   if (!value || !revenue) return '';
@@ -72,6 +72,7 @@ function PnLDetailSheet({ pnl, month, onClose }: { pnl: ProfitLoss; month: numbe
           {pnl.marketingExpense > 0 && <Sub label="마케팅" value={fmt(pnl.marketingExpense)} ratio={ratioOfRevenue(pnl.marketingExpense, rev)} />}
           {pnl.maintenanceExpense > 0 && <Sub label="시설보수" value={fmt(pnl.maintenanceExpense)} ratio={ratioOfRevenue(pnl.maintenanceExpense, rev)} />}
           {pnl.utilitiesExpense > 0 && <Sub label="공과금" value={fmt(pnl.utilitiesExpense)} ratio={ratioOfRevenue(pnl.utilitiesExpense, rev)} />}
+          {pnl.cardFeeExpense > 0 && <Sub label="카드 수수료" value={fmt(pnl.cardFeeExpense)} ratio={ratioOfRevenue(pnl.cardFeeExpense, rev)} />}
         </Group>
 
         {/* 5. 영업이익 */}

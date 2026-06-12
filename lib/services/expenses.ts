@@ -33,6 +33,21 @@ export async function createExpense(data: {
   return row as Expense;
 }
 
+export async function updateExpense(
+  id: string,
+  data: { name: string; amount: number },
+): Promise<Expense> {
+  const { data: row, error } = await supabase
+    .from('expenses')
+    .update(data)
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (error) throw new Error(error.message);
+  return row as Expense;
+}
+
 export async function deleteExpense(id: string): Promise<void> {
   const { error } = await supabase.from('expenses').delete().eq('id', id);
   if (error) throw new Error(error.message);

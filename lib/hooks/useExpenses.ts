@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { getExpensesByMonth, createExpense, deleteExpense } from '../services/expenses';
+import { getExpensesByMonth, createExpense, updateExpense, deleteExpense } from '../services/expenses';
 import { Expense, ExpenseCategory } from '../../types';
 
 export function useExpenses(yearMonth: string) {
@@ -34,10 +34,16 @@ export function useExpenses(yearMonth: string) {
     return created;
   }, [store, yearMonth]);
 
+  const update = useCallback(async (id: string, data: { name: string; amount: number }) => {
+    const updated = await updateExpense(id, data);
+    setExpenses(prev => prev.map(e => (e.id === id ? updated : e)));
+    return updated;
+  }, []);
+
   const remove = useCallback(async (id: string) => {
     await deleteExpense(id);
     setExpenses(prev => prev.filter(e => e.id !== id));
   }, []);
 
-  return { expenses, loading, error, refetch, add, remove };
+  return { expenses, loading, error, refetch, add, update, remove };
 }

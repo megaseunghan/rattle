@@ -14,7 +14,7 @@ import { useAuth } from '../../lib/contexts/AuthContext';
 import { usePurchases } from '../../lib/hooks/usePurchases';
 import { useExpenses } from '../../lib/hooks/useExpenses';
 import { callOcrEdgeFunction } from '../../lib/services/ocr';
-import { ExpenseCategory } from '../../types';
+import { Expense, ExpenseCategory } from '../../types';
 
 // ─── 공통 ──────────────────────────────────────────────────
 const PURCHASE_TABS = ['전체', '전자세금계산서', '수기'] as const;
@@ -247,18 +247,27 @@ function ExpensesView() {
   const [month, setMonth] = useState(today.getMonth() + 1);
   const [modalVisible, setModalVisible] = useState(false);
   const [editTarget, setEditTarget] = useState<ExpenseCategory | null>(null);
+  const [editId, setEditId] = useState<string | null>(null); // null이면 신규, 있으면 수정
   const [inputName, setInputName] = useState('');
   const [inputAmount, setInputAmount] = useState('');
   const [saving, setSaving] = useState(false);
 
   const yearMonth = `${year}-${String(month).padStart(2, '0')}`;
-  const { expenses, loading, refetch, add, remove } = useExpenses(yearMonth);
+  const { expenses, loading, refetch, add, update, remove } = useExpenses(yearMonth);
   useEffect(() => { refetch(); }, [refetch]);
 
   const totalAmount = expenses.reduce((s, e) => s + e.amount, 0);
 
   function prevMonth() { if (month === 1) { setYear(y => y - 1); setMonth(12); } else setMonth(m => m - 1); }
   function nextMonth() { if (month === 12) { setYear(y => y + 1); setMonth(1); } else setMonth(m => m + 1); }
+
+  function openAdd(category: ExpenseCategory) {
+    setEditTarget(category); setEditId(null); setInputName(''); setInputAmount(''); setModalVisible(true);
+  }
+  function openEdit(item: Expense) {
+    setEditTarget(item.category); setEditId(item.id);
+    setInputName(item.name); setInputAmount(String(item.amount)); setModalVisible(true);
+  }
 
   async function handleSave() {
     if (!editTarget) return;
@@ -267,7 +276,11 @@ function ExpensesView() {
     if (!name) { Alert.alert('입력 오류', '항목명을 입력해주세요.'); return; }
     if (!amount || amount <= 0) { Alert.alert('입력 오류', '금액을 올바르게 입력해주세요.'); return; }
     setSaving(true);
-    try { await add({ category: editTarget, name, amount }); setModalVisible(false); }
+    try {
+      if (editId) await update(editId, { name, amount });
+      else await add({ category: editTarget, name, amount });
+      setModalVisible(false);
+    }
     catch (e: any) { Alert.alert('저장 실패', e.message); }
     finally { setSaving(false); }
   }
@@ -307,9 +320,12 @@ function ExpensesView() {
                 {loading ? <View style={styles.emptyInCard}><ActivityIndicator size="small" color={Colors.gray300} /></View>
                   : catItems.length === 0 ? <View style={styles.emptyInCard}><Text style={styles.emptyInCardText}>등록된 항목이 없어요</Text></View>
                   : catItems.map((item, idx) => (
-                    <TouchableOpacity key={item.id} style={[styles.itemRow, idx < catItems.length - 1 && styles.rowBorder]} onLongPress={locked ? undefined : () => Alert.alert('삭제', '이 항목을 삭제할까요?', [{ text: '취소', style: 'cancel' }, { text: '삭제', style: 'destructive', onPress: () => remove(item.id).catch(e => Alert.alert('삭제 실패', e.message)) }])} activeOpacity={locked ? 1 : 0.7}>
+                    <TouchableOpacity key={item.id} style={[styles.itemRow, idx < catItems.length - 1 && styles.rowBorder]} onPress={locked ? undefined : () => openEdit(item)} onLongPress={locked ? undefined : () => Alert.alert('삭제', '이 항목을 삭제할까요?', [{ text: '취소', style: 'cancel' }, { text: '삭제', style: 'destructive', onPress: () => remove(item.id).catch(e => Alert.alert('삭제 실패', e.message)) }])} activeOpacity={locked ? 1 : 0.7}>
                       <Text style={styles.itemName}>{item.name}</Text>
-                      <Text style={styles.itemAmount}>{item.amount.toLocaleString()}원</Text>
+                      <View style={styles.itemRight}>
+                        <Text style={styles.itemAmount}>{item.amount.toLocaleString()}원</Text>
+                        {!locked && <Ionicons name="chevron-forward" size={14} color={Colors.gray300} />}
+                      </View>
                     </TouchableOpacity>
                   ))
                 }
@@ -319,7 +335,7 @@ function ExpensesView() {
                     <Text style={[styles.addCatRowText, { color: Colors.gray400 }]}>관리자만 수정할 수 있어요</Text>
                   </View>
                 ) : (
-                  <TouchableOpacity style={[styles.addCatRow, catItems.length > 0 && styles.addCatRowBorder]} onPress={() => { setEditTarget(cat.key); setInputName(''); setInputAmount(''); setModalVisible(true); }} activeOpacity={0.7}>
+                  <TouchableOpacity style={[styles.addCatRow, catItems.length > 0 && styles.addCatRowBorder]} onPress={() => openAdd(cat.key)} activeOpacity={0.7}>
                     <Ionicons name="add-circle-outline" size={16} color={cat.color} />
                     <Text style={[styles.addCatRowText, { color: cat.color }]}>항목 추가</Text>
                   </TouchableOpacity>
@@ -334,7 +350,7 @@ function ExpensesView() {
         <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <View style={styles.modalSheet}>
             <View style={styles.modalHandle} />
-            <Text style={styles.modalTitle}>{editTarget} 항목 추가</Text>
+            <Text style={styles.modalTitle}>{editTarget} 항목 {editId ? '수정' : '추가'}</Text>
             <Text style={styles.fieldLabel}>항목명</Text>
             <TextInput style={styles.input} value={inputName} onChangeText={setInputName} placeholder="예: 임대료, 광고비" placeholderTextColor={Colors.gray300} />
             <Text style={styles.fieldLabel}>금액</Text>
@@ -452,6 +468,7 @@ const styles = StyleSheet.create({
   catTotal: { fontSize: 14, fontWeight: '700' },
   itemRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 13 },
   itemName: { fontSize: 14, color: Colors.black, flex: 1 },
+  itemRight: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   itemAmount: { fontSize: 14, fontWeight: '600', color: Colors.black },
   addCatRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 12 },
   addCatRowBorder: { borderTopWidth: 0.5, borderTopColor: Colors.gray100 },

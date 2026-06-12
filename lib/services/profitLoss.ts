@@ -5,6 +5,9 @@ import { getExpensesByMonth } from './expenses';
 import { getStoreWageHistory, regularGrossForMonth } from './wageHistory';
 import { probationFactor } from './payroll';
 
+// 카드 매출 대비 카드 수수료율 (1.25%)
+const CARD_FEE_RATE = 0.0125;
+
 export async function getYearlyProfitLoss(
   storeId: string,
   year: number,
@@ -146,7 +149,9 @@ export async function getProfitLossByMonth(
   const marketingExpense = expenses.filter(e => e.category === '마케팅').reduce((s, e) => s + e.amount, 0);
   const maintenanceExpense = expenses.filter(e => e.category === '시설보수').reduce((s, e) => s + e.amount, 0);
   const utilitiesExpense = expenses.filter(e => e.category === '공과금').reduce((s, e) => s + e.amount, 0);
-  const variableExpense = marketingExpense + maintenanceExpense + utilitiesExpense;
+  // 카드 수수료: 카드 매출 × 1.25% (자동 계산, 별도 입력 불필요)
+  const cardFeeExpense = Math.round(cardRevenue * CARD_FEE_RATE);
+  const variableExpense = marketingExpense + maintenanceExpense + utilitiesExpense + cardFeeExpense;
 
   // 5. 이익
   const operatingProfit = grossProfit - laborCost - fixedExpense - variableExpense;
@@ -169,6 +174,7 @@ export async function getProfitLossByMonth(
     marketingExpense,
     maintenanceExpense,
     utilitiesExpense,
+    cardFeeExpense,
     variableExpense,
     operatingProfit,
     taxReserve: 0,
