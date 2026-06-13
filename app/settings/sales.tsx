@@ -107,6 +107,14 @@ export default function SalesSettingsScreen() {
           <SelectField value={meridiem} onPress={() => setPicker('meridiem')} flex={1} />
           <SelectField value={`${hour12}시`} onPress={() => setPicker('hour')} flex={1.2} />
         </View>
+
+        {/* 안내 */}
+        <View style={styles.guideCard}>
+          <Ionicons name="information-circle-outline" size={16} color={Colors.gray400} />
+          <Text style={styles.guideText}>
+            {label}부터 익일 {label}까지의 주문을 하루 매출로 정산합니다.
+          </Text>
+        </View>
       </ScrollView>
 
       {/* 셀렉트 모달 */}
@@ -181,6 +189,12 @@ const styles = StyleSheet.create({
   heroValue: { fontSize: 25, fontWeight: '800', color: Colors.primary, marginTop: 6, letterSpacing: -1 },
   heroRange: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 10 },
   heroRangeText: { fontSize: 13, color: Colors.primary, fontWeight: '600' },
+
+  guideCard: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginTop: 16,
+    backgroundColor: Colors.gray100, borderRadius: 12, padding: 14,
+  },
+  guideText: { flex: 1, fontSize: 13, color: Colors.gray600, lineHeight: 19 },
 
   selectRow: { flexDirection: 'row', gap: 10, marginTop: 20 },
   selectField: {
