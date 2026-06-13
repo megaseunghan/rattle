@@ -60,8 +60,7 @@ function fmt(v: number | null | undefined): string {
 
 function pct(value: number | null | undefined, total: number | null | undefined): string {
   if (!value || !total) return '';
-  const p = Math.round((value / total) * 1000) / 10;
-  return `${p}%`;
+  return `${(value / total * 100).toFixed(2)}%`;
 }
 
 function PnLRow({ label, value, ratio, onPress, loading }: {
