@@ -38,6 +38,16 @@ function toYearMonth(year: number, month: number) {
   return `${year}-${String(month).padStart(2, '0')}`;
 }
 
+/** 영수증 스타일 공제 항목 행 (항목 / 금액 두 컬럼) */
+function ReceiptLine({ label, value }: { label: string; value: number }) {
+  return (
+    <View style={styles.receiptRow}>
+      <Text style={styles.receiptLabel}>{label}</Text>
+      <Text style={styles.receiptValue}>-{value.toLocaleString()}원</Text>
+    </View>
+  );
+}
+
 function EmployeeCard({
   employee,
   payroll,
@@ -138,40 +148,24 @@ function EmployeeCard({
 
       {payroll ? (
         <View style={styles.payrollResult}>
-          <View style={styles.payrollDivider} />
-          <View style={styles.payrollRow}>
-            <Text style={styles.payrollLabel}>실수령액</Text>
-            <Text style={styles.payrollNetPay}>{payroll.net_pay.toLocaleString()}원</Text>
-          </View>
+          <View style={styles.receiptDivider} />
+          <Text style={styles.receiptHeading}>공제 내역</Text>
           {insurance ? (
             <>
-              <View style={styles.payrollRow}>
-                <Text style={styles.payrollDeductLabel}>국민연금</Text>
-                <Text style={styles.payrollDeduct}>-{payroll.national_pension.toLocaleString()}원</Text>
-              </View>
-              <View style={styles.payrollRow}>
-                <Text style={styles.payrollDeductLabel}>건강·장기요양</Text>
-                <Text style={styles.payrollDeduct}>-{(payroll.health_insurance + payroll.long_term_care).toLocaleString()}원</Text>
-              </View>
-              <View style={styles.payrollRow}>
-                <Text style={styles.payrollDeductLabel}>고용보험</Text>
-                <Text style={styles.payrollDeduct}>-{payroll.employment_insurance.toLocaleString()}원</Text>
-              </View>
-              <View style={styles.payrollRow}>
-                <Text style={styles.payrollDeductLabel}>소득세</Text>
-                <Text style={styles.payrollDeduct}>-{payroll.income_tax.toLocaleString()}원</Text>
-              </View>
-              <View style={styles.payrollRow}>
-                <Text style={styles.payrollDeductLabel}>지방소득세</Text>
-                <Text style={styles.payrollDeduct}>-{payroll.local_income_tax.toLocaleString()}원</Text>
-              </View>
+              <ReceiptLine label="국민연금" value={payroll.national_pension} />
+              <ReceiptLine label="건강·장기요양" value={payroll.health_insurance + payroll.long_term_care} />
+              <ReceiptLine label="고용보험" value={payroll.employment_insurance} />
+              <ReceiptLine label="소득세" value={payroll.income_tax} />
+              <ReceiptLine label="지방소득세" value={payroll.local_income_tax} />
             </>
           ) : (
-            <View style={styles.payrollRow}>
-              <Text style={styles.payrollDeductLabel}>3.3% 원천징수</Text>
-              <Text style={styles.payrollDeduct}>-{payroll.withholding_tax.toLocaleString()}원</Text>
-            </View>
+            <ReceiptLine label="3.3% 원천징수" value={payroll.withholding_tax} />
           )}
+          <View style={styles.receiptTotalLine} />
+          <View style={styles.receiptNetRow}>
+            <Text style={styles.receiptNetLabel}>실수령액</Text>
+            <Text style={styles.receiptNetValue}>{payroll.net_pay.toLocaleString()}원</Text>
+          </View>
           <View style={styles.payrollActions}>
             <TouchableOpacity style={styles.recalcBtn} onPress={onCalculate} disabled={isCalculating}>
               {isCalculating
@@ -900,6 +894,19 @@ const styles = StyleSheet.create({
   calcBtnText: { fontSize: 13, fontWeight: '600', color: Colors.white },
   payrollResult: { marginTop: 4 },
   payrollDivider: { height: 0.5, backgroundColor: Colors.gray100, marginVertical: 10 },
+  // Nostalgia: 급여명세서 영수증 스타일
+  receiptDivider: { height: 0.5, backgroundColor: Colors.gray200, marginVertical: 10 },
+  receiptHeading: { fontSize: 11, fontWeight: '700', color: Colors.gray400, letterSpacing: 2, marginBottom: 6 },
+  receiptRow: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingVertical: 4, borderBottomWidth: 0.5, borderBottomColor: Colors.gray100, borderStyle: 'dashed',
+  },
+  receiptLabel: { fontSize: 12, color: Colors.gray500 },
+  receiptValue: { fontSize: 12, color: Colors.gray700 },
+  receiptTotalLine: { borderTopWidth: 2, borderTopColor: Colors.gray300, borderStyle: 'dashed', marginTop: 12 },
+  receiptNetRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 10 },
+  receiptNetLabel: { fontSize: 15, fontWeight: '800', color: Colors.black },
+  receiptNetValue: { fontSize: 19, fontWeight: '800', color: Colors.primary },
   payrollRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },
   payrollLabel: { fontSize: 14, fontWeight: '600', color: Colors.black },
   payrollNetPay: { fontSize: 14, fontWeight: '700', color: Colors.primary },

@@ -3,14 +3,25 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
-import { Colors } from '../../constants/colors';
+import { Colors, glassTintForStore } from '../../constants/colors';
 import { useAuth } from '../../lib/contexts/AuthContext';
 import { useIngredients } from '../../lib/hooks/useIngredients';
 import { useProfitLoss } from '../../lib/hooks/useProfitLoss';
 import { useEmployees } from '../../lib/hooks/useEmployees';
 import { useFixedExpenseCheck } from '../../lib/hooks/useFixedExpenseCheck';
+import { useTossSync } from '../../lib/hooks/useTossSync';
+import { useDismissedIntents } from '../../lib/hooks/useDismissedIntents';
 import { AttendanceCalendar } from '../../lib/components/AttendanceCalendar';
+import { IntentCard, IntentCardProps } from '../../lib/components/IntentCard';
+import { GlassCard } from '../../lib/components/GlassCard';
+import { getProfitSentiment } from '../../lib/utils/sentimentMessage';
 import { Ingredient, ProfitLoss } from '../../types';
+
+type HomeIntent = IntentCardProps & { id: string };
+
+const LABOR_RATIO_TARGET = 30;       // 인건비율 목표(%)
+const LOW_STOCK_INTENT_THRESHOLD = 3; // 의도 카드 노출 품절 임박 기준 개수
+const MONTH_CLOSE_LEAD_DAYS = 3;      // 월 마감 D-N 리마인더
 
 type QuickAction = { key: string; label: string; icon: keyof typeof Ionicons.glyphMap; route: string };
 
@@ -101,7 +112,7 @@ function PnLDivider() {
   return <View style={styles.pnlDivider} />;
 }
 
-function PnLCard({ pnl, loading }: { pnl: ProfitLoss | null; loading: boolean }) {
+function PnLCard({ pnl, loading, tint }: { pnl: ProfitLoss | null; loading: boolean; tint?: string }) {
   const cats = pnl?.purchaseByCategory ?? {};
   const catOrder = ['식자재', '비품소모품', '주류', '기타'] as const;
   const rev = pnl?.revenue ?? 0;
@@ -109,7 +120,7 @@ function PnLCard({ pnl, loading }: { pnl: ProfitLoss | null; loading: boolean })
   const isProfit = (pnl?.operatingProfit ?? 0) >= 0;
 
   return (
-    <View style={styles.pnlCard}>
+    <GlassCard tint={tint} contentStyle={styles.pnlGlassContent}>
 
       {/* 매출 */}
       <PnLRow label="매출" value={fmt(pnl?.revenue)} onPress={() => router.push('/(tabs)/pos')} loading={loading} />
@@ -156,6 +167,27 @@ function PnLCard({ pnl, loading }: { pnl: ProfitLoss | null; loading: boolean })
             </Text>
         }
       </View>
+    </GlassCard>
+  );
+}
+
+const SENTIMENT_STYLE: Record<
+  'positive' | 'neutral' | 'negative',
+  { bg: string; fg: string; icon: keyof typeof Ionicons.glyphMap }
+> = {
+  positive: { bg: Colors.sentiment.positiveBg, fg: Colors.sentiment.positive, icon: 'trending-up-outline' },
+  neutral: { bg: Colors.sentiment.neutralBg, fg: Colors.sentiment.neutral, icon: 'remove-outline' },
+  negative: { bg: Colors.sentiment.negativeBg, fg: Colors.sentiment.negative, icon: 'trending-down-outline' },
+};
+
+function SentimentBanner({ pnl }: { pnl: ProfitLoss }) {
+  const fb = getProfitSentiment(pnl.operatingProfit ?? 0, pnl.revenue ?? 0);
+  const s = SENTIMENT_STYLE[fb.level];
+
+  return (
+    <View style={[styles.sentimentBanner, { backgroundColor: s.bg }]}>
+      <Ionicons name={s.icon} size={18} color={s.fg} />
+      <Text style={[styles.sentimentText, { color: s.fg }]}>{fb.message}</Text>
     </View>
   );
 }
@@ -194,6 +226,8 @@ export default function HomeScreen() {
   const yearMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
   const { data: pnl, loading: pnlLoading, refetch: fetchPnl } = useProfitLoss(yearMonth);
   const { check: checkFixedExpense } = useFixedExpenseCheck();
+  const { autoSyncOnForeground, autoSyncing, todaySales } = useTossSync();
+  const { isDismissed, dismiss } = useDismissedIntents();
 
   // 로그인 본인에 연결된 직원 → 파트타이머 여부 판별
   const myEmployee = employees.find(e => e.user_id === user?.id);
@@ -212,8 +246,66 @@ export default function HomeScreen() {
     }
   }, [refetch, refetchEmp, fetchPnl, checkFixedExpense, isPartTime]));
 
-  const lowStockItems = ingredients.filter(i => i.current_stock <= i.min_stock).slice(0, 5);
+  const lowStockAll = ingredients.filter(i => i.current_stock <= i.min_stock);
+  const lowStockItems = lowStockAll.slice(0, 5);
   const monthLabel = today.toLocaleDateString('ko-KR', { year: 'numeric', month: 'long' });
+
+  // ── Intent-based Design: 상황별 의도 카드 산출 ──
+  const todayStr = `${yearMonth}-${String(today.getDate()).padStart(2, '0')}`;
+  const laborRatio = pnl && pnl.revenue > 0 ? (pnl.laborCost / pnl.revenue) * 100 : 0;
+  const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+  const daysToClose = daysInMonth - today.getDate();
+  const tossConnected = !!store?.toss_merchant_id;
+
+  const intents: HomeIntent[] = [];
+  if (!isPartTime) {
+    if (lowStockAll.length >= LOW_STOCK_INTENT_THRESHOLD) {
+      intents.push({
+        id: 'low-stock',
+        tone: 'urgent',
+        icon: 'cube-outline',
+        title: '재고를 채워주세요',
+        description: `품절 임박 품목이 ${lowStockAll.length}개 있어요. 매입을 등록할까요?`,
+        actionLabel: '재고 확인',
+        onAction: () => router.push('/(tabs)/stock'),
+      });
+    }
+    if (laborRatio > LABOR_RATIO_TARGET) {
+      intents.push({
+        id: `labor-ratio:${yearMonth}`,
+        tone: 'warning',
+        icon: 'people-outline',
+        title: '인건비율이 목표를 초과했어요',
+        description: `이번 달 인건비율이 ${laborRatio.toFixed(1)}%예요 (목표 ${LABOR_RATIO_TARGET}%).`,
+        actionLabel: '인건비 보기',
+        onAction: () => router.push('/(tabs)/payroll'),
+      });
+    }
+    if (tossConnected && todaySales === 0) {
+      intents.push({
+        id: `toss-sync:${todayStr}`,
+        tone: 'info',
+        icon: 'sync-outline',
+        title: '오늘 매출을 불러올까요?',
+        description: '오늘 매출 데이터가 아직 동기화되지 않았어요.',
+        actionLabel: '지금 동기화',
+        busy: autoSyncing,
+        onAction: async () => { await autoSyncOnForeground(); fetchPnl(); },
+      });
+    }
+    if (daysToClose <= MONTH_CLOSE_LEAD_DAYS) {
+      intents.push({
+        id: `month-close:${yearMonth}`,
+        tone: 'info',
+        icon: 'calendar-outline',
+        title: '이번 달 손익 정산',
+        description: `이번 달 마감이 D-${daysToClose}예요. 손익을 확인해주세요.`,
+        actionLabel: '손익 정산',
+        onAction: () => router.push('/profit-loss'),
+      });
+    }
+  }
+  const activeIntents = intents.filter(it => !isDismissed(it.id));
 
   return (
     <SafeAreaView style={styles.container}>
@@ -232,6 +324,20 @@ export default function HomeScreen() {
         {/* 역할별 빠른 메뉴 */}
         <QuickActionsGrid actions={QUICK_ACTIONS[effectiveRole]} />
 
+        {/* Intent-based Design: 상황별 의도 카드 (가로 스크롤) */}
+        {activeIntents.length > 0 && (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.intentScrollOuter}
+            contentContainerStyle={styles.intentScroll}
+          >
+            {activeIntents.map(({ id, ...cardProps }) => (
+              <IntentCard key={id} {...cardProps} onDismiss={() => dismiss(id)} />
+            ))}
+          </ScrollView>
+        )}
+
         {/* 파트타이머: 개인 출퇴근·급여 캘린더 / 그 외: 손익계산서 */}
         {isPartTime ? (
           store && myEmployee ? (
@@ -248,7 +354,9 @@ export default function HomeScreen() {
                 <Text style={styles.sectionLink}>연간 보기</Text>
               </TouchableOpacity>
             </View>
-            <PnLCard pnl={pnl} loading={pnlLoading} />
+            <PnLCard pnl={pnl} loading={pnlLoading} tint={glassTintForStore(store?.id)} />
+            {/* Emotionally Aware: 손익 결과 감성 피드백 */}
+            {pnl && !pnlLoading && <SentimentBanner pnl={pnl} />}
           </>
         )}
 
@@ -288,6 +396,15 @@ const styles = StyleSheet.create({
   storePillText: { fontSize: 12, color: Colors.gray500 },
   scroll: { padding: 16, gap: 14, paddingBottom: 48 },
 
+  intentScrollOuter: { marginHorizontal: -16 },
+  intentScroll: { paddingHorizontal: 16, paddingVertical: 2 },
+
+  sentimentBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    borderRadius: 14, paddingHorizontal: 16, paddingVertical: 12, marginTop: -4,
+  },
+  sentimentText: { flex: 1, fontSize: 13, fontWeight: '600' },
+
   profitColor: { color: Colors.primary },
   lossColor: { color: '#DC2626' },
 
@@ -314,11 +431,7 @@ const styles = StyleSheet.create({
   sectionLink: { fontSize: 12, color: Colors.primary, fontWeight: '500' },
 
   // 손익 카드
-  pnlCard: {
-    backgroundColor: Colors.white, borderRadius: 16,
-    borderWidth: 0.5, borderColor: Colors.gray100,
-    overflow: 'hidden',
-  },
+  pnlGlassContent: { padding: 0 },
   pnlRow: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     paddingHorizontal: 16, paddingVertical: 11,
