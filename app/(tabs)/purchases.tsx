@@ -350,17 +350,19 @@ function ExpensesView() {
         <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <View style={styles.modalSheet}>
             <View style={styles.modalHandle} />
-            <Text style={styles.modalTitle}>{editTarget} 항목 {editId ? '수정' : '추가'}</Text>
+            <View style={styles.sheetHeader}>
+              <TouchableOpacity onPress={() => setModalVisible(false)} hitSlop={8}>
+                <Text style={styles.sheetCancelText}>취소</Text>
+              </TouchableOpacity>
+              <Text style={styles.sheetHeaderTitle}>{editTarget} 항목 {editId ? '수정' : '추가'}</Text>
+              <TouchableOpacity onPress={handleSave} disabled={saving} hitSlop={8}>
+                {saving ? <ActivityIndicator size="small" color={Colors.primary} /> : <Text style={styles.sheetSaveText}>저장</Text>}
+              </TouchableOpacity>
+            </View>
             <Text style={styles.fieldLabel}>항목명</Text>
             <TextInput style={styles.input} value={inputName} onChangeText={setInputName} placeholder="예: 임대료, 광고비" placeholderTextColor={Colors.gray300} />
             <Text style={styles.fieldLabel}>금액</Text>
             <TextInput style={styles.input} value={inputAmount} onChangeText={setInputAmount} placeholder="0" placeholderTextColor={Colors.gray300} keyboardType="numeric" />
-            <View style={styles.modalBtns}>
-              <TouchableOpacity style={styles.cancelBtn} onPress={() => setModalVisible(false)}><Text style={styles.cancelBtnText}>취소</Text></TouchableOpacity>
-              <TouchableOpacity style={[styles.saveBtn, saving && { opacity: 0.5 }]} onPress={handleSave} disabled={saving}>
-                {saving ? <ActivityIndicator size="small" color={Colors.white} /> : <Text style={styles.saveBtnText}>저장</Text>}
-              </TouchableOpacity>
-            </View>
           </View>
         </KeyboardAvoidingView>
       </Modal>
@@ -478,6 +480,10 @@ const styles = StyleSheet.create({
   modalSheet: { backgroundColor: Colors.white, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 40 },
   modalHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: Colors.gray200, alignSelf: 'center', marginBottom: 20 },
   modalTitle: { fontSize: 16, fontWeight: '700', color: Colors.black, marginBottom: 4 },
+  sheetHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, paddingBottom: 12, borderBottomWidth: 0.5, borderBottomColor: Colors.gray100 },
+  sheetHeaderTitle: { fontSize: 16, fontWeight: '700', color: Colors.black },
+  sheetCancelText: { fontSize: 15, fontWeight: '500', color: Colors.gray500 },
+  sheetSaveText: { fontSize: 15, fontWeight: '700', color: Colors.primary },
   fieldLabel: { fontSize: 13, fontWeight: '600', color: Colors.gray600, marginBottom: 6, marginTop: 14 },
   input: { borderWidth: 1, borderColor: Colors.gray200, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, color: Colors.black, backgroundColor: Colors.gray50 },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },

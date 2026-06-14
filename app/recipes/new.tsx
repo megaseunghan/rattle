@@ -488,7 +488,17 @@ export default function NewRecipeScreen() {
       <Modal visible={volumeTarget !== null} animationType="fade" transparent>
         <Pressable style={styles.volOverlay} onPress={() => setVolumeTarget(null)}>
           <Pressable style={styles.volSheet} onPress={() => {}}>
-            <Text style={styles.volTitle}>{volumeTarget?.name} 개당 용량</Text>
+            <View style={styles.volHeader}>
+              <TouchableOpacity onPress={() => setVolumeTarget(null)} hitSlop={8}>
+                <Text style={styles.volHeaderCancel}>나중에</Text>
+              </TouchableOpacity>
+              <Text style={styles.volHeaderTitle} numberOfLines={1}>{volumeTarget?.name} 개당 용량</Text>
+              <TouchableOpacity onPress={handleSaveVolume} disabled={savingVol} hitSlop={8}>
+                {savingVol
+                  ? <ActivityIndicator size="small" color={Colors.primary} />
+                  : <Text style={styles.volHeaderSave}>저장</Text>}
+              </TouchableOpacity>
+            </View>
             <Text style={styles.volDesc}>
               개수로 관리하는 품목이에요. 레시피에서 g·mL로 쓰려면 1개의 용량을 알려주세요.
             </Text>
@@ -513,20 +523,6 @@ export default function NewRecipeScreen() {
                   </TouchableOpacity>
                 ))}
               </View>
-            </View>
-            <View style={styles.volActions}>
-              <TouchableOpacity style={styles.volSkipBtn} onPress={() => setVolumeTarget(null)}>
-                <Text style={styles.volSkipText}>나중에 (개 단위로)</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.volSaveBtn, savingVol && { opacity: 0.5 }]}
-                onPress={handleSaveVolume}
-                disabled={savingVol}
-              >
-                {savingVol
-                  ? <ActivityIndicator size="small" color={Colors.white} />
-                  : <Text style={styles.volSaveText}>저장</Text>}
-              </TouchableOpacity>
             </View>
           </Pressable>
         </Pressable>
@@ -738,6 +734,10 @@ const styles = StyleSheet.create({
   volOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', paddingHorizontal: 28 },
   volSheet: { backgroundColor: Colors.white, borderRadius: 18, padding: 22 },
   volTitle: { fontSize: 17, fontWeight: '700', color: Colors.black },
+  volHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4, gap: 10 },
+  volHeaderTitle: { flex: 1, textAlign: 'center', fontSize: 16, fontWeight: '700', color: Colors.black },
+  volHeaderCancel: { fontSize: 15, fontWeight: '500', color: Colors.gray500 },
+  volHeaderSave: { fontSize: 15, fontWeight: '700', color: Colors.primary },
   volDesc: { fontSize: 13, color: Colors.gray500, marginTop: 8, lineHeight: 19 },
   volInputRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 18 },
   volInput: {

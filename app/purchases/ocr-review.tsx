@@ -327,9 +327,12 @@ export default function PurchaseOcrReviewScreen() {
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={closeQuickAdd}>
           <TouchableOpacity activeOpacity={1} style={styles.modalSheet}>
             <View style={styles.modalHeader}>
+              <TouchableOpacity onPress={closeQuickAdd} hitSlop={8}>
+                <Text style={styles.modalCancel}>취소</Text>
+              </TouchableOpacity>
               <Text style={styles.modalTitle}>재고 신규 등록</Text>
-              <TouchableOpacity onPress={closeQuickAdd}>
-                <Text style={styles.modalClose}>닫기</Text>
+              <TouchableOpacity onPress={handleQuickAdd} disabled={quickAdding} hitSlop={8}>
+                <Text style={styles.modalClose}>{quickAdding ? '등록 중...' : '추가'}</Text>
               </TouchableOpacity>
             </View>
 
@@ -370,18 +373,6 @@ export default function PurchaseOcrReviewScreen() {
                 ))}
               </View>
 
-              <View style={styles.modalActions}>
-                <TouchableOpacity style={styles.cancelBtn} onPress={closeQuickAdd}>
-                  <Text style={styles.cancelText}>취소</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.confirmBtn, quickAdding && { opacity: 0.5 }]}
-                  onPress={handleQuickAdd}
-                  disabled={quickAdding}
-                >
-                  <Text style={styles.confirmText}>{quickAdding ? '등록 중...' : '재고에 추가'}</Text>
-                </TouchableOpacity>
-              </View>
             </ScrollView>
           </TouchableOpacity>
         </TouchableOpacity>
@@ -589,7 +580,8 @@ const styles = StyleSheet.create({
     padding: 20, borderBottomWidth: 1, borderBottomColor: Colors.gray100,
   },
   modalTitle: { fontSize: 17, fontWeight: '700', color: Colors.black },
-  modalClose: { fontSize: 15, color: Colors.primary, fontWeight: '600' },
+  modalClose: { fontSize: 15, color: Colors.primary, fontWeight: '700' },
+  modalCancel: { fontSize: 15, color: Colors.gray500, fontWeight: '500' },
   modalBody: { padding: 20, paddingBottom: 40 },
   modalLabel: { fontSize: 13, fontWeight: '600', color: Colors.gray700, marginBottom: 8, marginTop: 14 },
   modalInput: {
