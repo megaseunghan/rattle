@@ -192,31 +192,6 @@ function SentimentBanner({ pnl }: { pnl: ProfitLoss }) {
   );
 }
 
-function LowStockRow({ item, isLast }: { item: Ingredient; isLast: boolean }) {
-  const ratio = item.min_stock > 0 ? item.current_stock / item.min_stock : 1;
-  const isDanger = ratio <= 0.2;
-  return (
-    <TouchableOpacity
-      style={[styles.listItem, !isLast && styles.listItemBorder]}
-      onPress={() => router.push(`/stock/${item.id}`)}
-      activeOpacity={0.7}
-    >
-      <View style={[styles.iconWrap, { backgroundColor: isDanger ? '#FCEBEB' : '#FAEEDA' }]}>
-        <Ionicons name="cube-outline" size={18} color={isDanger ? '#A32D2D' : '#854F0B'} />
-      </View>
-      <View style={styles.itemInfo}>
-        <Text style={styles.itemName}>{item.name}</Text>
-        <Text style={styles.itemSub}>잔여 {item.current_stock}{item.unit}</Text>
-      </View>
-      <View style={[styles.stockBadge, isDanger ? styles.badgeDanger : styles.badgeWarn]}>
-        <Text style={[styles.stockBadgeText, isDanger ? styles.badgeTextDanger : styles.badgeTextWarn]}>
-          {isDanger ? '부족' : '임박'}
-        </Text>
-      </View>
-    </TouchableOpacity>
-  );
-}
-
 export default function HomeScreen() {
   const { store, user, currentRole } = useAuth();
   const { data: ingredients, refetch } = useIngredients();
@@ -247,7 +222,6 @@ export default function HomeScreen() {
   }, [refetch, refetchEmp, fetchPnl, checkFixedExpense, isPartTime]));
 
   const lowStockAll = ingredients.filter(i => i.current_stock <= i.min_stock);
-  const lowStockItems = lowStockAll.slice(0, 5);
   const monthLabel = today.toLocaleDateString('ko-KR', { year: 'numeric', month: 'long' });
 
   // ── Intent-based Design: 상황별 의도 카드 산출 ──
@@ -359,21 +333,6 @@ export default function HomeScreen() {
             {pnl && !pnlLoading && <SentimentBanner pnl={pnl} />}
           </>
         )}
-
-        {/* 품절 임박 */}
-        <Text style={styles.sectionHeaderLabel}>품절 임박</Text>
-        <View style={styles.card}>
-          {lowStockItems.length === 0 ? (
-            <View style={styles.emptyInCard}>
-              <Ionicons name="checkmark-circle-outline" size={20} color={Colors.success} />
-              <Text style={styles.emptyInCardText}>품절 임박 재고가 없어요</Text>
-            </View>
-          ) : (
-            lowStockItems.map((item, i) => (
-              <LowStockRow key={item.id} item={item} isLast={i === lowStockItems.length - 1} />
-            ))
-          )}
-        </View>
 
       </ScrollView>
     </SafeAreaView>

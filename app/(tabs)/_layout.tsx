@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../constants/colors';
 import { useAuth } from '../../lib/contexts/AuthContext';
 import { useEmployees } from '../../lib/hooks/useEmployees';
+import { useLowStockCount } from '../../lib/hooks/useLowStockCount';
 
 type TabName = 'home' | 'pos' | 'purchases' | 'payroll' | 'stock' | 'more';
 
@@ -21,17 +22,27 @@ const TAB_CONFIG: Record<TabName, {
   more:      { active: 'settings',    inactive: 'settings-outline',    label: '설정' },
 };
 
-function TabIcon({ tab, focused }: { tab: TabName; focused: boolean }) {
+function TabIcon({ tab, focused, badge }: { tab: TabName; focused: boolean; badge?: number }) {
   const cfg = TAB_CONFIG[tab];
+  const showBadge = !!badge && badge > 0;
   return (
     <View style={styles.iconWrap}>
       {focused && <View style={styles.indicator} />}
-      <Ionicons
-        name={focused ? cfg.active : cfg.inactive}
-        size={22}
-        color={focused ? Colors.primary : Colors.gray400}
-      />
-      <Text style={[styles.label, focused && styles.labelActive]} numberOfLines={1} adjustsFontSizeToFit>{cfg.label}</Text>
+      <View>
+        <Ionicons
+          name={focused ? cfg.active : cfg.inactive}
+          size={22}
+          color={focused ? Colors.primary : Colors.gray400}
+        />
+        {showBadge && (
+          <View style={styles.badge}>
+            <Text style={styles.badgeText} numberOfLines={1}>{badge > 99 ? '99+' : badge}</Text>
+          </View>
+        )}
+      </View>
+      <Text style={[styles.label, focused && styles.labelActive]} numberOfLines={1} adjustsFontSizeToFit>
+        {showBadge ? `${cfg.label} (${badge})` : cfg.label}
+      </Text>
     </View>
   );
 }
@@ -39,6 +50,7 @@ function TabIcon({ tab, focused }: { tab: TabName; focused: boolean }) {
 export default function TabsLayout() {
   const { user, currentRole } = useAuth();
   const { employees, refetch } = useEmployees();
+  const { count: lowStockCount } = useLowStockCount();
 
   // useEmployees는 자동 조회하지 않으므로 진입/매장 변경 시 직접 fetch
   useEffect(() => { refetch(); }, [refetch]);
@@ -63,7 +75,7 @@ export default function TabsLayout() {
       {/* 탭 순서: 홈 · 재고 · 매입/비용 · 인건비 · 설정 (매출은 홈 손익카드에서 진입) */}
       <Tabs.Screen name="index"     options={{ tabBarIcon: ({ focused }) => <TabIcon tab="home"      focused={focused} /> }} />
       {/* 재고: 모든 역할에 노출, 홈 다음 자리 (기존 매출 탭 자리 대체) */}
-      <Tabs.Screen name="stock"     options={{ tabBarIcon: ({ focused }) => <TabIcon tab="stock"     focused={focused} /> }} />
+      <Tabs.Screen name="stock"     options={{ tabBarIcon: ({ focused }) => <TabIcon tab="stock"     focused={focused} badge={lowStockCount} /> }} />
       <Tabs.Screen name="purchases" options={{ ...(isPartTime ? hidden : visible), tabBarIcon: ({ focused }) => <TabIcon tab="purchases" focused={focused} /> }} />
       <Tabs.Screen name="payroll"   options={{ ...(isPartTime ? hidden : visible), tabBarIcon: ({ focused }) => <TabIcon tab="payroll"   focused={focused} /> }} />
       <Tabs.Screen name="more"      options={{ tabBarIcon: ({ focused }) => <TabIcon tab="more"      focused={focused} /> }} />
@@ -99,4 +111,17 @@ const styles = StyleSheet.create({
   },
   label: { fontSize: 10, fontWeight: '500', color: Colors.gray400 },
   labelActive: { color: Colors.primary, fontWeight: '700' },
+  badge: {
+    position: 'absolute',
+    top: -6,
+    right: -10,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    paddingHorizontal: 4,
+    backgroundColor: Colors.danger,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  badgeText: { fontSize: 9, fontWeight: '700', color: Colors.white },
 });
