@@ -15,7 +15,7 @@ import { AttendanceCalendar } from '../../lib/components/AttendanceCalendar';
 import { IntentCard, IntentCardProps } from '../../lib/components/IntentCard';
 import { GlassCard } from '../../lib/components/GlassCard';
 import { getProfitSentiment } from '../../lib/utils/sentimentMessage';
-import { Ingredient, ProfitLoss } from '../../types';
+import { ProfitLoss } from '../../types';
 
 type HomeIntent = IntentCardProps & { id: string };
 
@@ -295,10 +295,7 @@ export default function HomeScreen() {
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
 
-        {/* 역할별 빠른 메뉴 */}
-        <QuickActionsGrid actions={QUICK_ACTIONS[effectiveRole]} />
-
-        {/* Intent-based Design: 상황별 의도 카드 (가로 스크롤) */}
+        {/* Intent-based Design: 상황별 의도 카드 (최상단 가로 스크롤) */}
         {activeIntents.length > 0 && (
           <ScrollView
             horizontal
@@ -311,6 +308,9 @@ export default function HomeScreen() {
             ))}
           </ScrollView>
         )}
+
+        {/* 역할별 빠른 메뉴 */}
+        <QuickActionsGrid actions={QUICK_ACTIONS[effectiveRole]} />
 
         {/* 파트타이머: 개인 출퇴근·급여 캘린더 / 그 외: 손익계산서 */}
         {isPartTime ? (
