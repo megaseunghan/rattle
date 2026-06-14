@@ -1,5 +1,8 @@
-import { useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { useCallback, useState } from 'react';
+import {
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator,
+  useWindowDimensions, NativeSyntheticEvent, NativeScrollEvent,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
@@ -20,6 +23,7 @@ import { ProfitLoss } from '../../types';
 type HomeIntent = IntentCardProps & { id: string };
 
 const LABOR_RATIO_TARGET = 30;       // 인건비율 목표(%)
+const COGS_RATIO_TARGET = 40;        // 매출원가율 목표(%)
 const LOW_STOCK_INTENT_THRESHOLD = 3; // 의도 카드 노출 품절 임박 기준 개수
 const MONTH_CLOSE_LEAD_DAYS = 3;      // 월 마감 D-N 리마인더
 
@@ -203,6 +207,8 @@ export default function HomeScreen() {
   const { check: checkFixedExpense } = useFixedExpenseCheck();
   const { autoSyncOnForeground, autoSyncing, todaySales } = useTossSync();
   const { isDismissed, dismiss } = useDismissedIntents();
+  const { width: winW } = useWindowDimensions();
+  const [intentIndex, setIntentIndex] = useState(0);
 
   // 로그인 본인에 연결된 직원 → 파트타이머 여부 판별
   const myEmployee = employees.find(e => e.user_id === user?.id);
@@ -255,6 +261,29 @@ export default function HomeScreen() {
         onAction: () => router.push('/(tabs)/payroll'),
       });
     }
+    const cogsRatio = pnl && pnl.revenue > 0 ? (pnl.purchaseCost / pnl.revenue) * 100 : 0;
+    if (cogsRatio > COGS_RATIO_TARGET) {
+      intents.push({
+        id: `cogs-ratio:${yearMonth}`,
+        tone: 'warning',
+        icon: 'pricetags-outline',
+        title: '매출원가율이 높아요',
+        description: `이번 달 매출원가율이 ${cogsRatio.toFixed(1)}%예요 (목표 ${COGS_RATIO_TARGET}%).`,
+        actionLabel: '매입 확인',
+        onAction: () => router.push('/(tabs)/purchases'),
+      });
+    }
+    if (pnl && pnl.revenue > 0 && pnl.fixedExpense === 0) {
+      intents.push({
+        id: `no-fixed-expense:${yearMonth}`,
+        tone: 'info',
+        icon: 'document-text-outline',
+        title: '고정비를 입력해주세요',
+        description: '이번 달 고정비가 아직 등록되지 않았어요.',
+        actionLabel: '비용 등록',
+        onAction: () => router.push('/(tabs)/expenses'),
+      });
+    }
     if (tossConnected && todaySales === 0) {
       intents.push({
         id: `toss-sync:${todayStr}`,
@@ -295,18 +324,35 @@ export default function HomeScreen() {
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
 
-        {/* Intent-based Design: 상황별 의도 카드 (최상단 가로 스크롤) */}
+        {/* Intent-based Design: 상황별 의도 카드 (풀폭 페이징 슬라이드) */}
         {activeIntents.length > 0 && (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.intentScrollOuter}
-            contentContainerStyle={styles.intentScroll}
-          >
-            {activeIntents.map(({ id, ...cardProps }) => (
-              <IntentCard key={id} {...cardProps} onDismiss={() => dismiss(id)} />
-            ))}
-          </ScrollView>
+          <View style={styles.intentScrollOuter}>
+            <ScrollView
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              onMomentumScrollEnd={(e: NativeSyntheticEvent<NativeScrollEvent>) => {
+                setIntentIndex(Math.round(e.nativeEvent.contentOffset.x / winW));
+              }}
+            >
+              {activeIntents.map(({ id, ...cardProps }) => (
+                <View key={id} style={{ width: winW, paddingHorizontal: 16 }}>
+                  <IntentCard {...cardProps} onDismiss={() => dismiss(id)} />
+                </View>
+              ))}
+            </ScrollView>
+
+            {activeIntents.length > 1 && (
+              <View style={styles.dotsRow}>
+                {activeIntents.map((it, i) => (
+                  <View
+                    key={it.id}
+                    style={[styles.dot, i === intentIndex ? styles.dotActive : styles.dotInactive]}
+                  />
+                ))}
+              </View>
+            )}
+          </View>
         )}
 
         {/* 역할별 빠른 메뉴 */}
@@ -356,7 +402,10 @@ const styles = StyleSheet.create({
   scroll: { padding: 16, gap: 14, paddingBottom: 48 },
 
   intentScrollOuter: { marginHorizontal: -16 },
-  intentScroll: { paddingHorizontal: 16, paddingVertical: 2 },
+  dotsRow: { flexDirection: 'row', justifyContent: 'center', gap: 6, marginTop: 10 },
+  dot: { width: 6, height: 6, borderRadius: 3 },
+  dotActive: { backgroundColor: Colors.primary, width: 16 },
+  dotInactive: { backgroundColor: Colors.gray300 },
 
   sentimentBanner: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
