@@ -24,7 +24,9 @@ export default function ProfileScreen() {
   const [phone, setPhone] = useState(meta.phone ?? '');
   const [savingInfo, setSavingInfo] = useState(false);
 
-  // 비밀번호 변경
+  // 비밀번호 변경 (이메일 가입자만 — 소셜 로그인은 비밀번호 개념이 없음)
+  const provider = (user?.app_metadata?.provider as string | undefined) ?? 'email';
+  const isEmailUser = provider === 'email';
   const [newPw, setNewPw] = useState('');
   const [confirmPw, setConfirmPw] = useState('');
   const [savingPw, setSavingPw] = useState(false);
@@ -186,7 +188,8 @@ export default function ProfileScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* 비밀번호 변경 */}
+        {/* 비밀번호 변경 (이메일 가입자만) */}
+        {isEmailUser && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>비밀번호 변경</Text>
           <Text style={styles.label}>새 비밀번호</Text>
@@ -219,6 +222,7 @@ export default function ProfileScreen() {
               : <Text style={styles.saveBtnText}>비밀번호 변경</Text>}
           </TouchableOpacity>
         </View>
+        )}
 
         {/* 매장 설정 (관리자 전용) */}
         {currentRole === 'admin' && (
