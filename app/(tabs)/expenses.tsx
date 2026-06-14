@@ -172,7 +172,17 @@ export default function ExpensesScreen() {
         <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <View style={styles.modalSheet}>
             <View style={styles.modalHandle} />
-            <Text style={styles.modalTitle}>{editTarget} 항목 추가</Text>
+            <View style={styles.sheetHeader}>
+              <TouchableOpacity onPress={() => setModalVisible(false)} hitSlop={8}>
+                <Text style={styles.sheetCancelText}>취소</Text>
+              </TouchableOpacity>
+              <Text style={styles.sheetHeaderTitle}>{editTarget} 항목 추가</Text>
+              <TouchableOpacity onPress={handleSave} disabled={saving} hitSlop={8}>
+                {saving
+                  ? <ActivityIndicator size="small" color={Colors.primary} />
+                  : <Text style={styles.sheetSaveText}>저장</Text>}
+              </TouchableOpacity>
+            </View>
 
             <Text style={styles.fieldLabel}>항목명</Text>
             <TextInput
@@ -193,21 +203,6 @@ export default function ExpensesScreen() {
               keyboardType="numeric"
             />
 
-            <View style={styles.modalBtns}>
-              <TouchableOpacity style={styles.cancelBtn} onPress={() => setModalVisible(false)}>
-                <Text style={styles.cancelBtnText}>취소</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.saveBtn, saving && { opacity: 0.5 }]}
-                onPress={handleSave}
-                disabled={saving}
-              >
-                {saving
-                  ? <ActivityIndicator size="small" color={Colors.white} />
-                  : <Text style={styles.saveBtnText}>저장</Text>
-                }
-              </TouchableOpacity>
-            </View>
           </View>
         </KeyboardAvoidingView>
       </Modal>
@@ -258,6 +253,10 @@ const styles = StyleSheet.create({
     width: 36, height: 4, borderRadius: 2, backgroundColor: Colors.gray200,
     alignSelf: 'center', marginBottom: 20,
   },
+  sheetHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, paddingBottom: 12, borderBottomWidth: 0.5, borderBottomColor: Colors.gray100 },
+  sheetHeaderTitle: { fontSize: 16, fontWeight: '700', color: Colors.black },
+  sheetCancelText: { fontSize: 15, fontWeight: '500', color: Colors.gray500 },
+  sheetSaveText: { fontSize: 15, fontWeight: '700', color: Colors.primary },
   modalTitle: { fontSize: 16, fontWeight: '700', color: Colors.black, marginBottom: 20 },
   fieldLabel: { fontSize: 13, fontWeight: '600', color: Colors.gray600, marginBottom: 6, marginTop: 12 },
   input: {
