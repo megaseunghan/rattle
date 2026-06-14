@@ -90,8 +90,9 @@ function EmployeeCard({
           <TouchableOpacity onPress={onShowHistory} style={styles.histBtn}>
             <Ionicons name="time-outline" size={16} color={Colors.gray400} />
           </TouchableOpacity>
-          <TouchableOpacity onPress={onEdit} style={styles.editBtn}>
-            <Ionicons name="ellipsis-horizontal" size={16} color={Colors.gray400} />
+          <TouchableOpacity onPress={onEdit} style={styles.editBtn} activeOpacity={0.7}>
+            <Ionicons name="create-outline" size={14} color={Colors.gray500} />
+            <Text style={styles.editBtnText}>수정</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -873,7 +874,12 @@ const styles = StyleSheet.create({
   taxBadgeText: { fontSize: 11, fontWeight: '500', color: Colors.gray500 },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   histBtn: { padding: 4 },
-  editBtn: { padding: 4 },
+  editBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 3,
+    paddingHorizontal: 10, paddingVertical: 5, marginLeft: 2,
+    backgroundColor: Colors.gray100, borderRadius: 8,
+  },
+  editBtnText: { fontSize: 12, fontWeight: '600', color: Colors.gray600 },
 
   confirmOverlay: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.4)', padding: 24 },
   confirmCard: { width: '100%', backgroundColor: Colors.white, borderRadius: 20, padding: 22 },
