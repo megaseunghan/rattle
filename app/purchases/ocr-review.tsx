@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TextInput,
   TouchableOpacity, Image, Alert, ActivityIndicator, Modal, Platform,
+  useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -31,6 +32,7 @@ function formatDate(d: Date): string {
 export default function PurchaseOcrReviewScreen() {
   const { imageUri, ocrText } = useLocalSearchParams<{ imageUri: string; ocrText: string }>();
   const { store } = useAuth();
+  const { width: winW, height: winH } = useWindowDimensions();
   const [date, setDate] = useState(new Date());
   const yearMonth = formatDate(date).slice(0, 7);
   const purchasesHook = usePurchases(yearMonth);
@@ -194,17 +196,18 @@ export default function PurchaseOcrReviewScreen() {
         <View style={{ width: 24 }} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-        {imageUri && (
-          <TouchableOpacity style={styles.imageToggle} onPress={() => setImageExpanded(p => !p)}>
-            <Ionicons name={imageExpanded ? 'chevron-up' : 'chevron-down'} size={16} color={Colors.gray500} />
-            <Text style={styles.imageToggleText}>원본 이미지 {imageExpanded ? '접기' : '펼치기'}</Text>
-          </TouchableOpacity>
-        )}
-        {imageExpanded && imageUri && (
-          <Image source={{ uri: imageUri }} style={styles.receiptImage} resizeMode="contain" />
-        )}
+      {/* 멀티모달: 상단 고정 원본 이미지 패널 (탭하면 핀치줌 확대) */}
+      {imageUri && (
+        <TouchableOpacity style={styles.imagePanel} activeOpacity={0.9} onPress={() => setImageExpanded(true)}>
+          <Image source={{ uri: imageUri }} style={styles.panelImage} resizeMode="cover" />
+          <View style={styles.zoomHint}>
+            <Ionicons name="scan-outline" size={13} color={Colors.white} />
+            <Text style={styles.zoomHintText}>탭하여 확대</Text>
+          </View>
+        </TouchableOpacity>
+      )}
 
+      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
         <View style={styles.section}>
           <Text style={styles.label}>거래처</Text>
           <View style={styles.supplierRow}>
@@ -377,6 +380,29 @@ export default function PurchaseOcrReviewScreen() {
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
+
+      {/* 멀티모달: 원본 이미지 확대 (핀치 줌) */}
+      <Modal visible={imageExpanded} transparent animationType="fade" onRequestClose={() => setImageExpanded(false)}>
+        <View style={styles.zoomOverlay}>
+          <ScrollView
+            style={styles.zoomScroll}
+            contentContainerStyle={styles.zoomContent}
+            maximumZoomScale={4}
+            minimumZoomScale={1}
+            pinchGestureEnabled
+            showsVerticalScrollIndicator={false}
+            showsHorizontalScrollIndicator={false}
+            centerContent
+          >
+            {imageUri && (
+              <Image source={{ uri: imageUri }} style={{ width: winW, height: winH * 0.85 }} resizeMode="contain" />
+            )}
+          </ScrollView>
+          <TouchableOpacity style={styles.zoomClose} onPress={() => setImageExpanded(false)} hitSlop={10}>
+            <Ionicons name="close" size={26} color={Colors.white} />
+          </TouchableOpacity>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -498,9 +524,19 @@ const styles = StyleSheet.create({
   },
   title: { fontSize: 18, fontWeight: '700', color: Colors.black },
   scroll: { padding: 16, paddingBottom: 100 },
-  imageToggle: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 10, paddingHorizontal: 4 },
-  imageToggleText: { fontSize: 14, color: Colors.gray500 },
-  receiptImage: { width: '100%', height: 240, borderRadius: 12, marginBottom: 12 },
+  // 멀티모달: 상단 고정 이미지 패널
+  imagePanel: { height: 180, backgroundColor: Colors.gray900, position: 'relative' },
+  panelImage: { width: '100%', height: '100%' },
+  zoomHint: {
+    position: 'absolute', right: 12, bottom: 12, flexDirection: 'row', alignItems: 'center', gap: 4,
+    backgroundColor: 'rgba(0,0,0,0.55)', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 16,
+  },
+  zoomHintText: { fontSize: 12, color: Colors.white, fontWeight: '600' },
+  // 멀티모달: 확대 모달
+  zoomOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.92)' },
+  zoomScroll: { flex: 1 },
+  zoomContent: { flexGrow: 1, justifyContent: 'center', alignItems: 'center' },
+  zoomClose: { position: 'absolute', top: 50, right: 20, width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.18)', justifyContent: 'center', alignItems: 'center' },
   section: {
     backgroundColor: Colors.white, borderRadius: 12, padding: 16,
     marginBottom: 12, borderWidth: 1, borderColor: Colors.gray100,
