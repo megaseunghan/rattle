@@ -40,9 +40,7 @@ function TabIcon({ tab, focused, badge }: { tab: TabName; focused: boolean; badg
           </View>
         )}
       </View>
-      <Text style={[styles.label, focused && styles.labelActive]} numberOfLines={1} adjustsFontSizeToFit>
-        {showBadge ? `${cfg.label} (${badge})` : cfg.label}
-      </Text>
+      <Text style={[styles.label, focused && styles.labelActive]} numberOfLines={1} adjustsFontSizeToFit>{cfg.label}</Text>
     </View>
   );
 }
