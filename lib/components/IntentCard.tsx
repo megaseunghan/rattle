@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, ViewStyle, StyleProp } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../constants/colors';
 
@@ -13,6 +13,7 @@ export interface IntentCardProps {
   onAction: () => void;
   onDismiss?: () => void;
   busy?: boolean;
+  style?: StyleProp<ViewStyle>;
 }
 
 const TONE: Record<IntentTone, { bg: string; fg: string; iconBg: string }> = {
@@ -26,14 +27,18 @@ const TONE: Record<IntentTone, { bg: string; fg: string; iconBg: string }> = {
  * 홈 상단 가로 스크롤에 배치되며, tone으로 긴급도를 시각화한다.
  */
 export function IntentCard({
-  tone, icon, title, description, actionLabel, onAction, onDismiss, busy,
+  tone, icon, title, description, actionLabel, onAction, onDismiss, busy, style,
 }: IntentCardProps) {
   const c = TONE[tone];
   return (
-    <View style={[styles.card, { backgroundColor: c.bg }]}>
-      <View style={styles.headerRow}>
+    <View style={[styles.card, { backgroundColor: c.bg }, style]}>
+      <View style={styles.topRow}>
         <View style={[styles.iconWrap, { backgroundColor: c.iconBg }]}>
-          <Ionicons name={icon} size={18} color={c.fg} />
+          <Ionicons name={icon} size={16} color={c.fg} />
+        </View>
+        <View style={styles.textCol}>
+          <Text style={styles.title} numberOfLines={1}>{title}</Text>
+          <Text style={styles.desc} numberOfLines={2}>{description}</Text>
         </View>
         {onDismiss && (
           <TouchableOpacity onPress={onDismiss} hitSlop={8} style={styles.dismissBtn}>
@@ -41,9 +46,6 @@ export function IntentCard({
           </TouchableOpacity>
         )}
       </View>
-
-      <Text style={styles.title} numberOfLines={1}>{title}</Text>
-      <Text style={styles.desc} numberOfLines={2}>{description}</Text>
 
       <TouchableOpacity
         style={[styles.actionBtn, { backgroundColor: c.fg }]}
@@ -61,14 +63,14 @@ export function IntentCard({
 
 const styles = StyleSheet.create({
   card: {
-    width: 230, borderRadius: 18, padding: 16, marginRight: 12,
-    justifyContent: 'space-between',
+    width: '100%', borderRadius: 16, padding: 14,
   },
-  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  iconWrap: { width: 34, height: 34, borderRadius: 11, justifyContent: 'center', alignItems: 'center' },
-  dismissBtn: { padding: 2 },
-  title: { fontSize: 14, fontWeight: '700', color: Colors.black, marginTop: 12 },
-  desc: { fontSize: 12, color: Colors.gray600, marginTop: 4, lineHeight: 17, minHeight: 34 },
-  actionBtn: { borderRadius: 10, paddingVertical: 9, alignItems: 'center', marginTop: 12 },
+  topRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
+  iconWrap: { width: 30, height: 30, borderRadius: 9, justifyContent: 'center', alignItems: 'center' },
+  textCol: { flex: 1 },
+  dismissBtn: { padding: 2, marginTop: 2 },
+  title: { fontSize: 14, fontWeight: '700', color: Colors.black },
+  desc: { fontSize: 12, color: Colors.gray600, marginTop: 2, lineHeight: 16 },
+  actionBtn: { borderRadius: 10, paddingVertical: 9, alignItems: 'center', marginTop: 10 },
   actionText: { fontSize: 13, fontWeight: '700', color: Colors.white },
 });

@@ -122,7 +122,9 @@ function RootNavigator() {
       <Stack.Screen name="orders/ocr-review" options={{ headerShown: false }} />
       <Stack.Screen name="orders/[id]" options={{ headerShown: false }} />
       <Stack.Screen name="recipes/[id]" options={{ headerShown: false }} />
-      <Stack.Screen name="settings/profile" options={{ headerShown: false }} />
+      <Stack.Screen name="settings/account" options={{ headerShown: false }} />
+      <Stack.Screen name="settings/password" options={{ headerShown: false }} />
+      <Stack.Screen name="settings/store" options={{ headerShown: false }} />
       <Stack.Screen name="settings/members" options={{ headerShown: false }} />
 <Stack.Screen name="pos/[date]" options={{ headerShown: false }} />
       <Stack.Screen name="profit-loss/index" options={{ headerShown: false }} />
