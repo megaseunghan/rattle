@@ -90,15 +90,24 @@ export function todayISO(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-/** 주어진 날짜에 유효한 급여 (해당일 이전 가장 최근 effective_date). 그 이전이면 최초 급여로 소급 */
-export function rateOnDate(history: WageHistory[], dateStr: string): WageHistory | null {
+/**
+ * 주어진 날짜에 유효한 급여 (해당일 이전 가장 최근 effective_date).
+ * @param strict true면 등록일(최초 effective_date) 이전 날짜에는 null 반환 (소급 안 함).
+ *   false(기본)면 그 이전 날짜는 최초 급여로 소급.
+ */
+export function rateOnDate(
+  history: WageHistory[],
+  dateStr: string,
+  strict = false,
+): WageHistory | null {
   if (history.length === 0) return null;
   const sorted = [...history].sort((a, b) => a.effective_date.localeCompare(b.effective_date));
   let eff: WageHistory | null = null;
   for (const r of sorted) {
     if (r.effective_date <= dateStr) eff = r;
   }
-  return eff ?? sorted[0];
+  if (eff) return eff;
+  return strict ? null : sorted[0];
 }
 
 /**
@@ -125,7 +134,8 @@ export function regularGrossForMonth(
   let sum = 0;
   for (let d = 1; d <= lastDay; d++) {
     const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-    const rate = rateOnDate(history, dateStr);
+    // strict: 등록일(최초 effective_date) 이전 날짜는 인건비에 반영하지 않음
+    const rate = rateOnDate(history, dateStr, true);
     if (rate) sum += rate.base_salary / daysInMonth;
   }
   return Math.round(sum * factor);

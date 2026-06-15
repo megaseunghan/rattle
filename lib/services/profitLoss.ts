@@ -1,7 +1,7 @@
 import { supabase } from '../supabase';
 import { ProfitLoss, PurchaseCategory } from '../../types';
 import { getPurchasesByMonth } from './purchases';
-import { getExpensesByMonth } from './expenses';
+import { getExpensesByMonth, getEffectiveFixedExpenses } from './expenses';
 import { getStoreWageHistory, regularGrossForMonth } from './wageHistory';
 import { probationFactor } from './payroll';
 
@@ -49,7 +49,7 @@ export async function getProfitLossByMonth(
   to.setHours(h, m, 0, 0);
   if (to > new Date()) to.setTime(Date.now());
 
-  const [revenueResult, purchases, expenses, payrollResult, attendanceResult, wageHistory, employeesResult] = await Promise.all([
+  const [revenueResult, purchases, expenses, effectiveFixed, payrollResult, attendanceResult, wageHistory, employeesResult] = await Promise.all([
     supabase
       .from('toss_orders')
       .select('total_amount, card_amount, cash_amount')
@@ -59,6 +59,7 @@ export async function getProfitLossByMonth(
       .lte('order_at', to.toISOString()),
     getPurchasesByMonth(storeId, yearMonth),
     getExpensesByMonth(storeId, yearMonth),
+    getEffectiveFixedExpenses(storeId, yearMonth),
     supabase
       .from('payroll')
       .select('gross, national_pension, health_insurance, long_term_care, employment_insurance, income_tax, local_income_tax, withholding_tax, employee_id')
@@ -146,7 +147,8 @@ export async function getProfitLossByMonth(
   const laborCost = regularGross + partTimeGross;
 
   // 4. 비용 (카테고리별)
-  const fixedExpense = expenses.filter(e => e.category === '고정비').reduce((s, e) => s + e.amount, 0);
+  // 고정비: 해당 월 등록분이 없으면 직전 등록 월에서 이어받음 (등록일 이후 자동 반영)
+  const fixedExpense = effectiveFixed.reduce((s, e) => s + e.amount, 0);
   const marketingExpense = expenses.filter(e => e.category === '마케팅').reduce((s, e) => s + e.amount, 0);
   const maintenanceExpense = expenses.filter(e => e.category === '시설보수').reduce((s, e) => s + e.amount, 0);
   const utilitiesExpense = expenses.filter(e => e.category === '공과금').reduce((s, e) => s + e.amount, 0);
