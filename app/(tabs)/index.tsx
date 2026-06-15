@@ -205,7 +205,7 @@ export default function HomeScreen() {
   const yearMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
   const { data: pnl, loading: pnlLoading, refetch: fetchPnl } = useProfitLoss(yearMonth);
   const { check: checkFixedExpense } = useFixedExpenseCheck();
-  const { autoSyncOnForeground, autoSyncing, todaySales } = useTossSync();
+  const { autoSyncOnForeground, autoSyncing, todaySales, loadTodaySales } = useTossSync();
   const { isDismissed, dismiss } = useDismissedIntents();
   const { width: winW } = useWindowDimensions();
   const [intentIndex, setIntentIndex] = useState(0);
@@ -224,8 +224,9 @@ export default function HomeScreen() {
     if (!isPartTime) {
       fetchPnl();
       checkFixedExpense();
+      loadTodaySales();
     }
-  }, [refetch, refetchEmp, fetchPnl, checkFixedExpense, isPartTime]));
+  }, [refetch, refetchEmp, fetchPnl, checkFixedExpense, loadTodaySales, isPartTime]));
 
   const lowStockAll = ingredients.filter(i => i.current_stock <= i.min_stock);
   const monthLabel = today.toLocaleDateString('ko-KR', { year: 'numeric', month: 'long' });
@@ -293,7 +294,7 @@ export default function HomeScreen() {
         description: '오늘 매출 데이터가 아직 동기화되지 않았어요.',
         actionLabel: '지금 동기화',
         busy: autoSyncing,
-        onAction: async () => { await autoSyncOnForeground(); fetchPnl(); },
+        onAction: async () => { await autoSyncOnForeground(); await loadTodaySales(); fetchPnl(); },
       });
     }
     if (daysToClose <= MONTH_CLOSE_LEAD_DAYS) {

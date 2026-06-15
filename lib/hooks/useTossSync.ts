@@ -153,7 +153,11 @@ export function useTossSync(): UseTossSyncResult {
         .gte('order_at', from)
         .lte('order_at', to);
 
-      if ((count ?? 0) > 0) return;
+      if ((count ?? 0) > 0) {
+        // 이미 데이터가 있으면 매출 상태만 최신화하고 종료 (카드 노출 판정 정합)
+        await loadTodaySales();
+        return;
+      }
 
       const merchantId = await getMerchantId();
       const orders = await fetchTossOrders(merchantId, from, to);
@@ -189,8 +193,11 @@ export function useTossSync(): UseTossSyncResult {
   /** 최근 N일치 일괄 자동 동기화 (마감시간 기준, 30분 캐시) */
   const autoSyncRecent = useCallback(async (closingTime: string, days: number = 14): Promise<void> => {
     if (!store || autoSyncing) return;
-    // 30분 이내 동기화했으면 스킵
-    if (lastSyncAt && Date.now() - new Date(lastSyncAt).getTime() < 30 * 60 * 1000) return;
+    // 30분 이내 동기화했으면 재동기화는 스킵하되, 매출 상태는 최신화 (카드 노출 판정 정합)
+    if (lastSyncAt && Date.now() - new Date(lastSyncAt).getTime() < 30 * 60 * 1000) {
+      await loadTodaySales();
+      return;
+    }
     try {
       setAutoSyncing(true);
       const [h, m] = closingTime.split(':').map(Number);
