@@ -20,7 +20,7 @@ type ReviewItem = OcrLineItem & { _key: string };
 
 const UNITS = ['개', '병', '캔', '팩', '봉', '박스', 'kg', 'g', 'L', 'ml', '장', '묶음'];
 const CATEGORIES = ['식자재', '주류', '비품소모품', '기타'];
-const PURCHASE_TYPES: PurchaseType[] = ['전자세금계산서', '쿠팡', '네이버', '수기'];
+const PURCHASE_TYPES: PurchaseType[] = ['쿠팡', '네이버', '수기'];
 
 function formatDate(d: Date): string {
   const y = d.getFullYear();

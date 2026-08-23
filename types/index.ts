@@ -276,7 +276,7 @@ export interface Payroll {
 
 // 매입
 export type PurchaseCategory = '식자재' | '비품소모품' | '주류' | '기타';
-export type PurchaseType = '전자세금계산서' | '쿠팡' | '네이버' | '수기';
+export type PurchaseType = '쿠팡' | '네이버' | '수기';
 
 export interface Purchase {
   id: string;

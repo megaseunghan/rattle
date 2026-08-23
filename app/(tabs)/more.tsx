@@ -154,8 +154,7 @@ export default function MoreScreen() {
           <>
             <Text style={[styles.sectionLabel, { marginTop: 20 }]}>연동</Text>
             <View style={styles.card}>
-              <SettingRow icon="document-text-outline" label="전자세금계산서 연동" onPress={() => {}} />
-              <SettingRow icon="card-outline" label="TossPos 연동" withBorder onPress={() => router.push('/settings/pos-sync')} />
+              <SettingRow icon="card-outline" label="TossPos 연동" onPress={() => router.push('/settings/pos-sync')} />
             </View>
           </>
         )}

@@ -17,7 +17,7 @@ import { callOcrEdgeFunction } from '../../lib/services/ocr';
 import { Expense, ExpenseCategory } from '../../types';
 
 // ─── 공통 ──────────────────────────────────────────────────
-const PURCHASE_TABS = ['전체', '전자세금계산서', '수기'] as const;
+const PURCHASE_TABS = ['전체', '쿠팡', '네이버', '수기'] as const;
 type PurchaseTab = (typeof PURCHASE_TABS)[number];
 
 const EXPENSE_CATEGORIES: { key: ExpenseCategory; icon: keyof typeof Ionicons.glyphMap; color: string; bg: string }[] = [
