@@ -60,3 +60,6 @@ supabase/supabase/
 
 # Test data
 test_stock*.csv
+
+# omd 스킬 로컬 산출물
+.omd/
