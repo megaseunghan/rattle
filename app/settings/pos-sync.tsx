@@ -1,107 +1,55 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useFocusEffect } from 'expo-router';
 import {
-  View, Text, StyleSheet, TextInput, TouchableOpacity,
-  ScrollView, Alert, ActivityIndicator,
+  View, Text, StyleSheet, TouchableOpacity,
+  ScrollView, Alert, ActivityIndicator, Clipboard,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Colors } from '../../constants/colors';
 import { useAuth } from '../../lib/contexts/AuthContext';
-import { getStoreDetails, updateStoreInfo } from '../../lib/services/stores';
-import { submitTossPlaceApplication } from '../../lib/services/tossPlaceForm';
+import { getStoreDetails } from '../../lib/services/stores';
 
-type SyncStatus = 'unregistered' | 'pending' | 'connected';
+// Rattle 공용 서비스코드 (토스 개발자센터 등록값)
+const SERVICE_CODE = 'BVH3TUFV';
+// 대기중일 때 자동 재조회 간격
+const POLL_INTERVAL_MS = 5000;
+
+type SyncStatus = 'connected' | 'waiting';
 
 export default function PosSyncScreen() {
   const { store } = useAuth();
 
-  const [status, setStatus] = useState<SyncStatus>('unregistered');
-  const [storeName, setStoreName] = useState(store?.name ?? '');
-  const [businessNumber, setBusinessNumber] = useState('');
-  const [ownerPhone, setOwnerPhone] = useState('');
-  const [address, setAddress] = useState('');
+  const [status, setStatus] = useState<SyncStatus>('waiting');
   const [merchantId, setMerchantId] = useState('');
-  const [saving, setSaving] = useState(false);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const loadStoreInfo = useCallback(async () => {
+  const load = useCallback(async () => {
     if (!store) return;
     try {
       const data = await getStoreDetails(store.id);
-      setStoreName(data.name ?? '');
-      setBusinessNumber(data.business_number ?? '');
-      setOwnerPhone(data.owner_phone ?? '');
-      setAddress(data.address ?? '');
-
-      if (data.toss_merchant_id) {
-        setStatus('connected');
-      } else if (data.business_number) {
-        setStatus('pending');
-      } else {
-        setStatus('unregistered');
-      }
+      const connected = !!data.toss_merchant_id;
+      setStatus(connected ? 'connected' : 'waiting');
+      setMerchantId(data.toss_merchant_id ?? '');
     } catch {}
   }, [store]);
 
-  useFocusEffect(useCallback(() => { loadStoreInfo(); }, [loadStoreInfo]));
+  useFocusEffect(useCallback(() => { load(); }, [load]));
 
-  async function handleSaveMerchantId() {
-    if (!store) return;
-    const trimmed = merchantId.trim();
-    if (!trimmed) {
-      Alert.alert('입력 오류', '가맹점 ID를 입력해주세요.');
-      return;
+  // 연동 대기중에는 자동 폴링 → 웹훅으로 자동매칭되면 '연동완료' 자동 전환
+  useEffect(() => {
+    if (status === 'waiting') {
+      pollRef.current = setInterval(load, POLL_INTERVAL_MS);
     }
-    if (!/^[A-Za-z0-9_-]{4,64}$/.test(trimmed)) {
-      Alert.alert('입력 오류', '유효하지 않은 가맹점 ID입니다.');
-      return;
-    }
-    setSaving(true);
-    try {
-      await updateStoreInfo(store.id, { toss_merchant_id: trimmed });
-      setStatus('connected');
-    } catch (e: any) {
-      Alert.alert('저장 실패', e.message);
-    } finally {
-      setSaving(false);
-    }
-  }
+    return () => {
+      if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+    };
+  }, [status, load]);
 
-  async function handleApply() {
-    if (!store) return;
-    if (!businessNumber.trim() || !ownerPhone.trim() || !address.trim()) {
-      Alert.alert('입력 오류', '모든 항목을 입력해주세요.');
-      return;
-    }
-    if (!/^\d{3}-\d{2}-\d{5}$/.test(businessNumber.trim())) {
-      Alert.alert('입력 오류', '사업자번호 형식이 올바르지 않습니다 (예: 000-00-00000).');
-      return;
-    }
-    if (!/^01[016789]-\d{3,4}-\d{4}$/.test(ownerPhone.trim())) {
-      Alert.alert('입력 오류', '연락처 형식이 올바르지 않습니다 (예: 010-1234-5678).');
-      return;
-    }
-    setSaving(true);
-    try {
-      await updateStoreInfo(store.id, {
-        name: storeName.trim(),
-        business_number: businessNumber.trim(),
-        owner_phone: ownerPhone.trim(),
-        address: address.trim(),
-      });
-      await submitTossPlaceApplication({
-        name: storeName.trim(),
-        address: address.trim(),
-        businessNumber: businessNumber.trim(),
-        ownerPhone: ownerPhone.trim(),
-      });
-      setStatus('pending');
-    } catch (e: any) {
-      Alert.alert('저장 실패', e.message);
-    } finally {
-      setSaving(false);
-    }
+  function copyServiceCode() {
+    Clipboard.setString(SERVICE_CODE);
+    Alert.alert('복사됨', `서비스코드 ${SERVICE_CODE}를 복사했어요.`);
   }
 
   return (
@@ -116,134 +64,61 @@ export default function PosSyncScreen() {
 
       <ScrollView contentContainerStyle={styles.scroll}>
         {/* ── 상태 배지 ── */}
-        <View style={[
-          styles.statusBadge,
-          status === 'connected' ? styles.statusConnected
-            : status === 'pending' ? styles.statusPending
-            : styles.statusDisconnected,
-        ]}>
+        <View style={[styles.statusBadge, status === 'connected' ? styles.statusConnected : styles.statusPending]}>
           <Ionicons
-            name={status === 'connected' ? 'checkmark-circle' : status === 'pending' ? 'time-outline' : 'ellipse-outline'}
+            name={status === 'connected' ? 'checkmark-circle' : 'time-outline'}
             size={16}
-            color={status === 'connected' ? Colors.success : status === 'pending' ? Colors.warning : Colors.gray400}
+            color={status === 'connected' ? Colors.success : Colors.warning}
           />
-          <Text style={[
-            styles.statusText,
-            status === 'connected' ? styles.statusTextConnected
-              : status === 'pending' ? styles.statusTextPending
-              : styles.statusTextDisconnected,
-          ]}>
-            {status === 'connected' ? '연동완료' : status === 'pending' ? '심사중' : '미연동'}
+          <Text style={[styles.statusText, status === 'connected' ? styles.statusTextConnected : styles.statusTextPending]}>
+            {status === 'connected' ? '연동완료' : '연동 대기중'}
           </Text>
         </View>
 
-        {/* ── 연동완료: POS 탭 안내 ── */}
-        {status === 'connected' && (
+        {status === 'connected' ? (
+          /* ── 연동완료 ── */
           <View style={styles.connectedCard}>
             <Ionicons name="checkmark-circle" size={32} color={Colors.success} style={{ marginBottom: 12 }} />
             <Text style={styles.connectedTitle}>POS 연동이 완료되었습니다</Text>
             <Text style={styles.connectedDesc}>
+              가맹점 ID: {merchantId}{'\n'}
               매출 데이터는 POS 탭에서 확인할 수 있어요.
             </Text>
-            <TouchableOpacity
-              style={styles.goToPosBtn}
-              onPress={() => router.push('/(tabs)/pos')}
-            >
+            <TouchableOpacity style={styles.goToPosBtn} onPress={() => router.push('/(tabs)/pos')}>
               <Text style={styles.goToPosBtnText}>POS 탭으로 이동</Text>
               <Ionicons name="arrow-forward" size={16} color={Colors.white} />
             </TouchableOpacity>
           </View>
-        )}
-
-        {/* ── 심사중 안내 ── */}
-        {status === 'pending' && (
-          <View style={styles.pendingCard}>
-            <Ionicons name="time-outline" size={32} color={Colors.warning} style={{ alignSelf: 'center', marginBottom: 12 }} />
-            <Text style={styles.pendingTitle}>가맹점 신청 완료</Text>
-            <Text style={styles.pendingDesc}>
-              1~3일 이내 토스 측에서 제공동의 전화 안내 후 처리됩니다.{'\n'}
-              연동 완료 후 토스에서 가맹점 ID를 받으면 아래에 입력하세요.
-            </Text>
-            <TextInput
-              style={styles.merchantInput}
-              value={merchantId}
-              onChangeText={setMerchantId}
-              placeholder="가맹점 ID 입력"
-              placeholderTextColor={Colors.gray300}
-              autoCapitalize="none"
-            />
-            <TouchableOpacity
-              style={[styles.checkBtn, saving && { opacity: 0.5 }]}
-              onPress={handleSaveMerchantId}
-              disabled={saving}
-            >
-              {saving
-                ? <ActivityIndicator size="small" color={Colors.primary} />
-                : <Text style={styles.checkBtnText}>연동 완료</Text>
-              }
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {/* ── 미연동: 신청 폼 ── */}
-        {status === 'unregistered' && (
+        ) : (
           <>
-            <Text style={styles.sectionTitle}>가맹점 신청</Text>
+            {/* ── 1. 서비스코드 안내 ── */}
+            <Text style={styles.sectionTitle}>1. 포스에서 서비스코드 입력</Text>
             <View style={styles.card}>
-              <Text style={styles.fieldLabel}>가맹점명</Text>
-              <TextInput
-                style={styles.input}
-                value={storeName}
-                onChangeText={setStoreName}
-                placeholder="가맹점명"
-                placeholderTextColor={Colors.gray300}
-              />
-
-              <Text style={styles.fieldLabel}>대표자 연락처</Text>
-              <TextInput
-                style={styles.input}
-                value={ownerPhone}
-                onChangeText={setOwnerPhone}
-                placeholder="010-0000-0000"
-                placeholderTextColor={Colors.gray300}
-                keyboardType="phone-pad"
-              />
-
-              <Text style={styles.fieldLabel}>매장 주소</Text>
-              <TextInput
-                style={styles.input}
-                value={address}
-                onChangeText={setAddress}
-                placeholder="서울시 강남구 테헤란로 00"
-                placeholderTextColor={Colors.gray300}
-              />
-
-              <Text style={styles.fieldLabel}>사업자번호</Text>
-              <TextInput
-                style={styles.input}
-                value={businessNumber}
-                onChangeText={setBusinessNumber}
-                placeholder="000-00-00000"
-                placeholderTextColor={Colors.gray300}
-                keyboardType="numeric"
-              />
-
-              <TouchableOpacity
-                style={[styles.applyBtn, saving && styles.applyBtnDisabled]}
-                onPress={handleApply}
-                disabled={saving}
-              >
-                {saving
-                  ? <ActivityIndicator size="small" color={Colors.white} />
-                  : <Text style={styles.applyBtnText}>연동 신청하기</Text>
-                }
+              <Text style={styles.codeLabel}>Rattle 서비스코드</Text>
+              <TouchableOpacity style={styles.codeBox} onPress={copyServiceCode} activeOpacity={0.7}>
+                <Text style={styles.codeText}>{SERVICE_CODE}</Text>
+                <Ionicons name="copy-outline" size={18} color={Colors.primary} />
               </TouchableOpacity>
+              <View style={styles.steps}>
+                <Text style={styles.stepText}>① 토스 포스에서 <Text style={styles.stepBold}>설정 &gt; 서비스 연동</Text> 이동</Text>
+                <Text style={styles.stepText}>② 위 서비스코드 <Text style={styles.stepBold}>{SERVICE_CODE}</Text> 입력</Text>
+                <Text style={styles.stepText}>③ 연결하면 <Text style={styles.stepBold}>자동으로 연동완료</Text>됩니다</Text>
+              </View>
+            </View>
+
+            {/* ── 자동 연동 대기 안내 ── */}
+            <View style={styles.waitingCard}>
+              <ActivityIndicator size="small" color={Colors.warning} style={{ marginBottom: 10 }} />
+              <Text style={styles.waitingTitle}>연동을 기다리는 중이에요</Text>
+              <Text style={styles.waitingDesc}>
+                포스에서 서비스코드를 입력하면{'\n'}이 화면이 자동으로 연동완료로 바뀝니다.
+              </Text>
             </View>
 
             <View style={styles.notice}>
               <Ionicons name="information-circle-outline" size={16} color={Colors.gray400} />
               <Text style={styles.noticeText}>
-                신청 후 1~3일 이내 토스 측에서 제공동의 전화 안내가 진행됩니다.
+                사업자번호로 자동 연결되므로 별도 입력은 필요 없어요. 반영이 늦으면 이 화면을 다시 열어주세요.
               </Text>
             </View>
           </>
@@ -262,6 +137,7 @@ const styles = StyleSheet.create({
   backBtn: { width: 40, height: 40, justifyContent: 'center' },
   title: { fontSize: 17, fontWeight: '700', color: Colors.black },
   scroll: { padding: 20, paddingBottom: 48 },
+
   statusBadge: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
     alignSelf: 'flex-start', paddingHorizontal: 12, paddingVertical: 6,
@@ -269,13 +145,11 @@ const styles = StyleSheet.create({
   },
   statusConnected: { backgroundColor: Colors.success + '18' },
   statusPending: { backgroundColor: Colors.warning + '18' },
-  statusDisconnected: { backgroundColor: Colors.gray100 },
   statusText: { fontSize: 13, fontWeight: '600' },
   statusTextConnected: { color: Colors.success },
   statusTextPending: { color: Colors.warning },
-  statusTextDisconnected: { color: Colors.gray500 },
 
-  // 연동완료 카드
+  // 연동완료
   connectedCard: {
     backgroundColor: Colors.white, borderRadius: 14,
     padding: 24, borderWidth: 1, borderColor: Colors.gray100,
@@ -290,47 +164,35 @@ const styles = StyleSheet.create({
   },
   goToPosBtnText: { fontSize: 14, fontWeight: '700', color: Colors.white },
 
-  // 심사중
-  pendingCard: {
-    backgroundColor: Colors.white, borderRadius: 14,
-    padding: 24, borderWidth: 1, borderColor: Colors.gray100,
-    marginBottom: 24,
-  },
-  pendingTitle: { fontSize: 16, fontWeight: '700', color: Colors.black, marginBottom: 8, textAlign: 'center' },
-  pendingDesc: { fontSize: 14, color: Colors.gray500, textAlign: 'center', lineHeight: 22 },
-  merchantInput: {
-    marginTop: 16,
-    borderWidth: 1, borderColor: Colors.gray200, borderRadius: 10,
-    paddingHorizontal: 12, paddingVertical: 10, fontSize: 14,
-    color: Colors.black, backgroundColor: Colors.gray50,
-  },
-  checkBtn: {
-    marginTop: 10, alignItems: 'center',
-    paddingHorizontal: 20, paddingVertical: 10,
-    borderRadius: 10, borderWidth: 1, borderColor: Colors.primary,
-  },
-  checkBtnText: { fontSize: 14, fontWeight: '600', color: Colors.primary },
-
-  // 신청 폼
+  // 서비스코드
   sectionTitle: { fontSize: 15, fontWeight: '700', color: Colors.black, marginBottom: 10 },
   card: {
     backgroundColor: Colors.white, borderRadius: 14,
     padding: 16, borderWidth: 1, borderColor: Colors.gray100, marginBottom: 24,
   },
-  fieldLabel: { fontSize: 13, fontWeight: '600', color: Colors.gray600, marginBottom: 6, marginTop: 12 },
-  input: {
-    borderWidth: 1, borderColor: Colors.gray200, borderRadius: 10,
-    paddingHorizontal: 12, paddingVertical: 10, fontSize: 14,
-    color: Colors.black, backgroundColor: Colors.gray50,
+  codeLabel: { fontSize: 13, fontWeight: '600', color: Colors.gray600, marginBottom: 8 },
+  codeBox: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    backgroundColor: Colors.primary + '10', borderRadius: 10,
+    borderWidth: 1, borderColor: Colors.primary + '40',
+    paddingHorizontal: 16, paddingVertical: 14, marginBottom: 16,
   },
-  applyBtn: {
-    backgroundColor: Colors.primary, borderRadius: 10,
-    paddingVertical: 12, alignItems: 'center', marginTop: 20,
+  codeText: { fontSize: 22, fontWeight: '800', color: Colors.primary, letterSpacing: 2 },
+  steps: { gap: 8 },
+  stepText: { fontSize: 13, color: Colors.gray600, lineHeight: 20 },
+  stepBold: { fontWeight: '700', color: Colors.black },
+
+  // 자동 연동 대기
+  waitingCard: {
+    backgroundColor: Colors.white, borderRadius: 14,
+    padding: 24, borderWidth: 1, borderColor: Colors.gray100,
+    alignItems: 'center', marginBottom: 12,
   },
-  applyBtnDisabled: { opacity: 0.5 },
-  applyBtnText: { color: Colors.white, fontSize: 15, fontWeight: '700' },
+  waitingTitle: { fontSize: 15, fontWeight: '700', color: Colors.black, marginBottom: 6 },
+  waitingDesc: { fontSize: 13, color: Colors.gray500, textAlign: 'center', lineHeight: 20 },
+
   notice: {
-    flexDirection: 'row', gap: 8, padding: 14,
+    flexDirection: 'row', gap: 8, padding: 14, marginTop: 12,
     backgroundColor: Colors.gray100, borderRadius: 12,
   },
   noticeText: { flex: 1, fontSize: 13, color: Colors.gray500, lineHeight: 20 },
