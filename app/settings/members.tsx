@@ -10,6 +10,7 @@ import { Colors } from '../../constants/colors';
 import { useAuth } from '../../lib/contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
 import { StoreMember } from '../../types';
+import { getErrorMessage } from '../../lib/utils/error';
 
 export default function MembersScreen() {
   const { store } = useAuth();
@@ -28,7 +29,7 @@ export default function MembersScreen() {
       if (error) throw error;
       setMembers((data ?? []) as StoreMember[]);
     } catch (e: unknown) {
-      Alert.alert('오류', e instanceof Error ? e.message : '멤버 목록을 불러오지 못했습니다.');
+      Alert.alert('오류', getErrorMessage(e, '멤버 목록을 불러오지 못했습니다.'));
     } finally {
       setLoading(false);
     }
@@ -49,7 +50,7 @@ export default function MembersScreen() {
         `${member.applicant_name ?? member.user_email ?? '신청자'} 님이 직원으로 추가됐어요.\n인건비 탭에서 급여 정보를 입력해주세요.`,
       );
     } catch (e: unknown) {
-      Alert.alert('오류', e instanceof Error ? e.message : '승인에 실패했습니다.');
+      Alert.alert('오류', getErrorMessage(e, '승인에 실패했습니다.'));
     }
   }
 
@@ -68,7 +69,7 @@ export default function MembersScreen() {
             if (error) throw error;
             await loadMembers();
           } catch (e: unknown) {
-            Alert.alert('오류', e instanceof Error ? e.message : '거절에 실패했습니다.');
+            Alert.alert('오류', getErrorMessage(e, '거절에 실패했습니다.'));
           }
         },
       },
@@ -90,7 +91,7 @@ export default function MembersScreen() {
             if (error) throw error;
             await loadMembers();
           } catch (e: unknown) {
-            Alert.alert('오류', e instanceof Error ? e.message : '제거에 실패했습니다.');
+            Alert.alert('오류', getErrorMessage(e, '제거에 실패했습니다.'));
           }
         },
       },

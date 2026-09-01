@@ -9,6 +9,7 @@ import { router } from 'expo-router';
 import { Colors } from '../../constants/colors';
 import { useAuth } from '../../lib/contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
+import { getErrorMessage } from '../../lib/utils/error';
 
 export default function StoreInfoScreen() {
   const { store, refreshStore } = useAuth();
@@ -31,7 +32,7 @@ export default function StoreInfoScreen() {
       await refreshStore();
       Alert.alert('성공', '매장 정보가 저장되었습니다.');
     } catch (e: unknown) {
-      Alert.alert('저장 실패', e instanceof Error ? e.message : '오류가 발생했습니다.');
+      Alert.alert('저장 실패', getErrorMessage(e));
     } finally {
       setSaving(false);
     }

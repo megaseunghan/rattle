@@ -7,11 +7,17 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Colors } from '../../constants/colors';
+import { useAuth } from '../../lib/contexts/AuthContext';
 import { updateUserPassword } from '../../lib/services/profile';
+import { getErrorMessage } from '../../lib/utils/error';
 
 const MIN_PASSWORD_LENGTH = 6;
 
 export default function PasswordScreen() {
+  const { user } = useAuth();
+  const provider = (user?.app_metadata?.provider as string | undefined) ?? 'email';
+  const isEmailUser = provider === 'email';
+
   const [newPw, setNewPw] = useState('');
   const [confirmPw, setConfirmPw] = useState('');
   const [saving, setSaving] = useState(false);
@@ -33,7 +39,7 @@ export default function PasswordScreen() {
       Alert.alert('성공', '비밀번호가 변경되었습니다.');
       router.back();
     } catch (e: unknown) {
-      Alert.alert('변경 실패', e instanceof Error ? e.message : '오류가 발생했습니다.');
+      Alert.alert('변경 실패', getErrorMessage(e));
     } finally {
       setSaving(false);
     }
@@ -50,35 +56,46 @@ export default function PasswordScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll}>
-        <Text style={styles.label}>새 비밀번호</Text>
-        <TextInput
-          style={styles.input}
-          value={newPw}
-          onChangeText={setNewPw}
-          placeholder={`${MIN_PASSWORD_LENGTH}자 이상`}
-          placeholderTextColor={Colors.gray400}
-          secureTextEntry
-          autoCapitalize="none"
-        />
-        <Text style={styles.label}>새 비밀번호 확인</Text>
-        <TextInput
-          style={styles.input}
-          value={confirmPw}
-          onChangeText={setConfirmPw}
-          placeholder="새 비밀번호 재입력"
-          placeholderTextColor={Colors.gray400}
-          secureTextEntry
-          autoCapitalize="none"
-        />
-        <TouchableOpacity
-          style={[styles.saveBtn, saving && styles.disabled]}
-          onPress={handleChange}
-          disabled={saving}
-        >
-          {saving
-            ? <ActivityIndicator size="small" color={Colors.white} />
-            : <Text style={styles.saveBtnText}>비밀번호 변경</Text>}
-        </TouchableOpacity>
+        {isEmailUser ? (
+          <>
+            <Text style={styles.label}>새 비밀번호</Text>
+            <TextInput
+              style={styles.input}
+              value={newPw}
+              onChangeText={setNewPw}
+              placeholder={`${MIN_PASSWORD_LENGTH}자 이상`}
+              placeholderTextColor={Colors.gray400}
+              secureTextEntry
+              autoCapitalize="none"
+            />
+            <Text style={styles.label}>새 비밀번호 확인</Text>
+            <TextInput
+              style={styles.input}
+              value={confirmPw}
+              onChangeText={setConfirmPw}
+              placeholder="새 비밀번호 재입력"
+              placeholderTextColor={Colors.gray400}
+              secureTextEntry
+              autoCapitalize="none"
+            />
+            <TouchableOpacity
+              style={[styles.saveBtn, saving && styles.disabled]}
+              onPress={handleChange}
+              disabled={saving}
+            >
+              {saving
+                ? <ActivityIndicator size="small" color={Colors.white} />
+                : <Text style={styles.saveBtnText}>비밀번호 변경</Text>}
+            </TouchableOpacity>
+          </>
+        ) : (
+          <View style={styles.socialNotice}>
+            <Ionicons name="information-circle-outline" size={18} color={Colors.gray400} />
+            <Text style={styles.socialNoticeText}>
+              소셜 로그인 계정은 비밀번호가 없어 변경할 수 없어요.
+            </Text>
+          </View>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -104,4 +121,9 @@ const styles = StyleSheet.create({
   },
   saveBtnText: { color: Colors.white, fontSize: 15, fontWeight: '700' },
   disabled: { opacity: 0.6 },
+  socialNotice: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: Colors.gray100, borderRadius: 12, padding: 16,
+  },
+  socialNoticeText: { flex: 1, fontSize: 13, color: Colors.gray600, lineHeight: 19 },
 });

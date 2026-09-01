@@ -9,6 +9,7 @@ import { router } from 'expo-router';
 import { Colors } from '../../constants/colors';
 import { useAuth } from '../../lib/contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
+import { getErrorMessage } from '../../lib/utils/error';
 
 type Meridiem = '오전' | '오후';
 
@@ -69,7 +70,7 @@ export default function SalesSettingsScreen() {
       Alert.alert('저장 완료', '하루 매출 사이클이 변경되었어요.');
       router.back();
     } catch (e: unknown) {
-      Alert.alert('저장 실패', e instanceof Error ? e.message : '오류가 발생했습니다.');
+      Alert.alert('저장 실패', getErrorMessage(e));
     } finally {
       setSaving(false);
     }

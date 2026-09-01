@@ -2,10 +2,14 @@ import { SplashScreen, Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef } from 'react';
 import { AppState, Alert } from 'react-native';
+import * as Linking from 'expo-linking';
+import * as WebBrowser from 'expo-web-browser';
 import { AuthProvider, useAuth } from '../lib/contexts/AuthContext';
 import { useTossSync } from '../lib/hooks/useTossSync';
 import { Colors } from '../constants/colors';
 import { supabase } from '../lib/supabase';
+
+WebBrowser.maybeCompleteAuthSession();
 
 SplashScreen.preventAutoHideAsync();
 
@@ -48,10 +52,10 @@ function RootNavigator() {
     SplashScreen.hideAsync();
 
     const inAuth = segments[0] === '(auth)';
-    const onLoginFlow = segments.includes('login') || segments.includes('signup');
+    const onLoginFlow = segments.includes('login');
 
     if (!user) {
-      // 로그인/회원가입 화면이 아니면 로그인으로 (select-store에서 로그아웃 시 빈 화면 방지)
+      // 로그인 화면이 아니면 로그인으로 (select-store에서 로그아웃 시 빈 화면 방지)
       if (!onLoginFlow) router.replace('/(auth)/login');
     } else if (!store) {
       if (!segments.includes('select-store')) router.replace('/(auth)/select-store');
@@ -76,6 +80,17 @@ function RootNavigator() {
     });
     return () => subscription.remove();
   }, [autoSyncOnForeground, store, currentRole]);
+
+  // OAuth 콜백 딥링크 처리 (카카오 로그인)
+  useEffect(() => {
+    const handleUrl = async ({ url }: { url: string }) => {
+      if (!url.includes('code=')) return;
+      await supabase.auth.exchangeCodeForSession(url);
+    };
+
+    const subscription = Linking.addEventListener('url', handleUrl);
+    return () => subscription.remove();
+  }, []);
 
   return (
     <Stack

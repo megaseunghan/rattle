@@ -9,6 +9,7 @@ import { router } from 'expo-router';
 import { Colors } from '../../constants/colors';
 import { useAuth } from '../../lib/contexts/AuthContext';
 import { updateUserProfile } from '../../lib/services/profile';
+import { getErrorMessage } from '../../lib/utils/error';
 
 export default function AccountScreen() {
   const { user } = useAuth();
@@ -33,7 +34,7 @@ export default function AccountScreen() {
       await updateUserProfile({ name: fullName.trim(), phone: phone.trim() || null });
       Alert.alert('성공', '내 정보가 저장되었습니다.');
     } catch (e: unknown) {
-      Alert.alert('저장 실패', e instanceof Error ? e.message : '오류가 발생했습니다.');
+      Alert.alert('저장 실패', getErrorMessage(e));
     } finally {
       setSaving(false);
     }

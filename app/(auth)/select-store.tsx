@@ -16,6 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../lib/contexts/AuthContext';
 import { Colors } from '../../constants/colors';
+import { getErrorMessage } from '../../lib/utils/error';
 
 export default function SelectStoreScreen() {
   const [storeName, setStoreName] = useState('');
@@ -63,7 +64,7 @@ export default function SelectStoreScreen() {
       await switchStore(data.id);
       router.replace('/(tabs)');
     } catch (error: unknown) {
-      Alert.alert('오류', error instanceof Error ? error.message : '오류가 발생했습니다.');
+      Alert.alert('오류', getErrorMessage(error));
     } finally {
       setLoading(false);
     }

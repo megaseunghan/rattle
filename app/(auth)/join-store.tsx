@@ -8,6 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../lib/contexts/AuthContext';
 import { Colors } from '../../constants/colors';
+import { getErrorMessage } from '../../lib/utils/error';
 
 export default function JoinStoreScreen() {
   const [businessNumber, setBusinessNumber] = useState('');
@@ -77,7 +78,7 @@ export default function JoinStoreScreen() {
         [{ text: '확인', onPress: () => router.back() }],
       );
     } catch (e: unknown) {
-      Alert.alert('오류', e instanceof Error ? e.message : '오류가 발생했습니다.');
+      Alert.alert('오류', getErrorMessage(e));
     } finally {
       setLoading(false);
     }
