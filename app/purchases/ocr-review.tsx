@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TextInput,
   TouchableOpacity, Image, Alert, ActivityIndicator, Modal, Platform,
-  useWindowDimensions,
+  useWindowDimensions, KeyboardAvoidingView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -15,6 +15,7 @@ import { useIngredients } from '../../lib/hooks/useIngredients';
 import { parseOcrItems } from '../../lib/services/ocr';
 import { convertQuantity } from '../../lib/utils/unit';
 import { OcrLineItem, PurchaseType } from '../../types';
+import { useConfirmLeave } from '../../lib/hooks/useConfirmLeave';
 
 type ReviewItem = OcrLineItem & { _key: string };
 
@@ -31,6 +32,7 @@ function formatDate(d: Date): string {
 
 export default function PurchaseOcrReviewScreen() {
   const { imageUri, ocrText } = useLocalSearchParams<{ imageUri: string; ocrText: string }>();
+  const bypassLeaveGuard = useConfirmLeave(true, { message: '지금 나가면 검토 중인 매입 내역이 저장되지 않아요.' });
   const { store } = useAuth();
   const { width: winW, height: winH } = useWindowDimensions();
   const [date, setDate] = useState(new Date());
@@ -175,6 +177,7 @@ export default function PurchaseOcrReviewScreen() {
           };
         }),
       });
+      bypassLeaveGuard();
       router.replace('/(tabs)/purchases');
     } catch (e: any) {
       Alert.alert('오류', e.message);
@@ -190,7 +193,7 @@ export default function PurchaseOcrReviewScreen() {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={24} color={Colors.black} />
+          <Ionicons name="chevron-back" size={24} color={Colors.black} />
         </TouchableOpacity>
         <Text style={styles.title}>매입서 검토</Text>
         <View style={{ width: 24 }} />
@@ -327,7 +330,8 @@ export default function PurchaseOcrReviewScreen() {
 
       {/* 신규 재고 등록 모달 */}
       <Modal visible={quickAddTarget !== null} animationType="slide" transparent>
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={closeQuickAdd}>
+        <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <TouchableOpacity style={styles.modalOverlayTouch} activeOpacity={1} onPress={closeQuickAdd}>
           <TouchableOpacity activeOpacity={1} style={styles.modalSheet}>
             <View style={styles.modalHeader}>
               <TouchableOpacity onPress={closeQuickAdd} hitSlop={8}>
@@ -379,6 +383,7 @@ export default function PurchaseOcrReviewScreen() {
             </ScrollView>
           </TouchableOpacity>
         </TouchableOpacity>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* 멀티모달: 원본 이미지 확대 (핀치 줌) */}
@@ -439,13 +444,13 @@ function OcrItemRow({
           />
         ) : (
           <TouchableOpacity onPress={onEdit} style={styles.itemNameTouchable}>
-            <Text style={styles.itemName}>{item.name || '(품목명 없음)'}</Text>
+            <Text style={styles.itemName} numberOfLines={2} ellipsizeMode="tail">{item.name || '(품목명 없음)'}</Text>
           </TouchableOpacity>
         )}
 
         {item.matched_ingredient ? (
           <View style={styles.matchBadge}>
-            <Text style={styles.matchBadgeText}>✓ {item.matched_ingredient.name}</Text>
+            <Text style={styles.matchBadgeText} numberOfLines={1} ellipsizeMode="tail">✓ {item.matched_ingredient.name}</Text>
           </View>
         ) : item.match_candidates.length > 0 ? (
           <TouchableOpacity
@@ -567,15 +572,15 @@ const styles = StyleSheet.create({
   },
   itemRowLow: { borderColor: Colors.warning + '80', backgroundColor: Colors.warning + '08' },
   itemNameRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
-  itemNameTouchable: { flex: 1 },
+  itemNameTouchable: { flex: 1, minWidth: 0 },
   itemName: { fontSize: 15, fontWeight: '600', color: Colors.black },
   itemInput: {
     flex: 1, fontSize: 15, fontWeight: '600', color: Colors.black,
     borderBottomWidth: 1, borderBottomColor: Colors.primary, paddingVertical: 2,
   },
-  matchBadge: { backgroundColor: Colors.success + '20', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
+  matchBadge: { backgroundColor: Colors.success + '20', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, flexShrink: 1, maxWidth: '55%' },
   matchBadgeText: { fontSize: 11, fontWeight: '700', color: Colors.success },
-  candidateBadge: { backgroundColor: Colors.warning + '20', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
+  candidateBadge: { backgroundColor: Colors.warning + '20', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, flexShrink: 1 },
   candidateBadgeText: { fontSize: 11, fontWeight: '700', color: Colors.warning },
   newBadge: { backgroundColor: Colors.primary + '15', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
   newBadgeText: { fontSize: 11, fontWeight: '700', color: Colors.primary },
@@ -586,7 +591,7 @@ const styles = StyleSheet.create({
     width: 64, fontSize: 14, fontWeight: '600', color: Colors.black,
     borderBottomWidth: 1, borderBottomColor: Colors.gray200, textAlign: 'center', paddingVertical: 4,
   },
-  unitChips: { flex: 1 },
+  unitChips: { flex: 1, minWidth: 0 },
   unitChip: {
     paddingHorizontal: 10, paddingVertical: 5, borderRadius: 16,
     borderWidth: 1, borderColor: Colors.gray200, marginRight: 6, backgroundColor: Colors.white,
@@ -610,6 +615,7 @@ const styles = StyleSheet.create({
   submitButtonDisabled: { opacity: 0.6 },
   submitText: { color: Colors.white, fontSize: 16, fontWeight: '700' },
   modalOverlay: { flex: 1, backgroundColor: Colors.overlay, justifyContent: 'flex-end' },
+  modalOverlayTouch: { flex: 1, justifyContent: 'flex-end' },
   modalSheet: { backgroundColor: Colors.white, borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '75%' },
   modalHeader: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',

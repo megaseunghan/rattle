@@ -1,11 +1,16 @@
 import { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import {
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator,
+  Modal, TextInput, Alert, KeyboardAvoidingView, Platform,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Colors } from '../../constants/colors';
-import { getPurchaseById, getPurchaseItems } from '../../lib/services/purchases';
+import { getPurchaseById, getPurchaseItems, updatePurchaseItem } from '../../lib/services/purchases';
 import { Purchase, PurchaseItem } from '../../types';
+import { getErrorMessage } from '../../lib/utils/error';
+import { animateListChange } from '../../lib/utils/layoutAnimation';
 
 export default function PurchaseDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -14,28 +19,59 @@ export default function PurchaseDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const [editTarget, setEditTarget] = useState<PurchaseItem | null>(null);
+  const [editQuantity, setEditQuantity] = useState('');
+  const [editUnitPrice, setEditUnitPrice] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  async function load() {
     if (!id) return;
-    (async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const [p, its] = await Promise.all([getPurchaseById(id), getPurchaseItems(id)]);
-        setPurchase(p);
-        setItems(its);
-      } catch (e: any) {
-        setError(e.message);
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, [id]);
+    setLoading(true);
+    setError(null);
+    try {
+      const [p, its] = await Promise.all([getPurchaseById(id), getPurchaseItems(id)]);
+      setPurchase(p);
+      setItems(its);
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { load(); }, [id]);
+
+  function openEdit(item: PurchaseItem) {
+    setEditTarget(item);
+    setEditQuantity(String(item.quantity));
+    setEditUnitPrice(String(item.unit_price));
+  }
+
+  async function handleSaveEdit() {
+    if (!editTarget) return;
+    const qty = Number(editQuantity.replace(/,/g, ''));
+    const price = Number(editUnitPrice.replace(/,/g, ''));
+    if (!qty || qty <= 0) { Alert.alert('입력 오류', '수량을 올바르게 입력해주세요.'); return; }
+    if (!price || price <= 0) { Alert.alert('입력 오류', '단가를 올바르게 입력해주세요.'); return; }
+
+    setSaving(true);
+    try {
+      await updatePurchaseItem(editTarget.id, qty, price);
+      animateListChange();
+      setEditTarget(null);
+      await load();
+    } catch (e: unknown) {
+      Alert.alert('저장 실패', getErrorMessage(e));
+    } finally {
+      setSaving(false);
+    }
+  }
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={24} color={Colors.black} />
+          <Ionicons name="chevron-back" size={24} color={Colors.black} />
         </TouchableOpacity>
         <Text style={styles.title}>매입 상세</Text>
         <View style={{ width: 24 }} />
@@ -69,7 +105,12 @@ export default function PurchaseDetailScreen() {
           ) : (
             <View style={styles.listCard}>
               {items.map((it, i) => (
-                <View key={it.id} style={[styles.itemRow, i < items.length - 1 && styles.rowBorder]}>
+                <TouchableOpacity
+                  key={it.id}
+                  style={[styles.itemRow, i < items.length - 1 && styles.rowBorder]}
+                  onPress={() => openEdit(it)}
+                  activeOpacity={0.7}
+                >
                   <View style={{ flex: 1 }}>
                     <Text style={styles.itemName}>{it.name}</Text>
                     <Text style={styles.itemSub}>
@@ -78,12 +119,56 @@ export default function PurchaseDetailScreen() {
                     </Text>
                   </View>
                   <Text style={styles.itemSubtotal}>{it.subtotal.toLocaleString()}원</Text>
-                </View>
+                  <Ionicons name="chevron-forward" size={16} color={Colors.gray300} />
+                </TouchableOpacity>
               ))}
             </View>
           )}
         </ScrollView>
       ) : null}
+
+      <Modal visible={editTarget != null} animationType="slide" transparent onRequestClose={() => setEditTarget(null)}>
+        <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <View style={styles.modalSheet}>
+            <View style={styles.modalHandle} />
+            <View style={styles.sheetHeader}>
+              <TouchableOpacity onPress={() => setEditTarget(null)} hitSlop={8}>
+                <Text style={styles.sheetCancelText}>취소</Text>
+              </TouchableOpacity>
+              <Text style={styles.sheetHeaderTitle}>{editTarget?.name}</Text>
+              <TouchableOpacity onPress={handleSaveEdit} disabled={saving} hitSlop={8}>
+                {saving
+                  ? <ActivityIndicator size="small" color={Colors.primary} />
+                  : <Text style={styles.sheetSaveText}>저장</Text>}
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.fieldLabel}>수량 ({editTarget?.unit})</Text>
+            <TextInput
+              style={styles.input}
+              value={editQuantity}
+              onChangeText={setEditQuantity}
+              keyboardType="numeric"
+              placeholder="0"
+              placeholderTextColor={Colors.gray300}
+            />
+
+            <Text style={styles.fieldLabel}>단가 (원/{editTarget?.unit})</Text>
+            <TextInput
+              style={styles.input}
+              value={editUnitPrice}
+              onChangeText={setEditUnitPrice}
+              keyboardType="numeric"
+              placeholder="0"
+              placeholderTextColor={Colors.gray300}
+            />
+
+            <Text style={styles.editSubtotal}>
+              합계 {((Number(editQuantity.replace(/,/g, '')) || 0) * (Number(editUnitPrice.replace(/,/g, '')) || 0)).toLocaleString()}원
+            </Text>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -133,4 +218,18 @@ const styles = StyleSheet.create({
   itemName: { fontSize: 14, fontWeight: '500', color: Colors.black },
   itemSub: { fontSize: 12, color: Colors.gray400, marginTop: 2 },
   itemSubtotal: { fontSize: 14, fontWeight: '600', color: Colors.black },
+
+  modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.3)' },
+  modalSheet: { backgroundColor: Colors.white, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24 },
+  modalHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: Colors.gray200, alignSelf: 'center', marginBottom: 20 },
+  sheetHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, paddingBottom: 12, borderBottomWidth: 0.5, borderBottomColor: Colors.gray100 },
+  sheetHeaderTitle: { fontSize: 16, fontWeight: '700', color: Colors.black },
+  sheetCancelText: { fontSize: 15, fontWeight: '500', color: Colors.gray500 },
+  sheetSaveText: { fontSize: 15, fontWeight: '700', color: Colors.primary },
+  fieldLabel: { fontSize: 13, fontWeight: '600', color: Colors.gray600, marginBottom: 6, marginTop: 14 },
+  input: {
+    backgroundColor: Colors.gray50, borderWidth: 1, borderColor: Colors.gray200,
+    borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: Colors.black,
+  },
+  editSubtotal: { fontSize: 14, fontWeight: '600', color: Colors.gray600, marginTop: 20, textAlign: 'right' },
 });

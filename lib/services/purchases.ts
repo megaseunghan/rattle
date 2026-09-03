@@ -39,6 +39,31 @@ export async function getPurchaseItems(purchaseId: string): Promise<PurchaseItem
   return (data ?? []) as PurchaseItem[];
 }
 
+/** 여러 매입 건의 품목을 한 번에 조회 (손익 카테고리별 집계용) */
+export async function getPurchaseItemsForPurchases(purchaseIds: string[]): Promise<PurchaseItem[]> {
+  if (purchaseIds.length === 0) return [];
+  const { data, error } = await supabase
+    .from('purchase_items')
+    .select('*')
+    .in('purchase_id', purchaseIds);
+  if (error) throw new Error(error.message);
+  return (data ?? []) as PurchaseItem[];
+}
+
+/** 매입 품목 수량/단가 수정 — 재고 델타 반영 + last_price 갱신 + 매입 합계 재계산 (원자적, RPC) */
+export async function updatePurchaseItem(
+  itemId: string,
+  quantity: number,
+  unitPrice: number,
+): Promise<void> {
+  const { error } = await supabase.rpc('update_purchase_item', {
+    p_item_id: itemId,
+    p_quantity: quantity,
+    p_unit_price: unitPrice,
+  });
+  if (error) throw new Error(error.message);
+}
+
 export async function getPurchasesByMonth(
   storeId: string,
   yearMonth: string, // 'YYYY-MM'

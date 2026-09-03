@@ -20,13 +20,14 @@ import { Colors } from '../../constants/colors';
 import { useAuth } from '../../lib/contexts/AuthContext';
 import { usePurchases } from '../../lib/hooks/usePurchases';
 import { useIngredients } from '../../lib/hooks/useIngredients';
-import { Ingredient, PurchaseCategory, PurchaseType } from '../../types';
+import { Ingredient, PurchaseType } from '../../types';
 import { convertQuantity, recipeUnitOptions } from '../../lib/utils/unit';
+import { usePurchaseCategories } from '../../lib/hooks/usePurchaseCategories';
+import { useCategories } from '../../lib/hooks/useCategories';
+import { CategoryManageModal } from '../../lib/components/CategoryManageModal';
+import { useConfirmLeave } from '../../lib/hooks/useConfirmLeave';
 
-const CATEGORIES = ['식자재', '주류', '비품소모품', '기타'];
-const FILTER_CATEGORIES = ['전체', ...CATEGORIES];
 const COMMON_UNITS = ['g', 'kg', 'ml', 'L', '개', '병', '봉', '박스'];
-const PURCHASE_CATEGORIES: PurchaseCategory[] = ['식자재', '비품소모품', '주류', '기타'];
 const PURCHASE_TYPES: PurchaseType[] = ['쿠팡', '네이버', '수기'];
 
 type Mode = '품목별' | '금액만';
@@ -59,8 +60,37 @@ export default function NewPurchaseScreen() {
   const params = useLocalSearchParams<{ date?: string }>();
   // 이번 달 매입 훅 (등록 후 refetch 위해 화면 진입 달 기준)
   const yearMonth = formatDate(parseInitialDate(params.date)).slice(0, 7);
-  const { purchases, add, addWithItems } = usePurchases(yearMonth);
-  const { data: ingredients, create: createIngredient } = useIngredients();
+  const { purchases, add, addWithItems, refetch: refetchPurchases } = usePurchases(yearMonth);
+  const { data: ingredients, create: createIngredient, refetch: refetchIngredients } = useIngredients();
+  const purchaseCategoriesBase = usePurchaseCategories();
+  const [categoryModalVisible, setCategoryModalVisible] = useState(false);
+  // 카테고리 이름변경/삭제는 서버의 purchases.category도 바꾸므로, 캐시된 매입 목록을 즉시 재조회한다
+  const purchaseCategories = {
+    ...purchaseCategoriesBase,
+    rename: async (oldName: string, newName: string) => {
+      await purchaseCategoriesBase.rename(oldName, newName);
+      await refetchPurchases();
+    },
+    remove: async (name: string) => {
+      await purchaseCategoriesBase.remove(name);
+      await refetchPurchases();
+    },
+  };
+  const ingredientCategoriesBase = useCategories();
+  const [ingredientCategoryModalVisible, setIngredientCategoryModalVisible] = useState(false);
+  // 카테고리 이름변경/삭제는 서버의 ingredients.category도 바꾸므로, 캐시된 재료 목록을 즉시 재조회한다
+  const ingredientCategories = {
+    ...ingredientCategoriesBase,
+    rename: async (oldName: string, newName: string) => {
+      await ingredientCategoriesBase.rename(oldName, newName);
+      await refetchIngredients();
+    },
+    remove: async (name: string) => {
+      await ingredientCategoriesBase.remove(name);
+      await refetchIngredients();
+    },
+  };
+  const filterCategories = ['전체', ...ingredientCategories.categories];
 
   const [mode, setMode] = useState<Mode>('품목별');
   const [supplier, setSupplier] = useState('');
@@ -77,9 +107,13 @@ export default function NewPurchaseScreen() {
   const [activeCategory, setActiveCategory] = useState('전체');
   const [selectedIngredients, setSelectedIngredients] = useState<Set<string>>(new Set());
 
-  // 금액만 모드
-  const [amount, setAmount] = useState('');
-  const [amountCategory, setAmountCategory] = useState<PurchaseCategory>('식자재');
+  // 금액만 모드 — 카테고리별로 각각 등록하지 않고 하나의 카드에서 일괄 입력
+  const [amountByCategory, setAmountByCategory] = useState<Record<string, string>>({});
+
+  const isDirty = supplier.trim().length > 0
+    || items.length > 0
+    || Object.values(amountByCategory).some(v => v.trim().length > 0);
+  const bypassLeaveGuard = useConfirmLeave(isDirty, { message: '지금 나가면 입력한 매입 내용이 저장되지 않아요.' });
 
   // 새 식자재 빠른 등록
   const [showQuickAdd, setShowQuickAdd] = useState(false);
@@ -204,21 +238,25 @@ export default function NewPurchaseScreen() {
           }),
         });
       } else {
-        const amt = Number(amount.replace(/,/g, ''));
-        if (!amt || amt <= 0) {
-          Alert.alert('입력 오류', '금액을 올바르게 입력해주세요.');
+        const entries = purchaseCategories.categories
+          .map(cat => ({ cat, amt: Number((amountByCategory[cat] ?? '').replace(/,/g, '')) }))
+          .filter(e => e.amt > 0);
+        if (entries.length === 0) {
+          Alert.alert('입력 오류', '금액을 1개 이상 입력해주세요.');
           setSubmitting(false);
           return;
         }
-        await add({
+        // 카테고리별로 별도 매입 행이 생기지만, 화면에서는 한 카드에서 한 번에 일괄 등록
+        await Promise.all(entries.map(({ cat, amt }) => add({
           date: formatDate(date),
           supplier: supplier.trim(),
           amount: amt,
-          category: amountCategory,
+          category: cat,
           type: purchaseType,
           note: null,
-        });
+        })));
       }
+      bypassLeaveGuard();
       router.back();
     } catch (e: any) {
       Alert.alert('오류', e.message ?? '매입 등록에 실패했습니다.');
@@ -233,18 +271,20 @@ export default function NewPurchaseScreen() {
     return matchSearch && matchCategory;
   });
 
+  const amountTotal = purchaseCategories.categories.reduce((s, cat) => s + (Number((amountByCategory[cat] ?? '').replace(/,/g, '')) || 0), 0);
+
   const totalAmount =
     mode === '품목별'
       ? items.reduce((s, i) => s + (parseFloat(i.quantity) || 0) * (parseFloat(i.unit_price) || 0), 0)
-      : Number(amount.replace(/,/g, '')) || 0;
+      : amountTotal;
 
-  const canSubmit = mode === '품목별' ? items.length > 0 : (Number(amount.replace(/,/g, '')) || 0) > 0;
+  const canSubmit = mode === '품목별' ? items.length > 0 : amountTotal > 0;
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()}>
-          <Text style={styles.back}>← 뒤로</Text>
+          <Ionicons name="chevron-back" size={24} color={Colors.black} />
         </TouchableOpacity>
         <Text style={styles.title}>매입 등록</Text>
         <View style={styles.headerSpacer} />
@@ -320,25 +360,27 @@ export default function NewPurchaseScreen() {
 
           {mode === '금액만' ? (
             <>
-              <Text style={styles.label}>금액</Text>
-              <TextInput
-                style={styles.input}
-                value={amount}
-                onChangeText={setAmount}
-                placeholder="0"
-                placeholderTextColor={Colors.gray400}
-                keyboardType="numeric"
-              />
-              <Text style={styles.label}>카테고리</Text>
-              <View style={styles.chipRow}>
-                {PURCHASE_CATEGORIES.map(cat => (
-                  <TouchableOpacity
-                    key={cat}
-                    style={[styles.chip, amountCategory === cat && styles.chipActive]}
-                    onPress={() => setAmountCategory(cat)}
-                  >
-                    <Text style={[styles.chipText, amountCategory === cat && styles.chipTextActive]}>{cat}</Text>
-                  </TouchableOpacity>
+              <View style={styles.amountLabelRow}>
+                <Text style={styles.label}>카테고리별 금액</Text>
+                <TouchableOpacity onPress={() => setCategoryModalVisible(true)} hitSlop={8}>
+                  <Ionicons name="pricetags-outline" size={18} color={Colors.gray500} />
+                </TouchableOpacity>
+              </View>
+              <Text style={styles.modeHint}>여러 카테고리에 지출했다면 각각 입력 후 한 번에 등록하세요</Text>
+              <View style={styles.amountCard}>
+                {purchaseCategories.categories.map((cat, i) => (
+                  <View key={cat} style={[styles.amountRow, i > 0 && styles.amountRowBorder]}>
+                    <Text style={styles.amountRowLabel}>{cat}</Text>
+                    <TextInput
+                      style={styles.amountRowInput}
+                      value={amountByCategory[cat] ?? ''}
+                      onChangeText={v => setAmountByCategory(prev => ({ ...prev, [cat]: v }))}
+                      placeholder="0"
+                      placeholderTextColor={Colors.gray400}
+                      keyboardType="numeric"
+                    />
+                    <Text style={styles.amountRowWon}>원</Text>
+                  </View>
                 ))}
               </View>
             </>
@@ -498,7 +540,7 @@ export default function NewPurchaseScreen() {
 
                 <Text style={styles.quickLabel}>카테고리</Text>
                 <View style={styles.chipRow}>
-                  {CATEGORIES.map(c => (
+                  {ingredientCategories.categories.map(c => (
                     <TouchableOpacity
                       key={c}
                       style={[styles.chip, quickCategory === c && styles.chipActive]}
@@ -541,7 +583,7 @@ export default function NewPurchaseScreen() {
                   contentContainerStyle={styles.filterTabsContent}
                   style={styles.filterTabsContainer}
                 >
-                  {FILTER_CATEGORIES.map(cat => (
+                  {filterCategories.map(cat => (
                     <TouchableOpacity
                       key={cat}
                       style={[styles.filterTab, activeCategory === cat && styles.filterTabActive]}
@@ -552,6 +594,13 @@ export default function NewPurchaseScreen() {
                       </Text>
                     </TouchableOpacity>
                   ))}
+                  <TouchableOpacity
+                    style={styles.filterTabManageBtn}
+                    onPress={() => setIngredientCategoryModalVisible(true)}
+                    hitSlop={8}
+                  >
+                    <Ionicons name="add" size={16} color={Colors.gray600} />
+                  </TouchableOpacity>
                 </ScrollView>
 
                 {filteredIngredients.length === 0 ? (
@@ -601,6 +650,30 @@ export default function NewPurchaseScreen() {
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
+
+      <CategoryManageModal
+        visible={categoryModalVisible}
+        onClose={() => setCategoryModalVisible(false)}
+        title="매입 카테고리 관리"
+        removeConfirmHint="해당 카테고리의 기존 매입 내역은 '기타'로 이동해요."
+        categories={purchaseCategories.categories}
+        loading={purchaseCategories.loading}
+        add={purchaseCategories.add}
+        rename={purchaseCategories.rename}
+        remove={purchaseCategories.remove}
+      />
+
+      <CategoryManageModal
+        visible={ingredientCategoryModalVisible}
+        onClose={() => setIngredientCategoryModalVisible(false)}
+        title="재고 카테고리 관리"
+        removeConfirmHint="해당 카테고리의 재료는 '기타'로 이동해요."
+        categories={ingredientCategories.categories}
+        loading={ingredientCategories.loading}
+        add={ingredientCategories.add}
+        rename={ingredientCategories.rename}
+        remove={ingredientCategories.remove}
+      />
     </SafeAreaView>
   );
 }
@@ -617,7 +690,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: Colors.gray100,
   },
-  back: { fontSize: 15, color: Colors.primary, fontWeight: '600' },
   title: { fontSize: 17, fontWeight: '700', color: Colors.black },
   headerSpacer: { width: 48 },
   content: { padding: 20, paddingBottom: 32 },
@@ -737,6 +809,17 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
 
+  amountLabelRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  amountCard: {
+    backgroundColor: Colors.white, borderRadius: 14, borderWidth: 0.5, borderColor: Colors.gray200,
+    overflow: 'hidden',
+  },
+  amountRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 12, gap: 10 },
+  amountRowBorder: { borderTopWidth: 0.5, borderTopColor: Colors.gray100 },
+  amountRowLabel: { fontSize: 14, color: Colors.gray600, width: 76 },
+  amountRowInput: { flex: 1, fontSize: 15, color: Colors.black, textAlign: 'right', paddingVertical: 4 },
+  amountRowWon: { fontSize: 13, color: Colors.gray400 },
+
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: {
     paddingHorizontal: 14,
@@ -787,6 +870,11 @@ const styles = StyleSheet.create({
   filterTabActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
   filterTabText: { fontSize: 13, color: Colors.gray600, fontWeight: '600' },
   filterTabTextActive: { color: Colors.white },
+  filterTabManageBtn: {
+    width: 28, height: 28, borderRadius: 14, alignSelf: 'center',
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: Colors.gray100, borderWidth: 0.5, borderColor: Colors.gray200,
+  },
   pickerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',

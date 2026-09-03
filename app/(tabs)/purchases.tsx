@@ -1,31 +1,24 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  Modal, TextInput, Alert, KeyboardAvoidingView, Platform,
-  ActivityIndicator,
+  Alert, ActivityIndicator, RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { router, useFocusEffect } from 'expo-router';
+import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { Colors } from '../../constants/colors';
-import { useAuth } from '../../lib/contexts/AuthContext';
+import { CardStyle } from '../../constants/designTokens';
 import { usePurchases } from '../../lib/hooks/usePurchases';
 import { useExpenses } from '../../lib/hooks/useExpenses';
 import { callOcrEdgeFunction } from '../../lib/services/ocr';
-import { Expense, ExpenseCategory } from '../../types';
+import { animateListChange } from '../../lib/utils/layoutAnimation';
+import { ExpensesPanel } from '../../lib/components/ExpensesPanel';
 
 // ─── 공통 ──────────────────────────────────────────────────
 const PURCHASE_TABS = ['전체', '쿠팡', '네이버', '수기'] as const;
 type PurchaseTab = (typeof PURCHASE_TABS)[number];
-
-const EXPENSE_CATEGORIES: { key: ExpenseCategory; icon: keyof typeof Ionicons.glyphMap; color: string; bg: string }[] = [
-  { key: '마케팅',  icon: 'megaphone-outline', color: '#7C3AED', bg: '#F3EEFF' },
-  { key: '고정비',  icon: 'receipt-outline',   color: '#0891B2', bg: '#E0F7FA' },
-  { key: '시설보수', icon: 'build-outline',     color: '#D97706', bg: '#FEF3C7' },
-  { key: '공과금',  icon: 'flash-outline',     color: '#059669', bg: '#D1FAE5' },
-];
 
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
 
@@ -61,7 +54,7 @@ function MonthNav({ year, month, onPrev, onNext }: { year: number; month: number
 }
 
 // ─── 매입 뷰 ───────────────────────────────────────────────
-function PurchasesView() {
+function PurchasesView({ active }: { active: boolean }) {
   const today = new Date();
   const [year, setYear] = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth());
@@ -72,7 +65,13 @@ function PurchasesView() {
   const yearMonth = toYearMonth(year, month);
   const { purchases, loading, refetch, remove } = usePurchases(yearMonth);
 
-  useFocusEffect(useCallback(() => { refetch(); }, [refetch]));
+  useEffect(() => { if (active) refetch(); }, [active, refetch]);
+
+  const [refreshing, setRefreshing] = useState(false);
+  async function onRefresh() {
+    setRefreshing(true);
+    try { await refetch(); } finally { setRefreshing(false); }
+  }
 
   const days = getCalendarDays(year, month);
   const filtered = purchases.filter(p => activeTab === '전체' || p.type === activeTab);
@@ -86,6 +85,13 @@ function PurchasesView() {
   const selectedPurchases = selectedKey ? (purchaseByDay.get(selectedKey) ?? []) : [];
   const monthTotal = filtered.reduce((s, p) => s + p.amount, 0);
   const isToday = (day: number) => year === today.getFullYear() && month === today.getMonth() && day === today.getDate();
+
+  function confirmDeletePurchase(id: string) {
+    Alert.alert('삭제', '이 매입 내역을 삭제할까요?', [
+      { text: '취소', style: 'cancel' },
+      { text: '삭제', style: 'destructive', onPress: () => { animateListChange(); remove(id).catch(e => Alert.alert('삭제 실패', e.message)); } },
+    ]);
+  }
 
   function prevMonth() {
     if (month === 0) { setYear(y => y - 1); setMonth(11); } else setMonth(m => m - 1);
@@ -166,7 +172,11 @@ function PurchasesView() {
         <Text style={styles.monthTotalRight}>{loading ? '' : monthTotal > 0 ? `${monthTotal.toLocaleString()}원` : ''}</Text>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.scroll}
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />}
+      >
         <MonthNav year={year} month={month} onPrev={prevMonth} onNext={nextMonth} />
 
         <View style={styles.calendarCard}>
@@ -202,13 +212,16 @@ function PurchasesView() {
               {loading ? <View style={styles.emptyInCard}><ActivityIndicator size="small" color={Colors.gray300} /></View>
                 : selectedPurchases.length === 0 ? <View style={styles.emptyInCard}><Text style={styles.emptyInCardText}>매입 내역이 없어요</Text></View>
                 : selectedPurchases.map((p, i) => (
-                  <TouchableOpacity key={p.id} style={[styles.purchaseRow, i < selectedPurchases.length - 1 && styles.rowBorder]} onPress={() => router.push(`/purchases/${p.id}`)} onLongPress={() => Alert.alert('삭제', '이 매입 내역을 삭제할까요?', [{ text: '취소', style: 'cancel' }, { text: '삭제', style: 'destructive', onPress: () => remove(p.id).catch(e => Alert.alert('삭제 실패', e.message)) }])} activeOpacity={0.7}>
+                  <TouchableOpacity key={p.id} style={[styles.purchaseRow, i < selectedPurchases.length - 1 && styles.rowBorder]} onPress={() => router.push(`/purchases/${p.id}`)} onLongPress={() => confirmDeletePurchase(p.id)} activeOpacity={0.7}>
                     <View style={styles.purchaseLeft}>
                       <Text style={styles.purchaseSupplier}>{p.supplier}</Text>
                       <View style={styles.typePill}><Text style={styles.typeText}>{p.category}</Text></View>
                       <View style={styles.typePill}><Text style={styles.typeText}>{p.type}</Text></View>
                     </View>
                     <Text style={styles.purchaseAmount}>{p.amount.toLocaleString()}원</Text>
+                    <TouchableOpacity onPress={() => confirmDeletePurchase(p.id)} hitSlop={8} style={styles.deleteIconBtn}>
+                      <Ionicons name="trash-outline" size={16} color={Colors.gray300} />
+                    </TouchableOpacity>
                   </TouchableOpacity>
                 ))
               }
@@ -239,147 +252,35 @@ function PurchasesView() {
 }
 
 // ─── 비용 뷰 ───────────────────────────────────────────────
-function ExpensesView() {
-  const { currentRole } = useAuth();
-  const isAdmin = currentRole === 'admin';
-  const today = new Date();
-  const [year, setYear] = useState(today.getFullYear());
-  const [month, setMonth] = useState(today.getMonth() + 1);
-  const [modalVisible, setModalVisible] = useState(false);
-  const [editTarget, setEditTarget] = useState<ExpenseCategory | null>(null);
-  const [editId, setEditId] = useState<string | null>(null); // null이면 신규, 있으면 수정
-  const [inputName, setInputName] = useState('');
-  const [inputAmount, setInputAmount] = useState('');
-  const [saving, setSaving] = useState(false);
-
-  const yearMonth = `${year}-${String(month).padStart(2, '0')}`;
-  const { expenses, loading, refetch, add, update, remove } = useExpenses(yearMonth);
-  useEffect(() => { refetch(); }, [refetch]);
-
-  const totalAmount = expenses.reduce((s, e) => s + e.amount, 0);
-
-  function prevMonth() { if (month === 1) { setYear(y => y - 1); setMonth(12); } else setMonth(m => m - 1); }
-  function nextMonth() { if (month === 12) { setYear(y => y + 1); setMonth(1); } else setMonth(m => m + 1); }
-
-  function openAdd(category: ExpenseCategory) {
-    setEditTarget(category); setEditId(null); setInputName(''); setInputAmount(''); setModalVisible(true);
-  }
-  function openEdit(item: Expense) {
-    setEditTarget(item.category); setEditId(item.id);
-    setInputName(item.name); setInputAmount(String(item.amount)); setModalVisible(true);
-  }
-
-  async function handleSave() {
-    if (!editTarget) return;
-    const name = inputName.trim();
-    const amount = Number(inputAmount.replace(/,/g, ''));
-    if (!name) { Alert.alert('입력 오류', '항목명을 입력해주세요.'); return; }
-    if (!amount || amount <= 0) { Alert.alert('입력 오류', '금액을 올바르게 입력해주세요.'); return; }
-    setSaving(true);
-    try {
-      if (editId) await update(editId, { name, amount });
-      else await add({ category: editTarget, name, amount });
-      setModalVisible(false);
-    }
-    catch (e: any) { Alert.alert('저장 실패', e.message); }
-    finally { setSaving(false); }
-  }
-
-  return (
-    <>
-      <View style={styles.expensesHeader}>
-        <Text style={styles.expensesTotal}>{loading ? '' : totalAmount > 0 ? `${totalAmount.toLocaleString()}원` : '—'}</Text>
-      </View>
-
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        <View style={styles.monthNav}>
-          <TouchableOpacity onPress={prevMonth} style={styles.navBtn} activeOpacity={0.7}>
-            <Ionicons name="chevron-back" size={20} color={Colors.gray600} />
-          </TouchableOpacity>
-          <Text style={styles.monthLabel}>{year}년 {month}월</Text>
-          <TouchableOpacity onPress={nextMonth} style={styles.navBtn} activeOpacity={0.7}>
-            <Ionicons name="chevron-forward" size={20} color={Colors.gray600} />
-          </TouchableOpacity>
-        </View>
-
-        {EXPENSE_CATEGORIES.map(cat => {
-          const catItems = expenses.filter(e => e.category === cat.key);
-          const catTotal = catItems.reduce((s, e) => s + e.amount, 0);
-          const locked = cat.key === '고정비' && !isAdmin; // 고정비는 관리자만 수정
-          return (
-            <View key={cat.key} style={styles.expSection}>
-              <View style={styles.expSectionHeader}>
-                <View style={[styles.catIconBg, { backgroundColor: cat.bg }]}>
-                  <Ionicons name={cat.icon} size={16} color={cat.color} />
-                </View>
-                <Text style={styles.catLabel}>{cat.key}</Text>
-                {locked && <Ionicons name="lock-closed" size={12} color={Colors.gray400} style={{ marginLeft: 4 }} />}
-                {catTotal > 0 && <Text style={[styles.catTotal, { color: cat.color }]}>{catTotal.toLocaleString()}원</Text>}
-              </View>
-              <View style={styles.listCard}>
-                {loading ? <View style={styles.emptyInCard}><ActivityIndicator size="small" color={Colors.gray300} /></View>
-                  : catItems.length === 0 ? <View style={styles.emptyInCard}><Text style={styles.emptyInCardText}>등록된 항목이 없어요</Text></View>
-                  : catItems.map((item, idx) => (
-                    <TouchableOpacity key={item.id} style={[styles.itemRow, idx < catItems.length - 1 && styles.rowBorder]} onPress={locked ? undefined : () => openEdit(item)} onLongPress={locked ? undefined : () => Alert.alert('삭제', '이 항목을 삭제할까요?', [{ text: '취소', style: 'cancel' }, { text: '삭제', style: 'destructive', onPress: () => remove(item.id).catch(e => Alert.alert('삭제 실패', e.message)) }])} activeOpacity={locked ? 1 : 0.7}>
-                      <Text style={styles.itemName}>{item.name}</Text>
-                      <View style={styles.itemRight}>
-                        <Text style={styles.itemAmount}>{item.amount.toLocaleString()}원</Text>
-                        {!locked && <Ionicons name="chevron-forward" size={14} color={Colors.gray300} />}
-                      </View>
-                    </TouchableOpacity>
-                  ))
-                }
-                {locked ? (
-                  <View style={[styles.addCatRow, catItems.length > 0 && styles.addCatRowBorder]}>
-                    <Ionicons name="lock-closed-outline" size={14} color={Colors.gray400} />
-                    <Text style={[styles.addCatRowText, { color: Colors.gray400 }]}>관리자만 수정할 수 있어요</Text>
-                  </View>
-                ) : (
-                  <TouchableOpacity style={[styles.addCatRow, catItems.length > 0 && styles.addCatRowBorder]} onPress={() => openAdd(cat.key)} activeOpacity={0.7}>
-                    <Ionicons name="add-circle-outline" size={16} color={cat.color} />
-                    <Text style={[styles.addCatRowText, { color: cat.color }]}>항목 추가</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            </View>
-          );
-        })}
-      </ScrollView>
-
-      <Modal visible={modalVisible} animationType="slide" transparent onRequestClose={() => setModalVisible(false)}>
-        <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-          <View style={styles.modalSheet}>
-            <View style={styles.modalHandle} />
-            <View style={styles.sheetHeader}>
-              <TouchableOpacity onPress={() => setModalVisible(false)} hitSlop={8}>
-                <Text style={styles.sheetCancelText}>취소</Text>
-              </TouchableOpacity>
-              <Text style={styles.sheetHeaderTitle}>{editTarget} 항목 {editId ? '수정' : '추가'}</Text>
-              <TouchableOpacity onPress={handleSave} disabled={saving} hitSlop={8}>
-                {saving ? <ActivityIndicator size="small" color={Colors.primary} /> : <Text style={styles.sheetSaveText}>저장</Text>}
-              </TouchableOpacity>
-            </View>
-            <Text style={styles.fieldLabel}>항목명</Text>
-            <TextInput style={styles.input} value={inputName} onChangeText={setInputName} placeholder="예: 임대료, 광고비" placeholderTextColor={Colors.gray300} />
-            <Text style={styles.fieldLabel}>금액</Text>
-            <TextInput style={styles.input} value={inputAmount} onChangeText={setInputAmount} placeholder="0" placeholderTextColor={Colors.gray300} keyboardType="numeric" />
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
-    </>
-  );
-}
-
 // ─── 메인 화면 ─────────────────────────────────────────────
 const INNER_TABS = ['매입', '비용'] as const;
 type InnerTab = (typeof INNER_TABS)[number];
 
-export default function PurchasesScreen() {
+export function PurchasesScreen({ active = true }: { active?: boolean }) {
   const [innerTab, setInnerTab] = useState<InnerTab>('매입');
+
+  const today = new Date();
+  const todayKey = toDateKey(today.getFullYear(), today.getMonth(), today.getDate());
+  const currentYearMonth = toYearMonth(today.getFullYear(), today.getMonth());
+  const { purchases, refetch: refetchPurchases } = usePurchases(currentYearMonth);
+  const { expenses, refetch: refetchExpenses } = useExpenses(currentYearMonth);
+
+  useEffect(() => {
+    if (!active) return;
+    refetchPurchases();
+    refetchExpenses();
+  }, [active, refetchPurchases, refetchExpenses]);
+
+  const todayPurchaseCount = purchases.filter(p => p.date === todayKey).length;
+  const monthExpenseCount = expenses.length;
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.topBar}>
+        <View style={styles.titleRow}>
+          <Text style={styles.title}>매입 및 비용</Text>
+          <Text style={styles.titleSummary}>오늘 매입 {todayPurchaseCount}건 · 이번달 비용 {monthExpenseCount}건</Text>
+        </View>
         <View style={styles.innerTabRow}>
           {INNER_TABS.map(tab => (
             <TouchableOpacity
@@ -394,7 +295,7 @@ export default function PurchasesScreen() {
         </View>
       </View>
 
-      {innerTab === '매입' ? <PurchasesView /> : <ExpensesView />}
+      {innerTab === '매입' ? <PurchasesView active={active} /> : <ExpensesPanel />}
     </SafeAreaView>
   );
 }
@@ -405,6 +306,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20, paddingTop: 14, paddingBottom: 12,
     backgroundColor: Colors.white, borderBottomWidth: 0.5, borderBottomColor: Colors.gray100,
   },
+  titleRow: { marginBottom: 12 },
+  title: { fontSize: 17, fontWeight: '600', color: Colors.black },
+  titleSummary: { fontSize: 12, color: Colors.gray400, marginTop: 2 },
   innerTabRow: { flexDirection: 'row', gap: 4, backgroundColor: Colors.gray100, borderRadius: 12, padding: 3 },
   innerTab: { flex: 1, paddingVertical: 7, borderRadius: 10, alignItems: 'center' },
   innerTabActive: { backgroundColor: Colors.white, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4, elevation: 2 },
@@ -417,9 +321,6 @@ const styles = StyleSheet.create({
   subTabText: { fontSize: 13, color: Colors.gray500 },
   subTabTextActive: { color: Colors.white, fontWeight: '500' },
   monthTotalRight: { marginLeft: 'auto', fontSize: 13, fontWeight: '600', color: Colors.black },
-
-  expensesHeader: { paddingHorizontal: 20, paddingVertical: 10, backgroundColor: Colors.white, borderBottomWidth: 0.5, borderBottomColor: Colors.gray100, alignItems: 'flex-end' },
-  expensesTotal: { fontSize: 14, fontWeight: '600', color: Colors.black },
 
   scroll: { padding: 16, gap: 14, paddingBottom: 48 },
   monthNav: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
@@ -443,7 +344,7 @@ const styles = StyleSheet.create({
   dotSelected: { backgroundColor: Colors.black },
 
   sectionLabel: { fontSize: 11, fontWeight: '500', color: Colors.gray400, textTransform: 'uppercase', letterSpacing: 0.5 },
-  listCard: { backgroundColor: Colors.white, borderRadius: 16, borderWidth: 0.5, borderColor: Colors.gray100 },
+  listCard: { ...CardStyle },
   emptyInCard: { paddingVertical: 20, alignItems: 'center' },
   emptyInCardText: { fontSize: 14, color: Colors.gray400 },
   purchaseRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 13, justifyContent: 'space-between' },
@@ -452,9 +353,10 @@ const styles = StyleSheet.create({
   purchaseSupplier: { fontSize: 14, fontWeight: '500', color: Colors.black },
   typePill: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, backgroundColor: Colors.gray100 },
   typeText: { fontSize: 11, color: Colors.gray500 },
-  purchaseAmount: { fontSize: 14, fontWeight: '600', color: Colors.black },
+  purchaseAmount: { fontSize: 14, fontWeight: '600', color: Colors.black, marginRight: 10 },
+  deleteIconBtn: { padding: 2 },
 
-  summaryCard: { backgroundColor: Colors.white, borderRadius: 16, borderWidth: 0.5, borderColor: Colors.gray100, padding: 20, alignItems: 'center', gap: 4 },
+  summaryCard: { ...CardStyle, padding: 20, alignItems: 'center', gap: 4 },
   summaryLabel: { fontSize: 12, color: Colors.gray400 },
   summaryValue: { fontSize: 26, fontWeight: '700', color: Colors.black },
 
@@ -463,37 +365,6 @@ const styles = StyleSheet.create({
   addBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: Colors.white, borderRadius: 14, borderWidth: 0.5, borderColor: Colors.gray200, paddingVertical: 14 },
   addBtnText: { fontSize: 14, color: Colors.gray700 },
 
-  expSection: { gap: 8 },
-  expSectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  catIconBg: { width: 28, height: 28, borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
-  catLabel: { fontSize: 14, fontWeight: '600', color: Colors.black, flex: 1 },
-  catTotal: { fontSize: 14, fontWeight: '700' },
-  itemRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 13 },
-  itemName: { fontSize: 14, color: Colors.black, flex: 1 },
-  itemRight: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  itemAmount: { fontSize: 14, fontWeight: '600', color: Colors.black },
-  addCatRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 12 },
-  addCatRowBorder: { borderTopWidth: 0.5, borderTopColor: Colors.gray100 },
-  addCatRowText: { fontSize: 13, fontWeight: '500' },
-
-  modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.3)' },
-  modalSheet: { backgroundColor: Colors.white, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 40 },
-  modalHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: Colors.gray200, alignSelf: 'center', marginBottom: 20 },
-  modalTitle: { fontSize: 16, fontWeight: '700', color: Colors.black, marginBottom: 4 },
-  sheetHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, paddingBottom: 12, borderBottomWidth: 0.5, borderBottomColor: Colors.gray100 },
-  sheetHeaderTitle: { fontSize: 16, fontWeight: '700', color: Colors.black },
-  sheetCancelText: { fontSize: 15, fontWeight: '500', color: Colors.gray500 },
-  sheetSaveText: { fontSize: 15, fontWeight: '700', color: Colors.primary },
-  fieldLabel: { fontSize: 13, fontWeight: '600', color: Colors.gray600, marginBottom: 6, marginTop: 14 },
-  input: { borderWidth: 1, borderColor: Colors.gray200, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, color: Colors.black, backgroundColor: Colors.gray50 },
-  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: Colors.gray200, backgroundColor: Colors.gray50 },
-  chipActive: { backgroundColor: Colors.black, borderColor: Colors.black },
-  chipText: { fontSize: 13, color: Colors.gray500 },
-  chipTextActive: { color: Colors.white, fontWeight: '500' },
-  modalBtns: { flexDirection: 'row', gap: 10, marginTop: 24 },
-  cancelBtn: { flex: 1, paddingVertical: 13, borderRadius: 12, backgroundColor: Colors.gray100, alignItems: 'center' },
-  cancelBtnText: { fontSize: 14, fontWeight: '600', color: Colors.gray600 },
-  saveBtn: { flex: 1, paddingVertical: 13, borderRadius: 12, backgroundColor: Colors.black, alignItems: 'center' },
-  saveBtnText: { fontSize: 14, fontWeight: '600', color: Colors.white },
 });
+
+export default PurchasesScreen;
