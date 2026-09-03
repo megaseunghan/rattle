@@ -1,13 +1,17 @@
-import { useEffect } from 'react';
-import { Tabs } from 'expo-router';
-import { View, Text, StyleSheet } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { View, Text, StyleSheet, Pressable } from 'react-native';
+import PagerView from 'react-native-pager-view';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../constants/colors';
 import { useAuth } from '../../lib/contexts/AuthContext';
 import { useEmployees } from '../../lib/hooks/useEmployees';
 import { useLowStockCount } from '../../lib/hooks/useLowStockCount';
-
-type TabName = 'home' | 'pos' | 'purchases' | 'payroll' | 'stock' | 'more';
+import { TabPagerContext, TabName } from '../../lib/contexts/TabPagerContext';
+import { HomeScreen } from './index';
+import { StockScreen } from './stock';
+import { PurchasesScreen } from './purchases';
+import { PayrollScreen } from './payroll';
+import { MoreScreen } from './more';
 
 const TAB_CONFIG: Record<TabName, {
   active: keyof typeof Ionicons.glyphMap;
@@ -15,10 +19,9 @@ const TAB_CONFIG: Record<TabName, {
   label: string;
 }> = {
   home:      { active: 'home',        inactive: 'home-outline',        label: '홈' },
-  pos:       { active: 'bar-chart',   inactive: 'bar-chart-outline',   label: '매출' },
+  stock:     { active: 'cube',        inactive: 'cube-outline',        label: '재고' },
   purchases: { active: 'cart',        inactive: 'cart-outline',        label: '매입' },
   payroll:   { active: 'people',      inactive: 'people-outline',      label: '인건비' },
-  stock:     { active: 'cube',        inactive: 'cube-outline',        label: '재고' },
   more:      { active: 'settings',    inactive: 'settings-outline',    label: '설정' },
 };
 
@@ -50,43 +53,86 @@ export default function TabsLayout() {
   const { employees, refetch } = useEmployees();
   const { count: lowStockCount } = useLowStockCount();
 
-  // useEmployees는 자동 조회하지 않으므로 진입/매장 변경 시 직접 fetch
   useEffect(() => { refetch(); }, [refetch]);
 
   // 파트타이머는 하단 탭을 홈·재고·설정으로 간소화
-  // (연결된 활성 직원 중 하나라도 part_time이면 파트타이머로 인정)
   const isPartTime = currentRole !== 'admin'
     && employees.some(e => e.user_id === user?.id && e.employment_type === 'part_time');
 
-  // href: null 이면 탭바에서 숨김
-  const hidden = { href: null as null };
-  const visible = {};
+  // 스와이프 가능한 탭 순서 (파트타이머는 매입/인건비 제외)
+  const tabs: TabName[] = useMemo(
+    () => isPartTime ? ['home', 'stock', 'more'] : ['home', 'stock', 'purchases', 'payroll', 'more'],
+    [isPartTime]
+  );
+
+  const pagerRef = useRef<PagerView>(null);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [visited, setVisited] = useState<Set<number>>(new Set([0]));
+
+  // 파트타이머 여부가 바뀌어 탭 개수가 줄면 인덱스 보정
+  useEffect(() => {
+    if (activeIndex >= tabs.length) {
+      setActiveIndex(0);
+      setVisited(new Set([0]));
+      pagerRef.current?.setPageWithoutAnimation(0);
+    }
+  }, [tabs.length, activeIndex]);
+
+  function goToTab(tab: TabName) {
+    const idx = tabs.indexOf(tab);
+    if (idx === -1) return;
+    pagerRef.current?.setPage(idx);
+  }
+
+  function handlePageSelected(idx: number) {
+    setActiveIndex(idx);
+    setVisited(prev => prev.has(idx) ? prev : new Set(prev).add(idx));
+  }
+
+  const activeTab = tabs[activeIndex] ?? 'home';
 
   return (
-    <Tabs
-      screenOptions={{
-        headerShown: false,
-        tabBarStyle: styles.tabBar,
-        tabBarShowLabel: false,
-      }}
-    >
-      {/* 탭 순서: 홈 · 재고 · 매입/비용 · 인건비 · 설정 (매출은 홈 손익카드에서 진입) */}
-      <Tabs.Screen name="index"     options={{ tabBarIcon: ({ focused }) => <TabIcon tab="home"      focused={focused} /> }} />
-      {/* 재고: 모든 역할에 노출, 홈 다음 자리 (기존 매출 탭 자리 대체) */}
-      <Tabs.Screen name="stock"     options={{ tabBarIcon: ({ focused }) => <TabIcon tab="stock"     focused={focused} badge={lowStockCount} /> }} />
-      <Tabs.Screen name="purchases" options={{ ...(isPartTime ? hidden : visible), tabBarIcon: ({ focused }) => <TabIcon tab="purchases" focused={focused} /> }} />
-      <Tabs.Screen name="payroll"   options={{ ...(isPartTime ? hidden : visible), tabBarIcon: ({ focused }) => <TabIcon tab="payroll"   focused={focused} /> }} />
-      <Tabs.Screen name="more"      options={{ tabBarIcon: ({ focused }) => <TabIcon tab="more"      focused={focused} /> }} />
-      {/* 숨김 라우트 (매출은 홈에서 진입) */}
-      <Tabs.Screen name="pos"       options={{ href: null }} />
-      <Tabs.Screen name="expenses"  options={{ href: null }} />
-      <Tabs.Screen name="recipes"   options={{ href: null }} />
-    </Tabs>
+    <TabPagerContext.Provider value={{ activeTab, goToTab }}>
+      <View style={styles.flex}>
+        <PagerView
+          ref={pagerRef}
+          style={styles.flex}
+          initialPage={0}
+          onPageSelected={e => handlePageSelected(e.nativeEvent.position)}
+        >
+          {tabs.map((tab, idx) => (
+            <View key={tab} style={styles.flex}>
+              {visited.has(idx) ? <TabPage tab={tab} active={activeIndex === idx} /> : null}
+            </View>
+          ))}
+        </PagerView>
+
+        <View style={styles.tabBar}>
+          {tabs.map((tab, idx) => (
+            <Pressable key={tab} style={styles.tabBarItem} onPress={() => pagerRef.current?.setPage(idx)}>
+              <TabIcon tab={tab} focused={activeIndex === idx} badge={tab === 'stock' ? lowStockCount : undefined} />
+            </Pressable>
+          ))}
+        </View>
+      </View>
+    </TabPagerContext.Provider>
   );
 }
 
+function TabPage({ tab, active }: { tab: TabName; active: boolean }) {
+  switch (tab) {
+    case 'home': return <HomeScreen active={active} />;
+    case 'stock': return <StockScreen active={active} />;
+    case 'purchases': return <PurchasesScreen active={active} />;
+    case 'payroll': return <PayrollScreen active={active} />;
+    case 'more': return <MoreScreen />;
+  }
+}
+
 const styles = StyleSheet.create({
+  flex: { flex: 1 },
   tabBar: {
+    flexDirection: 'row',
     height: 80,
     paddingTop: 10,
     backgroundColor: Colors.white,
@@ -98,6 +144,7 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     elevation: 8,
   },
+  tabBarItem: { flex: 1, alignItems: 'center' },
   iconWrap: { alignItems: 'center', gap: 3 },
   indicator: {
     position: 'absolute',
