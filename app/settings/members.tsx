@@ -84,11 +84,12 @@ export default function MembersScreen() {
         style: 'destructive',
         onPress: async () => {
           try {
-            const { error } = await supabase
+            const { error, count } = await supabase
               .from('store_members')
-              .delete()
+              .delete({ count: 'exact' })
               .eq('id', member.id);
             if (error) throw error;
+            if (!count) throw new Error('제거 권한이 없습니다.');
             await loadMembers();
           } catch (e: unknown) {
             Alert.alert('오류', getErrorMessage(e, '제거에 실패했습니다.'));
@@ -169,7 +170,7 @@ export default function MembersScreen() {
                     </View>
                   </View>
                   {m.role !== 'admin' && (
-                    <TouchableOpacity onPress={() => handleRemove(m)}>
+                    <TouchableOpacity onPress={() => handleRemove(m)} hitSlop={10}>
                       <Ionicons name="person-remove-outline" size={20} color={Colors.danger} />
                     </TouchableOpacity>
                   )}
@@ -193,7 +194,7 @@ export default function MembersScreen() {
                         </Text>
                       </View>
                     </View>
-                    <TouchableOpacity onPress={() => handleRemove(m)}>
+                    <TouchableOpacity onPress={() => handleRemove(m)} hitSlop={10}>
                       <Ionicons name="close-circle-outline" size={20} color={Colors.gray400} />
                     </TouchableOpacity>
                   </View>
