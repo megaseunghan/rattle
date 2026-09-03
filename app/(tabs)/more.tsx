@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Colors } from '../../constants/colors';
+import { CardStyle } from '../../constants/designTokens';
 import { useAuth } from '../../lib/contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
 
@@ -35,7 +36,7 @@ function SettingRow({
   );
 }
 
-export default function MoreScreen() {
+export function MoreScreen() {
   const { stores, store: currentStore, switchStore, currentRole, user, signOut } = useAuth();
   const [switching, setSwitching] = useState<string | null>(null);
 
@@ -193,10 +194,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   card: {
-    backgroundColor: Colors.white,
-    borderRadius: 16,
-    borderWidth: 0.5,
-    borderColor: Colors.gray100,
+    ...CardStyle,
     overflow: 'hidden',
   },
   listItem: {
@@ -221,3 +219,5 @@ const styles = StyleSheet.create({
   itemName: { flex: 1, fontSize: 14, fontWeight: '500', color: Colors.black },
   itemSub: { fontSize: 12, marginTop: 1 },
 });
+
+export default MoreScreen;

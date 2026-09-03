@@ -2,12 +2,12 @@ import { useState, useCallback, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, Pressable,
   Modal, TextInput, Alert, KeyboardAvoidingView, Platform,
-  ActivityIndicator,
+  ActivityIndicator, RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../constants/colors';
+import { CardStyle } from '../../constants/designTokens';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../lib/contexts/AuthContext';
 import { useEmployees } from '../../lib/hooks/useEmployees';
@@ -20,6 +20,7 @@ import {
   getStoreWageHistory, addWageChange, regularGrossForMonth, todayISO,
 } from '../../lib/services/wageHistory';
 import { WageHistory } from '../../types';
+import { animateListChange } from '../../lib/utils/layoutAnimation';
 
 type WageAccum = { totalWage: number; totalMinutes: number; days: number };
 
@@ -74,6 +75,19 @@ function EmployeeCard({
   const probation = isInProbation(employee);
   const insurance = isInsuranceApplicable(employee);
   const isPart = employee.employment_type === 'part_time';
+  const [expanded, setExpanded] = useState(false);
+
+  function toggleExpanded() {
+    animateListChange();
+    setExpanded(v => !v);
+  }
+
+  const baseLabel = isPart ? '시급' : '기본급';
+  const baseValue = isPart
+    ? (employee.hourly_wage != null ? `${Number(employee.hourly_wage).toLocaleString()}원` : '—')
+    : `${employee.base_salary.toLocaleString()}원`;
+  const summaryNetPay = isPart ? (wage?.totalWage ?? 0) : (payroll ? payroll.net_pay : null);
+  const summaryNetLabel = isPart ? '세전 누적액' : '실수령액';
 
   return (
     <View style={styles.employeeCard}>
@@ -107,14 +121,24 @@ function EmployeeCard({
         </View>
       </View>
 
-      {isPart ? (
+      <TouchableOpacity style={styles.salaryRow} onPress={toggleExpanded} activeOpacity={0.7}>
+        <View>
+          <Text style={styles.salaryLabel}>{baseLabel}</Text>
+          <Text style={styles.salaryValue}>{baseValue}</Text>
+        </View>
+        <View style={styles.summaryRight}>
+          {summaryNetPay != null && (
+            <View>
+              <Text style={styles.summaryNetLabel}>{summaryNetLabel}</Text>
+              <Text style={styles.summaryNetValue}>{summaryNetPay.toLocaleString()}원</Text>
+            </View>
+          )}
+          <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={18} color={Colors.gray400} />
+        </View>
+      </TouchableOpacity>
+
+      {expanded && (isPart ? (
         <>
-          <View style={styles.salaryRow}>
-            <Text style={styles.salaryLabel}>시급</Text>
-            <Text style={styles.salaryValue}>
-              {employee.hourly_wage != null ? `${Number(employee.hourly_wage).toLocaleString()}원` : '—'}
-            </Text>
-          </View>
           <View style={styles.payrollDivider} />
           <View style={styles.payrollRow}>
             <Text style={styles.payrollLabel}>세전 누적액</Text>
@@ -132,10 +156,6 @@ function EmployeeCard({
         </>
       ) : (
       <>
-      <View style={styles.salaryRow}>
-        <Text style={styles.salaryLabel}>기본급</Text>
-        <Text style={styles.salaryValue}>{employee.base_salary.toLocaleString()}원</Text>
-      </View>
       <View style={styles.payrollDivider} />
       <View style={styles.payrollRow}>
         <Text style={styles.payrollLabel}>세전 누적액</Text>
@@ -193,7 +213,7 @@ function EmployeeCard({
         </TouchableOpacity>
       )}
       </>
-      )}
+      ))}
     </View>
   );
 }
@@ -213,7 +233,7 @@ const EMPTY_FORM = {
   user_id: null as string | null,
 };
 
-export default function PayrollScreen() {
+export function PayrollScreen({ active = true }: { active?: boolean }) {
   const today = new Date();
   const [year, setYear] = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth() + 1);
@@ -260,12 +280,20 @@ export default function PayrollScreen() {
       .catch(() => setHistMap({}));
   }, [store]);
 
-  useFocusEffect(useCallback(() => {
+  useEffect(() => {
+    if (!active) return;
     refetchEmp();
     refetchPay();
     refetchWage();
     refetchHist();
-  }, [refetchEmp, refetchPay, refetchWage, refetchHist]));
+  }, [active, refetchEmp, refetchPay, refetchWage, refetchHist]);
+
+  const [refreshing, setRefreshing] = useState(false);
+  async function onRefresh() {
+    setRefreshing(true);
+    try { await Promise.all([refetchEmp(), refetchPay(), refetchWage(), refetchHist()]); }
+    finally { setRefreshing(false); }
+  }
 
   // 계정 연결용 매장 멤버 목록 (관리자만)
   useEffect(() => {
@@ -433,6 +461,12 @@ export default function PayrollScreen() {
   const totalNetPay = regularAccruedNet + partTimeWageTotal;
   const monthLabel = `${year}년 ${month}월`;
 
+  const canSaveEmployee = form.name.trim().length > 0 && (
+    form.employment_type === 'part_time'
+      ? Number(form.hourly_wage.replace(/,/g, '') || '0') > 0
+      : Number(form.base_salary.replace(/,/g, '') || '0') > 0
+  );
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.topBar}>
@@ -440,7 +474,11 @@ export default function PayrollScreen() {
         <Text style={styles.monthPill}>{monthLabel}</Text>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.scroll}
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />}
+      >
 
         {/* 월 네비게이션 */}
         <View style={styles.monthNav}>
@@ -510,7 +548,7 @@ export default function PayrollScreen() {
                   { text: '취소', style: 'cancel' },
                   {
                     text: '삭제', style: 'destructive',
-                    onPress: () => removePayroll(p.id).catch(e => Alert.alert('삭제 실패', e.message)),
+                    onPress: () => { animateListChange(); removePayroll(p.id).catch(e => Alert.alert('삭제 실패', e.message)); },
                   },
                 ]);
               }}
@@ -531,18 +569,27 @@ export default function PayrollScreen() {
       {/* 직원 추가/수정 모달 */}
       <Modal visible={modalVisible} animationType="slide" transparent onRequestClose={() => setModalVisible(false)}>
         <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-          <ScrollView style={styles.modalSheet} showsVerticalScrollIndicator={false} stickyHeaderIndices={[1]}>
+          <ScrollView style={styles.modalSheet} showsVerticalScrollIndicator={false}>
             <View style={styles.modalHandle} />
             <View style={styles.sheetHeader}>
-              <TouchableOpacity onPress={() => setModalVisible(false)} hitSlop={8}>
+              <Pressable
+                onPress={() => setModalVisible(false)}
+                hitSlop={8}
+                style={({ pressed }) => [styles.sheetHeaderBtn, pressed && styles.sheetHeaderBtnPressed]}
+              >
                 <Text style={styles.sheetCancelText}>취소</Text>
-              </TouchableOpacity>
+              </Pressable>
               <Text style={styles.sheetHeaderTitle}>{editTarget ? '직원 수정' : '직원 추가'}</Text>
-              <TouchableOpacity onPress={handleSave} disabled={saving} hitSlop={8}>
+              <Pressable
+                onPress={handleSave}
+                disabled={saving || !canSaveEmployee}
+                hitSlop={8}
+                style={({ pressed }) => [styles.sheetHeaderBtn, pressed && !saving && canSaveEmployee && styles.sheetHeaderBtnPressed]}
+              >
                 {saving
                   ? <ActivityIndicator size="small" color={Colors.primary} />
-                  : <Text style={styles.sheetSaveText}>저장</Text>}
-              </TouchableOpacity>
+                  : <Text style={[styles.sheetSaveText, !canSaveEmployee && styles.sheetSaveTextDisabled]}>저장</Text>}
+              </Pressable>
             </View>
 
             <Text style={styles.fieldLabel}>이름</Text>
@@ -843,7 +890,7 @@ const styles = StyleSheet.create({
   summaryLoader: { height: 24, marginBottom: 2 },
   summarySub: { fontSize: 11, color: Colors.gray400 },
   sectionLabel: { fontSize: 11, fontWeight: '500', color: Colors.gray400, textTransform: 'uppercase', letterSpacing: 0.5 },
-  employeeCard: { backgroundColor: Colors.white, borderRadius: 16, borderWidth: 0.5, borderColor: Colors.gray100, padding: 16 },
+  employeeCard: { ...CardStyle, padding: 16 },
   cardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
   cardNameRow: { flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 },
   employeeName: { fontSize: 15, fontWeight: '600', color: Colors.black },
@@ -886,9 +933,12 @@ const styles = StyleSheet.create({
   histMemo: { fontSize: 12, color: Colors.gray400 },
   histAmount: { fontSize: 14, fontWeight: '700', color: Colors.gray700 },
   histEmpty: { fontSize: 13, color: Colors.gray400, textAlign: 'center', paddingVertical: 32 },
-  salaryRow: { flexDirection: 'row', justifyContent: 'space-between' },
+  salaryRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 2 },
   salaryLabel: { fontSize: 13, color: Colors.gray500 },
   salaryValue: { fontSize: 13, fontWeight: '500', color: Colors.black },
+  summaryRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  summaryNetLabel: { fontSize: 11, color: Colors.gray400, textAlign: 'right' },
+  summaryNetValue: { fontSize: 14, fontWeight: '700', color: Colors.black, textAlign: 'right' },
   partHint: { fontSize: 11, color: Colors.gray400, marginTop: 8 },
   calcBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: Colors.black, borderRadius: 10, paddingVertical: 10, marginTop: 12 },
   calcBtnText: { fontSize: 13, fontWeight: '600', color: Colors.white },
@@ -917,7 +967,7 @@ const styles = StyleSheet.create({
   recalcBtnText: { fontSize: 12, color: Colors.gray400 },
   removePayrollBtn: { paddingVertical: 8, paddingHorizontal: 4 },
   removePayrollBtnText: { fontSize: 12, color: '#D94040' },
-  emptyCard: { backgroundColor: Colors.white, borderRadius: 16, borderWidth: 0.5, borderColor: Colors.gray100, padding: 40, alignItems: 'center', gap: 8 },
+  emptyCard: { ...CardStyle, padding: 40, alignItems: 'center', gap: 8 },
   emptyIconWrap: { width: 60, height: 60, borderRadius: 18, backgroundColor: Colors.gray50, justifyContent: 'center', alignItems: 'center', marginBottom: 8 },
   emptyTitle: { fontSize: 15, fontWeight: '600', color: Colors.gray700 },
   emptyDesc: { fontSize: 13, color: Colors.gray400, textAlign: 'center', lineHeight: 18 },
@@ -929,8 +979,11 @@ const styles = StyleSheet.create({
   modalTitle: { fontSize: 16, fontWeight: '700', color: Colors.black, marginBottom: 4 },
   sheetHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: Colors.white, marginBottom: 12, paddingBottom: 12, borderBottomWidth: 0.5, borderBottomColor: Colors.gray100 },
   sheetHeaderTitle: { fontSize: 16, fontWeight: '700', color: Colors.black },
+  sheetHeaderBtn: { paddingVertical: 6, paddingHorizontal: 4, borderRadius: 8 },
+  sheetHeaderBtnPressed: { backgroundColor: Colors.gray100 },
   sheetCancelText: { fontSize: 15, fontWeight: '500', color: Colors.gray500 },
   sheetSaveText: { fontSize: 15, fontWeight: '700', color: Colors.primary },
+  sheetSaveTextDisabled: { color: Colors.gray300 },
   fieldLabel: { fontSize: 13, fontWeight: '600', color: Colors.gray600, marginBottom: 6, marginTop: 14 },
   fieldHint: { fontSize: 11, color: Colors.gray400, marginBottom: 8, lineHeight: 16 },
   input: { borderWidth: 1, borderColor: Colors.gray200, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, color: Colors.black, backgroundColor: Colors.gray50 },
@@ -954,3 +1007,5 @@ const styles = StyleSheet.create({
   deleteBtn: { marginTop: 12, paddingVertical: 13, alignItems: 'center' },
   deleteBtnText: { fontSize: 14, color: '#D94040' },
 });
+
+export default PayrollScreen;
