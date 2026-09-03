@@ -84,7 +84,7 @@ export default function PosSyncScreen() {
               가맹점 ID: {merchantId}{'\n'}
               매출 데이터는 POS 탭에서 확인할 수 있어요.
             </Text>
-            <TouchableOpacity style={styles.goToPosBtn} onPress={() => router.push('/(tabs)/pos')}>
+            <TouchableOpacity style={styles.goToPosBtn} onPress={() => router.push('/pos')}>
               <Text style={styles.goToPosBtnText}>POS 탭으로 이동</Text>
               <Ionicons name="arrow-forward" size={16} color={Colors.white} />
             </TouchableOpacity>

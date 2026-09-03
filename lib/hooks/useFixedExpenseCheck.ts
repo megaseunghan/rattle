@@ -60,7 +60,7 @@ export function useFixedExpenseCheck() {
         : `이번 달 고정비가 없어요.\n비용 탭에서 등록해주세요.`,
       hasPrev
         ? [
-            { text: '수정하기', onPress: () => router.push('/(tabs)/expenses') },
+            { text: '수정하기', onPress: () => router.push('/expenses') },
             {
               text: '전월과 동일',
               onPress: async () => {
@@ -78,7 +78,7 @@ export function useFixedExpenseCheck() {
             { text: '나중에', style: 'cancel' },
           ]
         : [
-            { text: '등록하기', onPress: () => router.push('/(tabs)/expenses') },
+            { text: '등록하기', onPress: () => router.push('/expenses') },
             { text: '나중에', style: 'cancel' },
           ],
     );
