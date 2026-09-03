@@ -7,12 +7,14 @@ export interface StoreDetails {
   address: string | null;
   toss_merchant_id: string | null;
   closing_time: string | null;
+  labor_ratio_target: number;
+  cogs_ratio_target: number;
 }
 
 export async function getStoreDetails(storeId: string): Promise<StoreDetails> {
   const { data, error } = await supabase
     .from('stores')
-    .select('name, business_number, owner_phone, address, toss_merchant_id, closing_time')
+    .select('name, business_number, owner_phone, address, toss_merchant_id, closing_time, labor_ratio_target, cogs_ratio_target')
     .eq('id', storeId)
     .single();
 
@@ -22,7 +24,7 @@ export async function getStoreDetails(storeId: string): Promise<StoreDetails> {
 
 export async function updateStoreInfo(
   storeId: string,
-  data: Partial<Pick<StoreDetails, 'name' | 'business_number' | 'owner_phone' | 'address' | 'toss_merchant_id'>>,
+  data: Partial<Pick<StoreDetails, 'name' | 'business_number' | 'owner_phone' | 'address' | 'toss_merchant_id' | 'labor_ratio_target' | 'cogs_ratio_target'>>,
 ): Promise<void> {
   const { error } = await supabase
     .from('stores')

@@ -1,12 +1,13 @@
 import { supabase } from '../supabase';
-import { ProfitLoss, PurchaseCategory } from '../../types';
-import { getPurchasesByMonth } from './purchases';
+import { ProfitLoss, PurchaseCategory, PurchaseItem } from '../../types';
+import { getPurchasesByMonth, getPurchaseItemsForPurchases } from './purchases';
 import { getExpensesByMonth, getEffectiveFixedExpenses } from './expenses';
 import { getStoreWageHistory, regularGrossForMonth } from './wageHistory';
 import { probationFactor } from './payroll';
 
 // 카드 매출 대비 카드 수수료율 (1.25%)
 const CARD_FEE_RATE = 0.0125;
+
 
 export async function getYearlyProfitLoss(
   storeId: string,
@@ -33,11 +34,7 @@ export async function getYearlyProfitLoss(
   return results.filter(Boolean) as { month: number; data: ProfitLoss }[];
 }
 
-export async function getProfitLossByMonth(
-  storeId: string,
-  yearMonth: string,
-  closingTime: string,
-): Promise<ProfitLoss> {
+function getMonthRevenueRange(yearMonth: string, closingTime: string): { from: Date; to: Date } {
   const [h, m] = closingTime.split(':').map(Number);
   const year = Number(yearMonth.slice(0, 4));
   const month = Number(yearMonth.slice(5, 7));
@@ -48,6 +45,37 @@ export async function getProfitLossByMonth(
   const to = new Date(year, month, 1);
   to.setHours(h, m, 0, 0);
   if (to > new Date()) to.setTime(Date.now());
+  return { from, to };
+}
+
+/** 특정 월의 매출 합계만 조회 (전월/전년 동월 대비 계산용, 손익 전체 집계보다 가볍다) */
+export async function getMonthlyRevenue(
+  storeId: string,
+  yearMonth: string,
+  closingTime: string,
+): Promise<number> {
+  const { from, to } = getMonthRevenueRange(yearMonth, closingTime);
+  const { data, error } = await supabase
+    .from('toss_orders')
+    .select('total_amount')
+    .eq('store_id', storeId)
+    .eq('status', 'COMPLETED')
+    .gte('order_at', from.toISOString())
+    .lte('order_at', to.toISOString());
+
+  if (error) throw new Error(error.message);
+  return (data ?? []).reduce((sum, r) => sum + (r.total_amount ?? 0), 0);
+}
+
+export async function getProfitLossByMonth(
+  storeId: string,
+  yearMonth: string,
+  closingTime: string,
+): Promise<ProfitLoss> {
+  const { from, to } = getMonthRevenueRange(yearMonth, closingTime);
+  const [h, m] = closingTime.split(':').map(Number);
+  const year = Number(yearMonth.slice(0, 4));
+  const month = Number(yearMonth.slice(5, 7));
 
   const [revenueResult, purchases, expenses, effectiveFixed, payrollResult, attendanceResult, wageHistory, employeesResult] = await Promise.all([
     supabase
@@ -94,10 +122,26 @@ export async function getProfitLossByMonth(
     return s + (card + cash > 0 ? card + cash : Number(r.total_amount ?? 0));
   }, 0);
 
-  // 2. 매입 (카테고리별)
+  // 2. 매입 (카테고리별) — 품목 있는 매입은 품목별 category로, 금액만 매입은 purchases.category로 집계
+  const purchaseItems = await getPurchaseItemsForPurchases(purchases.map(p => p.id));
+  const itemsByPurchase = new Map<string, PurchaseItem[]>();
+  for (const it of purchaseItems) {
+    const list = itemsByPurchase.get(it.purchase_id) ?? [];
+    list.push(it);
+    itemsByPurchase.set(it.purchase_id, list);
+  }
+
   const purchaseByCategory: Partial<Record<PurchaseCategory, number>> = {};
   for (const p of purchases) {
-    purchaseByCategory[p.category] = (purchaseByCategory[p.category] ?? 0) + p.amount;
+    const items = itemsByPurchase.get(p.id) ?? [];
+    if (items.length > 0) {
+      for (const it of items) {
+        const cat = it.category ?? '기타';
+        purchaseByCategory[cat] = (purchaseByCategory[cat] ?? 0) + it.subtotal;
+      }
+    } else {
+      purchaseByCategory[p.category] = (purchaseByCategory[p.category] ?? 0) + p.amount;
+    }
   }
   const purchaseCost = purchases.reduce((s, p) => s + p.amount, 0);
   const grossProfit = revenue - purchaseCost;

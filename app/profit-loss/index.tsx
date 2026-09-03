@@ -9,7 +9,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../constants/colors';
 import { useAuth } from '../../lib/contexts/AuthContext';
 import { getYearlyProfitLoss } from '../../lib/services/profitLoss';
-import { ProfitLoss, PurchaseCategory } from '../../types';
+import { ProfitLoss } from '../../types';
 
 function fmt(v: number | null | undefined) {
   if (v == null) return '—';
@@ -17,7 +17,6 @@ function fmt(v: number | null | undefined) {
 }
 
 const MONTHS = ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
-const CAT_ORDER: PurchaseCategory[] = ['식자재','비품소모품','주류','기타'];
 
 function ratioOfRevenue(value: number | null | undefined, revenue: number): string {
   if (!value || !revenue) return '';
@@ -46,7 +45,7 @@ function PnLDetailSheet({ pnl, month, onClose }: { pnl: ProfitLoss; month: numbe
 
         {/* 2. 매입 */}
         <Group label="2. 매입" value={fmt(pnl.purchaseCost)} ratio={ratioOfRevenue(pnl.purchaseCost, rev)}>
-          {CAT_ORDER.map(c => (cats[c] ?? 0) > 0 && <Sub key={c} label={c} value={fmt(cats[c])} ratio={ratioOfRevenue(cats[c], rev)} />)}
+          {Object.keys(cats).sort().map(c => (cats[c] ?? 0) > 0 && <Sub key={c} label={c} value={fmt(cats[c])} ratio={ratioOfRevenue(cats[c], rev)} />)}
         </Group>
         <TotalRow label="= 매출이익" value={fmt(pnl.grossProfit)} />
 

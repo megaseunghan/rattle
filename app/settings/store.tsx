@@ -14,19 +14,33 @@ import { getErrorMessage } from '../../lib/utils/error';
 export default function StoreInfoScreen() {
   const { store, refreshStore } = useAuth();
   const [name, setName] = useState(store?.name || '');
+  const [laborTarget, setLaborTarget] = useState(String(store?.labor_ratio_target ?? 30));
+  const [cogsTarget, setCogsTarget] = useState(String(store?.cogs_ratio_target ?? 40));
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (store) setName(store.name || '');
+    if (store) {
+      setName(store.name || '');
+      setLaborTarget(String(store.labor_ratio_target ?? 30));
+      setCogsTarget(String(store.cogs_ratio_target ?? 40));
+    }
   }, [store?.id]);
 
   async function handleSave() {
     if (!store || !name.trim()) return;
+    const laborNum = Number(laborTarget);
+    const cogsNum = Number(cogsTarget);
+    if (!laborTarget || Number.isNaN(laborNum) || laborNum <= 0) {
+      Alert.alert('입력 오류', '목표 인건비율을 올바르게 입력해주세요.'); return;
+    }
+    if (!cogsTarget || Number.isNaN(cogsNum) || cogsNum <= 0) {
+      Alert.alert('입력 오류', '목표 매출원가율을 올바르게 입력해주세요.'); return;
+    }
     setSaving(true);
     try {
       const { error } = await supabase
         .from('stores')
-        .update({ name: name.trim() })
+        .update({ name: name.trim(), labor_ratio_target: laborNum, cogs_ratio_target: cogsNum })
         .eq('id', store.id);
       if (error) throw error;
       await refreshStore();
@@ -57,6 +71,27 @@ export default function StoreInfoScreen() {
           placeholder="매장 이름"
           placeholderTextColor={Colors.gray400}
         />
+
+        <Text style={styles.label}>목표 인건비율 (%)</Text>
+        <TextInput
+          style={styles.input}
+          value={laborTarget}
+          onChangeText={setLaborTarget}
+          placeholder="30"
+          placeholderTextColor={Colors.gray400}
+          keyboardType="decimal-pad"
+        />
+
+        <Text style={styles.label}>목표 매출원가율 (매입 비중, %)</Text>
+        <TextInput
+          style={styles.input}
+          value={cogsTarget}
+          onChangeText={setCogsTarget}
+          placeholder="40"
+          placeholderTextColor={Colors.gray400}
+          keyboardType="decimal-pad"
+        />
+
         <TouchableOpacity
           style={[styles.saveBtn, saving && styles.disabled]}
           onPress={handleSave}

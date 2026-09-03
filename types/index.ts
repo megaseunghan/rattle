@@ -12,6 +12,8 @@ export interface Store {
   toss_merchant_id?: string | null;
   latitude?: number | null;
   longitude?: number | null;
+  labor_ratio_target?: number;
+  cogs_ratio_target?: number;
 }
 
 export type AttendanceType = 'clock_in' | 'clock_out';
@@ -275,7 +277,8 @@ export interface Payroll {
 }
 
 // 매입
-export type PurchaseCategory = '식자재' | '비품소모품' | '주류' | '기타';
+// 매장별로 자유롭게 추가/수정/삭제 가능 (stores.purchase_categories) — 고정 enum이 아님
+export type PurchaseCategory = string;
 export type PurchaseType = '쿠팡' | '네이버' | '수기';
 
 export interface Purchase {
@@ -300,6 +303,7 @@ export interface PurchaseItem {
   unit: string;
   unit_price: number;
   subtotal: number;
+  category: string | null;
   created_at: string;
 }
 
