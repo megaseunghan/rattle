@@ -1,8 +1,7 @@
-import { useState, useCallback } from 'react';
-import { useFocusEffect } from 'expo-router';
+import { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
-  ScrollView, ActivityIndicator,
+  ScrollView, ActivityIndicator, RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -11,9 +10,12 @@ import { Colors } from '../../constants/colors';
 import { useStorePermissions } from '../../lib/hooks/useStorePermissions';
 import { useIngredients } from '../../lib/hooks/useIngredients';
 import { useRecipes } from '../../lib/hooks/useRecipes';
+import { useCategories } from '../../lib/hooks/useCategories';
 import { Ingredient } from '../../types';
 import { formatStock } from '../../lib/utils/unit';
 import { RecipeCard } from '../../lib/components/RecipeCard';
+import { CategoryManageModal } from '../../lib/components/CategoryManageModal';
+import { animateListChange } from '../../lib/utils/layoutAnimation';
 
 type ContentTab = '재고현황' | '레시피';
 
@@ -25,8 +27,6 @@ function IngredientRow({ item }: { item: Ingredient }) {
   const isWarn = ratio > 0.2 && ratio <= 1;
 
   const barColor = isDanger ? '#E24B4A' : isWarn ? '#EF9F27' : Colors.primary;
-  const iconBg = isDanger ? '#FCEBEB' : isWarn ? '#FAEEDA' : Colors.tinted;
-  const iconColor = isDanger ? '#A32D2D' : isWarn ? '#854F0B' : Colors.primary;
 
   return (
     <TouchableOpacity
@@ -34,9 +34,6 @@ function IngredientRow({ item }: { item: Ingredient }) {
       onPress={() => router.push(`/stock/${item.id}`)}
       activeOpacity={0.7}
     >
-      <View style={[styles.rowIcon, { backgroundColor: iconBg }]}>
-        <Ionicons name="cube-outline" size={18} color={iconColor} />
-      </View>
       <View style={styles.ingredientInfo}>
         <View style={styles.nameRow}>
           <Text style={styles.ingredientName}>{item.name}</Text>
@@ -67,7 +64,7 @@ function IngredientRow({ item }: { item: Ingredient }) {
 }
 
 // ─── 메인 스크린 ──────────────────────────────────────────────
-export default function StockScreen() {
+export function StockScreen({ active = true }: { active?: boolean }) {
   const [activeTab, setActiveTab] = useState<ContentTab>('재고현황');
   const [activeCategory, setActiveCategory] = useState('전체');
 
@@ -76,17 +73,39 @@ export default function StockScreen() {
     loadingMore, hasMore, loadMore, refetch: refetchIng,
   } = useIngredients();
   const { data: recipes, loading: recLoading, refetch: refetchRec, remove: removeRecipe } = useRecipes();
-  const { canManageRecipes } = useStorePermissions();
+  const { canManageRecipes, isAdmin } = useStorePermissions();
+  const [categoryModalVisible, setCategoryModalVisible] = useState(false);
+  const ingredientCategoriesBase = useCategories();
+  // 카테고리 이름변경/삭제는 서버의 ingredients.category도 바꾸므로, 캐시된 재고 목록을 즉시 재조회한다
+  const ingredientCategories = {
+    ...ingredientCategoriesBase,
+    rename: async (oldName: string, newName: string) => {
+      await ingredientCategoriesBase.rename(oldName, newName);
+      await refetchIng();
+    },
+    remove: async (name: string) => {
+      await ingredientCategoriesBase.remove(name);
+      await refetchIng();
+    },
+  };
 
   // 파트타이머는 레시피 세그먼트 접근 불가
   const contentTabs: ContentTab[] = canManageRecipes
     ? ['재고현황', '레시피']
     : ['재고현황'];
 
-  useFocusEffect(useCallback(() => {
+  useEffect(() => {
+    if (!active) return;
     if (activeTab === '재고현황') refetchIng();
     else refetchRec();
-  }, [activeTab, refetchIng, refetchRec]));
+  }, [active, activeTab, refetchIng, refetchRec]);
+
+  const [refreshing, setRefreshing] = useState(false);
+  async function onRefresh() {
+    setRefreshing(true);
+    try { await (activeTab === '재고현황' ? refetchIng() : refetchRec()); }
+    finally { setRefreshing(false); }
+  }
 
   const categories = ['전체', ...Array.from(new Set(ingredients.map(i => i.category))).sort()];
   const filtered = (activeCategory === '전체' ? ingredients : ingredients.filter(i => i.category === activeCategory))
@@ -109,31 +128,35 @@ export default function StockScreen() {
     <SafeAreaView style={styles.container}>
       {/* 헤더 */}
       <View style={styles.topBar}>
-        <View>
-          <Text style={styles.title}>재고</Text>
-          {lowStockCount > 0 && (
-            <Text style={styles.lowStockHint}>품절 임박 {lowStockCount}개</Text>
-          )}
+        <View style={styles.titleRow}>
+          <View>
+            <Text style={styles.title}>재고</Text>
+            {lowStockCount > 0 && (
+              <Text style={styles.lowStockHint}>품절 임박 {lowStockCount}개</Text>
+            )}
+          </View>
         </View>
-      </View>
 
-      {/* 콘텐츠 탭 */}
-      <View style={styles.contentTabRow}>
-        {contentTabs.map(tab => (
-          <TouchableOpacity
-            key={tab}
-            style={[styles.contentTab, activeTab === tab && styles.contentTabActive]}
-            onPress={() => setActiveTab(tab)}
-          >
-            <Text style={[styles.contentTabText, activeTab === tab && styles.contentTabTextActive]}>
-              {tab}
-            </Text>
-          </TouchableOpacity>
-        ))}
+        {contentTabs.length > 1 && (
+          <View style={styles.innerTabRow}>
+            {contentTabs.map(tab => (
+              <TouchableOpacity
+                key={tab}
+                style={[styles.innerTab, activeTab === tab && styles.innerTabActive]}
+                onPress={() => setActiveTab(tab)}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.innerTabText, activeTab === tab && styles.innerTabTextActive]}>
+                  {tab}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
       </View>
 
       {/* 카테고리 필터 */}
-      {activeTab === '재고현황' && categories.length > 1 && (
+      {activeTab === '재고현황' && (categories.length > 1 || isAdmin) && (
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -151,6 +174,15 @@ export default function StockScreen() {
               </Text>
             </TouchableOpacity>
           ))}
+          {isAdmin && (
+            <TouchableOpacity
+              style={styles.catManageBtn}
+              onPress={() => setCategoryModalVisible(true)}
+              hitSlop={8}
+            >
+              <Ionicons name="add" size={16} color={Colors.gray600} />
+            </TouchableOpacity>
+          )}
         </ScrollView>
       )}
 
@@ -170,6 +202,7 @@ export default function StockScreen() {
           onEndReachedThreshold={0.5}
           ListEmptyComponent={<EmptyState icon="cube-outline" text="재고 데이터가 없어요" />}
           ListFooterComponent={loadingMore ? <ActivityIndicator style={{ padding: 16 }} color={Colors.primary} /> : null}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />}
         />
       ) : (
         <FlatList
@@ -177,8 +210,9 @@ export default function StockScreen() {
           keyExtractor={item => item.id}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
-          renderItem={({ item }) => <RecipeCard recipe={item} onDelete={removeRecipe} isAdmin={canManageRecipes} />}
+          renderItem={({ item }) => <RecipeCard recipe={item} onDelete={id => { animateListChange(); removeRecipe(id); }} isAdmin={canManageRecipes} />}
           ListEmptyComponent={<EmptyState icon="restaurant-outline" text="레시피가 없어요" />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />}
         />
       )}
 
@@ -188,6 +222,18 @@ export default function StockScreen() {
           <Ionicons name="add" size={26} color={Colors.white} />
         </TouchableOpacity>
       )}
+
+      <CategoryManageModal
+        visible={categoryModalVisible}
+        onClose={() => setCategoryModalVisible(false)}
+        title="재고 카테고리 관리"
+        removeConfirmHint="해당 카테고리의 재료는 '기타'로 이동해요."
+        categories={ingredientCategories.categories}
+        loading={ingredientCategories.loading}
+        add={ingredientCategories.add}
+        rename={ingredientCategories.rename}
+        remove={ingredientCategories.remove}
+      />
     </SafeAreaView>
   );
 }
@@ -205,39 +251,23 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.gray50 },
 
   topBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
     paddingHorizontal: 20,
     paddingTop: 16,
     paddingBottom: 12,
     backgroundColor: Colors.white,
     borderBottomWidth: 0.5,
     borderBottomColor: Colors.gray100,
+    gap: 12,
   },
+  titleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   title: { fontSize: 17, fontWeight: '600', color: Colors.black },
   lowStockHint: { fontSize: 11, color: Colors.warning, marginTop: 1 },
 
-  contentTabRow: {
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    gap: 6,
-    backgroundColor: Colors.white,
-    borderBottomWidth: 0.5,
-    borderBottomColor: Colors.gray100,
-  },
-  contentTab: {
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 20,
-    borderWidth: 0.5,
-    borderColor: Colors.gray200,
-    backgroundColor: Colors.gray50,
-  },
-  contentTabActive: { backgroundColor: Colors.black, borderColor: Colors.black },
-  contentTabText: { fontSize: 13, color: Colors.gray500 },
-  contentTabTextActive: { color: Colors.white, fontWeight: '500' },
+  innerTabRow: { flexDirection: 'row', gap: 4, backgroundColor: Colors.gray100, borderRadius: 12, padding: 3 },
+  innerTab: { flex: 1, paddingVertical: 7, borderRadius: 10, alignItems: 'center' },
+  innerTabActive: { backgroundColor: Colors.white, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4, elevation: 2 },
+  innerTabText: { fontSize: 14, fontWeight: '500', color: Colors.gray400 },
+  innerTabTextActive: { color: Colors.black, fontWeight: '700' },
 
   catScroll: { flexGrow: 0, flexShrink: 0 },
   catBar: { paddingHorizontal: 16, paddingVertical: 10, gap: 6, flexDirection: 'row', alignItems: 'center' },
@@ -253,6 +283,12 @@ const styles = StyleSheet.create({
   catTabActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
   catTabText: { fontSize: 12, fontWeight: '500', color: Colors.gray500 },
   catTabTextActive: { color: Colors.white },
+  catManageBtn: {
+    alignSelf: 'center',
+    width: 28, height: 28, borderRadius: 14,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: Colors.gray100, borderWidth: 0.5, borderColor: Colors.gray200,
+  },
 
   listContent: { padding: 16, paddingBottom: 100 },
 
@@ -267,15 +303,6 @@ const styles = StyleSheet.create({
     padding: 12,
     marginBottom: 8,
     gap: 12,
-  },
-  rowIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
-    flexShrink: 0,
-    marginTop: 2,
   },
   ingredientInfo: { flex: 1 },
   nameRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 },
@@ -316,3 +343,5 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
 });
+
+export default StockScreen;
