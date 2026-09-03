@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../constants/colors';
 import { useIngredients } from '../../lib/hooks/useIngredients';
 import { useCategories } from '../../lib/hooks/useCategories';
@@ -19,6 +20,7 @@ import { getIngredientById } from '../../lib/services/ingredients';
 import { Ingredient } from '../../types';
 import { LoadingSpinner } from '../../lib/components/LoadingSpinner';
 import { ErrorMessage } from '../../lib/components/ErrorMessage';
+import { useConfirmLeave } from '../../lib/hooks/useConfirmLeave';
 
 import { STOCK_UNITS } from '../../lib/utils/unit';
 
@@ -56,6 +58,16 @@ export default function EditIngredientScreen() {
       .finally(() => setFetchLoading(false));
   }, [id]);
 
+  const isDirty = !!ingredient && (
+    name !== ingredient.name
+    || category !== ingredient.category
+    || unit !== ingredient.unit
+    || currentStock !== String(ingredient.current_stock)
+    || minStock !== String(ingredient.min_stock)
+    || lastPrice !== String(ingredient.last_price)
+  );
+  const bypassLeaveGuard = useConfirmLeave(isDirty, { message: '지금 나가면 수정한 재고 정보가 저장되지 않아요.' });
+
   if (fetchLoading) return <SafeAreaView style={styles.container}><LoadingSpinner /></SafeAreaView>;
   if (fetchError) return <SafeAreaView style={styles.container}><ErrorMessage message={fetchError} /></SafeAreaView>;
   if (!ingredient) return <SafeAreaView style={styles.container}><ErrorMessage message="식자재를 찾을 수 없습니다." /></SafeAreaView>;
@@ -75,6 +87,7 @@ export default function EditIngredientScreen() {
         min_stock: parseFloat(minStock) || 0,
         last_price: parseFloat(lastPrice) || 0,
       });
+      bypassLeaveGuard();
       router.back();
     } catch (e: any) {
       Alert.alert('오류', e.message ?? '수정에 실패했습니다.');
@@ -87,7 +100,7 @@ export default function EditIngredientScreen() {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()}>
-          <Text style={styles.back}>← 뒤로</Text>
+          <Ionicons name="chevron-back" size={24} color={Colors.black} />
         </TouchableOpacity>
         <Text style={styles.title}>식자재 수정</Text>
         <TouchableOpacity
@@ -192,7 +205,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: Colors.gray100,
   },
-  back: { fontSize: 15, color: Colors.primary, fontWeight: '600' },
   title: { fontSize: 17, fontWeight: '700', color: Colors.black },
   submitBtn: {
     backgroundColor: Colors.primary,

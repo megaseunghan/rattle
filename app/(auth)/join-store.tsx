@@ -9,6 +9,7 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../lib/contexts/AuthContext';
 import { Colors } from '../../constants/colors';
 import { getErrorMessage } from '../../lib/utils/error';
+import { useConfirmLeave } from '../../lib/hooks/useConfirmLeave';
 
 export default function JoinStoreScreen() {
   const [businessNumber, setBusinessNumber] = useState('');
@@ -16,6 +17,9 @@ export default function JoinStoreScreen() {
   const [phone, setPhone] = useState('');
   const [loading, setLoading] = useState(false);
   const { user } = useAuth();
+
+  const isDirty = name.trim().length > 0 || businessNumber.trim().length > 0 || phone.trim().length > 0;
+  const bypassLeaveGuard = useConfirmLeave(isDirty, { message: '지금 나가면 입력한 참여 신청 내용이 저장되지 않아요.' });
 
   async function handleJoin() {
     const cleaned = businessNumber.replace(/[^0-9]/g, '');
@@ -75,7 +79,7 @@ export default function JoinStoreScreen() {
       Alert.alert(
         '참여 신청 완료',
         `"${storeData.name}" 매장에 참여 신청했습니다.\n관리자가 승인하면 접속할 수 있습니다.`,
-        [{ text: '확인', onPress: () => router.back() }],
+        [{ text: '확인', onPress: () => { bypassLeaveGuard(); router.back(); } }],
       );
     } catch (e: unknown) {
       Alert.alert('오류', getErrorMessage(e));

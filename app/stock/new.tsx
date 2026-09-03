@@ -12,10 +12,12 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../constants/colors';
 import { useIngredients } from '../../lib/hooks/useIngredients';
 import { useCategories } from '../../lib/hooks/useCategories';
 import { useAuth } from '../../lib/contexts/AuthContext';
+import { useConfirmLeave } from '../../lib/hooks/useConfirmLeave';
 
 import { STOCK_UNITS } from '../../lib/utils/unit';
 
@@ -31,6 +33,10 @@ export default function NewIngredientScreen() {
   const [minStock, setMinStock] = useState('0');
   const [lastPrice, setLastPrice] = useState('0');
   const [submitting, setSubmitting] = useState(false);
+
+  const isDirty = name.trim().length > 0 || category.trim().length > 0
+    || currentStock !== '0' || minStock !== '0' || lastPrice !== '0';
+  const bypassLeaveGuard = useConfirmLeave(isDirty, { message: '지금 나가면 입력한 재고 정보가 저장되지 않아요.' });
 
   async function handleSubmit() {
     if (!name.trim()) {
@@ -50,6 +56,7 @@ export default function NewIngredientScreen() {
         min_stock: parseFloat(minStock) || 0,
         last_price: parseFloat(lastPrice) || 0,
       });
+      bypassLeaveGuard();
       router.back();
     } catch (e: any) {
       Alert.alert('오류', e.message ?? '식자재 등록에 실패했습니다.');
@@ -62,7 +69,7 @@ export default function NewIngredientScreen() {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()}>
-          <Text style={styles.back}>← 뒤로</Text>
+          <Ionicons name="chevron-back" size={24} color={Colors.black} />
         </TouchableOpacity>
         <Text style={styles.title}>새 식자재</Text>
         <TouchableOpacity
@@ -174,7 +181,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: Colors.gray100,
   },
-  back: { fontSize: 15, color: Colors.primary, fontWeight: '600' },
   title: { fontSize: 17, fontWeight: '700', color: Colors.black },
   submitBtn: {
     backgroundColor: Colors.primary,

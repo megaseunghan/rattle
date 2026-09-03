@@ -25,11 +25,16 @@ import { getRecipeById, updateRecipeFull } from '../../lib/services/recipes';
 import { updateIngredient } from '../../lib/services/ingredients';
 import { Ingredient } from '../../types';
 import { recipeLineCost, recipeUnitOptionsFor } from '../../lib/utils/unit';
+import { useConfirmLeave } from '../../lib/hooks/useConfirmLeave';
 
 interface RecipeIngredientForm {
   ingredient: Ingredient;
   quantity: string;
   unit: string;
+}
+
+function itemsKey(items: RecipeIngredientForm[]): string {
+  return JSON.stringify(items.map(i => ({ id: i.ingredient.id, quantity: i.quantity, unit: i.unit })));
 }
 
 export default function NewRecipeScreen() {
@@ -49,6 +54,7 @@ export default function NewRecipeScreen() {
     return Array.from(new Set(recipes.filter(r => r.category !== '기타').map(r => r.category))).sort();
   }, [recipes]);
   const [items, setItems] = useState<RecipeIngredientForm[]>([]);
+  const [original, setOriginal] = useState<{ name: string; category: string; sellingPrice: string; itemsKey: string } | null>(null);
   const [loading, setLoading] = useState(isEdit);
   const [submitting, setSubmitting] = useState(false);
   const [showPicker, setShowPicker] = useState(false);
@@ -95,6 +101,18 @@ export default function NewRecipeScreen() {
     }
   }, [id]);
 
+  const isDirty = isEdit
+    ? !!original && (
+        name !== original.name
+        || category !== original.category
+        || sellingPrice !== original.sellingPrice
+        || itemsKey(items) !== original.itemsKey
+      )
+    : (name.trim().length > 0 || sellingPrice.trim().length > 0 || items.length > 0);
+  const bypassLeaveGuard = useConfirmLeave(isDirty, {
+    message: isEdit ? '지금 나가면 수정한 레시피 내용이 저장되지 않아요.' : '지금 나가면 입력한 레시피 내용이 저장되지 않아요.',
+  });
+
   async function loadOriginalRecipe() {
     if (!id) return;
     try {
@@ -102,13 +120,19 @@ export default function NewRecipeScreen() {
       setName(data.name);
       setCategory(data.category);
       setSellingPrice(String(data.selling_price));
-      setItems(data.recipe_ingredients.map(ri => ({
+      const loadedItems = data.recipe_ingredients.map(ri => ({
         ingredient: ri.ingredient!,
         quantity: String(ri.quantity),
         unit: ri.unit ?? ri.ingredient!.unit,
-      })));
+      }));
+      setItems(loadedItems);
+      setOriginal({
+        name: data.name, category: data.category,
+        sellingPrice: String(data.selling_price), itemsKey: itemsKey(loadedItems),
+      });
     } catch (e: any) {
       Alert.alert('오류', '레시피 정보를 불러오는데 실패했습니다.');
+      bypassLeaveGuard();
       router.back();
     } finally {
       setLoading(false);
@@ -222,6 +246,7 @@ export default function NewRecipeScreen() {
       } else {
         await create(name.trim(), category.trim() || '기타', sp, ingredientData);
       }
+      bypassLeaveGuard();
       router.back();
     } catch (e: any) {
       Alert.alert('오류', e.message ?? '작업에 실패했습니다.');
