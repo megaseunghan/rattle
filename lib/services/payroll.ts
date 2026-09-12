@@ -157,6 +157,22 @@ export async function getPayrollByMonth(
   return (data ?? []) as Payroll[];
 }
 
+/** 마이페이지 급여 명세서(화면 25)용 — 특정 직원의 특정 월 확정 급여 1건 */
+export async function getMyPayroll(
+  employeeId: string,
+  yearMonth: string,
+): Promise<Payroll | null> {
+  const { data, error } = await supabase
+    .from('payroll')
+    .select('*')
+    .eq('employee_id', employeeId)
+    .eq('year_month', yearMonth)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  return data as Payroll | null;
+}
+
 export async function upsertPayroll(
   storeId: string,
   employeeId: string,
