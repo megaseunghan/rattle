@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useEmployees } from './useEmployees';
+import { resolveSelfEmployee } from '../utils/resolveSelfEmployee';
 
 /**
  * 현재 매장에서의 권한 플래그.
@@ -9,13 +10,13 @@ import { useEmployees } from './useEmployees';
  * - canManageRecipes: 레시피 조회·수정 가능 (멤버 가능, 파트타이머 차단)
  */
 export function useStorePermissions() {
-  const { user, currentRole } = useAuth();
+  const { user, currentRole, devPreviewEmployeeId } = useAuth();
   const { employees, refetch } = useEmployees();
 
   useEffect(() => { refetch(); }, [refetch]);
 
-  const isPartTime = currentRole !== 'admin'
-    && employees.some(e => e.user_id === user?.id && e.employment_type === 'part_time');
+  const myEmployee = resolveSelfEmployee(employees, user?.id, devPreviewEmployeeId);
+  const isPartTime = currentRole !== 'admin' && myEmployee?.employment_type === 'part_time';
 
   return {
     isAdmin: currentRole === 'admin',

@@ -6,17 +6,28 @@ import { Store } from '../../types';
 
 const LAST_STORE_ID_KEY = 'LAST_STORE_ID';
 
+export type DevPreviewMode = 'self' | 'regular' | 'part_time';
+
 interface AuthContextValue {
   user: User | null;
   session: Session | null;
   store: Store | null;
   stores: Store[];
   storesLoaded: boolean;
+  /** 매장 id → 그 매장에서의 역할. 오너 매장은 포함하지 않으므로 store.owner_id와 함께 봐야 함 */
+  memberRoles: Record<string, 'admin' | 'member'>;
+  /** 미리보기 적용된 역할 — 화면 대부분은 이 값으로 admin/member를 분기한다 */
   currentRole: 'admin' | 'member';
+  /** 실제 로그인 계정의 역할 (미리보기와 무관). 미리보기 스위처 자체를 admin에게만 보여줄 때 사용 */
+  realRole: 'admin' | 'member';
   loading: boolean;
   signOut: () => Promise<void>;
   refreshStore: () => Promise<void>;
   switchStore: (storeId: string) => Promise<void>;
+  // ── 관리자 전용 테스트 미리보기 (전 화면에 적용) ──
+  devPreviewMode: DevPreviewMode;
+  devPreviewEmployeeId: string | null;
+  setDevPreview: (mode: DevPreviewMode, employeeId: string | null) => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -29,6 +40,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [storesLoaded, setStoresLoaded] = useState(false);
   const [memberRoles, setMemberRoles] = useState<Record<string, 'admin' | 'member'>>({});
   const [loading, setLoading] = useState(true);
+  const [devPreviewMode, setDevPreviewMode] = useState<DevPreviewMode>('self');
+  const [devPreviewEmployeeId, setDevPreviewEmployeeId] = useState<string | null>(null);
+
+  const setDevPreview = useCallback((mode: DevPreviewMode, employeeId: string | null) => {
+    setDevPreviewMode(mode);
+    setDevPreviewEmployeeId(mode === 'self' ? null : employeeId);
+  }, []);
 
   async function loadStores(userId: string) {
     const [ownedRes, memberRes] = await Promise.all([
@@ -79,8 +97,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const switchStore = useCallback(async (storeId: string) => {
     await AsyncStorage.setItem(LAST_STORE_ID_KEY, storeId);
+    setDevPreview('self', null);
     if (user) await loadStores(user.id);
-  }, [user]);
+  }, [user, setDevPreview]);
 
   const refreshStore = useCallback(async () => {
     if (user) await loadStores(user.id);
@@ -95,13 +114,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setStores([]);
     setStoresLoaded(false);
     setMemberRoles({});
+    setDevPreview('self', null);
   }
 
   // 현재 매장에서의 역할 (오너이면 admin, 아니면 memberRoles에서 조회)
-  const currentRole: 'admin' | 'member' =
+  const realRole: 'admin' | 'member' =
     !store || !user ? 'admin' :
     store.owner_id === user.id ? 'admin' :
     memberRoles[store.id] ?? 'member';
+
+  // 관리자가 "직원/파트타이머로 보기"를 켜면 나머지 모든 화면은 member로 취급된다
+  const currentRole: 'admin' | 'member' =
+    realRole === 'admin' && devPreviewMode !== 'self' ? 'member' : realRole;
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
@@ -139,7 +163,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, session, store, stores, storesLoaded, currentRole, loading, signOut, refreshStore, switchStore }}>
+    <AuthContext.Provider value={{
+      user, session, store, stores, storesLoaded, memberRoles, currentRole, realRole, loading, signOut, refreshStore, switchStore,
+      devPreviewMode, devPreviewEmployeeId, setDevPreview,
+    }}>
       {children}
     </AuthContext.Provider>
   );
