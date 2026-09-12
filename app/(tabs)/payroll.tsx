@@ -21,6 +21,7 @@ import {
 } from '../../lib/services/wageHistory';
 import { WageHistory } from '../../types';
 import { animateListChange } from '../../lib/utils/layoutAnimation';
+import { Badge, EmptyState, Field } from '../../lib/components/ui';
 
 type WageAccum = { totalWage: number; totalMinutes: number; days: number };
 
@@ -94,29 +95,23 @@ function EmployeeCard({
       <View style={styles.cardHeader}>
         <View style={styles.cardNameRow}>
           <Text style={styles.employeeName}>{employee.name}</Text>
-          <View style={[styles.typeBadge, employee.employment_type === 'regular' ? styles.badgeRegular : styles.badgePart]}>
-            <Text style={[styles.typeBadgeText, employee.employment_type === 'regular' ? styles.badgeRegularText : styles.badgePartText]}>
-              {employee.employment_type === 'regular' ? '정규직' : '파트타임'}
-            </Text>
-          </View>
+          <Badge
+            label={employee.employment_type === 'regular' ? '정규직' : '파트타임'}
+            variant={employee.employment_type === 'regular' ? 'employment' : 'neutral'}
+          />
           {probation && (
             <View style={styles.probationBadge}>
-              <Text style={styles.probationBadgeText}>수습</Text>
+              <Text style={styles.probationBadgeText}>수습 · {Math.round(probationFactor(employee) * 100)}%</Text>
             </View>
           )}
-          {!insurance && (
-            <View style={styles.taxBadge}>
-              <Text style={styles.taxBadgeText}>3.3%</Text>
-            </View>
-          )}
+          {!insurance && <Badge label="3.3%" variant="neutral" />}
         </View>
         <View style={styles.headerActions}>
-          <TouchableOpacity onPress={onShowHistory} style={styles.histBtn}>
+          <TouchableOpacity onPress={onShowHistory} style={styles.histBtn} hitSlop={8}>
             <Ionicons name="time-outline" size={16} color={Colors.gray400} />
           </TouchableOpacity>
-          <TouchableOpacity onPress={onEdit} style={styles.editBtn} activeOpacity={0.7}>
-            <Ionicons name="create-outline" size={14} color={Colors.gray500} />
-            <Text style={styles.editBtnText}>수정</Text>
+          <TouchableOpacity onPress={onEdit} style={styles.editBtn} activeOpacity={0.7} hitSlop={8}>
+            <Ionicons name="create-outline" size={16} color={Colors.gray500} />
           </TouchableOpacity>
         </View>
       </View>
@@ -517,13 +512,11 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
         {empLoading ? (
           <ActivityIndicator color={Colors.primary} />
         ) : employees.length === 0 ? (
-          <View style={styles.emptyCard}>
-            <View style={styles.emptyIconWrap}>
-              <Ionicons name="people-outline" size={28} color={Colors.gray300} />
-            </View>
-            <Text style={styles.emptyTitle}>아직 직원이 없어요</Text>
-            <Text style={styles.emptyDesc}>직원을 추가하면 4대보험과 실수령액이 자동으로 계산됩니다</Text>
-          </View>
+          <EmptyState
+            icon="people-outline"
+            title="아직 직원이 없어요"
+            description="직원을 추가하면 4대보험과 실수령액이 자동으로 계산됩니다"
+          />
         ) : (
           employees.map(emp => {
             const factor = accruedFactor(year, month);
@@ -559,8 +552,7 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
 
         {isAdmin && (
           <TouchableOpacity style={styles.addBtn} onPress={openAdd} activeOpacity={0.7}>
-            <Ionicons name="person-add-outline" size={16} color={Colors.gray700} />
-            <Text style={styles.addBtnText}>직원 추가</Text>
+            <Text style={styles.addBtnText}>+ 직원 추가</Text>
           </TouchableOpacity>
         )}
 
@@ -592,14 +584,14 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
               </Pressable>
             </View>
 
-            <Text style={styles.fieldLabel}>이름</Text>
-            <TextInput
-              style={styles.input}
-              value={form.name}
-              onChangeText={v => setForm(f => ({ ...f, name: v }))}
-              placeholder="홍길동"
-              placeholderTextColor={Colors.gray300}
-            />
+            <View style={styles.modalFieldGroup}>
+              <Field
+                label="이름"
+                value={form.name}
+                onChangeText={v => setForm(f => ({ ...f, name: v }))}
+                placeholder="홍길동"
+              />
+            </View>
 
             <Text style={styles.fieldLabel}>고용 형태</Text>
             <View style={styles.chipRow}>
@@ -616,109 +608,86 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
               ))}
             </View>
 
-            {form.employment_type === 'part_time' && (
-              <>
-                <Text style={styles.fieldLabel}>주 근무 시간 (15h 미만이면 3.3% 원천징수)</Text>
-                <TextInput
-                  style={styles.input}
+            <View style={styles.modalFieldGroup}>
+              {form.employment_type === 'part_time' && (
+                <Field
+                  label="주 근무 시간 (15h 미만이면 3.3% 원천징수)"
                   value={form.weekly_hours}
                   onChangeText={v => setForm(f => ({ ...f, weekly_hours: v }))}
                   placeholder="예: 20"
-                  placeholderTextColor={Colors.gray300}
                   keyboardType="numeric"
                 />
-              </>
-            )}
+              )}
 
-            {form.employment_type === 'part_time' ? (
-              <>
-                <Text style={styles.fieldLabel}>시급</Text>
-                <TextInput
-                  style={styles.input}
+              {form.employment_type === 'part_time' ? (
+                <Field
+                  label="시급"
                   value={form.hourly_wage}
                   onChangeText={v => setForm(f => ({ ...f, hourly_wage: v }))}
                   placeholder="13,000"
-                  placeholderTextColor={Colors.gray300}
                   keyboardType="numeric"
+                  helpText="퇴근 시 실제 근무 시간(분) 기준으로 일일 급여가 계산됩니다."
                 />
-                <Text style={styles.fieldHint}>퇴근 시 실제 근무 시간(분) 기준으로 일일 급여가 계산됩니다.</Text>
-              </>
-            ) : (
-              <>
-                <Text style={styles.fieldLabel}>기본급</Text>
-                <TextInput
-                  style={styles.input}
+              ) : (
+                <Field
+                  label="기본급"
                   value={form.base_salary}
                   onChangeText={v => setForm(f => ({ ...f, base_salary: v }))}
                   placeholder="2,000,000"
-                  placeholderTextColor={Colors.gray300}
                   keyboardType="numeric"
                 />
-              </>
-            )}
+              )}
 
-            {/* 비과세·부양가족: 정규직 또는 주15h 이상 파트타이머만 */}
-            {(form.employment_type === 'regular' || Number(form.weekly_hours || '0') >= 15) && (
-              <>
-                <Text style={styles.fieldLabel}>비과세 (식대 등)</Text>
-                <TextInput
-                  style={styles.input}
-                  value={form.non_taxable}
-                  onChangeText={v => setForm(f => ({ ...f, non_taxable: v }))}
-                  placeholder="200,000"
-                  placeholderTextColor={Colors.gray300}
-                  keyboardType="numeric"
-                />
+              {/* 비과세·부양가족: 정규직 또는 주15h 이상 파트타이머만 */}
+              {(form.employment_type === 'regular' || Number(form.weekly_hours || '0') >= 15) && (
+                <>
+                  <Field
+                    label="비과세 (식대 등)"
+                    value={form.non_taxable}
+                    onChangeText={v => setForm(f => ({ ...f, non_taxable: v }))}
+                    placeholder="200,000"
+                    keyboardType="numeric"
+                  />
+                  <Field
+                    label="부양가족 수 (본인 포함)"
+                    value={form.dependents}
+                    onChangeText={v => setForm(f => ({ ...f, dependents: v }))}
+                    placeholder="1"
+                    keyboardType="numeric"
+                  />
+                </>
+              )}
 
-                <Text style={styles.fieldLabel}>부양가족 수 (본인 포함)</Text>
-                <TextInput
-                  style={styles.input}
-                  value={form.dependents}
-                  onChangeText={v => setForm(f => ({ ...f, dependents: v }))}
-                  placeholder="1"
-                  placeholderTextColor={Colors.gray300}
-                  keyboardType="numeric"
-                />
-              </>
-            )}
+              <Field
+                label="입사일 (YYYY-MM-DD)"
+                value={form.joined_at}
+                onChangeText={v => setForm(f => ({ ...f, joined_at: v }))}
+                placeholder="2026-06-01"
+              />
 
-            <Text style={styles.fieldLabel}>입사일 (YYYY-MM-DD)</Text>
-            <TextInput
-              style={styles.input}
-              value={form.joined_at}
-              onChangeText={v => setForm(f => ({ ...f, joined_at: v }))}
-              placeholder="2026-06-01"
-              placeholderTextColor={Colors.gray300}
-            />
+              <Field
+                label="연락처"
+                value={form.phone}
+                onChangeText={v => setForm(f => ({ ...f, phone: v }))}
+                placeholder="010-0000-0000"
+                keyboardType="phone-pad"
+              />
 
-            <Text style={styles.fieldLabel}>연락처</Text>
-            <TextInput
-              style={styles.input}
-              value={form.phone}
-              onChangeText={v => setForm(f => ({ ...f, phone: v }))}
-              placeholder="010-0000-0000"
-              placeholderTextColor={Colors.gray300}
-              keyboardType="phone-pad"
-            />
+              <Field
+                label="은행"
+                value={form.bank_name}
+                onChangeText={v => setForm(f => ({ ...f, bank_name: v }))}
+                placeholder="국민은행"
+              />
 
-            <Text style={styles.fieldLabel}>은행</Text>
-            <TextInput
-              style={styles.input}
-              value={form.bank_name}
-              onChangeText={v => setForm(f => ({ ...f, bank_name: v }))}
-              placeholder="국민은행"
-              placeholderTextColor={Colors.gray300}
-            />
-
-            <Text style={styles.fieldLabel}>계좌번호</Text>
-            <TextInput
-              style={styles.input}
-              value={form.account_number}
-              onChangeText={v => setForm(f => ({ ...f, account_number: v }))}
-              placeholder="000-0000-0000-00"
-              placeholderTextColor={Colors.gray300}
-              keyboardType="numeric"
-            />
+              <Field
+                label="계좌번호"
+                value={form.account_number}
+                onChangeText={v => setForm(f => ({ ...f, account_number: v }))}
+                placeholder="000-0000-0000-00"
+                keyboardType="numeric"
+              />
+            </View>
 
             {currentRole === 'admin' && (
               <>
@@ -893,25 +862,12 @@ const styles = StyleSheet.create({
   employeeCard: { ...CardStyle, padding: 16 },
   cardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
   cardNameRow: { flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 },
-  employeeName: { fontSize: 15, fontWeight: '600', color: Colors.black },
-  typeBadge: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 8 },
-  badgeRegular: { backgroundColor: Colors.primary + '18' },
-  badgePart: { backgroundColor: Colors.gray100 },
-  typeBadgeText: { fontSize: 11, fontWeight: '500' },
-  badgeRegularText: { color: Colors.primary },
-  badgePartText: { color: Colors.gray500 },
+  employeeName: { fontSize: 16, fontWeight: '700', color: Colors.black },
   probationBadge: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 8, backgroundColor: Colors.warning + '20' },
   probationBadgeText: { fontSize: 11, fontWeight: '500', color: Colors.warning },
-  taxBadge: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 8, backgroundColor: Colors.gray100 },
-  taxBadgeText: { fontSize: 11, fontWeight: '500', color: Colors.gray500 },
-  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   histBtn: { padding: 4 },
-  editBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 3,
-    paddingHorizontal: 10, paddingVertical: 5, marginLeft: 2,
-    backgroundColor: Colors.gray100, borderRadius: 8,
-  },
-  editBtnText: { fontSize: 12, fontWeight: '600', color: Colors.gray600 },
+  editBtn: { padding: 4 },
 
   confirmOverlay: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.4)', padding: 24 },
   confirmCard: { width: '100%', backgroundColor: Colors.white, borderRadius: 20, padding: 22 },
@@ -967,10 +923,6 @@ const styles = StyleSheet.create({
   recalcBtnText: { fontSize: 12, color: Colors.gray400 },
   removePayrollBtn: { paddingVertical: 8, paddingHorizontal: 4 },
   removePayrollBtnText: { fontSize: 12, color: '#D94040' },
-  emptyCard: { ...CardStyle, padding: 40, alignItems: 'center', gap: 8 },
-  emptyIconWrap: { width: 60, height: 60, borderRadius: 18, backgroundColor: Colors.gray50, justifyContent: 'center', alignItems: 'center', marginBottom: 8 },
-  emptyTitle: { fontSize: 15, fontWeight: '600', color: Colors.gray700 },
-  emptyDesc: { fontSize: 13, color: Colors.gray400, textAlign: 'center', lineHeight: 18 },
   addBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: Colors.white, borderRadius: 14, borderWidth: 0.5, borderColor: Colors.gray200, paddingVertical: 14 },
   addBtnText: { fontSize: 14, color: Colors.gray700 },
   modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.3)' },
@@ -987,6 +939,7 @@ const styles = StyleSheet.create({
   fieldLabel: { fontSize: 13, fontWeight: '600', color: Colors.gray600, marginBottom: 6, marginTop: 14 },
   fieldHint: { fontSize: 11, color: Colors.gray400, marginBottom: 8, lineHeight: 16 },
   input: { borderWidth: 1, borderColor: Colors.gray200, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, color: Colors.black, backgroundColor: Colors.gray50 },
+  modalFieldGroup: { gap: 14, marginTop: 14 },
   memberWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   memberChip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, borderWidth: 1, borderColor: Colors.gray200, backgroundColor: Colors.gray50 },
   memberChipOn: { borderColor: Colors.primary, backgroundColor: Colors.tinted },

@@ -407,7 +407,7 @@ export default function NewRecipeScreen() {
                     <Text style={styles.unitText}>{item.unit}</Text>
                   )}
                   <TouchableOpacity onPress={() => removeItem(item.ingredient.id)}>
-                    <Text style={styles.removeText}>✕</Text>
+                    <Ionicons name="close" size={16} color={Colors.gray400} />
                   </TouchableOpacity>
                 </View>
               </View>
@@ -699,7 +699,6 @@ const styles = StyleSheet.create({
   unitToggleChipActive: { backgroundColor: Colors.primary },
   unitToggleText: { fontSize: 12, color: Colors.gray500, fontWeight: '600' },
   unitToggleTextActive: { color: Colors.white },
-  removeText: { fontSize: 15, color: Colors.gray400 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
   modalSheet: {
     backgroundColor: Colors.white,

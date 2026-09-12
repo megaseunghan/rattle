@@ -16,6 +16,7 @@ import { formatStock } from '../../lib/utils/unit';
 import { RecipeCard } from '../../lib/components/RecipeCard';
 import { CategoryManageModal } from '../../lib/components/CategoryManageModal';
 import { animateListChange } from '../../lib/utils/layoutAnimation';
+import { EmptyState } from '../../lib/components/ui';
 
 type ContentTab = '재고현황' | '레시피';
 
@@ -27,28 +28,16 @@ function IngredientRow({ item }: { item: Ingredient }) {
   const isWarn = ratio > 0.2 && ratio <= 1;
 
   const barColor = isDanger ? '#E24B4A' : isWarn ? '#EF9F27' : Colors.primary;
+  const rowTint = isDanger ? styles.ingredientRowDanger : isWarn ? styles.ingredientRowWarn : null;
 
   return (
     <TouchableOpacity
-      style={styles.ingredientRow}
+      style={[styles.ingredientRow, rowTint]}
       onPress={() => router.push(`/stock/${item.id}`)}
       activeOpacity={0.7}
     >
       <View style={styles.ingredientInfo}>
-        <View style={styles.nameRow}>
-          <Text style={styles.ingredientName}>{item.name}</Text>
-          <View style={[
-            styles.badge,
-            isDanger ? styles.badgeDanger : isWarn ? styles.badgeWarn : styles.badgeOk,
-          ]}>
-            <Text style={[
-              styles.badgeText,
-              isDanger ? styles.badgeTextDanger : isWarn ? styles.badgeTextWarn : styles.badgeTextOk,
-            ]}>
-              {isDanger ? '부족' : isWarn ? '임박' : '정상'}
-            </Text>
-          </View>
-        </View>
+        <Text style={styles.ingredientName}>{item.name}</Text>
         <Text style={styles.ingredientSub}>
           잔여 {formatStock(item.current_stock, item)}
           {item.min_stock > 0 ? ` / 기준 ${item.min_stock}${item.unit}` : ''}
@@ -117,25 +106,28 @@ export function StockScreen({ active = true }: { active?: boolean }) {
     });
 
   const lowStockCount = ingredients.filter(i => i.current_stock <= i.min_stock).length;
+  const normalRatio = ingredients.length > 0
+    ? Math.round(((ingredients.length - lowStockCount) / ingredients.length) * 100)
+    : 100;
   const isLoading = activeTab === '재고현황' ? ingLoading : recLoading;
-
-  function handleFab() {
-    if (activeTab === '재고현황') router.push('/stock/new');
-    else router.push('/recipes/new');
-  }
 
   return (
     <SafeAreaView style={styles.container}>
       {/* 헤더 */}
       <View style={styles.topBar}>
-        <View style={styles.titleRow}>
-          <View>
-            <Text style={styles.title}>재고</Text>
+        <Text style={styles.title}>재고</Text>
+
+        {activeTab === '재고현황' && ingredients.length > 0 && (
+          <View style={styles.summaryRow}>
+            <View>
+              <Text style={styles.summaryLabel}>정상 재고율</Text>
+              <Text style={styles.summaryValue}>{normalRatio}%</Text>
+            </View>
             {lowStockCount > 0 && (
-              <Text style={styles.lowStockHint}>품절 임박 {lowStockCount}개</Text>
+              <Text style={styles.summaryLowStock}>품절 임박 {lowStockCount}개</Text>
             )}
           </View>
-        </View>
+        )}
 
         {contentTabs.length > 1 && (
           <View style={styles.innerTabRow}>
@@ -200,7 +192,7 @@ export function StockScreen({ active = true }: { active?: boolean }) {
           renderItem={({ item }) => <IngredientRow item={item} />}
           onEndReached={hasMore ? loadMore : undefined}
           onEndReachedThreshold={0.5}
-          ListEmptyComponent={<EmptyState icon="cube-outline" text="재고 데이터가 없어요" />}
+          ListEmptyComponent={<EmptyState icon="cube-outline" title="재고 데이터가 없어요" />}
           ListFooterComponent={loadingMore ? <ActivityIndicator style={{ padding: 16 }} color={Colors.primary} /> : null}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />}
         />
@@ -211,16 +203,9 @@ export function StockScreen({ active = true }: { active?: boolean }) {
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
           renderItem={({ item }) => <RecipeCard recipe={item} onDelete={id => { animateListChange(); removeRecipe(id); }} isAdmin={canManageRecipes} />}
-          ListEmptyComponent={<EmptyState icon="restaurant-outline" text="레시피가 없어요" />}
+          ListEmptyComponent={<EmptyState icon="restaurant-outline" title="레시피가 없어요" />}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />}
         />
-      )}
-
-      {/* FAB (레시피 세그먼트는 파트타이머에게 숨김) */}
-      {!(activeTab === '레시피' && !canManageRecipes) && (
-        <TouchableOpacity style={styles.fab} onPress={handleFab} activeOpacity={0.85}>
-          <Ionicons name="add" size={26} color={Colors.white} />
-        </TouchableOpacity>
       )}
 
       <CategoryManageModal
@@ -238,15 +223,6 @@ export function StockScreen({ active = true }: { active?: boolean }) {
   );
 }
 
-function EmptyState({ icon, text }: { icon: keyof typeof Ionicons.glyphMap; text: string }) {
-  return (
-    <View style={styles.emptyState}>
-      <Ionicons name={icon} size={32} color={Colors.gray300} />
-      <Text style={styles.emptyText}>{text}</Text>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.gray50 },
 
@@ -259,9 +235,11 @@ const styles = StyleSheet.create({
     borderBottomColor: Colors.gray100,
     gap: 12,
   },
-  titleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  title: { fontSize: 17, fontWeight: '600', color: Colors.black },
-  lowStockHint: { fontSize: 11, color: Colors.warning, marginTop: 1 },
+  title: { fontSize: 20, fontWeight: '700', color: Colors.black },
+  summaryRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between' },
+  summaryLabel: { fontSize: 12, fontWeight: '500', color: Colors.gray500, marginBottom: 2 },
+  summaryValue: { fontSize: 30, fontWeight: '700', color: Colors.black, letterSpacing: -0.5 },
+  summaryLowStock: { fontSize: 13, fontWeight: '600', color: Colors.negative },
 
   innerTabRow: { flexDirection: 'row', gap: 4, backgroundColor: Colors.gray100, borderRadius: 12, padding: 3 },
   innerTab: { flex: 1, paddingVertical: 7, borderRadius: 10, alignItems: 'center' },
@@ -280,9 +258,9 @@ const styles = StyleSheet.create({
     borderWidth: 0.5,
     borderColor: Colors.gray200,
   },
-  catTabActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
+  catTabActive: { backgroundColor: Colors.black, borderColor: Colors.black },
   catTabText: { fontSize: 12, fontWeight: '500', color: Colors.gray500 },
-  catTabTextActive: { color: Colors.white },
+  catTabTextActive: { color: Colors.white, fontWeight: '600' },
   catManageBtn: {
     alignSelf: 'center',
     width: 28, height: 28, borderRadius: 14,
@@ -304,44 +282,18 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     gap: 12,
   },
+  // 재고 상태(부족/임박)를 뱃지 대신 카드 배경/테두리 색으로 표현
+  ingredientRowDanger: { backgroundColor: '#FCEBEB', borderColor: '#F3C6C6' },
+  ingredientRowWarn: { backgroundColor: '#FAEEDA', borderColor: '#EED9AE' },
   ingredientInfo: { flex: 1 },
-  nameRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 },
-  ingredientName: { fontSize: 14, fontWeight: '500', color: Colors.black },
+  ingredientName: { fontSize: 14, fontWeight: '500', color: Colors.black, marginBottom: 2 },
   ingredientSub: { fontSize: 11, color: Colors.gray400, marginBottom: 6 },
   progressBg: { height: 4, backgroundColor: Colors.gray100, borderRadius: 2, overflow: 'hidden' },
   progressFill: { height: 4, borderRadius: 2 },
 
-  // 뱃지
-  badge: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 10 },
-  badgeDanger: { backgroundColor: '#FCEBEB' },
-  badgeWarn: { backgroundColor: '#FAEEDA' },
-  badgeOk: { backgroundColor: '#EAF3DE' },
-  badgeText: { fontSize: 10, fontWeight: '600' },
-  badgeTextDanger: { color: '#A32D2D' },
-  badgeTextWarn: { color: '#854F0B' },
-  badgeTextOk: { color: '#3B6D11' },
-
   // 기타
   loadingWrap: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  emptyState: { paddingTop: 60, alignItems: 'center', gap: 12 },
-  emptyText: { fontSize: 15, color: Colors.gray400 },
 
-  fab: {
-    position: 'absolute',
-    bottom: 24,
-    right: 20,
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: Colors.black,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 6,
-  },
 });
 
 export default StockScreen;

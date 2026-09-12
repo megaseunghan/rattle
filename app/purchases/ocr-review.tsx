@@ -321,7 +321,7 @@ export default function PurchaseOcrReviewScreen() {
                 }}
               >
                 <Text style={styles.supplierRowText}>{name}</Text>
-                {supplier === name && <Text style={styles.supplierRowCheck}>✓</Text>}
+                {supplier === name && <Ionicons name="checkmark" size={18} color={Colors.primary} />}
               </TouchableOpacity>
             ))}
           </TouchableOpacity>
@@ -450,7 +450,8 @@ function OcrItemRow({
 
         {item.matched_ingredient ? (
           <View style={styles.matchBadge}>
-            <Text style={styles.matchBadgeText} numberOfLines={1} ellipsizeMode="tail">✓ {item.matched_ingredient.name}</Text>
+            <Ionicons name="checkmark" size={12} color={Colors.success} />
+            <Text style={styles.matchBadgeText} numberOfLines={1} ellipsizeMode="tail">{item.matched_ingredient.name}</Text>
           </View>
         ) : item.match_candidates.length > 0 ? (
           <TouchableOpacity
@@ -474,7 +475,7 @@ function OcrItemRow({
         )}
 
         <TouchableOpacity onPress={onRemove} style={styles.removeBtn}>
-          <Text style={styles.removeBtnText}>✕</Text>
+          <Ionicons name="close" size={16} color={Colors.gray400} />
         </TouchableOpacity>
       </View>
 
@@ -578,14 +579,13 @@ const styles = StyleSheet.create({
     flex: 1, fontSize: 15, fontWeight: '600', color: Colors.black,
     borderBottomWidth: 1, borderBottomColor: Colors.primary, paddingVertical: 2,
   },
-  matchBadge: { backgroundColor: Colors.success + '20', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, flexShrink: 1, maxWidth: '55%' },
+  matchBadge: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: Colors.success + '20', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, flexShrink: 1, maxWidth: '55%' },
   matchBadgeText: { fontSize: 11, fontWeight: '700', color: Colors.success },
   candidateBadge: { backgroundColor: Colors.warning + '20', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, flexShrink: 1 },
   candidateBadgeText: { fontSize: 11, fontWeight: '700', color: Colors.warning },
   newBadge: { backgroundColor: Colors.primary + '15', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
   newBadgeText: { fontSize: 11, fontWeight: '700', color: Colors.primary },
   removeBtn: { padding: 4 },
-  removeBtnText: { fontSize: 14, color: Colors.gray400 },
   itemDetails: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   detailInput: {
     width: 64, fontSize: 14, fontWeight: '600', color: Colors.black,
@@ -650,5 +650,4 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1, borderBottomColor: Colors.gray100,
   },
   supplierRowText: { fontSize: 15, color: Colors.black },
-  supplierRowCheck: { fontSize: 16, color: Colors.primary, fontWeight: '700' },
 });

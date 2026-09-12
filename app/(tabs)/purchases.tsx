@@ -15,6 +15,7 @@ import { useExpenses } from '../../lib/hooks/useExpenses';
 import { callOcrEdgeFunction } from '../../lib/services/ocr';
 import { animateListChange } from '../../lib/utils/layoutAnimation';
 import { ExpensesPanel } from '../../lib/components/ExpensesPanel';
+import { Badge, SummaryCard } from '../../lib/components/ui';
 
 // ─── 공통 ──────────────────────────────────────────────────
 const PURCHASE_TABS = ['전체', '쿠팡', '네이버', '수기'] as const;
@@ -215,8 +216,8 @@ function PurchasesView({ active }: { active: boolean }) {
                   <TouchableOpacity key={p.id} style={[styles.purchaseRow, i < selectedPurchases.length - 1 && styles.rowBorder]} onPress={() => router.push(`/purchases/${p.id}`)} onLongPress={() => confirmDeletePurchase(p.id)} activeOpacity={0.7}>
                     <View style={styles.purchaseLeft}>
                       <Text style={styles.purchaseSupplier}>{p.supplier}</Text>
-                      <View style={styles.typePill}><Text style={styles.typeText}>{p.category}</Text></View>
-                      <View style={styles.typePill}><Text style={styles.typeText}>{p.type}</Text></View>
+                      <Badge label={p.category} variant="neutral" />
+                      <Badge label={p.type} variant="neutral" />
                     </View>
                     <Text style={styles.purchaseAmount}>{p.amount.toLocaleString()}원</Text>
                     <TouchableOpacity onPress={() => confirmDeletePurchase(p.id)} hitSlop={8} style={styles.deleteIconBtn}>
@@ -230,20 +231,18 @@ function PurchasesView({ active }: { active: boolean }) {
         )}
 
         {selectedDay === null && (
-          <View style={styles.summaryCard}>
-            <Text style={styles.summaryLabel}>이번 달 총 매입</Text>
-            {loading ? <ActivityIndicator size="small" color={Colors.gray300} />
-              : <Text style={styles.summaryValue}>{monthTotal > 0 ? `${monthTotal.toLocaleString()}원` : '—'}</Text>}
-          </View>
+          <SummaryCard
+            label="이번 달 총 매입"
+            amount={loading ? '—' : monthTotal > 0 ? `${monthTotal.toLocaleString()}원` : '—'}
+          />
         )}
 
         <View style={styles.actionRow}>
           <TouchableOpacity style={[styles.scanBtn, scanning && { opacity: 0.5 }]} onPress={handleScan} disabled={scanning} activeOpacity={0.7}>
-            {scanning ? <ActivityIndicator size="small" color={Colors.primary} /> : <Ionicons name="camera-outline" size={18} color={Colors.primary} />}
+            {scanning ? <ActivityIndicator size="small" color={Colors.primary} /> : <Text style={styles.scanBtnText}>스캔</Text>}
           </TouchableOpacity>
           <TouchableOpacity style={styles.addBtn} onPress={goNewPurchase} activeOpacity={0.7}>
-            <Ionicons name="add" size={16} color={Colors.gray700} />
-            <Text style={styles.addBtnText}>매입 추가</Text>
+            <Text style={styles.addBtnText}>+ 매입 추가</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -351,17 +350,12 @@ const styles = StyleSheet.create({
   rowBorder: { borderBottomWidth: 0.5, borderBottomColor: Colors.gray100 },
   purchaseLeft: { flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 },
   purchaseSupplier: { fontSize: 14, fontWeight: '500', color: Colors.black },
-  typePill: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, backgroundColor: Colors.gray100 },
-  typeText: { fontSize: 11, color: Colors.gray500 },
   purchaseAmount: { fontSize: 14, fontWeight: '600', color: Colors.black, marginRight: 10 },
   deleteIconBtn: { padding: 2 },
 
-  summaryCard: { ...CardStyle, padding: 20, alignItems: 'center', gap: 4 },
-  summaryLabel: { fontSize: 12, color: Colors.gray400 },
-  summaryValue: { fontSize: 26, fontWeight: '700', color: Colors.black },
-
   actionRow: { flexDirection: 'row', gap: 10 },
-  scanBtn: { width: 50, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.tinted, borderRadius: 14, borderWidth: 1.5, borderColor: Colors.primary + '40' },
+  scanBtn: { paddingHorizontal: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.tinted, borderRadius: 14, borderWidth: 1.5, borderColor: Colors.primary + '40' },
+  scanBtnText: { fontSize: 14, fontWeight: '600', color: Colors.primary },
   addBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: Colors.white, borderRadius: 14, borderWidth: 0.5, borderColor: Colors.gray200, paddingVertical: 14 },
   addBtnText: { fontSize: 14, color: Colors.gray700 },
 

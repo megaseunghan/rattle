@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  Modal, TextInput, Alert, KeyboardAvoidingView, Platform,
+  Modal, Alert, KeyboardAvoidingView, Platform,
   ActivityIndicator, RefreshControl,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -11,6 +11,7 @@ import { useExpenses } from '../hooks/useExpenses';
 import { Expense, ExpenseCategory } from '../../types';
 import { animateListChange } from '../utils/layoutAnimation';
 import { getErrorMessage } from '../utils/error';
+import { Field } from './ui';
 
 const CATEGORIES: {
   key: ExpenseCategory;
@@ -280,24 +281,21 @@ export function ExpensesPanel() {
               </TouchableOpacity>
             </View>
 
-            <Text style={styles.fieldLabel}>항목명</Text>
-            <TextInput
-              style={styles.input}
-              value={inputName}
-              onChangeText={setInputName}
-              placeholder="예: 임대료, 인스타그램 광고"
-              placeholderTextColor={Colors.gray300}
-            />
-
-            <Text style={styles.fieldLabel}>금액</Text>
-            <TextInput
-              style={styles.input}
-              value={inputAmount}
-              onChangeText={setInputAmount}
-              placeholder="0"
-              placeholderTextColor={Colors.gray300}
-              keyboardType="numeric"
-            />
+            <View style={styles.modalFieldGroup}>
+              <Field
+                label="항목명"
+                value={inputName}
+                onChangeText={setInputName}
+                placeholder="예: 임대료, 인스타그램 광고"
+              />
+              <Field
+                label="금액"
+                value={inputAmount}
+                onChangeText={setInputAmount}
+                placeholder="0"
+                keyboardType="numeric"
+              />
+            </View>
 
           </View>
         </KeyboardAvoidingView>
@@ -360,10 +358,5 @@ const styles = StyleSheet.create({
   sheetHeaderTitle: { fontSize: 16, fontWeight: '700', color: Colors.black },
   sheetCancelText: { fontSize: 15, fontWeight: '500', color: Colors.gray500 },
   sheetSaveText: { fontSize: 15, fontWeight: '700', color: Colors.primary },
-  fieldLabel: { fontSize: 13, fontWeight: '600', color: Colors.gray600, marginBottom: 6, marginTop: 12 },
-  input: {
-    borderWidth: 1, borderColor: Colors.gray200, borderRadius: 10,
-    paddingHorizontal: 12, paddingVertical: 10, fontSize: 14,
-    color: Colors.black, backgroundColor: Colors.gray50,
-  },
+  modalFieldGroup: { gap: 14 },
 });

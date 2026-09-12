@@ -406,7 +406,7 @@ export default function NewPurchaseScreen() {
                         <Text style={styles.itemCategory}>{item.ingredient.category}</Text>
                       </View>
                       <TouchableOpacity onPress={() => removeItem(item.ingredient.id)}>
-                        <Text style={styles.removeText}>✕</Text>
+                        <Ionicons name="close" size={16} color={Colors.gray400} />
                       </TouchableOpacity>
                     </View>
                     {(() => {
@@ -494,7 +494,7 @@ export default function NewPurchaseScreen() {
                 }}
               >
                 <Text style={styles.supplierItemText}>{name}</Text>
-                {supplier === name && <Text style={styles.supplierItemCheck}>✓</Text>}
+                {supplier === name && <Ionicons name="checkmark" size={18} color={Colors.primary} />}
               </TouchableOpacity>
             ))}
           </TouchableOpacity>
@@ -628,7 +628,7 @@ export default function NewPurchaseScreen() {
                           </View>
                           <View style={styles.pickerRowRight}>
                             <Text style={styles.pickerUnit}>{item.unit}</Text>
-                            {checked && !already && <Text style={styles.checkMark}>✓</Text>}
+                            {checked && !already && <Ionicons name="checkmark" size={16} color={Colors.primary} />}
                           </View>
                         </TouchableOpacity>
                       );
@@ -781,7 +781,6 @@ const styles = StyleSheet.create({
   itemCardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 },
   itemName: { fontSize: 15, fontWeight: '600', color: Colors.black },
   itemCategory: { fontSize: 12, color: Colors.gray400, marginTop: 2 },
-  removeText: { fontSize: 15, color: Colors.gray400 },
   unitToggleRow: { flexDirection: 'row', gap: 6, marginBottom: 10 },
   unitToggle: {
     paddingHorizontal: 14,
@@ -891,7 +890,6 @@ const styles = StyleSheet.create({
   pickerNameAdded: { color: Colors.gray400 },
   pickerCategory: { fontSize: 12, color: Colors.gray400, marginTop: 2 },
   pickerUnit: { fontSize: 13, color: Colors.gray500 },
-  checkMark: { fontSize: 16, color: Colors.primary, fontWeight: '700' },
   quickAddTrigger: { padding: 16, alignItems: 'center', borderTopWidth: 1, borderTopColor: Colors.gray100 },
   quickAddTriggerText: { fontSize: 14, color: Colors.primary, fontWeight: '700' },
   bulkAddBtn: {
@@ -949,5 +947,4 @@ const styles = StyleSheet.create({
     borderBottomColor: Colors.gray100,
   },
   supplierItemText: { fontSize: 15, color: Colors.black },
-  supplierItemCheck: { fontSize: 16, color: Colors.primary, fontWeight: '700' },
 });
