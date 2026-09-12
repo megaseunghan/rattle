@@ -1,5 +1,6 @@
 import { supabase } from '../supabase';
 import { Ingredient } from '../../types';
+import { notifyIfEnabled } from './notifications';
 
 export async function getIngredients(
   storeId: string,
@@ -58,7 +59,21 @@ export async function updateIngredient(
     .single();
 
   if (error) throw new Error(error.message);
-  return result as Ingredient;
+  const ingredient = result as Ingredient;
+
+  if (data.current_stock !== undefined && ingredient.current_stock <= ingredient.min_stock) {
+    notifyIfEnabled({
+      storeId: ingredient.store_id,
+      settingKey: 'stock_low',
+      category: 'stock',
+      type: 'low_stock',
+      title: '품절 임박',
+      message: `${ingredient.name}이(가) ${ingredient.current_stock}${ingredient.unit} 남았어요`,
+      dedupeKey: `low_stock:${ingredient.id}:${new Date().toISOString().slice(0, 10)}`,
+    }).catch(() => {});
+  }
+
+  return ingredient;
 }
 
 export async function deleteIngredient(id: string): Promise<void> {
