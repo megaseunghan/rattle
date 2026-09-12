@@ -2,16 +2,23 @@ import { SplashScreen, Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef } from 'react';
 import { AppState, Alert } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { useFonts } from 'expo-font';
 import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
 import { AuthProvider, useAuth } from '../lib/contexts/AuthContext';
+import { DevRoleSwitcher } from '../lib/components/DevRoleSwitcher';
 import { useTossSync } from '../lib/hooks/useTossSync';
 import { Colors } from '../constants/colors';
+import { FONT_ASSETS } from '../constants/fonts';
+import { applyGlobalFont } from '../lib/utils/applyGlobalFont';
 import { supabase } from '../lib/supabase';
 
 WebBrowser.maybeCompleteAuthSession();
 
 SplashScreen.preventAutoHideAsync();
+
+applyGlobalFont();
 
 const PENDING_CHECK_INTERVAL = 30 * 60 * 1000; // 30분
 
@@ -93,6 +100,7 @@ function RootNavigator() {
   }, []);
 
   return (
+    <>
     <Stack
       screenOptions={{
         headerShown: false,
@@ -127,18 +135,36 @@ function RootNavigator() {
       <Stack.Screen name="settings/store" options={{ headerShown: false }} />
       <Stack.Screen name="settings/members" options={{ headerShown: false }} />
 <Stack.Screen name="pos/[date]" options={{ headerShown: false }} />
+      <Stack.Screen name="pos/new" options={{ headerShown: false }} />
       <Stack.Screen name="profit-loss/index" options={{ headerShown: false }} />
       <Stack.Screen name="attendance/index" options={{ headerShown: false }} />
-      <Stack.Screen name="settings/store-location" options={{ headerShown: false }} />
+      <Stack.Screen name="attendance/correction" options={{ headerShown: false }} />
+      <Stack.Screen name="attendance/requests" options={{ headerShown: false }} />
+      <Stack.Screen name="mypage/index" options={{ headerShown: false }} />
+      <Stack.Screen name="mypage/schedule" options={{ headerShown: false }} />
+      <Stack.Screen name="mypage/payslip" options={{ headerShown: false }} />
+      <Stack.Screen name="notifications/index" options={{ headerShown: false }} />
+      <Stack.Screen name="notifications/settings" options={{ headerShown: false }} />
     </Stack>
+    {!loading && user && store && <DevRoleSwitcher />}
+    </>
   );
 }
 
 export default function RootLayout() {
+  const [fontsLoaded, fontError] = useFonts(FONT_ASSETS);
+
+  if (!fontsLoaded && !fontError) {
+    // 스플래시가 떠 있는 동안 로드되므로 별도 로딩 화면 불필요
+    return null;
+  }
+
   return (
-    <AuthProvider>
-      <StatusBar style="dark" />
-      <RootNavigator />
-    </AuthProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <AuthProvider>
+        <StatusBar style="dark" />
+        <RootNavigator />
+      </AuthProvider>
+    </GestureHandlerRootView>
   );
 }
