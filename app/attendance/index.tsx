@@ -1,20 +1,17 @@
 import { useState, useCallback, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  Alert, ActivityIndicator,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import * as Location from 'expo-location';
 import { Colors } from '../../constants/colors';
 import { useAuth } from '../../lib/contexts/AuthContext';
 import { useEmployees } from '../../lib/hooks/useEmployees';
-import {
-  clockIn, clockOut, getTodayAttendance,
-  calcDistanceM, isWithinRadius,
-} from '../../lib/services/attendance';
+import { getTodayAttendance } from '../../lib/services/attendance';
 import { Attendance, Employee } from '../../types';
+import { Badge } from '../../lib/components/ui';
 
 function formatTime(iso: string) {
   return new Date(iso).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
@@ -23,15 +20,9 @@ function formatTime(iso: string) {
 function EmployeeCard({
   employee,
   records,
-  onClockIn,
-  onClockOut,
-  stamping,
 }: {
   employee: Employee;
   records: Attendance[];
-  onClockIn: () => void;
-  onClockOut: () => void;
-  stamping: boolean;
 }) {
   const lastRecord = records[records.length - 1];
   const isClockedIn = lastRecord?.type === 'clock_in';
@@ -43,27 +34,11 @@ function EmployeeCard({
       <View style={styles.empHeader}>
         <View style={styles.empInfo}>
           <Text style={styles.empName}>{employee.name}</Text>
-          <View style={[styles.statusBadge, isClockedIn ? styles.statusIn : clockOutRecord ? styles.statusOut : styles.statusNone]}>
-            <Text style={[styles.statusText, isClockedIn ? styles.statusTextIn : clockOutRecord ? styles.statusTextOut : styles.statusTextNone]}>
-              {isClockedIn ? '근무 중' : clockOutRecord ? '퇴근' : '미출근'}
-            </Text>
-          </View>
+          <Badge
+            label={isClockedIn ? '근무 중' : clockOutRecord ? '퇴근' : '미출근'}
+            variant={isClockedIn ? 'positive' : 'neutral'}
+          />
         </View>
-
-        {stamping
-          ? <ActivityIndicator size="small" color={Colors.primary} />
-          : isClockedIn
-            ? <TouchableOpacity style={styles.clockOutBtn} onPress={onClockOut} activeOpacity={0.7}>
-                <Ionicons name="log-out-outline" size={15} color={Colors.white} />
-                <Text style={styles.clockOutBtnText}>퇴근</Text>
-              </TouchableOpacity>
-            : !clockOutRecord
-              ? <TouchableOpacity style={styles.clockInBtn} onPress={onClockIn} activeOpacity={0.7}>
-                  <Ionicons name="log-in-outline" size={15} color={Colors.white} />
-                  <Text style={styles.clockInBtnText}>출근</Text>
-                </TouchableOpacity>
-              : null
-        }
       </View>
 
       {(clockInRecord || clockOutRecord) && (
@@ -84,20 +59,30 @@ function EmployeeCard({
           )}
         </View>
       )}
+
+      <TouchableOpacity
+        style={styles.historyLink}
+        onPress={() => router.push(`/attendance/${employee.id}?name=${encodeURIComponent(employee.name)}`)}
+        hitSlop={8}
+      >
+        <Text style={styles.historyLinkText}>이번 달 전체 기록 보기</Text>
+        <Ionicons name="chevron-forward" size={13} color={Colors.primary} />
+      </TouchableOpacity>
     </View>
   );
 }
 
 export default function AttendanceScreen() {
-  const { store, user, refreshStore } = useAuth();
+  const { store, user, refreshStore, devPreviewEmployeeId } = useAuth();
   const { employees, loading: empLoading, refetch: refetchEmp } = useEmployees();
 
   // 로그인 본인에 연결된 직원만 출퇴근 가능
-  const myEmployees = employees.filter(e => e.user_id === user?.id);
+  const myEmployees = devPreviewEmployeeId
+    ? employees.filter(e => e.id === devPreviewEmployeeId)
+    : employees.filter(e => e.user_id === user?.id);
 
   const [recordsByEmp, setRecordsByEmp] = useState<Record<string, Attendance[]>>({});
   const [loadingRecords, setLoadingRecords] = useState(false);
-  const [stampingId, setStampingId] = useState<string | null>(null);
 
   const today = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'short' });
 
@@ -125,58 +110,6 @@ export default function AttendanceScreen() {
 
   useEffect(() => { loadRecords(); }, [loadRecords]);
 
-  async function handleStamp(employee: Employee, type: 'clock_in' | 'clock_out') {
-    if (!store) return;
-
-    if (store.latitude == null || store.longitude == null) {
-      Alert.alert('위치 미설정', '매장 위치가 등록되어 있지 않습니다.\n설정 > 매장 위치 등록에서 먼저 설정해주세요.');
-      return;
-    }
-
-    setStampingId(employee.id);
-    try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('권한 필요', '위치 권한이 필요합니다.');
-        return;
-      }
-
-      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
-      const distanceM = calcDistanceM(
-        loc.coords.latitude, loc.coords.longitude,
-        store.latitude!, store.longitude!,
-      );
-
-      if (!isWithinRadius(distanceM)) {
-        Alert.alert(
-          '위치 확인 실패',
-          `매장에서 ${Math.round(distanceM)}m 떨어져 있어요.\n40m 이내에서만 출퇴근이 가능합니다.`,
-        );
-        return;
-      }
-
-      const fn = type === 'clock_in' ? clockIn : clockOut;
-      const record = await fn(store.id, employee.id, loc.coords.latitude, loc.coords.longitude, distanceM);
-
-      setRecordsByEmp(prev => ({
-        ...prev,
-        [employee.id]: [...(prev[employee.id] ?? []), record],
-      }));
-
-      const wageLine = type === 'clock_out' && record.daily_wage != null
-        ? `\n근무 ${record.worked_minutes}분 · 일급 ${record.daily_wage.toLocaleString()}원`
-        : '';
-      Alert.alert(
-        type === 'clock_in' ? '출근 완료' : '퇴근 완료',
-        `${employee.name} · ${formatTime(record.timestamp)}\n매장까지 ${Math.round(distanceM)}m${wageLine}`,
-      );
-    } catch (e: any) {
-      Alert.alert('오류', e.message);
-    } finally {
-      setStampingId(null);
-    }
-  }
-
   const hasLocation = store?.latitude != null && store?.longitude != null;
 
   return (
@@ -193,7 +126,7 @@ export default function AttendanceScreen() {
       </View>
 
       {!hasLocation && (
-        <TouchableOpacity style={styles.locationBanner} onPress={() => router.push('/settings/store-location')} activeOpacity={0.8}>
+        <TouchableOpacity style={styles.locationBanner} onPress={() => router.push('/settings/store')} activeOpacity={0.8}>
           <Ionicons name="location-outline" size={16} color="#92400E" />
           <Text style={styles.locationBannerText}>매장 위치를 먼저 등록해주세요</Text>
           <Ionicons name="chevron-forward" size={14} color="#92400E" />
@@ -216,9 +149,6 @@ export default function AttendanceScreen() {
                 key={emp.id}
                 employee={emp}
                 records={recordsByEmp[emp.id] ?? []}
-                stamping={stampingId === emp.id}
-                onClockIn={() => handleStamp(emp, 'clock_in')}
-                onClockOut={() => handleStamp(emp, 'clock_out')}
               />
             ))
         }
@@ -255,29 +185,9 @@ const styles = StyleSheet.create({
   empInfo: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   empName: { fontSize: 15, fontWeight: '600', color: Colors.black },
 
-  statusBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10 },
-  statusIn:   { backgroundColor: '#D1FAE5' },
-  statusOut:  { backgroundColor: Colors.gray100 },
-  statusNone: { backgroundColor: Colors.gray50, borderWidth: 0.5, borderColor: Colors.gray200 },
-  statusText: { fontSize: 11, fontWeight: '600' },
-  statusTextIn:   { color: '#065F46' },
-  statusTextOut:  { color: Colors.gray500 },
-  statusTextNone: { color: Colors.gray400 },
-
-  clockInBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 5,
-    backgroundColor: Colors.primary, borderRadius: 10,
-    paddingHorizontal: 14, paddingVertical: 8,
-  },
-  clockInBtnText: { fontSize: 13, fontWeight: '600', color: Colors.white },
-  clockOutBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 5,
-    backgroundColor: Colors.gray700, borderRadius: 10,
-    paddingHorizontal: 14, paddingVertical: 8,
-  },
-  clockOutBtnText: { fontSize: 13, fontWeight: '600', color: Colors.white },
-
   timeRow: { flexDirection: 'row', gap: 16, marginTop: 10, paddingTop: 10, borderTopWidth: 0.5, borderTopColor: Colors.gray100 },
+  historyLink: { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 10 },
+  historyLinkText: { fontSize: 12, fontWeight: '600', color: Colors.primary },
   timeItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   timeLabel: { fontSize: 11, color: Colors.gray400 },
   timeValue: { fontSize: 12, fontWeight: '600', color: Colors.gray600 },

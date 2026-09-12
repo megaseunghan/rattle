@@ -3,7 +3,7 @@ import * as Location from 'expo-location';
 import { useAuth } from '../contexts/AuthContext';
 import {
   clockIn, clockOut, getTodayAttendance,
-  calcDistanceM, isWithinRadius,
+  calcDistanceM, isWithinRadius, DEFAULT_ATTENDANCE_RADIUS_M,
 } from '../services/attendance';
 import { Attendance } from '../../types';
 
@@ -50,9 +50,11 @@ export function useAttendance(employeeId: string) {
         loc.coords.latitude, loc.coords.longitude,
         store.latitude!, store.longitude!,
       );
+      const radiusM = store.attendance_radius_m ?? DEFAULT_ATTENDANCE_RADIUS_M;
+      const blockOutside = store.attendance_block_outside ?? true;
 
-      if (!isWithinRadius(distanceM)) {
-        return { success: false, distanceM: Math.round(distanceM), withinRadius: false, message: `매장에서 ${Math.round(distanceM)}m 떨어져 있어요. 40m 이내에서만 가능합니다.` };
+      if (blockOutside && !isWithinRadius(distanceM, radiusM)) {
+        return { success: false, distanceM: Math.round(distanceM), withinRadius: false, message: '매장과 멀리 떨어져 있어 출퇴근을 기록할 수 없어요.' };
       }
 
       const fn = type === 'clock_in' ? clockIn : clockOut;

@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
-import { useFocusEffect } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../constants/colors';
 import { getMonthlyAttendanceRecords } from '../services/attendance';
@@ -12,6 +12,10 @@ interface DaySummary {
   clockOut?: string;
   workedMinutes: number;
   dailyWage: number;
+}
+
+function toDateStr(year: number, month: number, day: number): string {
+  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
 
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
@@ -145,7 +149,20 @@ export function AttendanceCalendar({ storeId, employeeId }: { storeId: string; e
           {workedDays
             .sort((a, b) => b.day - a.day)
             .map((d, i) => (
-              <View key={d.day} style={[styles.listRow, i !== workedDays.length - 1 && styles.listRowBorder]}>
+              <TouchableOpacity
+                key={d.day}
+                style={[styles.listRow, i !== workedDays.length - 1 && styles.listRowBorder]}
+                activeOpacity={0.7}
+                onPress={() => {
+                  const params = new URLSearchParams({
+                    employeeId,
+                    date: toDateStr(year, month, d.day),
+                    ...(d.clockIn ? { clockIn: d.clockIn } : {}),
+                    ...(d.clockOut ? { clockOut: d.clockOut } : {}),
+                  });
+                  router.push(`/attendance/correction?${params.toString()}` as any);
+                }}
+              >
                 <View style={styles.listDateWrap}>
                   <Text style={styles.listDate}>{month}/{d.day}</Text>
                 </View>
@@ -154,7 +171,8 @@ export function AttendanceCalendar({ storeId, employeeId }: { storeId: string; e
                   <Text style={styles.listMinutes}>{Math.floor(d.workedMinutes / 60)}시간 {d.workedMinutes % 60}분</Text>
                 </View>
                 <Text style={styles.listWage}>{d.dailyWage.toLocaleString()}원</Text>
-              </View>
+                <Ionicons name="chevron-forward" size={14} color={Colors.gray300} />
+              </TouchableOpacity>
             ))}
         </View>
       )}

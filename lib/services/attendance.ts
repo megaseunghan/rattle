@@ -1,8 +1,10 @@
 import { supabase } from '../supabase';
 import { Attendance, AttendanceType } from '../../types';
 import { probationFactor } from './payroll';
+import { getEmployeeSchedule } from './schedule';
+import { notifyIfEnabled } from './notifications';
 
-const RADIUS_M = 40;
+export const DEFAULT_ATTENDANCE_RADIUS_M = 40;
 
 /** Haversine 공식 — 두 GPS 좌표 간 거리(m) */
 export function calcDistanceM(
@@ -19,8 +21,9 @@ export function calcDistanceM(
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-export function isWithinRadius(distanceM: number): boolean {
-  return distanceM <= RADIUS_M;
+/** 매장별로 설정된 허용 반경(m) 기준으로 판정. 미설정 매장은 기본 40m */
+export function isWithinRadius(distanceM: number, radiusM: number = DEFAULT_ATTENDANCE_RADIUS_M): boolean {
+  return distanceM <= radiusM;
 }
 
 export async function clockIn(
@@ -36,7 +39,38 @@ export async function clockIn(
     .select()
     .single();
   if (error) throw new Error(error.message);
-  return data as Attendance;
+  const record = data as Attendance;
+  checkLateAndNotify(storeId, employeeId, record.timestamp).catch(() => {});
+  return record;
+}
+
+/** 스케줄 시작 시각보다 1분이라도 늦게 출근하면 지각 알림 생성 (설정 꺼져 있으면 조용히 무시) */
+async function checkLateAndNotify(storeId: string, employeeId: string, clockInIso: string): Promise<void> {
+  const clockInAt = new Date(clockInIso);
+  const todayWeekday = clockInAt.getDay();
+  const [schedule, { data: emp }] = await Promise.all([
+    getEmployeeSchedule(employeeId),
+    supabase.from('employees').select('name').eq('id', employeeId).maybeSingle(),
+  ]);
+  const todaySchedule = schedule.find(s => s.day_of_week === todayWeekday && s.is_working && s.start_time);
+  if (!todaySchedule?.start_time) return;
+
+  const [h, m] = todaySchedule.start_time.split(':').map(Number);
+  const startMin = h * 60 + m;
+  const actualMin = clockInAt.getHours() * 60 + clockInAt.getMinutes();
+  if (actualMin <= startMin) return;
+
+  const empName = (emp as { name?: string } | null)?.name ?? '직원';
+  const timeLabel = clockInAt.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+  await notifyIfEnabled({
+    storeId,
+    settingKey: 'attendance_late',
+    category: 'attendance',
+    type: 'late',
+    title: '지각',
+    message: `${empName}님이 ${timeLabel}에 지각했어요`,
+    dedupeKey: `late:${employeeId}:${clockInIso.slice(0, 10)}`,
+  });
 }
 
 export async function clockOut(
@@ -202,5 +236,36 @@ export async function updateStoreLocation(
   if (error) throw new Error(`저장 실패: ${error.message} (code: ${error.code})`);
   if (!data || data.length === 0) {
     throw new Error('위치 저장 권한이 없거나 매장을 찾을 수 없습니다. Supabase RLS 정책을 확인해주세요.');
+  }
+}
+
+/** 매장 정보 화면(GPS 기준점+허용 반경+출근 규칙)을 한 번에 저장 */
+export async function updateStoreAttendanceSettings(
+  storeId: string,
+  settings: {
+    name: string;
+    address: string | null;
+    latitude: number;
+    longitude: number;
+    radiusM: number;
+    blockOutside: boolean;
+  },
+): Promise<void> {
+  const { data, error } = await supabase
+    .from('stores')
+    .update({
+      name: settings.name,
+      address: settings.address,
+      latitude: settings.latitude,
+      longitude: settings.longitude,
+      attendance_radius_m: settings.radiusM,
+      attendance_block_outside: settings.blockOutside,
+    })
+    .eq('id', storeId)
+    .select('id');
+
+  if (error) throw new Error(`저장 실패: ${error.message} (code: ${error.code})`);
+  if (!data || data.length === 0) {
+    throw new Error('저장 권한이 없거나 매장을 찾을 수 없습니다.');
   }
 }
