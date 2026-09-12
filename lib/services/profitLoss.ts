@@ -4,6 +4,7 @@ import { getPurchasesByMonth, getPurchaseItemsForPurchases } from './purchases';
 import { getExpensesByMonth, getEffectiveFixedExpenses } from './expenses';
 import { getStoreWageHistory, regularGrossForMonth } from './wageHistory';
 import { probationFactor } from './payroll';
+import { getManualSalesTotals } from './manualSales';
 
 // 카드 매출 대비 카드 수수료율 (1.25%)
 const CARD_FEE_RATE = 0.0125;
@@ -48,25 +49,6 @@ function getMonthRevenueRange(yearMonth: string, closingTime: string): { from: D
   return { from, to };
 }
 
-/** 특정 월의 매출 합계만 조회 (전월/전년 동월 대비 계산용, 손익 전체 집계보다 가볍다) */
-export async function getMonthlyRevenue(
-  storeId: string,
-  yearMonth: string,
-  closingTime: string,
-): Promise<number> {
-  const { from, to } = getMonthRevenueRange(yearMonth, closingTime);
-  const { data, error } = await supabase
-    .from('toss_orders')
-    .select('total_amount')
-    .eq('store_id', storeId)
-    .eq('status', 'COMPLETED')
-    .gte('order_at', from.toISOString())
-    .lte('order_at', to.toISOString());
-
-  if (error) throw new Error(error.message);
-  return (data ?? []).reduce((sum, r) => sum + (r.total_amount ?? 0), 0);
-}
-
 export async function getProfitLossByMonth(
   storeId: string,
   yearMonth: string,
@@ -77,7 +59,7 @@ export async function getProfitLossByMonth(
   const year = Number(yearMonth.slice(0, 4));
   const month = Number(yearMonth.slice(5, 7));
 
-  const [revenueResult, purchases, expenses, effectiveFixed, payrollResult, attendanceResult, wageHistory, employeesResult] = await Promise.all([
+  const [revenueResult, manualSalesTotals, purchases, expenses, effectiveFixed, payrollResult, attendanceResult, wageHistory, employeesResult] = await Promise.all([
     supabase
       .from('toss_orders')
       .select('total_amount, card_amount, cash_amount')
@@ -85,6 +67,7 @@ export async function getProfitLossByMonth(
       .eq('status', 'COMPLETED')
       .gte('order_at', from.toISOString())
       .lte('order_at', to.toISOString()),
+    getManualSalesTotals(storeId, yearMonth),
     getPurchasesByMonth(storeId, yearMonth),
     getExpensesByMonth(storeId, yearMonth),
     getEffectiveFixedExpenses(storeId, yearMonth),
@@ -111,16 +94,16 @@ export async function getProfitLossByMonth(
       .eq('is_active', true),
   ]);
 
-  // 1. 매출 (카드/현금 분리)
+  // 1. 매출 (카드/현금 분리) — Toss POS 동기화분 + 수기 등록분 합산
   const orders = revenueResult.data ?? [];
-  const cardRevenue = orders.reduce((s, r) => s + Number(r.card_amount ?? 0), 0);
-  const cashRevenue = orders.reduce((s, r) => s + Number(r.cash_amount ?? 0), 0);
+  const cardRevenue = orders.reduce((s, r) => s + Number(r.card_amount ?? 0), 0) + manualSalesTotals.cardRevenue;
+  const cashRevenue = orders.reduce((s, r) => s + Number(r.cash_amount ?? 0), 0) + manualSalesTotals.cashRevenue;
   // card+cash가 0이면 total_amount를 카드로 처리 (구 데이터 호환)
   const revenue = orders.reduce((s, r) => {
     const card = Number(r.card_amount ?? 0);
     const cash = Number(r.cash_amount ?? 0);
     return s + (card + cash > 0 ? card + cash : Number(r.total_amount ?? 0));
-  }, 0);
+  }, 0) + manualSalesTotals.total;
 
   // 2. 매입 (카테고리별) — 품목 있는 매입은 품목별 category로, 금액만 매입은 purchases.category로 집계
   const purchaseItems = await getPurchaseItemsForPurchases(purchases.map(p => p.id));

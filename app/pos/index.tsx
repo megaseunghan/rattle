@@ -1,10 +1,10 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   Alert, ActivityIndicator, TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useFocusEffect, router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../constants/colors';
 import { useTossSync } from '../../lib/hooks/useTossSync';
@@ -12,7 +12,9 @@ import { usePosAnalytics } from '../../lib/hooks/usePosAnalytics';
 import { useAuth } from '../../lib/contexts/AuthContext';
 import { LoadingSpinner } from '../../lib/components/LoadingSpinner';
 import { getStoreDetails } from '../../lib/services/stores';
+import { useManualSales } from '../../lib/hooks/useManualSales';
 import { DailySummary } from '../../types';
+import { Badge, EmptyState } from '../../lib/components/ui';
 
 type SyncStatus = 'unregistered' | 'connected';
 
@@ -31,7 +33,7 @@ function toDateKey(year: number, month: number, day: number) {
   return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
 
-export default function PosScreen() {
+export function PosScreen({ active = true }: { active?: boolean }) {
   const { store } = useAuth();
   const {
     lastSyncAt, todaySales, todayOrderCount,
@@ -52,6 +54,19 @@ export default function PosScreen() {
   const selectedMonthRef = useRef(new Date().getMonth() + 1);
 
   const closingTime = (store?.closing_time as string | null | undefined)?.slice(0, 5) ?? '23:00';
+
+  const manualYearMonth = `${queryYear}-${String(queryMonth).padStart(2, '0')}`;
+  const { sales: manualSales, loading: loadingManualSales, total: manualTotal, refetch: refetchManualSales, remove: removeManualSale } = useManualSales(manualYearMonth);
+
+  useEffect(() => {
+    if (!active || status !== 'unregistered') return;
+    refetchManualSales();
+  }, [active, status, refetchManualSales]);
+
+  // 매출 추가 화면(스택 push)에서 뒤로 돌아왔을 때도 목록 갱신
+  useFocusEffect(useCallback(() => {
+    if (status === 'unregistered') refetchManualSales();
+  }, [status, refetchManualSales]));
 
   function prevQueryMonth() {
     setSelectedDay(null);
@@ -130,10 +145,11 @@ export default function PosScreen() {
     setLoadingStatus(false);
   }, [store, loadTodaySales, fetchSummariesByRange, autoSyncRecent]);
 
-  useFocusEffect(useCallback(() => {
+  useEffect(() => {
+    if (!active) return;
     setLoadingStatus(true);
     loadStoreStatus();
-  }, [loadStoreStatus]));
+  }, [active, loadStoreStatus]);
 
   async function handleManualSync() {
     setSyncing(true);
@@ -149,8 +165,6 @@ export default function PosScreen() {
   }
 
   const statusLabel = status === 'connected' ? '연동완료' : '미연동';
-  const statusIcon = status === 'connected' ? 'checkmark-circle' as const : 'ellipse-outline' as const;
-  const statusColor = status === 'connected' ? Colors.success : Colors.gray400;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -171,18 +185,7 @@ export default function PosScreen() {
               <Text style={styles.syncingText}>동기화 중</Text>
             </View>
           )}
-          <View style={[
-            styles.statusBadge,
-            status === 'connected' ? styles.statusConnected : styles.statusDisconnected,
-          ]}>
-            <Ionicons name={statusIcon} size={13} color={statusColor} />
-            <Text style={[
-              styles.statusText,
-              status === 'connected' ? styles.statusTextConnected : styles.statusTextDisconnected,
-            ]}>
-              {statusLabel}
-            </Text>
-          </View>
+          <Badge label={statusLabel} variant={status === 'connected' ? 'auto' : 'neutral'} />
         </View>
       </View>
 
@@ -339,13 +342,11 @@ export default function PosScreen() {
 
                         {/* 날짜 미선택 + 데이터 없음 */}
                         {selectedDay === null && summaries.length === 0 && (
-                          <View style={styles.emptyState}>
-                            <View style={styles.emptyIconBg}>
-                              <Ionicons name="storefront-outline" size={26} color={Colors.gray400} />
-                            </View>
-                            <Text style={styles.emptyText}>이 달의 내역이 없어요</Text>
-                            <Text style={styles.emptySubtext}>조회 버튼을 눌러 데이터를 불러오세요</Text>
-                          </View>
+                          <EmptyState
+                            icon="storefront-outline"
+                            title="이 달의 내역이 없어요"
+                            description="조회 버튼을 눌러 데이터를 불러오세요"
+                          />
                         )}
                       </>
                     )
@@ -376,6 +377,64 @@ export default function PosScreen() {
                   포스 설정 &gt; 서비스 연동에서 서비스코드를 입력하면 자동으로 연결됩니다.
                 </Text>
               </View>
+
+              {/* ── 화면 10/11: 수기 매출 ── */}
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>{queryYear}년 {queryMonth}월 수기 매출</Text>
+                {manualTotal > 0 && <Text style={styles.sectionTotal}>{manualTotal.toLocaleString('ko-KR')}원</Text>}
+              </View>
+
+              <View style={styles.monthPickerRow}>
+                <TouchableOpacity onPress={prevQueryMonth} style={styles.monthNavBtn} activeOpacity={0.7}>
+                  <Ionicons name="chevron-back" size={18} color={Colors.gray600} />
+                </TouchableOpacity>
+                <Text style={styles.monthPickerText}>{queryYear}년 {queryMonth}월</Text>
+                <TouchableOpacity onPress={nextQueryMonth} style={styles.monthNavBtn} activeOpacity={0.7}>
+                  <Ionicons name="chevron-forward" size={18} color={Colors.gray600} />
+                </TouchableOpacity>
+              </View>
+
+              {loadingManualSales ? (
+                <LoadingSpinner fullScreen={false} />
+              ) : manualSales.length === 0 ? (
+                <EmptyState
+                  icon="cash-outline"
+                  title="이번 달 등록된 매출이 없어요"
+                  description="POS 연동 전이라면 직접 등록해서 손익계산서에 반영할 수 있어요"
+                  ctaLabel="매출 등록하기"
+                  onCtaPress={() => router.push('/pos/new')}
+                />
+              ) : (
+                <>
+                  <View style={styles.manualList}>
+                    {manualSales.map((s, i) => (
+                      <View key={s.id} style={[styles.manualRow, i > 0 && styles.manualRowBorder]}>
+                        <View style={styles.manualRowInfo}>
+                          <Text style={styles.manualRowDate}>{s.date.slice(5).replace('-', '/')}</Text>
+                          <Text style={styles.manualRowMethod}>
+                            {s.payment_method === 'card' ? '카드' : s.payment_method === 'cash' ? '현금' : '배달앱'}
+                            {s.memo ? ` · ${s.memo}` : ''}
+                          </Text>
+                        </View>
+                        <Text style={styles.manualRowAmount}>{Number(s.amount).toLocaleString('ko-KR')}원</Text>
+                        <TouchableOpacity
+                          onPress={() => Alert.alert('삭제', '이 매출 기록을 삭제할까요?', [
+                            { text: '취소', style: 'cancel' },
+                            { text: '삭제', style: 'destructive', onPress: () => removeManualSale(s.id) },
+                          ])}
+                          hitSlop={8}
+                        >
+                          <Ionicons name="trash-outline" size={16} color={Colors.negative} />
+                        </TouchableOpacity>
+                      </View>
+                    ))}
+                  </View>
+                  <TouchableOpacity style={styles.addManualBtn} onPress={() => router.push('/pos/new')} activeOpacity={0.7}>
+                    <Ionicons name="add" size={16} color={Colors.primary} />
+                    <Text style={styles.addManualBtnText}>매출 추가</Text>
+                  </TouchableOpacity>
+                </>
+              )}
             </ScrollView>
           )
       }
@@ -410,19 +469,6 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   syncingText: { fontSize: 12, color: Colors.dark, fontWeight: '600' },
-
-  statusBadge: {
-    flexDirection: 'row', alignItems: 'center', gap: 5,
-    paddingHorizontal: 10, paddingVertical: 5,
-    borderRadius: 20,
-  },
-  statusConnected: { backgroundColor: Colors.success + '18' },
-  statusPending: { backgroundColor: Colors.warning + '18' },
-  statusDisconnected: { backgroundColor: Colors.gray100 },
-  statusText: { fontSize: 12, fontWeight: '600' },
-  statusTextConnected: { color: Colors.success },
-  statusTextPending: { color: Colors.warning },
-  statusTextDisconnected: { color: Colors.gray500 },
 
   scroll: { padding: 16, paddingBottom: 48 },
 
@@ -474,6 +520,22 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.gray100, borderRadius: 12, marginBottom: 16,
   },
   noticeText: { flex: 1, fontSize: 13, color: Colors.gray500, lineHeight: 20 },
+
+  manualList: {
+    backgroundColor: Colors.white, borderRadius: 16, borderWidth: 0.5, borderColor: Colors.gray100,
+    overflow: 'hidden', marginTop: 8,
+  },
+  manualRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, paddingVertical: 12 },
+  manualRowBorder: { borderTopWidth: 0.5, borderTopColor: Colors.gray100 },
+  manualRowInfo: { flex: 1, gap: 2 },
+  manualRowDate: { fontSize: 13, fontWeight: '700', color: Colors.black },
+  manualRowMethod: { fontSize: 11, fontWeight: '400', color: Colors.gray400 },
+  manualRowAmount: { fontSize: 14, fontWeight: '700', color: Colors.primary },
+  addManualBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    marginTop: 10, paddingVertical: 12, borderRadius: 12, borderWidth: 1, borderColor: Colors.primary,
+  },
+  addManualBtnText: { fontSize: 13, fontWeight: '700', color: Colors.primary },
 
   pendingCard: {
     backgroundColor: Colors.white, borderRadius: 20,
@@ -568,14 +630,6 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.gray100, justifyContent: 'center', alignItems: 'center',
   },
 
-  emptyState: { alignItems: 'center', paddingVertical: 32 },
-  emptyIconBg: {
-    width: 64, height: 64, borderRadius: 20,
-    backgroundColor: Colors.gray100, justifyContent: 'center', alignItems: 'center', marginBottom: 14,
-  },
-  emptyText: { fontSize: 15, fontWeight: '700', color: Colors.gray600, marginBottom: 4 },
-  emptySubtext: { fontSize: 13, color: Colors.gray400 },
-
   // 캘린더
   calendarCard: {
     backgroundColor: Colors.white, borderRadius: 16,
@@ -616,3 +670,5 @@ const styles = StyleSheet.create({
   },
   selectedDayEmptyText: { fontSize: 14, color: Colors.gray400 },
 });
+
+export default PosScreen;
