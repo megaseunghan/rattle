@@ -14,6 +14,8 @@ export interface Store {
   longitude?: number | null;
   labor_ratio_target?: number;
   cogs_ratio_target?: number;
+  attendance_radius_m?: number;
+  attendance_block_outside?: boolean;
 }
 
 export type AttendanceType = 'clock_in' | 'clock_out';
@@ -367,4 +369,117 @@ export interface DailyItem {
   categoryName: string;  // 카탈로그 미동기화 시 ''
   quantity: number;
   totalAmount: number;
+}
+
+// 매출 수기 입력 (화면 10/11)
+export type ManualSalePaymentMethod = 'card' | 'cash' | 'delivery';
+
+export interface ManualSale {
+  id: string;
+  store_id: string;
+  date: string; // 'YYYY-MM-DD'
+  amount: number;
+  payment_method: ManualSalePaymentMethod;
+  memo: string | null;
+  created_by: string | null;
+  created_at: string;
+}
+
+// 알림 센터 (화면 38/52)
+export type NotificationCategory = 'attendance' | 'stock' | 'sales';
+
+export interface AppNotification {
+  id: string;
+  store_id: string;
+  category: NotificationCategory;
+  type: string;
+  title: string;
+  message: string;
+  dedupe_key: string | null;
+  is_read: boolean;
+  created_at: string;
+}
+
+export interface NotificationSetting {
+  id: string;
+  store_id: string;
+  setting_key: string;
+  enabled: boolean;
+}
+
+// 청소 체크리스트 (화면 27/28)
+export type CleaningSegment = 'open' | 'close' | 'weekday';
+
+export interface CleaningItem {
+  id: string;
+  store_id: string;
+  segment: CleaningSegment;
+  weekday: number | null; // segment='weekday'일 때만 사용 (0=일요일)
+  title: string;
+  sort_order: number;
+  created_at: string;
+}
+
+// 주간 스케줄 (화면 21/22)
+export interface EmployeeSchedule {
+  id: string;
+  store_id: string;
+  employee_id: string;
+  day_of_week: number;       // 0=일요일 ~ 6=토요일
+  is_working: boolean;
+  start_time: string | null; // 'HH:mm:ss'
+  end_time: string | null;
+  updated_at: string;
+}
+
+export interface ScheduleDayInput {
+  day_of_week: number;
+  is_working: boolean;
+  start_time: string | null;
+  end_time: string | null;
+}
+
+export type RequestStatus = 'pending' | 'approved' | 'rejected';
+
+export interface ScheduleRequest {
+  id: string;
+  store_id: string;
+  employee_id: string;
+  days: ScheduleDayInput[];
+  status: RequestStatus;
+  requested_at: string;
+  reviewed_at: string | null;
+  reviewed_by: string | null;
+}
+
+// 근태 정정 요청 (화면 51)
+export type CorrectionTarget = 'clock_in' | 'clock_out' | 'both';
+
+export interface AttendanceCorrection {
+  id: string;
+  store_id: string;
+  employee_id: string;
+  attendance_date: string; // 'YYYY-MM-DD'
+  target: CorrectionTarget;
+  original_clock_in: string | null;
+  original_clock_out: string | null;
+  requested_clock_in: string | null;
+  requested_clock_out: string | null;
+  reason: string;
+  photo_url: string | null;
+  status: RequestStatus;
+  requested_at: string;
+  reviewed_at: string | null;
+  reviewed_by: string | null;
+}
+
+
+export interface CleaningLog {
+  id: string;
+  store_id: string;
+  item_id: string;
+  date: string; // 'YYYY-MM-DD'
+  checked_by: string;
+  checked_by_name: string;
+  checked_at: string;
 }

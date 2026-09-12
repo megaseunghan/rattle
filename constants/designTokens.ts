@@ -1,4 +1,4 @@
-import { ViewStyle } from 'react-native';
+import { TextStyle, ViewStyle } from 'react-native';
 import { Colors } from './colors';
 
 /**
@@ -20,6 +20,18 @@ export const Radius = {
   lg: 14,
   xl: 16,
   pill: 20,
+  field: 12,
+} as const;
+
+/** design_handoff_rattle_ui/design-tokens.md 기준 여백 스케일 */
+export const Spacing = {
+  screenX: 22,
+  sectionTop: 20,
+  sectionHeaderGap: 6,
+  cardPadding: 14,
+  listGap: 8,
+  fieldGap: 14,
+  ctaPadding: 22,
 } as const;
 
 /** 앱 전반에서 가장 널리 쓰이는 '흰 카드' 패턴 (list/summary/employee/empty 카드 등의 기준값) */
@@ -35,4 +47,51 @@ export const ScreenTitle = {
   fontSize: Type.lg,
   fontWeight: '600' as const,
   color: Colors.black,
+};
+
+/** patterns.md 4번 — 요약 카드 (tinted 배경) */
+export const SummaryCardStyle: ViewStyle = {
+  backgroundColor: Colors.tinted,
+  borderRadius: Radius.xl,
+  padding: Spacing.cardPadding,
+};
+
+/** patterns.md 5번 — 리스트 카드 (gray100 테두리) */
+export const ListCardStyle: ViewStyle = {
+  backgroundColor: Colors.white,
+  borderWidth: 1,
+  borderColor: Colors.gray100,
+  borderRadius: Radius.lg,
+  padding: Spacing.cardPadding,
+};
+
+/** patterns.md 5번 — 리스트 카드 선택 상태 */
+export const ListCardSelectedStyle: ViewStyle = {
+  ...ListCardStyle,
+  borderWidth: 1.5,
+  borderColor: Colors.primary,
+  backgroundColor: Colors.tinted,
+};
+
+export type BadgeVariant = 'positive' | 'negative' | 'neutral' | 'employment' | 'auto';
+
+/** patterns.md 15번 — 뱃지 (variant별 배경/텍스트 색) */
+export const BadgeColors: Record<BadgeVariant, { bg: string; text: string }> = {
+  positive: { bg: Colors.positiveBg, text: Colors.positive },
+  negative: { bg: Colors.negativeBg, text: Colors.negative },
+  neutral: { bg: Colors.gray100, text: Colors.gray500 },
+  employment: { bg: Colors.tinted, text: Colors.primary },
+  auto: { bg: Colors.positiveBg, text: Colors.positive },
+};
+
+export const BadgeStyle: ViewStyle = {
+  borderRadius: Radius.pill,
+  paddingVertical: 4,
+  paddingHorizontal: 9,
+  alignSelf: 'flex-start',
+};
+
+export const BadgeTextStyle: TextStyle = {
+  fontSize: Type.xs,
+  fontWeight: '600',
 };

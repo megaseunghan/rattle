@@ -22,11 +22,26 @@ export const Colors = {
   gray900: '#111827',
 
   overlay: 'rgba(0,0,0,0.4)',
+  overlaySheet: 'rgba(17,24,39,.45)',
+  overlayCoach: 'rgba(17,24,39,.6)',
 
   success: '#10B981',
   warning: '#F59E0B',
   danger: '#EF4444',
   info: '#3B82F6',
+
+  // 디자인 핸드오프(design_handoff_rattle_ui) 뱃지·증감률 토큰
+  positive: '#1D9E75',
+  positiveBg: 'rgba(29,158,117,.1)',
+  negative: '#EF4444',
+  negativeBg: '#FEE2E2',
+  warningBg: '#FEF3C7',
+  warningStroke: '#D97706',
+
+  kakao: {
+    bg: '#FEE500',
+    text: '#191919',
+  },
 
   // Glassmorphism 토큰 (RN: expo-blur BlurView + 반투명 오버레이로 구현)
   glass: {
