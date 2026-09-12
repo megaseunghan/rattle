@@ -1,15 +1,15 @@
 import { useState } from 'react';
 import {
-  View, Text, TextInput, TouchableOpacity,
-  StyleSheet, Alert, SafeAreaView,
+  View, Text, StyleSheet, Alert, SafeAreaView,
 } from 'react-native';
 import { router } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../lib/contexts/AuthContext';
 import { Colors } from '../../constants/colors';
+import { Spacing } from '../../constants/designTokens';
 import { getErrorMessage } from '../../lib/utils/error';
 import { useConfirmLeave } from '../../lib/hooks/useConfirmLeave';
+import { AppBar, Button, Field } from '../../lib/components/ui';
 
 export default function JoinStoreScreen() {
   const [businessNumber, setBusinessNumber] = useState('');
@@ -90,47 +90,44 @@ export default function JoinStoreScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Ionicons name="chevron-back" size={24} color={Colors.black} />
-        </TouchableOpacity>
-        <Text style={styles.title}>기존 매장 참여</Text>
-        <View style={{ width: 40 }} />
-      </View>
+      <AppBar title="기존 매장 참여" onBack={() => router.back()} />
 
       <View style={styles.content}>
         <Text style={styles.subtitle}>참여할 매장 정보와 본인 정보를 입력하세요</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="이름 (출퇴근·급여에 사용)"
-          placeholderTextColor={Colors.gray400}
-          value={name}
-          onChangeText={setName}
-        />
-        <TextInput
-          style={styles.input}
-          placeholder="연락처 (선택)"
-          placeholderTextColor={Colors.gray400}
-          value={phone}
-          onChangeText={setPhone}
-          keyboardType="phone-pad"
-        />
-        <TextInput
-          style={styles.input}
-          placeholder="사업자번호 10자리 (예: 1234567890)"
-          placeholderTextColor={Colors.gray400}
-          value={businessNumber}
-          onChangeText={setBusinessNumber}
-          keyboardType="number-pad"
-          maxLength={10}
-        />
-        <TouchableOpacity
-          style={[styles.button, loading && styles.buttonDisabled]}
-          onPress={handleJoin}
-          disabled={loading}
-        >
-          <Text style={styles.buttonText}>{loading ? '신청 중...' : '참여 신청'}</Text>
-        </TouchableOpacity>
+
+        <View style={styles.fieldGroup}>
+          <Field
+            label="이름"
+            placeholder="출퇴근·급여에 사용돼요"
+            value={name}
+            onChangeText={setName}
+          />
+          <Field
+            label="연락처 (선택)"
+            placeholder="010-0000-0000"
+            value={phone}
+            onChangeText={setPhone}
+            keyboardType="phone-pad"
+          />
+          <Field
+            label="사업자번호"
+            placeholder="1234567890"
+            helpText="매장 사업자등록번호 10자리를 입력해주세요"
+            value={businessNumber}
+            onChangeText={setBusinessNumber}
+            keyboardType="number-pad"
+            maxLength={10}
+          />
+        </View>
+
+        <View style={styles.buttonWrap}>
+          <Button
+            label={loading ? '신청 중...' : '참여 신청'}
+            variant="primary"
+            onPress={handleJoin}
+            loading={loading}
+          />
+        </View>
       </View>
     </SafeAreaView>
   );
@@ -138,24 +135,20 @@ export default function JoinStoreScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.white },
-  header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 16, paddingVertical: 12,
-    borderBottomWidth: 1, borderBottomColor: Colors.gray100,
+  content: { padding: Spacing.screenX },
+  subtitle: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: Colors.gray500,
+    lineHeight: 19,
+    marginTop: 4,
+    marginBottom: 20,
   },
-  backBtn: { width: 40, height: 40, justifyContent: 'center' },
-  title: { fontSize: 17, fontWeight: '700', color: Colors.black },
-  content: { padding: 24 },
-  subtitle: { fontSize: 15, color: Colors.gray500, marginBottom: 20, lineHeight: 22 },
-  input: {
-    height: 52, borderWidth: 1, borderColor: Colors.gray200,
-    borderRadius: 12, paddingHorizontal: 16, fontSize: 16,
-    color: Colors.black, backgroundColor: Colors.gray50, marginBottom: 16,
+  fieldGroup: {
+    gap: Spacing.fieldGap,
+    marginBottom: 24,
   },
-  button: {
-    height: 52, backgroundColor: Colors.primary,
-    borderRadius: 12, justifyContent: 'center', alignItems: 'center',
+  buttonWrap: {
+    marginTop: 4,
   },
-  buttonDisabled: { opacity: 0.6 },
-  buttonText: { color: Colors.white, fontSize: 16, fontWeight: '700' },
 });

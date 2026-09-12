@@ -2,7 +2,6 @@ import { useState } from 'react';
 import {
   View,
   Text,
-  TouchableOpacity,
   StyleSheet,
   Alert,
 } from 'react-native';
@@ -10,6 +9,7 @@ import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
 import { supabase } from '../../lib/supabase';
 import { Colors } from '../../constants/colors';
+import { Button } from '../../lib/components/ui';
 
 export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
@@ -63,17 +63,23 @@ export default function LoginScreen() {
           <Text style={styles.logoAttle}>attle</Text>
           <View style={styles.logoDot} />
         </View>
-        <Text style={styles.tagline}>발주 · 재고 · 레시피</Text>
 
-        <TouchableOpacity
-          style={[styles.kakaoButton, loading && styles.buttonDisabled]}
-          onPress={handleKakaoLogin}
-          disabled={loading}
-        >
-          <Text style={styles.kakaoButtonText}>
-            {loading ? '처리 중...' : '카카오로 시작하기'}
-          </Text>
-        </TouchableOpacity>
+        <Text style={styles.headline}>간편하게 시작하는{'\n'}매장 손익관리</Text>
+        <Text style={styles.subheadline}>카카오 계정 하나로{'\n'}로그인하고 회원가입까지 한 번에</Text>
+
+        <View style={styles.buttonWrap}>
+          <Button
+            label={loading ? '처리 중...' : '카카오로 시작하기'}
+            variant="kakao"
+            onPress={handleKakaoLogin}
+            loading={loading}
+          />
+        </View>
+
+        <Text style={styles.legal}>
+          계속 진행 시 <Text style={styles.legalEmphasis}>이용약관</Text> 및{' '}
+          <Text style={styles.legalEmphasis}>개인정보처리방침</Text>에{'\n'}동의하는 것으로 간주됩니다
+        </Text>
       </View>
     </View>
   );
@@ -87,13 +93,14 @@ const styles = StyleSheet.create({
   inner: {
     flex: 1,
     justifyContent: 'center',
-    paddingHorizontal: 32,
+    alignItems: 'center',
+    paddingHorizontal: 28,
   },
   logoArea: {
     flexDirection: 'row',
     alignItems: 'baseline',
     justifyContent: 'center',
-    marginBottom: 8,
+    marginBottom: 24,
   },
   logoR: {
     fontSize: 48,
@@ -114,26 +121,35 @@ const styles = StyleSheet.create({
     marginLeft: -2,
     marginBottom: 12,
   },
-  tagline: {
+  headline: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: Colors.black,
+    textAlign: 'center',
+    lineHeight: 30,
+  },
+  subheadline: {
     fontSize: 14,
+    fontWeight: '500',
     color: Colors.gray500,
     textAlign: 'center',
-    letterSpacing: 2,
-    marginBottom: 48,
+    lineHeight: 20,
+    marginTop: 12,
   },
-  buttonDisabled: {
-    opacity: 0.6,
+  buttonWrap: {
+    width: '100%',
+    marginTop: 48,
   },
-  kakaoButton: {
-    height: 52,
-    backgroundColor: '#FEE500',
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
+  legal: {
+    fontSize: 12,
+    fontWeight: '400',
+    color: Colors.gray400,
+    textAlign: 'center',
+    lineHeight: 18,
+    marginTop: 16,
   },
-  kakaoButtonText: {
-    color: '#191919',
-    fontSize: 16,
-    fontWeight: '700',
+  legalEmphasis: {
+    color: Colors.gray600,
+    fontWeight: '600',
   },
 });

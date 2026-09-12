@@ -2,7 +2,6 @@ import { useState, useCallback } from 'react';
 import {
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   StyleSheet,
   Alert,
@@ -16,7 +15,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../lib/contexts/AuthContext';
 import { Colors } from '../../constants/colors';
+import { Spacing } from '../../constants/designTokens';
 import { getErrorMessage } from '../../lib/utils/error';
+import { Button, Field, ListCard } from '../../lib/components/ui';
 
 export default function SelectStoreScreen() {
   const [storeName, setStoreName] = useState('');
@@ -76,14 +77,14 @@ export default function SelectStoreScreen() {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <View style={styles.headerRow}>
-          <Text style={styles.title}>{hasStores ? '매장 선택' : '환영합니다'}</Text>
+          <Text style={styles.title}>{hasStores ? '매장 관리' : '환영합니다'}</Text>
           <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} hitSlop={8}>
             <Ionicons name="log-out-outline" size={20} color={Colors.gray500} />
             <Text style={styles.logoutText}>로그아웃</Text>
           </TouchableOpacity>
         </View>
         <Text style={styles.headerSub}>
-          {hasStores ? '관리할 매장을 선택하세요' : '어떻게 시작할지 선택해주세요'}
+          {hasStores ? '전환하거나 새 매장을 추가하세요' : '어떻게 시작할지 선택해주세요'}
         </Text>
       </View>
 
@@ -92,92 +93,83 @@ export default function SelectStoreScreen() {
       ) : (
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {/* 기존 매장 목록 */}
-        {hasStores && stores.map((item) => {
-          const isSelected = store?.id === item.id;
-          return (
-            <TouchableOpacity
-              key={item.id}
-              style={[styles.storeCard, isSelected && styles.storeCardSelected]}
-              onPress={() => handleSelectStore(item.id)}
-              activeOpacity={0.7}
-            >
-              <View style={styles.storeCardContent}>
-                <Text style={styles.storeName}>{item.name}</Text>
-              </View>
-              {isSelected && (
-                <Ionicons name="checkmark-circle" size={24} color={Colors.primary} />
-              )}
-            </TouchableOpacity>
-          );
-        })}
+        {hasStores && (
+          <View style={styles.storeList}>
+            {stores.map((item) => {
+              const isSelected = store?.id === item.id;
+              return (
+                <ListCard
+                  key={item.id}
+                  selected={isSelected}
+                  onPress={() => handleSelectStore(item.id)}
+                >
+                  <View style={styles.storeCardRow}>
+                    <Text style={styles.storeName}>{item.name}</Text>
+                    {isSelected && (
+                      <Ionicons name="checkmark-circle" size={22} color={Colors.primary} />
+                    )}
+                  </View>
+                </ListCard>
+              );
+            })}
+          </View>
+        )}
 
         {/* 신규 회원: stores 로드 완료 후 진짜 매장 없을 때만 표시 */}
         {storesLoaded && !hasStores && !showForm && (
           <View style={styles.optionGroup}>
-            <TouchableOpacity
-              style={[styles.optionCard, styles.optionCardPrimary]}
-              onPress={() => setShowForm(true)}
-              activeOpacity={0.8}
-            >
-              <View style={[styles.optionIcon, styles.optionIconPrimary]}>
-                <Ionicons name="storefront" size={24} color={Colors.primary} />
+            <ListCard trailingIcon="chevron" onPress={() => setShowForm(true)} style={styles.optionCardPrimary}>
+              <View style={styles.optionRow}>
+                <View style={[styles.optionIcon, styles.optionIconPrimary]}>
+                  <Ionicons name="storefront" size={22} color={Colors.primary} />
+                </View>
+                <View style={styles.optionTextWrap}>
+                  <Text style={styles.optionTitle}>매장 등록</Text>
+                  <Text style={styles.optionDesc}>사장님이라면 직접 매장을 만들어 시작하세요</Text>
+                </View>
               </View>
-              <View style={styles.optionTextWrap}>
-                <Text style={styles.optionTitle}>매장 등록</Text>
-                <Text style={styles.optionDesc}>사장님이라면 직접 매장을 만들어 시작하세요</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={20} color={Colors.primary} />
-            </TouchableOpacity>
+            </ListCard>
 
-            <TouchableOpacity
-              style={styles.optionCard}
-              onPress={() => router.push('/(auth)/join-store')}
-              activeOpacity={0.8}
-            >
-              <View style={styles.optionIcon}>
-                <Ionicons name="people" size={24} color={Colors.gray600} />
+            <ListCard trailingIcon="chevron" onPress={() => router.push('/(auth)/join-store')}>
+              <View style={styles.optionRow}>
+                <View style={styles.optionIcon}>
+                  <Ionicons name="people" size={22} color={Colors.gray600} />
+                </View>
+                <View style={styles.optionTextWrap}>
+                  <Text style={styles.optionTitle}>기존 매장 참여</Text>
+                  <Text style={styles.optionDesc}>직원이라면 사업자번호로 참여를 신청하세요</Text>
+                </View>
               </View>
-              <View style={styles.optionTextWrap}>
-                <Text style={styles.optionTitle}>기존 매장 참여</Text>
-                <Text style={styles.optionDesc}>직원이라면 사업자번호로 참여를 신청하세요</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={20} color={Colors.gray400} />
-            </TouchableOpacity>
+            </ListCard>
           </View>
         )}
 
         {/* 기존 회원: 매장 있을 때 추가/참여 버튼 */}
         {hasStores && !showForm && (
           <View style={styles.optionGroup}>
-            <TouchableOpacity
-              style={styles.optionCard}
-              onPress={() => setShowForm(true)}
-              activeOpacity={0.8}
-            >
-              <View style={[styles.optionIcon, styles.optionIconPrimary]}>
-                <Ionicons name="add" size={24} color={Colors.primary} />
+            <ListCard trailingIcon="chevron" onPress={() => setShowForm(true)}>
+              <View style={styles.optionRow}>
+                <View style={[styles.optionIcon, styles.optionIconPrimary]}>
+                  <Ionicons name="add" size={22} color={Colors.primary} />
+                </View>
+                <View style={styles.optionTextWrap}>
+                  <Text style={styles.optionTitle}>새 매장 추가</Text>
+                  <Text style={styles.optionDesc}>새로운 매장을 등록합니다</Text>
+                </View>
               </View>
-              <View style={styles.optionTextWrap}>
-                <Text style={styles.optionTitle}>새 매장 추가</Text>
-                <Text style={styles.optionDesc}>새로운 매장을 등록합니다</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={20} color={Colors.gray400} />
-            </TouchableOpacity>
+            </ListCard>
 
-            <TouchableOpacity
-              style={styles.optionCard}
-              onPress={() => router.push('/(auth)/join-store')}
-              activeOpacity={0.8}
-            >
-              <View style={styles.optionIcon}>
-                <Ionicons name="people" size={24} color={Colors.gray600} />
+            <ListCard trailingIcon="chevron" onPress={() => router.push('/(auth)/join-store')}>
+              <View style={styles.optionRow}>
+                <View style={styles.optionIcon}>
+                  <Ionicons name="people" size={22} color={Colors.gray600} />
+                </View>
+                <View style={styles.optionTextWrap}>
+                  <Text style={styles.optionTitle}>기존 매장 참여</Text>
+                  <Text style={styles.optionDesc}>사업자번호로 참여를 신청합니다</Text>
+                </View>
               </View>
-              <View style={styles.optionTextWrap}>
-                <Text style={styles.optionTitle}>기존 매장 참여</Text>
-                <Text style={styles.optionDesc}>사업자번호로 참여를 신청합니다</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={20} color={Colors.gray400} />
-            </TouchableOpacity>
+            </ListCard>
           </View>
         )}
 
@@ -185,28 +177,23 @@ export default function SelectStoreScreen() {
         {storesLoaded && showForm && (
           <View style={styles.form}>
             <Text style={styles.formTitle}>{hasStores ? '새 매장 추가' : '매장 등록'}</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="예: 카페 라틀"
-              placeholderTextColor={Colors.gray400}
-              value={storeName}
-              onChangeText={setStoreName}
-            />
-            <TouchableOpacity
-              style={[styles.button, loading && styles.buttonDisabled]}
+            <View style={styles.formField}>
+              <Field
+                label="매장 이름"
+                placeholder="예: 카페 라틀"
+                value={storeName}
+                onChangeText={setStoreName}
+              />
+            </View>
+            <Button
+              label={loading ? '등록 중...' : '등록하기'}
+              variant="primary"
               onPress={handleCreateStore}
-              disabled={loading}
-            >
-              <Text style={styles.buttonText}>
-                {loading ? '등록 중...' : '등록하기'}
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.cancelButton}
-              onPress={() => setShowForm(false)}
-            >
-              <Text style={styles.cancelButtonText}>취소</Text>
-            </TouchableOpacity>
+              loading={loading}
+            />
+            <View style={styles.cancelButtonWrap}>
+              <Button label="취소" variant="text" onPress={() => setShowForm(false)} />
+            </View>
           </View>
         )}
       </ScrollView>
@@ -221,7 +208,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.white,
   },
   header: {
-    paddingHorizontal: 24,
+    paddingHorizontal: Spacing.screenX,
     paddingTop: 16,
     paddingBottom: 8,
   },
@@ -231,8 +218,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   title: {
-    fontSize: 28,
-    fontWeight: '800',
+    fontSize: 22,
+    fontWeight: '700',
     color: Colors.black,
   },
   logoutBtn: {
@@ -243,71 +230,51 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
   },
   logoutText: {
-    fontSize: 14,
+    fontSize: 13,
     color: Colors.gray500,
     fontWeight: '500',
   },
   headerSub: {
-    fontSize: 15,
+    fontSize: 13,
     color: Colors.gray500,
     marginTop: 6,
   },
   scrollContent: {
-    paddingHorizontal: 24,
+    paddingHorizontal: Spacing.screenX,
     paddingTop: 16,
     paddingBottom: 32,
   },
-  subtitle: {
-    fontSize: 16,
-    color: Colors.gray500,
-    marginBottom: 16,
+  storeList: {
+    gap: Spacing.listGap,
   },
-  storeCard: {
+  storeCardRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: Colors.gray200,
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    marginBottom: 12,
-    backgroundColor: Colors.gray50,
-  },
-  storeCardSelected: {
-    borderColor: Colors.primary,
-    borderWidth: 2,
-    backgroundColor: Colors.white,
-  },
-  storeCardContent: {
-    flex: 1,
+    justifyContent: 'space-between',
   },
   storeName: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '600',
     color: Colors.black,
   },
   optionGroup: {
-    gap: 12,
+    gap: Spacing.listGap,
     marginTop: 4,
   },
-  optionCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 14,
-    backgroundColor: Colors.white,
-    borderWidth: 1,
-    borderColor: Colors.gray200,
-    borderRadius: 16,
-    padding: 16,
-  },
   optionCardPrimary: {
+    borderWidth: 1.5,
     borderColor: Colors.primary,
     backgroundColor: Colors.tinted,
   },
+  optionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+  },
   optionIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: Colors.gray100,
@@ -320,57 +287,29 @@ const styles = StyleSheet.create({
     gap: 3,
   },
   optionTitle: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '700',
     color: Colors.black,
   },
   optionDesc: {
-    fontSize: 13,
+    fontSize: 12,
     color: Colors.gray500,
-    lineHeight: 18,
+    lineHeight: 17,
   },
   form: {
     marginTop: 8,
   },
   formTitle: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '700',
     color: Colors.black,
     marginBottom: 16,
   },
-  input: {
-    height: 52,
-    borderWidth: 1,
-    borderColor: Colors.gray200,
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    fontSize: 16,
-    color: Colors.black,
-    backgroundColor: Colors.gray50,
-    marginBottom: 16,
+  formField: {
+    marginBottom: Spacing.fieldGap,
   },
-  button: {
-    height: 52,
-    backgroundColor: Colors.primary,
-    borderRadius: 12,
-    justifyContent: 'center',
+  cancelButtonWrap: {
+    marginTop: 4,
     alignItems: 'center',
-  },
-  buttonDisabled: {
-    opacity: 0.6,
-  },
-  buttonText: {
-    color: Colors.white,
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  cancelButton: {
-    marginTop: 12,
-    alignItems: 'center',
-    paddingVertical: 10,
-  },
-  cancelButtonText: {
-    fontSize: 15,
-    color: Colors.gray500,
   },
 });
