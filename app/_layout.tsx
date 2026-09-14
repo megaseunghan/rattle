@@ -1,6 +1,6 @@
 import { SplashScreen, Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AppState, Alert } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useFonts } from 'expo-font';
@@ -8,6 +8,7 @@ import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
 import { AuthProvider, useAuth } from '../lib/contexts/AuthContext';
 import { DevRoleSwitcher } from '../lib/components/DevRoleSwitcher';
+import { SplashAnimation } from '../lib/components/SplashAnimation';
 import { useTossSync } from '../lib/hooks/useTossSync';
 import { Colors } from '../constants/colors';
 import { FONT_ASSETS } from '../constants/fonts';
@@ -28,6 +29,7 @@ function RootNavigator() {
   const segments = useSegments();
   const { autoSyncOnForeground } = useTossSync();
   const lastCheckedAt = useRef<number>(0);
+  const [showIntro, setShowIntro] = useState(true);
 
   async function checkPendingMembers() {
     if (!store || currentRole !== 'admin') return;
@@ -143,10 +145,14 @@ function RootNavigator() {
       <Stack.Screen name="mypage/index" options={{ headerShown: false }} />
       <Stack.Screen name="mypage/schedule" options={{ headerShown: false }} />
       <Stack.Screen name="mypage/payslip" options={{ headerShown: false }} />
+      <Stack.Screen name="payroll/settlement" options={{ headerShown: false }} />
       <Stack.Screen name="notifications/index" options={{ headerShown: false }} />
       <Stack.Screen name="notifications/settings" options={{ headerShown: false }} />
+      <Stack.Screen name="legal/terms" options={{ headerShown: false }} />
+      <Stack.Screen name="legal/privacy" options={{ headerShown: false }} />
     </Stack>
     {!loading && user && store && <DevRoleSwitcher />}
+    {showIntro && <SplashAnimation onDone={() => setShowIntro(false)} />}
     </>
   );
 }
