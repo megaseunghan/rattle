@@ -1,5 +1,5 @@
 import { supabase } from '../supabase';
-import { ManualSale, ManualSalePaymentMethod } from '../../types';
+import { ManualSale } from '../../types';
 
 export async function getManualSalesByMonth(storeId: string, yearMonth: string): Promise<ManualSale[]> {
   const from = `${yearMonth}-01`;
@@ -17,24 +17,30 @@ export async function getManualSalesByMonth(storeId: string, yearMonth: string):
   return (data ?? []) as ManualSale[];
 }
 
-export async function createManualSale(input: {
+/** 매장당 하루 1건 — 같은 날짜로 다시 저장하면 그날 값을 덮어쓴다(upsert) */
+export async function saveManualSale(input: {
   storeId: string;
   date: string;
-  amount: number;
-  paymentMethod: ManualSalePaymentMethod;
+  cashAmount: number;
+  cardAmount: number;
+  discountAmount: number;
   memo: string | null;
 }): Promise<ManualSale> {
   const { data: userData } = await supabase.auth.getUser();
   const { data, error } = await supabase
     .from('manual_sales')
-    .insert({
-      store_id: input.storeId,
-      date: input.date,
-      amount: input.amount,
-      payment_method: input.paymentMethod,
-      memo: input.memo,
-      created_by: userData.user?.id ?? null,
-    })
+    .upsert(
+      {
+        store_id: input.storeId,
+        date: input.date,
+        cash_amount: input.cashAmount,
+        card_amount: input.cardAmount,
+        discount_amount: input.discountAmount,
+        memo: input.memo,
+        created_by: userData.user?.id ?? null,
+      },
+      { onConflict: 'store_id,date' },
+    )
     .select()
     .single();
   if (error) throw new Error(error.message);
@@ -46,17 +52,13 @@ export async function deleteManualSale(id: string): Promise<void> {
   if (error) throw new Error(error.message);
 }
 
-/** 손익계산서용 — 카드/현금 매출 합계 (배달앱은 현금성으로 취급) */
+/** 손익계산서용 — 카드/현금 매출 합계 (할인액은 이미 입력된 금액에 반영된 순매출 기준) */
 export async function getManualSalesTotals(
   storeId: string,
   yearMonth: string,
 ): Promise<{ cardRevenue: number; cashRevenue: number; total: number }> {
   const rows = await getManualSalesByMonth(storeId, yearMonth);
-  let cardRevenue = 0;
-  let cashRevenue = 0;
-  for (const r of rows) {
-    if (r.payment_method === 'card') cardRevenue += Number(r.amount);
-    else cashRevenue += Number(r.amount);
-  }
+  const cardRevenue = rows.reduce((s, r) => s + Number(r.card_amount), 0);
+  const cashRevenue = rows.reduce((s, r) => s + Number(r.cash_amount), 0);
   return { cardRevenue, cashRevenue, total: cardRevenue + cashRevenue };
 }

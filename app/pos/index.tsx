@@ -407,16 +407,20 @@ export function PosScreen({ active = true }: { active?: boolean }) {
               ) : (
                 <>
                   <View style={styles.manualList}>
-                    {manualSales.map((s, i) => (
+                    {manualSales.map((s, i) => {
+                      const parts: string[] = [];
+                      if (Number(s.card_amount) > 0) parts.push(`카드 ${Number(s.card_amount).toLocaleString('ko-KR')}원`);
+                      if (Number(s.cash_amount) > 0) parts.push(`현금 ${Number(s.cash_amount).toLocaleString('ko-KR')}원`);
+                      if (Number(s.discount_amount) > 0) parts.push(`할인 -${Number(s.discount_amount).toLocaleString('ko-KR')}원`);
+                      const methodLabel = parts.join(' · ') + (s.memo ? ` · ${s.memo}` : '');
+                      const total = Number(s.card_amount) + Number(s.cash_amount);
+                      return (
                       <View key={s.id} style={[styles.manualRow, i > 0 && styles.manualRowBorder]}>
                         <View style={styles.manualRowInfo}>
                           <Text style={styles.manualRowDate}>{s.date.slice(5).replace('-', '/')}</Text>
-                          <Text style={styles.manualRowMethod}>
-                            {s.payment_method === 'card' ? '카드' : s.payment_method === 'cash' ? '현금' : '배달앱'}
-                            {s.memo ? ` · ${s.memo}` : ''}
-                          </Text>
+                          <Text style={styles.manualRowMethod} numberOfLines={1}>{methodLabel}</Text>
                         </View>
-                        <Text style={styles.manualRowAmount}>{Number(s.amount).toLocaleString('ko-KR')}원</Text>
+                        <Text style={styles.manualRowAmount}>{total.toLocaleString('ko-KR')}원</Text>
                         <TouchableOpacity
                           onPress={() => Alert.alert('삭제', '이 매출 기록을 삭제할까요?', [
                             { text: '취소', style: 'cancel' },
@@ -427,7 +431,8 @@ export function PosScreen({ active = true }: { active?: boolean }) {
                           <Ionicons name="trash-outline" size={16} color={Colors.negative} />
                         </TouchableOpacity>
                       </View>
-                    ))}
+                      );
+                    })}
                   </View>
                   <TouchableOpacity style={styles.addManualBtn} onPress={() => router.push('/pos/new')} activeOpacity={0.7}>
                     <Ionicons name="add" size={16} color={Colors.primary} />

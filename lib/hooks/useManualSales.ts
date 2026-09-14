@@ -23,7 +23,7 @@ export function useManualSales(yearMonth: string) {
     setSales(prev => prev.filter(s => s.id !== id));
   }, []);
 
-  const total = sales.reduce((sum, s) => sum + Number(s.amount), 0);
+  const total = sales.reduce((sum, s) => sum + Number(s.cash_amount) + Number(s.card_amount), 0);
 
   return { sales, loading, total, refetch, remove };
 }
