@@ -58,21 +58,29 @@ export async function updateEmployee(
 }
 
 export async function deactivateEmployee(id: string): Promise<void> {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('employees')
     .update({ is_active: false })
-    .eq('id', id);
+    .eq('id', id)
+    .select('id');
 
   if (error) throw new Error(error.message);
+  if (!data || data.length === 0) {
+    throw new Error('삭제 권한이 없거나 직원을 찾을 수 없습니다.');
+  }
 }
 
 export async function deleteEmployee(id: string): Promise<void> {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('employees')
     .delete()
-    .eq('id', id);
+    .eq('id', id)
+    .select('id');
 
   if (error) throw new Error(error.message);
+  if (!data || data.length === 0) {
+    throw new Error('삭제 권한이 없거나 직원을 찾을 수 없습니다.');
+  }
 }
 
 /** 로그인 계정에 연결된 본인 직원 레코드 조회 (출퇴근용) */

@@ -46,6 +46,7 @@ export default function CleaningScreen() {
     <SafeAreaView style={styles.container}>
       <AppBar
         title="청소 체크리스트"
+        onBack={() => router.back()}
         rightSlot={(
           <TouchableOpacity onPress={() => router.push('/cleaning/edit')} hitSlop={8}>
             <Ionicons name="pencil" size={18} color={Colors.gray600} />

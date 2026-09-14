@@ -1,10 +1,13 @@
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StyleSheet } from 'react-native';
+import { router } from 'expo-router';
 import { ExpensesPanel } from '../lib/components/ExpensesPanel';
+import { AppBar } from '../lib/components/ui';
 
 export default function ExpensesScreen() {
   return (
     <SafeAreaView style={styles.safeArea}>
+      <AppBar title="비용 등록" onBack={() => router.back()} />
       <ExpensesPanel />
     </SafeAreaView>
   );

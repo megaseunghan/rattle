@@ -275,6 +275,8 @@ export interface Payroll {
   local_income_tax: number;
   withholding_tax: number;         // 3.3% 원천징수 (파트타임 주15h 미만)
   net_pay: number;
+  is_settled: boolean;
+  settled_at: string | null;
   created_at: string;
 }
 
@@ -372,14 +374,13 @@ export interface DailyItem {
 }
 
 // 매출 수기 입력 (화면 10/11)
-export type ManualSalePaymentMethod = 'card' | 'cash' | 'delivery';
-
 export interface ManualSale {
   id: string;
   store_id: string;
-  date: string; // 'YYYY-MM-DD'
-  amount: number;
-  payment_method: ManualSalePaymentMethod;
+  date: string; // 'YYYY-MM-DD' — 매장당 하루 1건
+  cash_amount: number;
+  card_amount: number;
+  discount_amount: number;
   memo: string | null;
   created_by: string | null;
   created_at: string;

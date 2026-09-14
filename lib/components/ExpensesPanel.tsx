@@ -13,16 +13,18 @@ import { animateListChange } from '../utils/layoutAnimation';
 import { getErrorMessage } from '../utils/error';
 import { Field } from './ui';
 
+// 카테고리 아이콘/합계는 중립색으로 통일하고, "항목 추가" 액션에만 primary를 남겨서
+// 색이 너무 많이 쓰이지 않게 한다.
 const CATEGORIES: {
   key: ExpenseCategory;
   icon: keyof typeof Ionicons.glyphMap;
   color: string;
   bg: string;
 }[] = [
-  { key: '마케팅',  icon: 'megaphone-outline',   color: '#7C3AED', bg: '#F3EEFF' },
-  { key: '고정비',  icon: 'receipt-outline',      color: '#0891B2', bg: '#E0F7FA' },
-  { key: '시설보수', icon: 'build-outline',        color: '#D97706', bg: '#FEF3C7' },
-  { key: '공과금',  icon: 'flash-outline',        color: '#059669', bg: '#D1FAE5' },
+  { key: '마케팅',  icon: 'megaphone-outline', color: Colors.gray600, bg: Colors.gray100 },
+  { key: '고정비',  icon: 'receipt-outline',   color: Colors.gray600, bg: Colors.gray100 },
+  { key: '시설보수', icon: 'build-outline',     color: Colors.gray600, bg: Colors.gray100 },
+  { key: '공과금',  icon: 'flash-outline',     color: Colors.gray600, bg: Colors.gray100 },
 ];
 
 function toYearMonth(year: number, month: number) {
@@ -254,8 +256,8 @@ export function ExpensesPanel() {
                     onPress={() => openAddModal(cat.key)}
                     activeOpacity={0.7}
                   >
-                    <Ionicons name="add-circle-outline" size={16} color={cat.color} />
-                    <Text style={[styles.addRowText, { color: cat.color }]}>항목 추가</Text>
+                    <Ionicons name="add-circle-outline" size={16} color={Colors.primary} />
+                    <Text style={[styles.addRowText, { color: Colors.primary }]}>항목 추가</Text>
                   </TouchableOpacity>
                 )}
               </View>

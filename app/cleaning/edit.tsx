@@ -106,7 +106,7 @@ export default function CleaningEditScreen() {
             </View>
           ) : (
             <>
-              <TouchableOpacity onLongPress={drag} disabled={isActive} hitSlop={8} style={styles.dragHandle}>
+              <TouchableOpacity onPressIn={drag} disabled={isActive} hitSlop={10} style={styles.dragHandle}>
                 <Ionicons name="reorder-three-outline" size={20} color={Colors.gray300} />
               </TouchableOpacity>
               <Text style={styles.rowTitle}>{item.title}</Text>
@@ -146,15 +146,17 @@ export default function CleaningEditScreen() {
       <DraggableFlatList
         data={orderedItems}
         keyExtractor={item => item.id}
-        onDragBegin={() => {}}
         onDragEnd={({ data }) => handleDragEnd(data)}
         renderItem={renderItem}
+        activationDistance={0}
+        dragItemOverflow
+        autoscrollThreshold={60}
         contentContainerStyle={styles.scroll}
         ListHeaderComponent={
           orderedItems.length > 0 ? (
             <View style={styles.hintRow}>
               <Ionicons name="information-circle-outline" size={13} color={Colors.gray400} />
-              <Text style={styles.hintText}>{reordering ? '순서 저장 중...' : '항목을 길게 눌러서 순서를 바꿀 수 있어요'}</Text>
+              <Text style={styles.hintText}>{reordering ? '순서 저장 중...' : '핸들 아이콘을 눌러서 끌면 순서를 바꿀 수 있어요'}</Text>
             </View>
           ) : null
         }

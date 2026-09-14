@@ -7,6 +7,7 @@ import {
 } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
+import { router } from 'expo-router';
 import { supabase } from '../../lib/supabase';
 import { Colors } from '../../constants/colors';
 import { Button } from '../../lib/components/ui';
@@ -77,8 +78,10 @@ export default function LoginScreen() {
         </View>
 
         <Text style={styles.legal}>
-          계속 진행 시 <Text style={styles.legalEmphasis}>이용약관</Text> 및{' '}
-          <Text style={styles.legalEmphasis}>개인정보처리방침</Text>에{'\n'}동의하는 것으로 간주됩니다
+          계속 진행 시{' '}
+          <Text style={styles.legalEmphasis} onPress={() => router.push('/legal/terms')}>이용약관</Text> 및{' '}
+          <Text style={styles.legalEmphasis} onPress={() => router.push('/legal/privacy')}>개인정보처리방침</Text>
+          {'\n'}에 동의하게 됩니다
         </Text>
       </View>
     </View>

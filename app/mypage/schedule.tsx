@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch,
-  Platform, Alert, ActivityIndicator,
+  Platform, Alert, ActivityIndicator, Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -31,6 +31,98 @@ function fmtHHmm(t: string | null): string {
   return t.slice(0, 5);
 }
 
+function timeToDate(t: string | null, fallbackHour: number): Date {
+  const d = new Date();
+  if (t) { const [h, m] = t.split(':').map(Number); d.setHours(h, m, 0, 0); }
+  else d.setHours(fallbackHour, 0, 0, 0);
+  return d;
+}
+
+/** 연필 아이콘으로 여는 출근/퇴근시간 한 번에 입력 폼 + 다른 요일 일괄 적용 */
+function DayEditModal({
+  day, onClose, onApply,
+}: {
+  day: ScheduleDayInput;
+  onClose: () => void;
+  onApply: (start: string, end: string, applyToDays: number[]) => void;
+}) {
+  const [startTime, setStartTime] = useState(() => timeToDate(day.start_time, 9));
+  const [endTime, setEndTime] = useState(() => timeToDate(day.end_time, 18));
+  const [pickerField, setPickerField] = useState<'start' | 'end' | null>(null);
+  const [bulkDays, setBulkDays] = useState<Set<number>>(new Set());
+
+  function toggleBulkDay(d: number) {
+    setBulkDays(prev => {
+      const next = new Set(prev);
+      if (next.has(d)) next.delete(d); else next.add(d);
+      return next;
+    });
+  }
+
+  return (
+    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalCard}>
+          <Text style={styles.modalTitle}>{WEEKDAYS[day.day_of_week]}요일 근무시간</Text>
+
+          <View style={styles.modalTimeRow}>
+            <TouchableOpacity style={styles.modalTimeBtn} onPress={() => setPickerField('start')} activeOpacity={0.7}>
+              <Text style={styles.modalTimeLabel}>출근</Text>
+              <Text style={styles.modalTimeValue}>{fmtHHmm(toHHmmss(startTime))}</Text>
+            </TouchableOpacity>
+            <Text style={styles.modalTimeSep}>~</Text>
+            <TouchableOpacity style={styles.modalTimeBtn} onPress={() => setPickerField('end')} activeOpacity={0.7}>
+              <Text style={styles.modalTimeLabel}>퇴근</Text>
+              <Text style={styles.modalTimeValue}>{fmtHHmm(toHHmmss(endTime))}</Text>
+            </TouchableOpacity>
+          </View>
+
+          {pickerField && (
+            <DateTimePicker
+              value={pickerField === 'start' ? startTime : endTime}
+              mode="time"
+              locale="ko-KR"
+              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+              onChange={(_, value) => {
+                if (Platform.OS === 'android') setPickerField(null);
+                if (!value) return;
+                if (pickerField === 'start') setStartTime(value); else setEndTime(value);
+              }}
+            />
+          )}
+
+          <Text style={styles.modalSectionLabel}>다른 요일에도 같이 적용 (선택)</Text>
+          <View style={styles.bulkChipRow}>
+            {WEEKDAYS.map((label, i) => i === day.day_of_week ? null : (
+              <TouchableOpacity
+                key={i}
+                style={[styles.bulkChip, bulkDays.has(i) && styles.bulkChipActive]}
+                onPress={() => toggleBulkDay(i)}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.bulkChipText, bulkDays.has(i) && styles.bulkChipTextActive]}>{label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          <View style={styles.modalBtnRow}>
+            <TouchableOpacity style={styles.modalCancelBtn} onPress={onClose} activeOpacity={0.7}>
+              <Text style={styles.modalCancelText}>취소</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.modalApplyBtn}
+              onPress={() => onApply(toHHmmss(startTime), toHHmmss(endTime), Array.from(bulkDays))}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.modalApplyText}>적용</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
 export default function ScheduleSettingsScreen() {
   const { user, realRole, devPreviewMode, devPreviewEmployeeId } = useAuth();
   const { employees, refetch: refetchEmployees } = useEmployees();
@@ -41,7 +133,7 @@ export default function ScheduleSettingsScreen() {
   useEffect(() => { refetchEmployees(); }, [refetchEmployees]);
 
   const [days, setDays] = useState<ScheduleDayInput[]>(defaultDays());
-  const [pickerFor, setPickerFor] = useState<{ day: number; field: 'start' | 'end' } | null>(null);
+  const [editingDay, setEditingDay] = useState<number | null>(null);
 
   useEffect(() => { refetch(); }, [refetch]);
 
@@ -61,10 +153,13 @@ export default function ScheduleSettingsScreen() {
       : d));
   }
 
-  function applyTime(day: number, field: 'start' | 'end', value: Date) {
-    setDays(prev => prev.map(d => d.day_of_week === day
-      ? { ...d, [field === 'start' ? 'start_time' : 'end_time']: toHHmmss(value) }
+  function applyDayEdit(start: string, end: string, applyToDays: number[]) {
+    if (editingDay == null) return;
+    const targets = new Set([editingDay, ...applyToDays]);
+    setDays(prev => prev.map(d => targets.has(d.day_of_week)
+      ? { ...d, is_working: true, start_time: start, end_time: end }
       : d));
+    setEditingDay(null);
   }
 
   async function handleSave() {
@@ -86,15 +181,7 @@ export default function ScheduleSettingsScreen() {
     );
   }
 
-  const pickerDate = (() => {
-    if (!pickerFor) return new Date();
-    const row = days.find(d => d.day_of_week === pickerFor.day);
-    const t = pickerFor.field === 'start' ? row?.start_time : row?.end_time;
-    const d = new Date();
-    if (t) { const [h, m] = t.split(':').map(Number); d.setHours(h, m, 0, 0); }
-    else d.setHours(pickerFor.field === 'start' ? 9 : 18, 0, 0, 0);
-    return d;
-  })();
+  const editingDayData = days.find(d => d.day_of_week === editingDay);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -121,16 +208,10 @@ export default function ScheduleSettingsScreen() {
               <View key={d.day_of_week} style={[styles.dayRow, d.is_working ? styles.dayRowActive : styles.dayRowInactive]}>
                 <Text style={styles.dayLabel}>{WEEKDAYS[d.day_of_week]}</Text>
                 {d.is_working ? (
-                  <View style={styles.timeGroup}>
-                    <TouchableOpacity onPress={() => setPickerFor({ day: d.day_of_week, field: 'start' })}>
-                      <Text style={styles.timeText}>{fmtHHmm(d.start_time)}</Text>
-                    </TouchableOpacity>
-                    <Text style={styles.timeSep}>~</Text>
-                    <TouchableOpacity onPress={() => setPickerFor({ day: d.day_of_week, field: 'end' })}>
-                      <Text style={styles.timeText}>{fmtHHmm(d.end_time)}</Text>
-                    </TouchableOpacity>
-                    <Ionicons name="pencil" size={13} color={Colors.gray400} style={{ marginLeft: 2 }} />
-                  </View>
+                  <TouchableOpacity style={styles.timeGroup} onPress={() => setEditingDay(d.day_of_week)} activeOpacity={0.7}>
+                    <Text style={styles.timeText}>{fmtHHmm(d.start_time)} ~ {fmtHHmm(d.end_time)}</Text>
+                    <Ionicons name="pencil" size={13} color={Colors.gray400} style={{ marginLeft: 4 }} />
+                  </TouchableOpacity>
                 ) : (
                   <Text style={styles.offText}>휴무</Text>
                 )}
@@ -156,16 +237,11 @@ export default function ScheduleSettingsScreen() {
         )}
       </ScrollView>
 
-      {pickerFor && (
-        <DateTimePicker
-          value={pickerDate}
-          mode="time"
-          locale="ko-KR"
-          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-          onChange={(_, value) => {
-            if (Platform.OS === 'android') setPickerFor(null);
-            if (value) applyTime(pickerFor.day, pickerFor.field, value);
-          }}
+      {editingDayData && (
+        <DayEditModal
+          day={editingDayData}
+          onClose={() => setEditingDay(null)}
+          onApply={applyDayEdit}
         />
       )}
     </SafeAreaView>
@@ -189,9 +265,8 @@ const styles = StyleSheet.create({
   dayRowActive: { borderWidth: 1, borderColor: Colors.primary, backgroundColor: Colors.tinted },
   dayRowInactive: { borderWidth: 1, borderColor: Colors.gray100, backgroundColor: Colors.white },
   dayLabel: { width: 24, fontSize: 14, fontWeight: '700', color: Colors.black },
-  timeGroup: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6 },
+  timeGroup: { flex: 1, flexDirection: 'row', alignItems: 'center' },
   timeText: { fontSize: 14, fontWeight: '600', color: Colors.black },
-  timeSep: { fontSize: 13, color: Colors.gray400 },
   offText: { flex: 1, fontSize: 14, fontWeight: '500', color: Colors.gray400 },
 
   infoBox: {
@@ -202,4 +277,29 @@ const styles = StyleSheet.create({
 
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   emptyText: { fontSize: 14, color: Colors.gray400 },
+
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', padding: 24 },
+  modalCard: { backgroundColor: Colors.white, borderRadius: 20, padding: 20, gap: 14 },
+  modalTitle: { fontSize: 16, fontWeight: '700', color: Colors.black },
+  modalTimeRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  modalTimeBtn: {
+    flex: 1, borderWidth: 1, borderColor: Colors.primary, borderRadius: 12,
+    paddingHorizontal: 14, paddingVertical: 12, gap: 3,
+  },
+  modalTimeLabel: { fontSize: 11, fontWeight: '600', color: Colors.gray400 },
+  modalTimeValue: { fontSize: 16, fontWeight: '700', color: Colors.black },
+  modalTimeSep: { fontSize: 13, color: Colors.gray400 },
+
+  modalSectionLabel: { fontSize: 12, fontWeight: '700', color: Colors.gray600, marginTop: 4 },
+  bulkChipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  bulkChip: { paddingVertical: 7, paddingHorizontal: 12, borderRadius: 16, borderWidth: 1, borderColor: Colors.gray200 },
+  bulkChipActive: { backgroundColor: Colors.black, borderColor: Colors.black },
+  bulkChipText: { fontSize: 12, fontWeight: '600', color: Colors.gray600 },
+  bulkChipTextActive: { color: Colors.white },
+
+  modalBtnRow: { flexDirection: 'row', gap: 10, marginTop: 6 },
+  modalCancelBtn: { flex: 1, alignItems: 'center', paddingVertical: 12, borderRadius: 12, borderWidth: 1, borderColor: Colors.gray200 },
+  modalCancelText: { fontSize: 14, fontWeight: '600', color: Colors.gray500 },
+  modalApplyBtn: { flex: 1, alignItems: 'center', paddingVertical: 12, borderRadius: 12, backgroundColor: Colors.primary },
+  modalApplyText: { fontSize: 14, fontWeight: '700', color: Colors.white },
 });
