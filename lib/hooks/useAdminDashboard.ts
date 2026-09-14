@@ -2,18 +2,17 @@ import { useCallback, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import {
   getMultiStoreMonthlyPnl, getMultiStoreYearlyPnl, StorePnl,
-  getTodayCleaningProgress, CleaningProgress,
+  getMultiStoreMonthlyTrend, getMultiStoreYearlyTrend,
   getTodayAttendanceStatus, AttendanceStatus,
-  getTodayScheduleSummary, TodayScheduleSummary,
+  getWeeklyCleaningProgress, WeeklyCleaningDay,
+  getWeeklyScheduleBreakdown, WeeklyScheduleDay,
 } from '../services/adminDashboard';
 
 export type DashboardPeriod = 'month' | 'year';
 
 export interface StoreOps {
   storeId: string;
-  cleaning: CleaningProgress;
   attendance: AttendanceStatus;
-  schedule: TodayScheduleSummary;
 }
 
 export function useAdminDashboard() {
@@ -27,7 +26,10 @@ export function useAdminDashboard() {
   const [anchorMonth, setAnchorMonth] = useState(now.getMonth() + 1);
 
   const [pnl, setPnl] = useState<{ current: StorePnl[]; previous: StorePnl[] }>({ current: [], previous: [] });
+  const [trend, setTrend] = useState<{ label: string; value: number }[]>([]);
   const [ops, setOps] = useState<Record<string, StoreOps>>({});
+  const [weeklyCleaning, setWeeklyCleaning] = useState<Record<string, { days: WeeklyCleaningDay[]; pct: number }>>({});
+  const [weeklySchedule, setWeeklySchedule] = useState<Record<string, WeeklyScheduleDay[]>>({});
   const [loading, setLoading] = useState(false);
 
   const yearMonth = `${anchorYear}-${String(anchorMonth).padStart(2, '0')}`;
@@ -37,23 +39,28 @@ export function useAdminDashboard() {
     if (ownedStores.length === 0) return;
     setLoading(true);
     try {
-      const [pnlResult, opsResults] = await Promise.all([
+      const [pnlResult, trendResult, opsResults, weeklyCleaningResults, weeklyScheduleResults] = await Promise.all([
         period === 'month'
           ? getMultiStoreMonthlyPnl(ownedStores, yearMonth)
           : getMultiStoreYearlyPnl(ownedStores, anchorYear),
-        Promise.all(ownedStores.map(async s => {
-          const [cleaning, attendance, schedule] = await Promise.all([
-            getTodayCleaningProgress(s.id),
-            getTodayAttendanceStatus(s.id),
-            getTodayScheduleSummary(s.id),
-          ]);
-          return { storeId: s.id, cleaning, attendance, schedule } as StoreOps;
-        })),
+        period === 'month'
+          ? getMultiStoreMonthlyTrend(ownedStores, yearMonth)
+          : getMultiStoreYearlyTrend(ownedStores, anchorYear),
+        Promise.all(ownedStores.map(async s => ({ storeId: s.id, attendance: await getTodayAttendanceStatus(s.id) } as StoreOps))),
+        Promise.all(ownedStores.map(async s => ({ storeId: s.id, result: await getWeeklyCleaningProgress(s.id) }))),
+        Promise.all(ownedStores.map(async s => ({ storeId: s.id, days: await getWeeklyScheduleBreakdown(s.id) }))),
       ]);
       setPnl(pnlResult);
+      setTrend(trendResult);
       const opsMap: Record<string, StoreOps> = {};
       opsResults.forEach(o => { opsMap[o.storeId] = o; });
       setOps(opsMap);
+      const weeklyCleaningMap: Record<string, { days: WeeklyCleaningDay[]; pct: number }> = {};
+      weeklyCleaningResults.forEach(r => { weeklyCleaningMap[r.storeId] = r.result; });
+      setWeeklyCleaning(weeklyCleaningMap);
+      const weeklyScheduleMap: Record<string, WeeklyScheduleDay[]> = {};
+      weeklyScheduleResults.forEach(r => { weeklyScheduleMap[r.storeId] = r.days; });
+      setWeeklySchedule(weeklyScheduleMap);
     } finally {
       setLoading(false);
     }
@@ -75,6 +82,6 @@ export function useAdminDashboard() {
 
   return {
     ownedStores, period, setPeriod, anchorYear, anchorMonth, yearMonth, isCurrentMonth,
-    pnl, ops, loading, refetch, goPrev, goNext,
+    pnl, trend, ops, weeklyCleaning, weeklySchedule, loading, refetch, goPrev, goNext,
   };
 }
