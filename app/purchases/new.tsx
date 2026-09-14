@@ -589,14 +589,14 @@ export default function NewPurchaseScreen() {
                       style={[styles.filterTab, activeCategory === cat && styles.filterTabActive]}
                       onPress={() => setActiveCategory(cat)}
                     >
-                      <Text style={[styles.filterTabText, activeCategory === cat && styles.filterTabTextActive]}>
+                      <Text style={[styles.filterTabText, activeCategory === cat && styles.filterTabTextActive]} numberOfLines={1}>
                         {cat}
                       </Text>
                     </TouchableOpacity>
                   ))}
                   <TouchableOpacity
                     style={styles.filterTabManageBtn}
-                    onPress={() => setIngredientCategoryModalVisible(true)}
+                    onPress={() => { setShowPicker(false); setIngredientCategoryModalVisible(true); }}
                     hitSlop={8}
                   >
                     <Ionicons name="add" size={16} color={Colors.gray600} />
@@ -665,7 +665,7 @@ export default function NewPurchaseScreen() {
 
       <CategoryManageModal
         visible={ingredientCategoryModalVisible}
-        onClose={() => setIngredientCategoryModalVisible(false)}
+        onClose={() => { setIngredientCategoryModalVisible(false); setShowPicker(true); }}
         title="재고 카테고리 관리"
         removeConfirmHint="해당 카테고리의 재료는 '기타'로 이동해요."
         categories={ingredientCategories.categories}
@@ -865,6 +865,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.gray200,
     backgroundColor: Colors.white,
+    flexShrink: 0,
   },
   filterTabActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
   filterTabText: { fontSize: 13, color: Colors.gray600, fontWeight: '600' },

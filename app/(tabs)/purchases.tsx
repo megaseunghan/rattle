@@ -13,6 +13,7 @@ import { CardStyle } from '../../constants/designTokens';
 import { usePurchases } from '../../lib/hooks/usePurchases';
 import { useExpenses } from '../../lib/hooks/useExpenses';
 import { callOcrEdgeFunction } from '../../lib/services/ocr';
+import { getPurchaseItemCounts } from '../../lib/services/purchases';
 import { animateListChange } from '../../lib/utils/layoutAnimation';
 import { ExpensesPanel } from '../../lib/components/ExpensesPanel';
 import { Badge, SummaryCard } from '../../lib/components/ui';
@@ -85,6 +86,12 @@ function PurchasesView({ active }: { active: boolean }) {
   const selectedKey = selectedDay ? toDateKey(year, month, selectedDay) : null;
   const selectedPurchases = selectedKey ? (purchaseByDay.get(selectedKey) ?? []) : [];
   const monthTotal = filtered.reduce((s, p) => s + p.amount, 0);
+
+  const [itemCounts, setItemCounts] = useState<Record<string, number>>({});
+  useEffect(() => {
+    if (selectedPurchases.length === 0) return;
+    getPurchaseItemCounts(selectedPurchases.map(p => p.id)).then(setItemCounts).catch(() => {});
+  }, [selectedKey, purchases]);
   const isToday = (day: number) => year === today.getFullYear() && month === today.getMonth() && day === today.getDate();
 
   function confirmDeletePurchase(id: string) {
@@ -216,6 +223,9 @@ function PurchasesView({ active }: { active: boolean }) {
                   <TouchableOpacity key={p.id} style={[styles.purchaseRow, i < selectedPurchases.length - 1 && styles.rowBorder]} onPress={() => router.push(`/purchases/${p.id}`)} onLongPress={() => confirmDeletePurchase(p.id)} activeOpacity={0.7}>
                     <View style={styles.purchaseLeft}>
                       <Text style={styles.purchaseSupplier}>{p.supplier}</Text>
+                      {itemCounts[p.id] > 0 && (
+                        <Text style={styles.purchaseItemCount}>{itemCounts[p.id]}개 품목</Text>
+                      )}
                       <Badge label={p.category} variant="neutral" />
                       <Badge label={p.type} variant="neutral" />
                     </View>
@@ -350,6 +360,7 @@ const styles = StyleSheet.create({
   rowBorder: { borderBottomWidth: 0.5, borderBottomColor: Colors.gray100 },
   purchaseLeft: { flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 },
   purchaseSupplier: { fontSize: 14, fontWeight: '500', color: Colors.black },
+  purchaseItemCount: { fontSize: 12, color: Colors.gray400 },
   purchaseAmount: { fontSize: 14, fontWeight: '600', color: Colors.black, marginRight: 10 },
   deleteIconBtn: { padding: 2 },
 

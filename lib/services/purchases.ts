@@ -50,6 +50,22 @@ export async function getPurchaseItemsForPurchases(purchaseIds: string[]): Promi
   return (data ?? []) as PurchaseItem[];
 }
 
+/** 매입 건별 품목 수 (목록에서 "N개 품목" 표시용) */
+export async function getPurchaseItemCounts(purchaseIds: string[]): Promise<Record<string, number>> {
+  if (purchaseIds.length === 0) return {};
+  const { data, error } = await supabase
+    .from('purchase_items')
+    .select('purchase_id')
+    .in('purchase_id', purchaseIds);
+  if (error) throw new Error(error.message);
+
+  const counts: Record<string, number> = {};
+  for (const row of (data ?? []) as { purchase_id: string }[]) {
+    counts[row.purchase_id] = (counts[row.purchase_id] ?? 0) + 1;
+  }
+  return counts;
+}
+
 /** 매입 품목 수량/단가 수정 — 재고 델타 반영 + last_price 갱신 + 매입 합계 재계산 (원자적, RPC) */
 export async function updatePurchaseItem(
   itemId: string,
