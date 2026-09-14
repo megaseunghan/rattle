@@ -481,19 +481,21 @@ export function HomeScreen({ active = true }: { active?: boolean }) {
     <SafeAreaView style={styles.container}>
       <View style={styles.appBar}>
         <TouchableOpacity onPress={() => goToTab('more')} hitSlop={8}>
-          <Ionicons name="settings-outline" size={20} color={Colors.gray600} />
+          <Ionicons name="ellipsis-horizontal" size={20} color={Colors.gray600} />
         </TouchableOpacity>
         <TouchableOpacity style={styles.storeSwitcher} onPress={() => setStoreDropdownVisible(true)} activeOpacity={0.7}>
           <Text style={styles.storeSwitcherText} numberOfLines={1}>{store?.name ?? ''}</Text>
           <Ionicons name={storeDropdownVisible ? 'chevron-up' : 'chevron-down'} size={14} color={Colors.gray500} />
         </TouchableOpacity>
-        <TouchableOpacity onPress={() => router.push('/notifications')} hitSlop={8} style={styles.bellBtn}>
-          <Ionicons name="notifications-outline" size={20} color={Colors.gray600} />
-          {unreadCount > 0 && <View style={styles.bellDot} />}
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => router.push('/mypage')} hitSlop={8}>
-          <Ionicons name="person-circle-outline" size={22} color={Colors.gray600} />
-        </TouchableOpacity>
+        <View style={styles.appBarRightGroup}>
+          <TouchableOpacity onPress={() => router.push('/notifications')} hitSlop={8} style={styles.bellBtn}>
+            <Ionicons name="notifications-outline" size={20} color={Colors.gray600} />
+            {unreadCount > 0 && <View style={styles.bellDot} />}
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => router.push('/mypage')} hitSlop={8}>
+            <Ionicons name="person-circle-outline" size={22} color={Colors.gray600} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView
@@ -563,6 +565,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.white, borderBottomWidth: 0.5, borderBottomColor: Colors.gray100,
   },
   storeSwitcher: { flexDirection: 'row', alignItems: 'center', gap: 4, maxWidth: 200 },
+  appBarRightGroup: { flexDirection: 'row', alignItems: 'center', gap: 14 },
   storeSwitcherText: { fontSize: 16, fontWeight: '700', color: Colors.black },
   bellBtn: { position: 'relative' },
   bellDot: {

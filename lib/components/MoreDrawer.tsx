@@ -189,7 +189,6 @@ export function MoreDrawer({ visible, onClose }: { visible: boolean; onClose: ()
 
           <AccordionSection title="설정">
             {isAdmin && <SettingRow icon="storefront-outline" label="매장 정보" onPress={() => go('/settings/store')} />}
-            {isAdmin && <SettingRow icon="receipt-outline" label="매출 정산 설정" withBorder onPress={() => go('/settings/sales')} />}
             {isAdmin && <SettingRow icon="people-outline" label="멤버 관리" withBorder onPress={() => go('/settings/members')} />}
             {isAdmin && <SettingRow icon="card-outline" label="TossPos 연동" withBorder onPress={() => go('/settings/pos-sync')} />}
             {isAdmin && <SettingRow icon="notifications-outline" label="알림 설정" withBorder onPress={() => go('/notifications/settings')} />}
@@ -198,6 +197,8 @@ export function MoreDrawer({ visible, onClose }: { visible: boolean; onClose: ()
             {isEmailUser && (
               <SettingRow icon="lock-closed-outline" label="비밀번호 변경" withBorder onPress={() => go('/settings/password')} />
             )}
+            <SettingRow icon="document-text-outline" label="이용약관" withBorder onPress={() => go('/legal/terms')} />
+            <SettingRow icon="shield-checkmark-outline" label="개인정보처리방침" withBorder onPress={() => go('/legal/privacy')} />
             <SettingRow icon="log-out-outline" label="로그아웃" withBorder onPress={handleSignOut} />
           </AccordionSection>
 

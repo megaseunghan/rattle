@@ -24,6 +24,7 @@ const QUICK_ADD_ITEMS: QuickAddAction[] = [
   { key: 'sales', label: '매출 등록', icon: 'stats-chart-outline', route: '/pos/new' },
   { key: 'purchase', label: '매입 등록', icon: 'cart-outline', route: '/purchases/new' },
   { key: 'stock', label: '재고 등록', icon: 'cube-outline', route: '/stock/new' },
+  { key: 'recipe', label: '레시피 등록', icon: 'restaurant-outline', route: '/recipes/new' },
   { key: 'employee', label: '직원 등록', icon: 'people-outline', tab: 'payroll' },
   { key: 'attendance', label: '출퇴근 등록', icon: 'time-outline', route: '/attendance' },
 ];
@@ -72,7 +73,7 @@ const TAB_CONFIG: Record<TabName, { label: string; icon: keyof typeof Ionicons.g
   purchases: { label: '매입', icon: 'cart-outline',         iconActive: 'cart' },
   payroll:   { label: '인건비', icon: 'people-outline',     iconActive: 'people' },
   sales:     { label: '매출', icon: 'stats-chart-outline',  iconActive: 'stats-chart' },
-  more:      { label: '설정', icon: 'settings-outline',     iconActive: 'settings' },
+  more:      { label: '설정', icon: 'ellipsis-horizontal',  iconActive: 'ellipsis-horizontal' },
 };
 
 function TabIcon({ tab, focused, badge }: { tab: TabName; focused: boolean; badge?: number }) {
