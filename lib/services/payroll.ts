@@ -80,7 +80,7 @@ function calcIncomeTaxApprox(monthly: number, dependents: number): number {
 }
 
 // ─── 급여 계산 ────────────────────────────────────────────
-export async function calculatePayroll(employee: Employee): Promise<Omit<Payroll, 'id' | 'store_id' | 'employee_id' | 'year_month' | 'created_at'>> {
+export async function calculatePayroll(employee: Employee): Promise<Omit<Payroll, 'id' | 'store_id' | 'employee_id' | 'year_month' | 'created_at' | 'is_settled' | 'settled_at'>> {
   const useInsurance = isInsuranceApplicable(employee);
   // 수습 기간 실지급 90%(중도퇴사 80%)를 gross에 직접 반영
   const gross = Math.floor(employee.base_salary * probationFactor(employee));
@@ -177,7 +177,7 @@ export async function upsertPayroll(
   storeId: string,
   employeeId: string,
   yearMonth: string,
-  calculated: Omit<Payroll, 'id' | 'store_id' | 'employee_id' | 'year_month' | 'created_at'>,
+  calculated: Omit<Payroll, 'id' | 'store_id' | 'employee_id' | 'year_month' | 'created_at' | 'is_settled' | 'settled_at'>,
 ): Promise<Payroll> {
   const { data, error } = await supabase
     .from('payroll')
@@ -194,5 +194,15 @@ export async function upsertPayroll(
 
 export async function deletePayroll(id: string): Promise<void> {
   const { error } = await supabase.from('payroll').delete().eq('id', id);
+  if (error) throw new Error(error.message);
+}
+
+/** 화면 42: 급여 정산 리포트 — 선택한 급여 건들을 정산 완료 처리 */
+export async function settlePayrolls(ids: string[]): Promise<void> {
+  if (ids.length === 0) return;
+  const { error } = await supabase
+    .from('payroll')
+    .update({ is_settled: true, settled_at: new Date().toISOString() })
+    .in('id', ids);
   if (error) throw new Error(error.message);
 }

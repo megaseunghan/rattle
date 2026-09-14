@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
+import { router } from 'expo-router';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, Pressable,
   Modal, TextInput, Alert, KeyboardAvoidingView, Platform,
@@ -466,7 +467,19 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
     <SafeAreaView style={styles.container}>
       <View style={styles.topBar}>
         <Text style={styles.title}>직원관리</Text>
-        <Text style={styles.monthPill}>{monthLabel}</Text>
+        <View style={styles.topBarRight}>
+          {isAdmin && (
+            <TouchableOpacity
+              style={styles.settlementBtn}
+              onPress={() => router.push({ pathname: '/payroll/settlement', params: { yearMonth } })}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="document-text-outline" size={14} color={Colors.primary} />
+              <Text style={styles.settlementBtnText}>정산 리포트</Text>
+            </TouchableOpacity>
+          )}
+          <Text style={styles.monthPill}>{monthLabel}</Text>
+        </View>
       </View>
 
       <ScrollView
@@ -847,6 +860,13 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.white, borderBottomWidth: 0.5, borderBottomColor: Colors.gray100,
   },
   title: { fontSize: 17, fontWeight: '600', color: Colors.black },
+  topBarRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  settlementBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20,
+    backgroundColor: Colors.tinted,
+  },
+  settlementBtnText: { fontSize: 12, fontWeight: '700', color: Colors.primary },
   monthPill: { fontSize: 12, color: Colors.gray500, backgroundColor: Colors.gray100, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
   scroll: { padding: 16, gap: 14, paddingBottom: 48 },
   monthNav: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
