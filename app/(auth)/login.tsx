@@ -8,6 +8,7 @@ import {
 import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
 import { router } from 'expo-router';
+import { completeAuthCallback } from '../../lib/services/authCallback';
 import { supabase } from '../../lib/supabase';
 import { Colors } from '../../constants/colors';
 import { Button } from '../../lib/components/ui';
@@ -30,20 +31,8 @@ export default function LoginScreen() {
       if (data.url) {
         const result = await WebBrowser.openAuthSessionAsync(data.url, redirectUrl);
         if (result.type === 'success') {
-          const fragment = result.url.split('#')[1] ?? '';
-          const params = new URLSearchParams(fragment);
-          const accessToken = params.get('access_token');
-          const refreshToken = params.get('refresh_token');
-          if (accessToken && refreshToken) {
-            const { error: sessionError } = await supabase.auth.setSession({
-              access_token: accessToken,
-              refresh_token: refreshToken,
-            });
-            if (sessionError) throw sessionError;
-          } else {
-            // PKCE flow fallback
-            const { error: sessionError } = await supabase.auth.exchangeCodeForSession(result.url);
-            if (sessionError) throw sessionError;
+          if (!await completeAuthCallback(result.url, redirectUrl)) {
+            throw new Error('인증 응답에 로그인 정보가 없습니다.');
           }
         }
       }

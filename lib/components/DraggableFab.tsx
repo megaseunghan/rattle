@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { StyleSheet, useWindowDimensions } from 'react-native';
-import Animated, { runOnJS, useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
+import Animated, { cancelAnimation, runOnJS, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
@@ -10,10 +10,25 @@ const FAB_SIZE = 52;
 const TAB_BAR_HEIGHT = 80;
 const DRAG_TAP_THRESHOLD = 6; // 이 이하로 움직이면 드래그가 아니라 탭으로 간주
 const STORAGE_KEY = 'rattle_fab_position_v1';
+const RUBBERBAND_CONSTANT = 0.55; // 경계 밖으로 나갈수록 저항이 커지는 정도 (apple-design §9)
 
 function clamp(value: number, min: number, max: number): number {
   'worklet';
   return Math.min(Math.max(value, min), max);
+}
+
+/** 경계를 넘어간 만큼 점점 더 저항하도록 완충 — 하드 스탑 대신 부드럽게 늘어나는 느낌 */
+function rubberband(overshoot: number, dimension: number, constant = RUBBERBAND_CONSTANT): number {
+  'worklet';
+  return (overshoot * dimension * constant) / (dimension + constant * Math.abs(overshoot));
+}
+
+/** 값이 [min, max] 밖이면 러버밴딩으로 완충하고, 안이면 그대로 반환 */
+function withRubberband(value: number, min: number, max: number, dimension: number): number {
+  'worklet';
+  if (value < min) return min + rubberband(value - min, dimension);
+  if (value > max) return max + rubberband(value - max, dimension);
+  return value;
 }
 
 interface DraggableFabProps {
@@ -43,6 +58,7 @@ function DraggableFabInner({ onPress, onDragEnd, iconName }: Omit<DraggableFabPr
   const y = useSharedValue(defaultY);
   const startX = useSharedValue(defaultX);
   const startY = useSharedValue(defaultY);
+  const hasDragged = useSharedValue(false);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
@@ -50,6 +66,7 @@ function DraggableFabInner({ onPress, onDragEnd, iconName }: Omit<DraggableFabPr
       if (raw) {
         try {
           const pos = JSON.parse(raw) as { x: number; y: number };
+          if (!Number.isFinite(pos.x) || !Number.isFinite(pos.y)) throw new Error();
           x.value = clamp(pos.x, minX, maxX);
           y.value = clamp(pos.y, minY, maxY);
         } catch {
@@ -59,28 +76,40 @@ function DraggableFabInner({ onPress, onDragEnd, iconName }: Omit<DraggableFabPr
       setReady(true);
       onDragEnd?.(x.value, y.value);
       // eslint-disable-next-line react-hooks/exhaustive-deps
-    });
+    }).catch(() => setReady(true));
   }, []);
 
   function persistPosition(px: number, py: number) {
-    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({ x: px, y: py }));
+    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({ x: px, y: py })).catch(() => {});
     onDragEnd?.(px, py);
   }
 
   const pan = Gesture.Pan()
     .minDistance(0) // 움직임이 거의 없는 순수 탭에서도 제스처가 확실히 활성화되도록
     .onStart(() => {
+      cancelAnimation(x);
+      cancelAnimation(y);
+      hasDragged.value = false;
       startX.value = x.value;
       startY.value = y.value;
     })
     .onUpdate((e) => {
-      x.value = clamp(startX.value + e.translationX, minX, maxX);
-      y.value = clamp(startY.value + e.translationY, minY, maxY);
+      if (Math.abs(e.translationX) > DRAG_TAP_THRESHOLD || Math.abs(e.translationY) > DRAG_TAP_THRESHOLD) {
+        hasDragged.value = true;
+      }
+      // 경계 안에서는 손끝에 1:1로 붙고, 밖으로 나가면 러버밴딩으로 저항 (apple-design §2, §9)
+      x.value = withRubberband(startX.value + e.translationX, minX, maxX, width);
+      y.value = withRubberband(startY.value + e.translationY, minY, maxY, height);
     })
-    .onFinalize((e) => {
-      const moved = Math.abs(e.translationX) > DRAG_TAP_THRESHOLD || Math.abs(e.translationY) > DRAG_TAP_THRESHOLD;
-      runOnJS(persistPosition)(x.value, y.value);
-      if (!moved) runOnJS(onPress)();
+    .onFinalize((e, success) => {
+      const moved = hasDragged.value || Math.abs(e.translationX) > DRAG_TAP_THRESHOLD || Math.abs(e.translationY) > DRAG_TAP_THRESHOLD;
+      const finalX = clamp(x.value, minX, maxX);
+      const finalY = clamp(y.value, minY, maxY);
+      // 놓을 때의 제스처 속도를 그대로 스프링에 넘겨 손과 애니메이션 사이에 이질감이 없게 한다 (apple-design §5)
+      x.value = withSpring(finalX, { damping: 20, stiffness: 300, velocity: success && moved ? e.velocityX : 0 });
+      y.value = withSpring(finalY, { damping: 20, stiffness: 300, velocity: success && moved ? e.velocityY : 0 });
+      runOnJS(persistPosition)(finalX, finalY);
+      if (success && !moved) runOnJS(onPress)();
     });
 
   const animatedStyle = useAnimatedStyle(() => ({

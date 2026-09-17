@@ -8,6 +8,7 @@ import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
 import { AuthProvider, useAuth } from '../lib/contexts/AuthContext';
 import { DevRoleSwitcher } from '../lib/components/DevRoleSwitcher';
+import { completeAuthCallback } from '../lib/services/authCallback';
 import { SplashAnimation } from '../lib/components/SplashAnimation';
 import { useTossSync } from '../lib/hooks/useTossSync';
 import { Colors } from '../constants/colors';
@@ -30,6 +31,7 @@ function RootNavigator() {
   const { autoSyncOnForeground } = useTossSync();
   const lastCheckedAt = useRef<number>(0);
   const [showIntro, setShowIntro] = useState(true);
+  const [introReady, setIntroReady] = useState(false);
 
   async function checkPendingMembers() {
     if (!store || currentRole !== 'admin') return;
@@ -58,7 +60,7 @@ function RootNavigator() {
   useEffect(() => {
     if (loading) return;
 
-    SplashScreen.hideAsync();
+    SplashScreen.hideAsync().then(() => setIntroReady(true)).catch(() => setIntroReady(true));
 
     const inAuth = segments[0] === '(auth)';
     const onLoginFlow = segments.includes('login');
@@ -93,11 +95,15 @@ function RootNavigator() {
   // OAuth 콜백 딥링크 처리 (카카오 로그인)
   useEffect(() => {
     const handleUrl = async ({ url }: { url: string }) => {
-      if (!url.includes('code=')) return;
-      await supabase.auth.exchangeCodeForSession(url);
+      try {
+        await completeAuthCallback(url, Linking.createURL('/'));
+      } catch {
+        Alert.alert('로그인 오류', '인증을 완료하지 못했습니다. 다시 로그인해주세요.');
+      }
     };
 
     const subscription = Linking.addEventListener('url', handleUrl);
+    Linking.getInitialURL().then(url => { if (url) void handleUrl({ url }); }).catch(() => {});
     return () => subscription.remove();
   }, []);
 
@@ -152,7 +158,7 @@ function RootNavigator() {
       <Stack.Screen name="legal/privacy" options={{ headerShown: false }} />
     </Stack>
     {!loading && user && store && <DevRoleSwitcher />}
-    {showIntro && <SplashAnimation onDone={() => setShowIntro(false)} />}
+    {showIntro && <SplashAnimation ready={introReady} onDone={() => setShowIntro(false)} />}
     </>
   );
 }

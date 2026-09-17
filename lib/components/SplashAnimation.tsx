@@ -23,30 +23,32 @@ const AnimatedG = Animated.createAnimatedComponent(G);
  */
 type Capsule = { x: number; y: number; w: number; h: number; r: number };
 
+// 마스터 로고 PNG가 캔버스 안에서 안 중앙(좌우/상하 여백이 서로 달랐음)이라
+// 에셋을 중앙으로 재정렬(x -31, y -63)했다 — 여기 좌표도 같은 이동값을 반영한다.
 const STEM: Capsule[] = [
-  { x: 290, y: 340, w: 400, h: 400, r: 200 },   // 0.0s — 둥근 블롭
-  { x: 270, y: 300, w: 370, h: 460, r: 185 },   // 0.3s — 세로로 늘어나기 시작
-  { x: 215, y: 270, w: 291, h: 620, r: 145.5 }, // 0.6s — 기둥 자리로 정렬
-  { x: 208, y: 248, w: 291, h: 660, r: 145.5 }, // 0.8s — 완성 (실측값)
+  { x: 259, y: 277, w: 400, h: 400, r: 200 },   // 0.0s — 둥근 블롭
+  { x: 239, y: 237, w: 370, h: 460, r: 185 },   // 0.3s — 세로로 늘어나기 시작
+  { x: 184, y: 207, w: 291, h: 620, r: 145.5 }, // 0.6s — 기둥 자리로 정렬
+  { x: 177, y: 185, w: 291, h: 660, r: 145.5 }, // 0.8s — 완성 (실측값)
 ];
 
 const BOWL: Capsule[] = [
-  { x: 420, y: 320, w: 360, h: 360, r: 180 },
-  { x: 440, y: 290, w: 345, h: 345, r: 172.5 },
-  { x: 490, y: 245, w: 310, h: 310, r: 155 },
-  { x: 496, y: 232.5, w: 318, h: 318, r: 159 },
+  { x: 389, y: 257, w: 360, h: 360, r: 180 },
+  { x: 409, y: 227, w: 345, h: 345, r: 172.5 },
+  { x: 459, y: 182, w: 310, h: 310, r: 155 },
+  { x: 465, y: 169.5, w: 318, h: 318, r: 159 },
 ];
 
 // 다리는 고정 회전(-45°)된 그룹 안에 있어서, 블롭 단계의 원은 회전해도 원 그대로다.
 const LEG: Capsule[] = [
-  { x: 481, y: 398, w: 350, h: 350, r: 175 },
-  { x: 500, y: 430, w: 320, h: 390, r: 160 },
-  { x: 572, y: 515, w: 242, h: 420, r: 121 },
-  { x: 567.5, y: 499, w: 242, h: 447, r: 121 },
+  { x: 450, y: 335, w: 350, h: 350, r: 175 },
+  { x: 469, y: 367, w: 320, h: 390, r: 160 },
+  { x: 541, y: 452, w: 242, h: 420, r: 121 },
+  { x: 536.5, y: 436, w: 242, h: 447, r: 121 },
 ];
 
-const LEG_ORIGIN = '688.5, 722.5'; // 다리 캡슐의 회전 중심 (축의 중점)
-const MARK_CENTER = { x: 542, y: 574 }; // 로고 content 의 실제 중심
+const LEG_ORIGIN = '657.5, 659.5'; // 다리 캡슐의 회전 중심 (축의 중점)
+const MARK_CENTER = { x: 511, y: 511 }; // 로고 content 의 실제 중심 (재정렬 후 캔버스 정중앙)
 const STEM_COLOR = '#1679FC'; // 기둥은 그라데이션 없이 단색 (로고 원본과 동일)
 
 /** 0.0 → 0.375 → 0.75 → 1.0 구간이 각각 0.0s / 0.3s / 0.6s / 0.8s 프레임이다 */
@@ -65,10 +67,11 @@ function capsuleAt(frames: Capsule[], p: number) {
 }
 
 interface Props {
+  ready: boolean;
   onDone: () => void;
 }
 
-export function SplashAnimation({ onDone }: Props) {
+export function SplashAnimation({ ready, onDone }: Props) {
   const progress = useSharedValue(0);   // 블롭 → 로고 형태 변형
   const appear = useSharedValue(0);     // 등장 페이드
   const scale = useSharedValue(0.62);   // 등장 스케일 + 완성 시 스프링 바운스
@@ -77,6 +80,7 @@ export function SplashAnimation({ onDone }: Props) {
   const container = useSharedValue(1);  // 전체 페이드아웃
 
   useEffect(() => {
+    if (!ready) return;
     appear.value = withTiming(1, { duration: 260, easing: Easing.out(Easing.cubic) });
 
     progress.value = withSequence(
@@ -87,8 +91,10 @@ export function SplashAnimation({ onDone }: Props) {
 
     scale.value = withSequence(
       withTiming(1, { duration: 300, easing: Easing.out(Easing.cubic) }),
-      withDelay(500, withSpring(1.09, { damping: 6, stiffness: 220 })),  // 0.8s — 살짝 튀고
-      withSpring(1, { damping: 11, stiffness: 200 }),                    // 1.0s — 안정
+      // apple-design §4: 완성 순간의 한 번뿐인 튐은 damping ratio~0.8/response~0.4에 대응하는 값으로,
+      // 뒤이은 안정은 거의 critically damped(ratio~1.0/response~0.3)로 — 여러 번 진동하지 않고 한 번만 튀고 멈춘다.
+      withDelay(500, withSpring(1.09, { damping: 25, stiffness: 247 })), // 0.8s — 살짝 튀고
+      withSpring(1, { damping: 42, stiffness: 438 }),                    // 1.0s — 안정
     );
 
     glow.value = withDelay(800, withSequence(
@@ -102,7 +108,7 @@ export function SplashAnimation({ onDone }: Props) {
       if (finished) runOnJS(onDone)();
     }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [ready]);
 
   const stemProps = useAnimatedProps(() => capsuleAt(STEM, progress.value));
   const bowlProps = useAnimatedProps(() => capsuleAt(BOWL, progress.value));
@@ -131,7 +137,7 @@ export function SplashAnimation({ onDone }: Props) {
   const containerStyle = useAnimatedStyle(() => ({ opacity: container.value }));
 
   return (
-    <Animated.View style={[styles.overlay, containerStyle]} pointerEvents="none">
+    <Animated.View style={[styles.overlay, containerStyle]} pointerEvents="auto">
       <Animated.View style={markStyle}>
         <Svg width={168} height={168} viewBox="0 0 1024 1024">
           <Defs>

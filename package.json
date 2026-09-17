@@ -8,7 +8,8 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
-    "test": "jest"
+    "test": "jest",
+    "docs:api": "python3 -m http.server 8732 --bind 127.0.0.1 --directory docs/api"
   },
   "jest": {
     "preset": "jest-expo",
@@ -23,7 +24,10 @@
     "moduleNameMapper": {
       "^@expo/vector-icons$": "<rootDir>/__mocks__/@expo/vector-icons.js",
       "^@expo/vector-icons/(.*)$": "<rootDir>/__mocks__/@expo/vector-icons.js"
-    }
+    },
+    "modulePathIgnorePatterns": [
+      "<rootDir>/.worktrees/"
+    ]
   },
   "dependencies": {
     "@expo/vector-icons": "^14.0.4",
@@ -42,7 +46,6 @@
     "expo-image-picker": "~55.0.13",
     "expo-linking": "~55.0.8",
     "expo-location": "~55.1.10",
-    "expo-notifications": "~55.0.13",
     "expo-router": "~55.0.7",
     "expo-secure-store": "~55.0.18",
     "expo-splash-screen": "^55.0.12",

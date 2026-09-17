@@ -1,93 +1,28 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createTossProxyHandler } from './handler.ts';
 
-const TOSS_BASE_URL = 'https://open-api.tossplace.com/api-public/openapi/v1';
-const ACCESS_KEY = Deno.env.get('TOSS_ACCESS_KEY') ?? '';
-const ACCESS_SECRET = Deno.env.get('TOSS_ACCESS_SECRET') ?? '';
-
-const CORS_HEADERS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
-
-serve(async (req) => {
-  // CORS 프리플라이트 요청 처리
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: CORS_HEADERS });
-  }
-
-  let path: string;
-  let method: string = 'GET';
-  let requestBody: any = null;
-
-  try {
-    const body = await req.json();
-    path = body.path;
-    method = body.method ?? 'GET';
-    requestBody = body.body ?? null; // Toss API로 전달할 실제 데이터
-  } catch {
-    return new Response(JSON.stringify({ error: '유효하지 않은 요청 본문입니다.' }), {
-      status: 400,
-      headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+serve(createTossProxyHandler({
+  accessKey: Deno.env.get('TOSS_ACCESS_KEY') ?? '',
+  accessSecret: Deno.env.get('TOSS_ACCESS_SECRET') ?? '',
+  async authorize(token, merchantId) {
+    // 사용자 JWT로 조회해 RLS도 적용한다. 서비스 역할 키는 사용하지 않는다.
+    const client = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_ANON_KEY')!, {
+      global: { headers: { Authorization: `Bearer ${token}` } },
+      auth: { persistSession: false, autoRefreshToken: false },
     });
-  }
-
-  if (!path) {
-    return new Response(JSON.stringify({ error: 'path 파라미터가 필요합니다.' }), {
-      status: 400,
-      headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
-    });
-  }
-
-  const targetUrl = `${TOSS_BASE_URL}${path}`;
-  console.log(`[TossProxy] ${method} 요청: ${targetUrl}`);
-
-  try {
-    const fetchOptions: RequestInit = {
-      method: method,
-      headers: {
-        'x-access-key': ACCESS_KEY,
-        'x-secret-key': ACCESS_SECRET,
-        'Content-Type': 'application/json',
-      },
-    };
-
-    if (requestBody && (method === 'POST' || method === 'PUT' || method === 'PATCH')) {
-      fetchOptions.body = JSON.stringify(requestBody);
+    const { data: { user }, error } = await client.auth.getUser(token);
+    if (error || !user) return 401;
+    const stores = await client.from('stores').select('id, owner_id').eq('toss_merchant_id', merchantId);
+    if (stores.error) throw new Error('Store lookup failed');
+    for (const store of stores.data ?? []) {
+      if (store.owner_id === user.id) return 200;
+      const membership = await client.from('store_members').select('id')
+        .eq('store_id', store.id).eq('user_id', user.id).eq('status', 'approved').limit(1);
+      if (membership.error) throw new Error('Membership lookup failed');
+      if (membership.data?.length) return 200;
     }
-
-    const tossRes = await fetch(targetUrl, fetchOptions);
-    console.log(`[TossProxy] 응답 상태: ${tossRes.status}`);
-
-    const text = await tossRes.text();
-    let responseData: any;
-    
-    try {
-      responseData = JSON.parse(text);
-    } catch {
-      responseData = { 
-        error: 'JSON 형식이 아닌 응답입니다.', 
-        status: tossRes.status, 
-        preview: text.slice(0, 500) 
-      };
-    }
-
-    if (!tossRes.ok) {
-      console.error(`[TossProxy] API 에러 발생: ${JSON.stringify(responseData)}`);
-    }
-
-    return new Response(JSON.stringify(responseData), {
-      status: tossRes.status,
-      headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
-    });
-
-  } catch (e) {
-    console.error(`[TossProxy] 네트워크 에러: ${String(e)}`);
-    return new Response(JSON.stringify({ 
-      error: 'Toss Place API 네트워크 오류', 
-      detail: String(e) 
-    }), {
-      status: 502,
-      headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
-    });
-  }
-});
+    return 403;
+  },
+  fetchUpstream: fetch,
+}));
