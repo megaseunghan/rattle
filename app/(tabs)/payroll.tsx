@@ -16,7 +16,7 @@ import { usePayroll } from '../../lib/hooks/usePayroll';
 import { Employee, EmploymentType, StoreMember } from '../../types';
 import { isInProbation, isInsuranceApplicable } from '../../lib/services/employees';
 import { getMonthlyWageByEmployee } from '../../lib/services/attendance';
-import { probationFactor } from '../../lib/services/payroll';
+import { PayrollDeductions, probationFactor } from '../../lib/services/payroll';
 import {
   getStoreWageHistory, addWageChange, regularGrossForMonth, todayISO,
 } from '../../lib/services/wageHistory';
@@ -41,12 +41,44 @@ function toYearMonth(year: number, month: number) {
   return `${year}-${String(month).padStart(2, '0')}`;
 }
 
-/** 영수증 스타일 공제 항목 행 (항목 / 금액 두 컬럼) */
-function ReceiptLine({ label, value }: { label: string; value: number }) {
+type DeductionDraft = Record<keyof PayrollDeductions, string>;
+
+function moneyInput(value: number): string {
+  return value > 0 ? value.toLocaleString() : '';
+}
+
+function parseMoneyInput(value: string): number {
+  return Number(value.replace(/[^0-9]/g, '')) || 0;
+}
+
+function DeductionInputLine({
+  label,
+  value,
+  editable,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  editable: boolean;
+  onChange: (value: string) => void;
+}) {
   return (
     <View style={styles.receiptRow}>
       <Text style={styles.receiptLabel}>{label}</Text>
-      <Text style={styles.receiptValue}>-{value.toLocaleString()}원</Text>
+      <View style={[styles.deductionInputWrap, !editable && styles.deductionInputWrapDisabled]}>
+        <Text style={styles.deductionMinus}>−</Text>
+        <TextInput
+          value={value}
+          onChangeText={text => onChange(moneyInput(parseMoneyInput(text)))}
+          editable={editable}
+          keyboardType="number-pad"
+          selectTextOnFocus
+          placeholder="0"
+          placeholderTextColor={Colors.gray300}
+          style={styles.deductionInput}
+        />
+        <Text style={styles.deductionWon}>원</Text>
+      </View>
     </View>
   );
 }
@@ -60,6 +92,9 @@ function EmployeeCard({
   onShowHistory,
   isCalculating,
   onCalculate,
+  onSaveDeductions,
+  isSavingDeductions,
+  canEditDeductions,
   onEdit,
   onRemovePayroll,
 }: {
@@ -71,6 +106,9 @@ function EmployeeCard({
   onShowHistory: () => void;
   isCalculating: boolean;
   onCalculate: () => void;
+  onSaveDeductions: (deductions: PayrollDeductions) => Promise<void>;
+  isSavingDeductions: boolean;
+  canEditDeductions: boolean;
   onEdit: () => void;
   onRemovePayroll?: () => void;
 }) {
@@ -78,6 +116,37 @@ function EmployeeCard({
   const insurance = isInsuranceApplicable(employee);
   const isPart = employee.employment_type === 'part_time';
   const [expanded, setExpanded] = useState(false);
+  const [deductionDraft, setDeductionDraft] = useState<DeductionDraft>({
+    national_pension: '',
+    health_insurance: '',
+    long_term_care: '',
+    employment_insurance: '',
+    income_tax: '',
+    local_income_tax: '',
+    withholding_tax: '',
+  });
+
+  useEffect(() => {
+    if (!payroll) return;
+    setDeductionDraft({
+      national_pension: moneyInput(payroll.national_pension),
+      health_insurance: moneyInput(payroll.health_insurance),
+      long_term_care: moneyInput(payroll.long_term_care),
+      employment_insurance: moneyInput(payroll.employment_insurance),
+      income_tax: moneyInput(payroll.income_tax),
+      local_income_tax: moneyInput(payroll.local_income_tax),
+      withholding_tax: moneyInput(payroll.withholding_tax),
+    });
+  }, [
+    payroll?.id,
+    payroll?.national_pension,
+    payroll?.health_insurance,
+    payroll?.long_term_care,
+    payroll?.employment_insurance,
+    payroll?.income_tax,
+    payroll?.local_income_tax,
+    payroll?.withholding_tax,
+  ]);
 
   function toggleExpanded() {
     animateListChange();
@@ -89,7 +158,19 @@ function EmployeeCard({
     ? (employee.hourly_wage != null ? `${Number(employee.hourly_wage).toLocaleString()}원` : '—')
     : `${employee.base_salary.toLocaleString()}원`;
   const summaryNetPay = isPart ? (wage?.totalWage ?? 0) : (payroll ? payroll.net_pay : null);
-  const summaryNetLabel = isPart ? '세전 누적액' : '실수령액';
+  const summaryNetLabel = isPart
+    ? '세전 누적액'
+    : payroll?.is_settled ? '확정 실수령액' : '월 예상 지급액';
+  const deductions = Object.fromEntries(
+    Object.entries(deductionDraft).map(([key, value]) => [key, parseMoneyInput(value)]),
+  ) as unknown as PayrollDeductions;
+  const deductionTotal = Object.values(deductions).reduce((sum, value) => sum + value, 0);
+  const previewNetPay = payroll ? Math.max(0, payroll.gross - deductionTotal) : 0;
+  const deductionsInvalid = payroll ? deductionTotal > payroll.gross : false;
+
+  function updateDeduction(key: keyof PayrollDeductions, value: string) {
+    setDeductionDraft(current => ({ ...current, [key]: value }));
+  }
 
   return (
     <View style={styles.employeeCard}>
@@ -165,36 +246,60 @@ function EmployeeCard({
       {payroll ? (
         <View style={styles.payrollResult}>
           <View style={styles.receiptDivider} />
-          <Text style={styles.receiptHeading}>공제 내역</Text>
+          <View style={styles.receiptHeadingRow}>
+            <Text style={styles.receiptHeading}>공제 내역 직접 입력</Text>
+            <Badge label={payroll.is_settled ? '정산완료' : '검토 필요'} variant={payroll.is_settled ? 'positive' : 'neutral'} />
+          </View>
+          <View style={styles.payrollRow}>
+            <Text style={styles.payrollDeductLabel}>월 급여 기준액</Text>
+            <Text style={styles.payrollDeduct}>{payroll.gross.toLocaleString()}원</Text>
+          </View>
+          <Text style={styles.deductionHint}>자동 계산값이 채워져 있어요. 급여 지급 전 실제 고지액으로 수정해주세요.</Text>
           {insurance ? (
             <>
-              <ReceiptLine label="국민연금" value={payroll.national_pension} />
-              <ReceiptLine label="건강·장기요양" value={payroll.health_insurance + payroll.long_term_care} />
-              <ReceiptLine label="고용보험" value={payroll.employment_insurance} />
-              <ReceiptLine label="소득세" value={payroll.income_tax} />
-              <ReceiptLine label="지방소득세" value={payroll.local_income_tax} />
+              <DeductionInputLine label="국민연금" value={deductionDraft.national_pension} editable={canEditDeductions && !isSavingDeductions} onChange={value => updateDeduction('national_pension', value)} />
+              <DeductionInputLine label="건강보험" value={deductionDraft.health_insurance} editable={canEditDeductions && !isSavingDeductions} onChange={value => updateDeduction('health_insurance', value)} />
+              <DeductionInputLine label="장기요양" value={deductionDraft.long_term_care} editable={canEditDeductions && !isSavingDeductions} onChange={value => updateDeduction('long_term_care', value)} />
+              <DeductionInputLine label="고용보험" value={deductionDraft.employment_insurance} editable={canEditDeductions && !isSavingDeductions} onChange={value => updateDeduction('employment_insurance', value)} />
+              <DeductionInputLine label="소득세" value={deductionDraft.income_tax} editable={canEditDeductions && !isSavingDeductions} onChange={value => updateDeduction('income_tax', value)} />
+              <DeductionInputLine label="지방소득세" value={deductionDraft.local_income_tax} editable={canEditDeductions && !isSavingDeductions} onChange={value => updateDeduction('local_income_tax', value)} />
             </>
           ) : (
-            <ReceiptLine label="3.3% 원천징수" value={payroll.withholding_tax} />
+            <DeductionInputLine label="3.3% 원천징수" value={deductionDraft.withholding_tax} editable={canEditDeductions && !isSavingDeductions} onChange={value => updateDeduction('withholding_tax', value)} />
           )}
+          {deductionsInvalid && <Text style={styles.deductionError}>공제 합계가 세전 급여보다 큽니다.</Text>}
           <View style={styles.receiptTotalLine} />
           <View style={styles.receiptNetRow}>
-            <Text style={styles.receiptNetLabel}>실수령액</Text>
-            <Text style={styles.receiptNetValue}>{payroll.net_pay.toLocaleString()}원</Text>
+            <Text style={styles.receiptNetLabel}>{payroll.is_settled ? '확정 실수령액' : '예상 실수령액'}</Text>
+            <Text style={styles.receiptNetValue}>{previewNetPay.toLocaleString()}원</Text>
           </View>
           <View style={styles.payrollActions}>
             <TouchableOpacity style={styles.recalcBtn} onPress={onCalculate} disabled={isCalculating}>
               {isCalculating
                 ? <ActivityIndicator size="small" color={Colors.gray500} />
-                : <Text style={styles.recalcBtnText}>재계산</Text>
+                : <Text style={styles.recalcBtnText}>자동 계산값 다시 불러오기</Text>
               }
             </TouchableOpacity>
-            {onRemovePayroll && (
-              <TouchableOpacity style={styles.removePayrollBtn} onPress={onRemovePayroll}>
-                <Text style={styles.removePayrollBtnText}>삭제</Text>
+            {canEditDeductions && (
+              <TouchableOpacity
+                style={[styles.saveDeductionBtn, (isSavingDeductions || deductionsInvalid) && styles.saveDeductionBtnDisabled]}
+                onPress={() => onSaveDeductions(deductions)}
+                disabled={isSavingDeductions || deductionsInvalid}
+                activeOpacity={0.8}
+              >
+                {isSavingDeductions
+                  ? <ActivityIndicator size="small" color={Colors.white} />
+                  : <Text style={styles.saveDeductionBtnText}>공제 내역 저장</Text>}
               </TouchableOpacity>
             )}
           </View>
+          {onRemovePayroll && (
+            <View style={styles.removePayrollRow}>
+              <TouchableOpacity style={styles.removePayrollBtn} onPress={onRemovePayroll}>
+                <Text style={styles.removePayrollBtnText}>삭제</Text>
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
       ) : (
         <TouchableOpacity
@@ -236,7 +341,16 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
 
   const yearMonth = toYearMonth(year, month);
   const { employees, loading: empLoading, refetch: refetchEmp, add, update, deactivate } = useEmployees();
-  const { payrolls, loading: payLoading, calculating, refetch: refetchPay, calculate, remove: removePayroll } = usePayroll(yearMonth);
+  const {
+    payrolls,
+    loading: payLoading,
+    calculating,
+    savingDeductions,
+    refetch: refetchPay,
+    calculate,
+    saveDeductions,
+    remove: removePayroll,
+  } = usePayroll(yearMonth);
 
   const { store, currentRole } = useAuth();
   const isAdmin = currentRole === 'admin';
@@ -444,17 +558,16 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
 
   // 누적 기준 합계 (정규직: 급여 이력 기반 일할, 파트타이머: 출퇴근 일급 누적)
   const accrualNow = new Date();
-  const monthFactor = accruedFactor(year, month);
   const partTimeWageTotal = Object.values(wageMap).reduce((s, w) => s + w.totalWage, 0);
   const regularEmps = employees.filter(e => e.employment_type !== 'part_time');
   const regularAccruedGross = regularEmps.reduce(
     (s, e) => s + regularGrossForMonth(histMap[e.id] ?? [], year, month, accrualNow, probationFactor(e)), 0);
-  const regularAccruedNet = payrolls.reduce((s, p) => {
+  const regularExpectedNet = payrolls.reduce((s, p) => {
     const emp = regularEmps.find(e => e.id === p.employee_id);
-    return emp ? s + Math.round(p.net_pay * monthFactor) : s;
+    return emp ? s + p.net_pay : s;
   }, 0);
   const totalLaborCost = regularAccruedGross + partTimeWageTotal;
-  const totalNetPay = regularAccruedNet + partTimeWageTotal;
+  const totalExpectedPay = regularExpectedNet + partTimeWageTotal;
   const monthLabel = `${year}년 ${month}월`;
 
   const canSaveEmployee = form.name.trim().length > 0 && (
@@ -510,12 +623,12 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
             <Text style={styles.summarySub}>세전 누적 (일할)</Text>
           </View>
           <View style={styles.summaryCard}>
-            <Text style={styles.summaryLabel}>총 실수령액</Text>
+            <Text style={styles.summaryLabel}>총 지급 예정액</Text>
             {payLoading
               ? <ActivityIndicator size="small" color={Colors.gray300} style={styles.summaryLoader} />
-              : <Text style={styles.summaryValue}>{totalNetPay > 0 ? `${totalNetPay.toLocaleString()}원` : '—'}</Text>
+              : <Text style={styles.summaryValue}>{totalExpectedPay > 0 ? `${totalExpectedPay.toLocaleString()}원` : '—'}</Text>
             }
-            <Text style={styles.summarySub}>공제 후 누적</Text>
+            <Text style={styles.summarySub}>월 급여 · 입력 공제 기준</Text>
           </View>
         </View>
 
@@ -546,6 +659,15 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
               onShowHistory={() => setHistTarget(emp)}
               isCalculating={calculating === emp.id}
               onCalculate={() => calculate(emp).catch(e => Alert.alert('계산 실패', e.message))}
+              onSaveDeductions={deductions => {
+                const payroll = payrolls.find(p => p.employee_id === emp.id);
+                if (!payroll) return Promise.resolve();
+                return saveDeductions(payroll, deductions)
+                  .then(() => { Alert.alert('저장 완료', '실제 공제 내역과 예상 실수령액을 반영했습니다.'); })
+                  .catch(e => { Alert.alert('저장 실패', e.message); throw e; });
+              }}
+              isSavingDeductions={savingDeductions === emp.id}
+              canEditDeductions={isAdmin}
               onEdit={() => openEdit(emp)}
               onRemovePayroll={() => {
                 const p = payrolls.find(pr => pr.employee_id === emp.id);
@@ -922,13 +1044,24 @@ const styles = StyleSheet.create({
   payrollDivider: { height: 0.5, backgroundColor: Colors.gray100, marginVertical: 10 },
   // Nostalgia: 급여명세서 영수증 스타일
   receiptDivider: { height: 0.5, backgroundColor: Colors.gray200, marginVertical: 10 },
-  receiptHeading: { fontSize: 11, fontWeight: '700', color: Colors.gray400, letterSpacing: 2, marginBottom: 6 },
+  receiptHeadingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
+  receiptHeading: { fontSize: 11, fontWeight: '700', color: Colors.gray500, letterSpacing: 1.2 },
+  deductionHint: { fontSize: 11, lineHeight: 16, color: Colors.gray400, marginTop: 6, marginBottom: 8 },
   receiptRow: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingVertical: 4, borderBottomWidth: 0.5, borderBottomColor: Colors.gray100, borderStyle: 'dashed',
+    minHeight: 42, borderBottomWidth: 0.5, borderBottomColor: Colors.gray100,
   },
   receiptLabel: { fontSize: 12, color: Colors.gray500 },
-  receiptValue: { fontSize: 12, color: Colors.gray700 },
+  deductionInputWrap: {
+    minWidth: 128, height: 34, paddingHorizontal: 10, borderRadius: 9,
+    borderWidth: 1, borderColor: Colors.gray200, backgroundColor: Colors.white,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end',
+  },
+  deductionInputWrapDisabled: { backgroundColor: Colors.gray50, borderColor: Colors.gray100 },
+  deductionMinus: { fontSize: 13, color: Colors.gray400, marginRight: 2 },
+  deductionInput: { minWidth: 72, paddingVertical: 0, fontSize: 13, fontWeight: '600', color: Colors.gray700, textAlign: 'right' },
+  deductionWon: { fontSize: 12, color: Colors.gray500, marginLeft: 2 },
+  deductionError: { fontSize: 11, color: Colors.negative, marginTop: 8, textAlign: 'right' },
   receiptTotalLine: { borderTopWidth: 2, borderTopColor: Colors.gray300, borderStyle: 'dashed', marginTop: 12 },
   receiptNetRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 10 },
   receiptNetLabel: { fontSize: 15, fontWeight: '800', color: Colors.black },
@@ -938,9 +1071,13 @@ const styles = StyleSheet.create({
   payrollNetPay: { fontSize: 14, fontWeight: '700', color: Colors.primary },
   payrollDeductLabel: { fontSize: 12, color: Colors.gray400 },
   payrollDeduct: { fontSize: 12, color: Colors.gray500 },
-  payrollActions: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 },
-  recalcBtn: { paddingVertical: 8 },
+  payrollActions: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 14 },
+  recalcBtn: { flex: 1, paddingVertical: 10, alignItems: 'center' },
   recalcBtnText: { fontSize: 12, color: Colors.gray400 },
+  saveDeductionBtn: { flex: 1.15, minHeight: 40, borderRadius: 10, backgroundColor: Colors.primary, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12 },
+  saveDeductionBtnDisabled: { opacity: 0.45 },
+  saveDeductionBtnText: { fontSize: 13, fontWeight: '700', color: Colors.white },
+  removePayrollRow: { flexDirection: 'row', justifyContent: 'flex-end' },
   removePayrollBtn: { paddingVertical: 8, paddingHorizontal: 4 },
   removePayrollBtnText: { fontSize: 12, color: '#D94040' },
   addBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: Colors.white, borderRadius: 14, borderWidth: 0.5, borderColor: Colors.gray200, paddingVertical: 14 },

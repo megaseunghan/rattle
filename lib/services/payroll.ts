@@ -2,6 +2,24 @@ import { supabase } from '../supabase';
 import { Employee, Payroll } from '../../types';
 import { isInProbation, isInsuranceApplicable } from './employees';
 
+export interface PayrollDeductions {
+  national_pension: number;
+  health_insurance: number;
+  long_term_care: number;
+  employment_insurance: number;
+  income_tax: number;
+  local_income_tax: number;
+  withholding_tax: number;
+}
+
+export function calculateNetPayFromDeductions(
+  gross: number,
+  deductions: PayrollDeductions,
+): number {
+  const totalDeduction = Object.values(deductions).reduce((sum, value) => sum + value, 0);
+  return Math.max(0, gross - totalDeduction);
+}
+
 // ─── 버림 헬퍼 ───────────────────────────────────────────
 function floorTo(n: number, unit: number): number {
   return Math.floor(n / unit) * unit;
@@ -195,6 +213,36 @@ export async function upsertPayroll(
 export async function deletePayroll(id: string): Promise<void> {
   const { error } = await supabase.from('payroll').delete().eq('id', id);
   if (error) throw new Error(error.message);
+}
+
+/** 실제 고지·지급 내역에 맞춰 공제액을 직접 수정한다. 수정 시 기존 정산 확정은 해제된다. */
+export async function updatePayrollDeductions(
+  payroll: Pick<Payroll, 'id' | 'gross'>,
+  deductions: PayrollDeductions,
+): Promise<Payroll> {
+  const normalized = Object.fromEntries(
+    Object.entries(deductions).map(([key, value]) => [key, Math.max(0, Math.round(value))]),
+  ) as unknown as PayrollDeductions;
+  const totalDeduction = Object.values(normalized).reduce((sum, value) => sum + value, 0);
+
+  if (totalDeduction > payroll.gross) {
+    throw new Error('공제 합계는 세전 급여보다 클 수 없습니다.');
+  }
+
+  const { data, error } = await supabase
+    .from('payroll')
+    .update({
+      ...normalized,
+      net_pay: calculateNetPayFromDeductions(payroll.gross, normalized),
+      is_settled: false,
+      settled_at: null,
+    })
+    .eq('id', payroll.id)
+    .select()
+    .single();
+
+  if (error) throw new Error(error.message);
+  return data as Payroll;
 }
 
 /** 화면 42: 급여 정산 리포트 — 선택한 급여 건들을 정산 완료 처리 */
