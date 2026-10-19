@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, useWindowDimensions } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import PagerView from 'react-native-pager-view';
 import { Colors } from '../../constants/colors';
@@ -123,6 +123,19 @@ export default function TabsLayout() {
   const [quickAddVisible, setQuickAddVisible] = useState(false);
   const [fabPos, setFabPos] = useState({ x: 0, y: 0 });
   const [moreOpen, setMoreOpen] = useState(false);
+
+  const routeParams = useLocalSearchParams<{ targetTab?: string }>();
+  const tabRouter = useRouter();
+  useEffect(() => {
+    if (!routeParams.targetTab) return;
+    const index = tabs.indexOf(routeParams.targetTab as TabName);
+    if (index >= 0) {
+      setVisited(prev => new Set(prev).add(index));
+      setActiveIndex(index);
+      pagerRef.current?.setPageWithoutAnimation(index);
+    }
+    tabRouter.setParams({ targetTab: undefined });
+  }, [routeParams.targetTab, tabs, tabRouter]);
 
   // 파트타이머 여부가 바뀌어 탭 개수가 줄면 인덱스 보정
   useEffect(() => {
