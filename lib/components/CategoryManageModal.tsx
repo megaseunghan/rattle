@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Modal, TextInput, Alert, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../constants/colors';
@@ -14,18 +14,20 @@ interface CategoryManageModalProps {
   loading: boolean;
   add: (name: string) => Promise<void>;
   rename: (oldName: string, newName: string) => Promise<void>;
-  remove: (name: string) => Promise<void>;
+  remove?: (name: string) => Promise<void>;
+  noun?: string;
 }
 
 /** 매장별 카테고리(재고/매입 등)를 추가·이름변경·삭제하는 공용 모달 */
 export function CategoryManageModal({
   visible, onClose, title, removeConfirmHint,
-  categories, loading, add, rename, remove,
+  categories, loading, add, rename, remove, noun = '카테고리',
 }: CategoryManageModalProps) {
   const [newName, setNewName] = useState('');
   const [renameTarget, setRenameTarget] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [saving, setSaving] = useState(false);
+  const renameInFlight = useRef(false);
 
   async function handleAdd() {
     const name = newName.trim();
@@ -49,9 +51,10 @@ export function CategoryManageModal({
   }
 
   async function handleRename() {
-    if (!renameTarget) return;
+    if (!renameTarget || renameInFlight.current) return;
     const name = renameValue.trim();
     if (!name || name === renameTarget) { setRenameTarget(null); return; }
+    renameInFlight.current = true;
     setSaving(true);
     try {
       await rename(renameTarget, name);
@@ -59,11 +62,13 @@ export function CategoryManageModal({
     } catch (e: unknown) {
       Alert.alert('수정 실패', getErrorMessage(e));
     } finally {
+      renameInFlight.current = false;
       setSaving(false);
     }
   }
 
   function handleRemove(name: string) {
+    if (!remove) return;
     Alert.alert('카테고리 삭제', `"${name}" 카테고리를 삭제할까요?\n${removeConfirmHint}`, [
       { text: '취소', style: 'cancel' },
       {
@@ -104,19 +109,19 @@ export function CategoryManageModal({
                       value={renameValue}
                       onChangeText={setRenameValue}
                       onSubmitEditing={handleRename}
-                      onBlur={handleRename}
                       autoFocus
                     />
                   ) : (
                     <Text style={styles.categoryRowText}>{c}</Text>
                   )}
                   <View style={styles.categoryRowActions}>
-                    <TouchableOpacity onPress={() => openRename(c)} hitSlop={8}>
-                      <Ionicons name="create-outline" size={18} color={Colors.gray400} />
+                    <TouchableOpacity onPress={() => renameTarget === c ? handleRename() : openRename(c)} hitSlop={8} disabled={saving}
+                      accessibilityRole="button" accessibilityLabel={`${c} ${renameTarget === c ? '이름 저장' : '이름 변경'}`}>
+                      <Ionicons name={renameTarget === c ? 'checkmark' : 'create-outline'} size={18} color={Colors.gray400} />
                     </TouchableOpacity>
-                    <TouchableOpacity onPress={() => handleRemove(c)} hitSlop={8}>
+                    {remove && <TouchableOpacity onPress={() => handleRemove(c)} hitSlop={8}>
                       <Ionicons name="trash-outline" size={18} color={Colors.gray400} />
-                    </TouchableOpacity>
+                    </TouchableOpacity>}
                   </View>
                 </View>
               ))}
@@ -128,7 +133,7 @@ export function CategoryManageModal({
               style={styles.categoryAddInput}
               value={newName}
               onChangeText={setNewName}
-              placeholder="새 카테고리 이름"
+              placeholder={`새 ${noun} 이름`}
               placeholderTextColor={Colors.gray400}
               onSubmitEditing={handleAdd}
             />

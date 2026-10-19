@@ -1,27 +1,27 @@
+import * as ImagePicker from 'expo-image-picker';
+import * as ImageManipulator from 'expo-image-manipulator';
+import { callOcrEdgeFunction } from '../../lib/services/ocr';
 import { getErrorMessage } from '../../lib/utils/error';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   Alert, ActivityIndicator, RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
-import * as ImagePicker from 'expo-image-picker';
-import * as ImageManipulator from 'expo-image-manipulator';
+import { router, useFocusEffect } from 'expo-router';
 import { Colors } from '../../constants/colors';
 import { CardStyle } from '../../constants/designTokens';
 import { usePurchases } from '../../lib/hooks/usePurchases';
 import { useExpenses } from '../../lib/hooks/useExpenses';
-import { callOcrEdgeFunction } from '../../lib/services/ocr';
 import { getPurchaseItemCounts } from '../../lib/services/purchases';
 import { animateListChange } from '../../lib/utils/layoutAnimation';
 import { ExpensesPanel } from '../../lib/components/ExpensesPanel';
+import { usePurchaseTypes } from '../../lib/hooks/usePurchaseTypes';
 import { Badge, SummaryCard } from '../../lib/components/ui';
 
 // ─── 공통 ──────────────────────────────────────────────────
-const PURCHASE_TABS = ['전체', '쿠팡', '네이버', '수기'] as const;
-type PurchaseTab = (typeof PURCHASE_TABS)[number];
+type PurchaseTab = string;
 
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
 
@@ -63,19 +63,23 @@ function PurchasesView({ active }: { active: boolean }) {
   const [month, setMonth] = useState(today.getMonth());
   const [selectedDay, setSelectedDay] = useState<number | null>(today.getDate());
   const [activeTab, setActiveTab] = useState<PurchaseTab>('전체');
-  const [scanning, setScanning] = useState(false);
 
+  const [scanning, setScanning] = useState(false);
+  const purchaseTypes = usePurchaseTypes();
   const yearMonth = toYearMonth(year, month);
   const { purchases, loading, refetch, remove } = usePurchases(yearMonth);
 
-  useEffect(() => { if (active) refetch(); }, [active, refetch]);
+  useFocusEffect(useCallback(() => {
+    if (active) { void refetch(); void purchaseTypes.refetch(); }
+  }, [active, refetch, purchaseTypes.refetch]));
 
   const [refreshing, setRefreshing] = useState(false);
   async function onRefresh() {
     setRefreshing(true);
-    try { await refetch(); } finally { setRefreshing(false); }
+    try { await Promise.all([refetch(), purchaseTypes.refetch()]); } finally { setRefreshing(false); }
   }
 
+  const purchaseTabs = ['전체', ...new Set([...purchaseTypes.types, ...purchases.map(p => p.type)])];
   const days = getCalendarDays(year, month);
   const filtered = purchases.filter(p => activeTab === '전체' || p.type === activeTab);
   const purchaseByDay = new Map<string, typeof filtered>();
@@ -173,11 +177,13 @@ function PurchasesView({ active }: { active: boolean }) {
   return (
     <>
       <View style={styles.subTabRow}>
-        {PURCHASE_TABS.map(tab => (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flex: 1 }}>
+        {purchaseTabs.map(tab => (
           <TouchableOpacity key={tab} style={[styles.subTab, activeTab === tab && styles.subTabActive]} onPress={() => setActiveTab(tab)}>
             <Text style={[styles.subTabText, activeTab === tab && styles.subTabTextActive]}>{tab}</Text>
           </TouchableOpacity>
         ))}
+        </ScrollView>
         <Text style={styles.monthTotalRight}>{loading ? '' : monthTotal > 0 ? `${monthTotal.toLocaleString()}원` : ''}</Text>
       </View>
 
@@ -217,13 +223,18 @@ function PurchasesView({ active }: { active: boolean }) {
         {selectedDay !== null && (
           <>
             <Text style={styles.sectionLabel}>{month + 1}월 {selectedDay}일 매입</Text>
-            <View style={styles.listCard}>
+            <View style={[styles.listCard, !loading && selectedPurchases.length === 0 && styles.listCardEmpty]}>
               {loading ? <View style={styles.emptyInCard}><ActivityIndicator size="small" color={Colors.gray300} /></View>
-                : selectedPurchases.length === 0 ? <View style={styles.emptyInCard}><Text style={styles.emptyInCardText}>매입 내역이 없어요</Text></View>
+                : selectedPurchases.length === 0 ? (
+                  <View style={styles.emptyInCard}>
+                    <Text style={styles.emptyInCardText}>등록된 매입이 없어요</Text>
+                    <Text style={styles.emptyHint}>매입서를 스캔하거나 직접 입력해 주세요.</Text>
+                  </View>
+                )
                 : selectedPurchases.map((p, i) => (
                   <TouchableOpacity key={p.id} style={[styles.purchaseRow, i < selectedPurchases.length - 1 && styles.rowBorder]} onPress={() => router.push(`/purchases/${p.id}`)} onLongPress={() => confirmDeletePurchase(p.id)} activeOpacity={0.7}>
                     <View style={styles.purchaseLeft}>
-                      <Text style={styles.purchaseSupplier}>{p.supplier}</Text>
+                      <Text style={styles.purchaseSupplier} numberOfLines={2}>{p.supplier}</Text>
                       {itemCounts[p.id] > 0 && (
                         <Text style={styles.purchaseItemCount}>{itemCounts[p.id]}개 품목</Text>
                       )}
@@ -353,14 +364,16 @@ const styles = StyleSheet.create({
   dot: { width: 4, height: 4, borderRadius: 2, backgroundColor: Colors.primary },
   dotSelected: { backgroundColor: Colors.black },
 
-  sectionLabel: { fontSize: 11, fontWeight: '500', color: Colors.gray400, textTransform: 'uppercase', letterSpacing: 0.5 },
+  sectionLabel: { fontSize: 13, fontWeight: '600', color: Colors.gray600 },
   listCard: { ...CardStyle },
-  emptyInCard: { paddingVertical: 20, alignItems: 'center' },
-  emptyInCardText: { fontSize: 14, color: Colors.gray400 },
+  listCardEmpty: { backgroundColor: 'transparent', borderWidth: 0 },
+  emptyInCard: { paddingVertical: 16, gap: 8 },
+  emptyInCardText: { fontSize: 15, fontWeight: '600', color: Colors.black },
+  emptyHint: { fontSize: 13, color: Colors.gray500 },
   purchaseRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 13, justifyContent: 'space-between' },
   rowBorder: { borderBottomWidth: 0.5, borderBottomColor: Colors.gray100 },
-  purchaseLeft: { flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 },
-  purchaseSupplier: { fontSize: 14, fontWeight: '500', color: Colors.black },
+  purchaseLeft: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6, flex: 1 },
+  purchaseSupplier: { flexShrink: 1, fontSize: 14, fontWeight: '500', color: Colors.black },
   purchaseItemCount: { fontSize: 12, color: Colors.gray400 },
   purchaseAmount: { fontSize: 14, fontWeight: '600', color: Colors.black, marginRight: 10 },
   deleteIconBtn: { padding: 2 },
@@ -368,8 +381,8 @@ const styles = StyleSheet.create({
   actionRow: { flexDirection: 'row', gap: 10 },
   scanBtn: { paddingHorizontal: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.tinted, borderRadius: 14, borderWidth: 1.5, borderColor: Colors.primary + '40' },
   scanBtnText: { fontSize: 14, fontWeight: '600', color: Colors.primary },
-  addBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: Colors.white, borderRadius: 14, borderWidth: 0.5, borderColor: Colors.gray200, paddingVertical: 14 },
-  addBtnText: { fontSize: 14, color: Colors.gray700 },
+  addBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: Colors.primary, borderRadius: 10, paddingVertical: 14 },
+  addBtnText: { fontSize: 14, fontWeight: '600', color: Colors.white },
 
 });
 
