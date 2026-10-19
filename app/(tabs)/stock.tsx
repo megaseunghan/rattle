@@ -122,7 +122,21 @@ export function StockScreen({ active = true }: { active?: boolean }) {
     <SafeAreaView style={styles.container}>
       {/* 헤더 */}
       <View style={styles.topBar}>
-        <Text style={styles.title}>재고</Text>
+        <View style={styles.headingRow}>
+          <Text style={styles.title}>재고</Text>
+          {activeTab === '레시피' && canManageRecipes && (
+            <TouchableOpacity
+              style={styles.recipeAddButton}
+              onPress={() => router.push('/recipes/new')}
+              accessibilityRole="button"
+              accessibilityLabel="레시피 추가"
+              activeOpacity={0.7}
+            >
+              <Ionicons name="add" size={18} color={Colors.primary} />
+              <Text style={styles.recipeAddText}>레시피 추가</Text>
+            </TouchableOpacity>
+          )}
+        </View>
 
         {activeTab === '재고현황' && ingredients.length > 0 && (
           <View style={styles.summaryRow}>
@@ -258,6 +272,9 @@ const styles = StyleSheet.create({
     borderBottomColor: Colors.gray100,
     gap: 12,
   },
+  headingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 44, gap: 12 },
+  recipeAddButton: { flexDirection: 'row', alignItems: 'center', gap: 4, minHeight: 44, paddingHorizontal: 12, borderRadius: 10, backgroundColor: Colors.tinted },
+  recipeAddText: { fontSize: 14, fontWeight: '600', color: Colors.primary },
   title: { fontSize: 20, fontWeight: '700', color: Colors.black },
   summaryRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between' },
   summaryLabel: { fontSize: 12, fontWeight: '500', color: Colors.gray500, marginBottom: 2 },

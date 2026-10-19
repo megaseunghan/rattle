@@ -75,24 +75,6 @@ export interface RecipeIngredient {
   unit: string;
 }
 
-// OCR 결과
-export interface OcrResult {
-  id: string;
-  store_id: string;
-  image_url: string;
-  raw_text: string;
-  parsed_items: OcrParsedItem[];
-  status: 'processing' | 'completed' | 'failed';
-  created_at: string;
-}
-
-export interface OcrParsedItem {
-  name: string;
-  quantity: number;
-  unit: string;
-  price: number;
-}
-
 // Toss Place POS 연동
 export interface TossOrderItemOptionChoice {
   title: string;
@@ -153,19 +135,6 @@ export interface TossOrderItemRecord {
   total_price: number;
   option_choices: TossOrderItemOptionChoice[];
   created_at: string;
-}
-
-// OCR 라인 아이템 (리뷰 화면용)
-export interface OcrLineItem {
-  raw: string;                          // Gemini 응답 원본 아이템 (JSON.stringify된 문자열)
-  name: string;                         // 파싱된 품목명
-  quantity: number;
-  unit: string;
-  unit_price: number;
-  confidence: 'high' | 'low';           // low = 주황색 하이라이트
-  matched_ingredient: Ingredient | null; // 재고 자동 매칭 결과
-  match_candidates: Ingredient[];        // 후보 2개 이상일 때
-  prev_price: number | null;            // 이전 발주 단가 (변동 표시용)
 }
 
 // Toss Place 카탈로그 (DB row)

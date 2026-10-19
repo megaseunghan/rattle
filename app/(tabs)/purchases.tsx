@@ -1,6 +1,3 @@
-import * as ImagePicker from 'expo-image-picker';
-import * as ImageManipulator from 'expo-image-manipulator';
-import { callOcrEdgeFunction } from '../../lib/services/ocr';
 import { getErrorMessage } from '../../lib/utils/error';
 import { useState, useEffect, useCallback } from 'react';
 import {
@@ -64,7 +61,6 @@ function PurchasesView({ active }: { active: boolean }) {
   const [selectedDay, setSelectedDay] = useState<number | null>(today.getDate());
   const [activeTab, setActiveTab] = useState<PurchaseTab>('전체');
 
-  const [scanning, setScanning] = useState(false);
   const purchaseTypes = usePurchaseTypes();
   const yearMonth = toYearMonth(year, month);
   const { purchases, loading, refetch, remove } = usePurchases(yearMonth);
@@ -118,60 +114,6 @@ function PurchasesView({ active }: { active: boolean }) {
   function goNewPurchase() {
     const dateParam = selectedDay ? toDateKey(year, month, selectedDay) : undefined;
     router.push({ pathname: '/purchases/new', params: dateParam ? { date: dateParam } : {} });
-  }
-
-  function handleScan() {
-    Alert.alert('매입서 스캔', '이미지를 어떻게 가져올까요?', [
-      {
-        text: '카메라로 촬영',
-        onPress: async () => {
-          const permission = await ImagePicker.requestCameraPermissionsAsync();
-          if (!permission.granted) { Alert.alert('권한 필요', '카메라 권한이 필요합니다. 설정에서 허용해주세요.'); return; }
-          const result = await ImagePicker.launchCameraAsync({ base64: true, quality: 0.8 });
-          if (!result.canceled && result.assets[0].base64) {
-            await processImages([{ uri: result.assets[0].uri, base64: result.assets[0].base64 }]);
-          }
-        },
-      },
-      {
-        text: '앨범에서 선택',
-        onPress: async () => {
-          const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-          if (!permission.granted) { Alert.alert('권한 필요', '사진 접근 권한이 필요합니다. 설정에서 허용해주세요.'); return; }
-          const result = await ImagePicker.launchImageLibraryAsync({ base64: true, quality: 0.8, allowsMultipleSelection: true });
-          if (!result.canceled && result.assets.length > 0) {
-            const assets = result.assets.filter(a => a.base64) as Array<{ uri: string; base64: string }>;
-            if (assets.length > 0) await processImages(assets);
-          }
-        },
-      },
-      { text: '취소', style: 'cancel' },
-    ]);
-  }
-
-  async function processImages(assets: Array<{ uri: string; base64: string }>) {
-    setScanning(true);
-    try {
-      const allItems: unknown[] = [];
-      for (const asset of assets) {
-        const manipulated = await ImageManipulator.manipulateAsync(
-          asset.uri,
-          [{ resize: { width: 1200 } }],
-          { compress: 0.6, format: ImageManipulator.SaveFormat.JPEG, base64: true }
-        );
-        const ocrText = await callOcrEdgeFunction(manipulated.base64!);
-        const parsed = JSON.parse(ocrText);
-        if (Array.isArray(parsed)) allItems.push(...parsed);
-      }
-      router.push({
-        pathname: '/purchases/ocr-review',
-        params: { imageUri: assets[0].uri, ocrText: JSON.stringify(allItems) },
-      });
-    } catch (e: any) {
-      Alert.alert('OCR 오류', getErrorMessage(e));
-    } finally {
-      setScanning(false);
-    }
   }
 
   return (
@@ -228,7 +170,7 @@ function PurchasesView({ active }: { active: boolean }) {
                 : selectedPurchases.length === 0 ? (
                   <View style={styles.emptyInCard}>
                     <Text style={styles.emptyInCardText}>등록된 매입이 없어요</Text>
-                    <Text style={styles.emptyHint}>매입서를 스캔하거나 직접 입력해 주세요.</Text>
+                    <Text style={styles.emptyHint}>매입 추가를 눌러 품목·수량·단가를 입력해주세요.</Text>
                   </View>
                 )
                 : selectedPurchases.map((p, i) => (
@@ -260,9 +202,6 @@ function PurchasesView({ active }: { active: boolean }) {
         )}
 
         <View style={styles.actionRow}>
-          <TouchableOpacity style={[styles.scanBtn, scanning && { opacity: 0.5 }]} onPress={handleScan} disabled={scanning} activeOpacity={0.7}>
-            {scanning ? <ActivityIndicator size="small" color={Colors.primary} /> : <Text style={styles.scanBtnText}>스캔</Text>}
-          </TouchableOpacity>
           <TouchableOpacity style={styles.addBtn} onPress={goNewPurchase} activeOpacity={0.7}>
             <Text style={styles.addBtnText}>+ 매입 추가</Text>
           </TouchableOpacity>
@@ -379,8 +318,6 @@ const styles = StyleSheet.create({
   deleteIconBtn: { padding: 2 },
 
   actionRow: { flexDirection: 'row', gap: 10 },
-  scanBtn: { paddingHorizontal: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.tinted, borderRadius: 14, borderWidth: 1.5, borderColor: Colors.primary + '40' },
-  scanBtnText: { fontSize: 14, fontWeight: '600', color: Colors.primary },
   addBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: Colors.primary, borderRadius: 10, paddingVertical: 14 },
   addBtnText: { fontSize: 14, fontWeight: '600', color: Colors.white },
 

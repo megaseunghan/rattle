@@ -32,8 +32,6 @@ servers:
 tags:
   - name: account
     description: 계정 관리
-  - name: purchases
-    description: 매입 OCR
   - name: toss-place
     description: Toss Place POS 연동
   - name: webhooks
@@ -84,69 +82,6 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
-  /ocr:
-    post:
-      operationId: extractPurchaseItemsFromImage
-      tags: [purchases]
-      summary: 납품서/영수증 이미지에서 품목 추출 (Gemini Vision)
-      description: |
-        이미지를 base64로 전달하면 Gemini 3 Flash Preview로 품목명·수량·단위·
-        단가를 추출해 반환한다. 클라이언트는 이 결과를 매입 등록 화면에서
-        재고와 매칭해 보여준다 (`lib/services/ocr.ts` → `parseOcrItems`).
-      security:
-        - bearerAuth: []
-          apiKeyAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [image_base64]
-              properties:
-                image_base64:
-                  type: string
-                  format: byte
-                  description: JPEG 이미지의 base64 인코딩 문자열 (최대 10MB, data URI 접두어 없이 순수 base64)
-      responses:
-        "200":
-          description: 추출된 품목 목록 (인식 실패 시 빈 배열)
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [items]
-                properties:
-                  items:
-                    type: array
-                    items:
-                      $ref: "#/components/schemas/OcrLineItem"
-              example:
-                items:
-                  - name: "삼겹살"
-                    quantity: 3
-                    unit: "kg"
-                    unit_price: 18000
-        "400":
-          description: image_base64 누락
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "413":
-          description: 이미지 크기 초과 (10MB)
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "500":
-          description: Gemini API 호출 실패 또는 서버 설정 오류
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
 
   /toss-proxy:
     post:
@@ -432,15 +367,3 @@ components:
       properties:
         error:
           type: string
-    OcrLineItem:
-      type: object
-      properties:
-        name:
-          type: string
-        quantity:
-          type: number
-        unit:
-          type: string
-          enum: [개, 병, 캔, 팩, 봉, 박스, kg, g, L, ml, 장, 묶음]
-        unit_price:
-          type: number
