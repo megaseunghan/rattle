@@ -1,7 +1,8 @@
 import { UserFacingError } from '../utils/error';
 import { supabase } from '../supabase';
-import { Employee, Payroll } from '../../types';
+import { Employee, Payroll, PayrollWorkHistory } from '../../types';
 import { isInProbation, isInsuranceApplicable } from './employees';
+import { calculateHourlyGross, parseWorkedMinutes } from '../utils/workMinutes';
 
 export interface PayrollDeductions {
   national_pension: number;
@@ -11,6 +12,19 @@ export interface PayrollDeductions {
   income_tax: number;
   local_income_tax: number;
   withholding_tax: number;
+}
+
+/** 정산 전 누락 점검: 급여는 전 직원, 총 근무 분은 파트타이머만 필수다. 0분은 입력 완료로 본다. */
+export function getPayrollSettlementGaps(employees: Employee[], payrolls: Payroll[]) {
+  const payrollByEmployee = new Map(payrolls.map(payroll => [payroll.employee_id, payroll]));
+  const activeEmployees = employees.filter(employee => employee.is_active);
+  return {
+    missingPayroll: activeEmployees.filter(employee => !payrollByEmployee.has(employee.id)),
+    missingPartTimeMinutes: activeEmployees.filter(employee => {
+      const payroll = payrollByEmployee.get(employee.id);
+      return employee.employment_type === 'part_time' && payroll != null && payroll.worked_minutes == null;
+    }),
+  };
 }
 
 export function calculateNetPayFromDeductions(
@@ -99,10 +113,21 @@ function calcIncomeTaxApprox(monthly: number, dependents: number): number {
 }
 
 // ─── 급여 계산 ────────────────────────────────────────────
-export async function calculatePayroll(employee: Employee): Promise<Omit<Payroll, 'id' | 'store_id' | 'employee_id' | 'year_month' | 'created_at' | 'is_settled' | 'settled_at'>> {
+export async function calculatePayroll(employee: Employee, work?: { minutes: number; hourlyWage: number }): Promise<Omit<Payroll, 'id' | 'store_id' | 'employee_id' | 'year_month' | 'created_at' | 'is_settled' | 'settled_at'>> {
   const useInsurance = isInsuranceApplicable(employee);
+  if (employee.employment_type === 'part_time' && !work) {
+    throw new UserFacingError('파트타이머의 총 근무 분과 적용 시급을 먼저 입력해주세요.');
+  }
   // 수습 기간 실지급 90%(중도퇴사 80%)를 gross에 직접 반영
-  const gross = Math.floor(employee.base_salary * probationFactor(employee));
+  const gross = employee.employment_type === 'part_time' && work
+    ? calculateHourlyGross(work.minutes, work.hourlyWage)
+    : Math.floor(employee.base_salary * probationFactor(employee));
+
+  if (gross === 0) {
+    return { gross: 0, taxable_base: 0, national_pension: 0, health_insurance: 0,
+      long_term_care: 0, employment_insurance: 0, income_tax: 0, local_income_tax: 0,
+      withholding_tax: 0, net_pay: 0 };
+  }
 
   if (!useInsurance) {
     // 3.3% 원천징수 (파트타임 주 15h 미만)
@@ -216,9 +241,68 @@ export async function deletePayroll(id: string): Promise<void> {
   if (error) throw new Error(error.message);
 }
 
+export interface WorkedMinutesInput {
+  minutes: string;
+  hourlyWage: number | null;
+  note: string;
+  submissionId?: string;
+}
+
+/** 근무시간과 급여를 한 번에 저장. revision으로 다른 기기의 변경을 덮어쓰지 않는다. */
+export async function saveWorkedMinutes(
+  storeId: string, employee: Employee, yearMonth: string,
+  input: WorkedMinutesInput, previous?: Payroll,
+): Promise<Payroll> {
+  const minutes = parseWorkedMinutes(input.minutes, yearMonth);
+  if (employee.store_id !== storeId || (previous && (previous.store_id !== storeId
+    || previous.employee_id !== employee.id || previous.year_month !== yearMonth))) {
+    throw new UserFacingError('매장·직원·대상 월을 다시 확인해주세요.');
+  }
+  const note = input.note.trim();
+  if (!note) throw new UserFacingError('입력 근거 또는 수정 사유를 적어주세요.');
+  if (note.length > 1000) throw new UserFacingError('메모는 1,000자 이내로 입력해주세요.');
+  const isPart = employee.employment_type === 'part_time';
+  const hourlyWage = isPart ? input.hourlyWage : null;
+  if (isPart && (!hourlyWage || !Number.isFinite(hourlyWage) || hourlyWage < 0 || hourlyWage >= 100_000_000
+    || Math.abs(hourlyWage * 10000 - Math.round(hourlyWage * 10000)) > 0.0001)) {
+    throw new UserFacingError('적용 시급을 0원 초과, 소수 넷째 자리 이내로 입력해주세요.');
+  }
+  // 정규직의 근무시간 기록은 기존 공제·월급을 변경하지 않는다.
+  const calculated = !isPart && previous
+    ? { gross: previous.gross, taxable_base: previous.taxable_base,
+      national_pension: previous.national_pension, health_insurance: previous.health_insurance,
+      long_term_care: previous.long_term_care, employment_insurance: previous.employment_insurance,
+      income_tax: previous.income_tax, local_income_tax: previous.local_income_tax,
+      withholding_tax: previous.withholding_tax, net_pay: previous.net_pay }
+    : await calculatePayroll(employee, isPart ? { minutes, hourlyWage: hourlyWage! } : undefined);
+  const payload = { ...calculated, worked_minutes: minutes, applied_hourly_wage: hourlyWage,
+    work_submission_id: input.submissionId ?? null,
+    work_note: note, work_source: 'manual', is_settled: false, settled_at: null };
+  const query = previous
+    ? supabase.from('payroll').update(payload).eq('id', previous.id)
+      .eq('store_id', storeId).eq('employee_id', employee.id).eq('year_month', yearMonth)
+      .eq('revision', previous.revision ?? 0)
+    : supabase.from('payroll').insert({ ...payload, store_id: storeId, employee_id: employee.id, year_month: yearMonth });
+  const { data, error } = await query.select().maybeSingle();
+  if (error) {
+    if (error.code === '23505') throw new UserFacingError('다른 곳에서 급여를 작성했어요. 새로고침 후 다시 확인해주세요.');
+    throw new Error(error.message);
+  }
+  if (!data) throw new UserFacingError('다른 곳에서 내역이 변경됐어요. 새로고침 후 다시 확인해주세요.');
+  return data as Payroll;
+}
+
+export async function getPayrollWorkHistory(storeId: string, employeeId: string, yearMonth: string): Promise<PayrollWorkHistory[]> {
+  const { data, error } = await supabase.from('payroll_work_history').select('*')
+    .eq('store_id', storeId).eq('employee_id', employeeId).eq('year_month', yearMonth)
+    .order('changed_at', { ascending: false });
+  if (error) throw new Error(error.message);
+  return (data ?? []) as PayrollWorkHistory[];
+}
+
 /** 실제 고지·지급 내역에 맞춰 공제액을 직접 수정한다. 수정 시 기존 정산 확정은 해제된다. */
 export async function updatePayrollDeductions(
-  payroll: Pick<Payroll, 'id' | 'gross'>,
+  payroll: Pick<Payroll, 'id' | 'gross' | 'revision'>,
   deductions: PayrollDeductions,
 ): Promise<Payroll> {
   const normalized = Object.fromEntries(
@@ -239,10 +323,12 @@ export async function updatePayrollDeductions(
       settled_at: null,
     })
     .eq('id', payroll.id)
+    .eq('revision', payroll.revision ?? 0)
     .select()
-    .single();
+    .maybeSingle();
 
   if (error) throw new Error(error.message);
+  if (!data) throw new UserFacingError('다른 곳에서 급여가 변경됐어요. 새로고침 후 공제액을 다시 확인해주세요.');
   return data as Payroll;
 }
 

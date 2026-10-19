@@ -7,7 +7,7 @@ import {
 import { seedInitialWage } from '../services/wageHistory';
 import { Employee, EmploymentType } from '../../types';
 
-export function useEmployees() {
+export function useEmployees(includeInactive = false) {
   const { store } = useAuth();
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(false);
@@ -18,14 +18,14 @@ export function useEmployees() {
     setLoading(true);
     setError(null);
     try {
-      const result = await getEmployees(store.id);
+      const result = await getEmployees(store.id, includeInactive);
       setEmployees(result);
     } catch (e: any) {
       setError(getErrorMessage(e));
     } finally {
       setLoading(false);
     }
-  }, [store]);
+  }, [store, includeInactive]);
 
   const add = useCallback(async (data: {
     name: string;

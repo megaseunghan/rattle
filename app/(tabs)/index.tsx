@@ -15,7 +15,6 @@ import { useEmployees } from '../../lib/hooks/useEmployees';
 import { useHomeAlerts, HomeAlert } from '../../lib/hooks/useHomeAlerts';
 import { useNotifications } from '../../lib/hooks/useNotifications';
 import { useTossSync } from '../../lib/hooks/useTossSync';
-import { useAttendance } from '../../lib/hooks/useAttendance';
 import { useProfitLossTrendChart, TrendBar } from '../../lib/hooks/useProfitLossTrendChart';
 import { useTabPager, TabName } from '../../lib/contexts/TabPagerContext';
 import { ProfitLoss } from '../../types';
@@ -118,67 +117,7 @@ function useNowClock(): string {
 }
 
 /** 화면 01 — 출퇴근 카드 (tinted, 실시간 타이머 + 출근/퇴근 pill 버튼) */
-function AttendanceCard({ employeeId }: { employeeId: string }) {
-  const { todayRecords, actionLoading, refetch, stamp, isClockedIn, lastRecord } = useAttendance(employeeId);
 
-  useEffect(() => { refetch(); }, [refetch]);
-
-  const clockInRecord = todayRecords.find(r => r.type === 'clock_in');
-  const clockOutRecord = todayRecords.findLast(r => r.type === 'clock_out');
-  const elapsed = useElapsedSince(isClockedIn ? clockInRecord?.timestamp ?? null : null);
-  const nowClock = useNowClock();
-  const displayTime = elapsed ?? nowClock;
-  const hasClockedOutToday = !isClockedIn && lastRecord?.type === 'clock_out';
-
-  function handlePress() {
-    const type = isClockedIn ? 'clock_out' : 'clock_in';
-    Alert.alert(
-      isClockedIn ? '퇴근 처리할까요?' : '출근 처리할까요?',
-      undefined,
-      [
-        { text: '취소', style: 'cancel' },
-        {
-          text: '확인',
-          onPress: async () => {
-            const result = await stamp(type);
-            if (!result.success && result.message) {
-              Alert.alert('처리 실패', result.message);
-            }
-          },
-        },
-      ],
-    );
-  }
-
-  const statusText = isClockedIn ? '근무 중' : hasClockedOutToday ? '오늘 근무 종료' : '근무 전';
-
-  return (
-    <View style={styles.attendanceCard}>
-      <View style={styles.attendanceLeft}>
-        <Text style={styles.attendanceTimer}>{displayTime}</Text>
-        <Text style={styles.attendanceStatus}>{statusText}</Text>
-        {(clockInRecord || clockOutRecord) && (
-          <View style={styles.attendanceTimeRow}>
-            {clockInRecord && (
-              <Text style={styles.attendanceTimeText}>출근 {formatClockTime(clockInRecord.timestamp)}</Text>
-            )}
-            {clockOutRecord && (
-              <Text style={styles.attendanceTimeText}>퇴근 {formatClockTime(clockOutRecord.timestamp)}</Text>
-            )}
-          </View>
-        )}
-      </View>
-      {!hasClockedOutToday && (
-        <Button
-          label={isClockedIn ? '퇴근하기' : '출근하기'}
-          variant="pill"
-          onPress={handlePress}
-          loading={actionLoading}
-        />
-      )}
-    </View>
-  );
-}
 
 /** 출근 카드 위에 뜨는 경고 배너 목록 (고정비 미입력 / 토스 미동기화 / 월마감 리마인더) */
 function AlertBanners({ alerts }: { alerts: HomeAlert[] }) {
@@ -505,7 +444,6 @@ export function HomeScreen({ active = true }: { active?: boolean }) {
       >
         {!isPartTime && <AlertBanners alerts={buildAlerts(todaySales)} />}
 
-        {myEmployee && <AttendanceCard employeeId={myEmployee.id} />}
 
         {!isPartTime && (
           <MetricChipsSection

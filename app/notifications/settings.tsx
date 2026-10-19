@@ -8,7 +8,7 @@ import { useNotificationSettings } from '../../lib/hooks/useNotificationSettings
 import { NOTIFICATION_SETTING_DEFS, NotificationSettingDef } from '../../lib/services/notifications';
 import { AppBar } from '../../lib/components/ui';
 
-const GROUPS: NotificationSettingDef['group'][] = ['근태', '재고', '매출·손익'];
+const GROUPS: NotificationSettingDef['group'][] = ['재고', '매출·손익'];
 
 export default function NotificationSettingsScreen() {
   const { settings, loading, refetch, toggle } = useNotificationSettings();

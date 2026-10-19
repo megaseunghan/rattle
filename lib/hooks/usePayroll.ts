@@ -1,5 +1,5 @@
 import { getErrorMessage, UserFacingError } from '../utils/error';
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import {
   getPayrollByMonth,
@@ -8,6 +8,8 @@ import {
   calculatePayroll,
   updatePayrollDeductions,
   PayrollDeductions,
+  saveWorkedMinutes,
+  WorkedMinutesInput,
 } from '../services/payroll';
 import { Employee, Payroll } from '../../types';
 
@@ -18,18 +20,22 @@ export function usePayroll(yearMonth: string) {
   const [calculating, setCalculating] = useState<string | null>(null); // employeeId
   const [savingDeductions, setSavingDeductions] = useState<string | null>(null); // employeeId
   const [error, setError] = useState<string | null>(null);
+  const requestId = useRef(0);
+  useEffect(() => () => { requestId.current += 1; }, [store?.id, yearMonth]);
 
   const refetch = useCallback(async () => {
-    if (!store) return;
+    const id = ++requestId.current;
+    setPayrolls([]);
+    if (!store) { setLoading(false); return; }
     setLoading(true);
     setError(null);
     try {
       const result = await getPayrollByMonth(store.id, yearMonth);
-      setPayrolls(result);
+      if (id === requestId.current) setPayrolls(result);
     } catch (e: any) {
-      setError(getErrorMessage(e));
+      if (id === requestId.current) setError(getErrorMessage(e));
     } finally {
-      setLoading(false);
+      if (id === requestId.current) setLoading(false);
     }
   }, [store, yearMonth]);
 
@@ -56,6 +62,18 @@ export function usePayroll(yearMonth: string) {
     setPayrolls(prev => prev.filter(p => p.id !== id));
   }, []);
 
+  const saveWork = useCallback(async (employee: Employee, input: WorkedMinutesInput, previous?: Payroll) => {
+    if (!store) throw new UserFacingError('매장 정보가 없습니다');
+    setCalculating(employee.id);
+    try {
+      const saved = await saveWorkedMinutes(store.id, employee, yearMonth, input, previous);
+      setPayrolls(prev => [...prev.filter(row => row.employee_id !== employee.id), saved]);
+      return saved;
+    } finally {
+      setCalculating(null);
+    }
+  }, [store, yearMonth]);
+
   const saveDeductions = useCallback(async (payroll: Payroll, deductions: PayrollDeductions) => {
     setSavingDeductions(payroll.employee_id);
     try {
@@ -74,7 +92,7 @@ export function usePayroll(yearMonth: string) {
 
   return {
     payrolls, loading, calculating, savingDeductions, error,
-    refetch, calculate, saveDeductions, remove,
+    refetch, calculate, saveWork, saveDeductions, remove,
     totalLaborCost, totalNetPay, totalInsurance,
   };
 }

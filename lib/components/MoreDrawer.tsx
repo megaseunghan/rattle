@@ -7,7 +7,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Colors } from '../../constants/colors';
-import { CardStyle } from '../../constants/designTokens';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../supabase';
 import { animateListChange } from '../utils/layoutAnimation';
@@ -21,16 +20,14 @@ function SettingRow({
 }) {
   return (
     <TouchableOpacity style={[styles.listItem, withBorder && styles.listItemBorder]} onPress={onPress} activeOpacity={0.7}>
-      <View style={[styles.iconWrap, { backgroundColor: danger ? Colors.negativeBg : Colors.gray100 }]}>
-        <Ionicons name={icon} size={17} color={danger ? Colors.negative : Colors.gray500} />
-      </View>
+      <Ionicons name={icon} size={19} color={danger ? Colors.negative : Colors.gray600} style={styles.rowIcon} />
       <Text style={[styles.itemName, danger && { color: Colors.negative }]}>{label}</Text>
       <Ionicons name="chevron-forward" size={15} color={Colors.gray300} />
     </TouchableOpacity>
   );
 }
 
-/** 아코디언처럼 열고 닫히는 섹션 — 헤더 탭하면 카드 리스트가 접히고 펼쳐짐 */
+/** 아코디언처럼 열고 닫히는 섹션 */
 function AccordionSection({ title, defaultOpen = true, children }: { title: string; defaultOpen?: boolean; children: React.ReactNode }) {
   const [open, setOpen] = useState(defaultOpen);
 
@@ -45,7 +42,7 @@ function AccordionSection({ title, defaultOpen = true, children }: { title: stri
         <Text style={styles.sectionLabel}>{title}</Text>
         <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={16} color={Colors.gray400} />
       </TouchableOpacity>
-      {open && <View style={styles.card}>{children}</View>}
+      {open && <View style={styles.listBody}>{children}</View>}
     </View>
   );
 }
@@ -168,9 +165,7 @@ export function MoreDrawer({ visible, onClose }: { visible: boolean; onClose: ()
                   onPress={() => handleSwitchStore(s.id)}
                   activeOpacity={0.7}
                 >
-                  <View style={[styles.iconWrap, { backgroundColor: Colors.gray100 }]}>
-                    <Ionicons name="business-outline" size={17} color={Colors.gray500} />
-                  </View>
+                  <Ionicons name="business-outline" size={19} color={Colors.gray600} style={styles.rowIcon} />
                   <View style={styles.itemInfoFlex}>
                     <Text style={styles.itemName} numberOfLines={1}>{s.name}</Text>
                     {isActive && <Text style={[styles.itemSub, { color: Colors.primary }]}>현재 선택됨</Text>}
@@ -192,8 +187,7 @@ export function MoreDrawer({ visible, onClose }: { visible: boolean; onClose: ()
             {isAdmin && <SettingRow icon="people-outline" label="멤버 관리" withBorder onPress={() => go('/settings/members')} />}
             {isAdmin && <SettingRow icon="card-outline" label="TossPos 연동" withBorder onPress={() => go('/settings/pos-sync')} />}
             {isAdmin && <SettingRow icon="notifications-outline" label="알림 설정" withBorder onPress={() => go('/notifications/settings')} />}
-            <SettingRow icon="time-outline" label="출퇴근 기록" withBorder={isAdmin} onPress={() => go('/attendance')} />
-            <SettingRow icon="checkmark-done-outline" label="청소 체크리스트" withBorder onPress={() => go('/cleaning')} />
+            <SettingRow icon="checkmark-done-outline" label="청소 체크리스트" withBorder={isAdmin} onPress={() => go('/cleaning')} />
             {isEmailUser && (
               <SettingRow icon="lock-closed-outline" label="비밀번호 변경" withBorder onPress={() => go('/settings/password')} />
             )}
@@ -215,7 +209,7 @@ const styles = StyleSheet.create({
   backdrop: { backgroundColor: 'rgba(0,0,0,0.4)' },
   drawer: {
     position: 'absolute', top: 0, bottom: 0, left: 0,
-    backgroundColor: Colors.gray50, paddingHorizontal: 16,
+    backgroundColor: Colors.white, paddingHorizontal: 20,
     shadowColor: '#000', shadowOffset: { width: 4, height: 0 }, shadowOpacity: 0.15, shadowRadius: 16, elevation: 16,
   },
   drawerHeader: {
@@ -227,9 +221,8 @@ const styles = StyleSheet.create({
   scroll: { paddingBottom: 40 },
   profileRow: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
-    backgroundColor: Colors.white, borderRadius: 16,
-    borderWidth: 0.5, borderColor: Colors.gray100,
-    padding: 14, marginBottom: 18,
+    paddingVertical: 16, marginBottom: 16,
+    borderBottomWidth: 1, borderBottomColor: Colors.gray100,
   },
   profileAvatar: {
     width: 42, height: 42, borderRadius: 21,
@@ -239,18 +232,17 @@ const styles = StyleSheet.create({
   profileSub: { fontSize: 11, fontWeight: '500', color: Colors.gray400, marginTop: 2 },
 
   accordion: { marginBottom: 16 },
-  accordionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 8 },
+  accordionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 10 },
 
   dangerTextRow: { alignItems: 'center', paddingVertical: 16 },
   dangerText: { fontSize: 14, fontWeight: '600', color: Colors.negative },
   sectionLabel: {
-    fontSize: 11, fontWeight: '500', color: Colors.gray400,
-    textTransform: 'uppercase', letterSpacing: 0.5,
+    fontSize: 13, fontWeight: '700', color: Colors.gray600,
   },
-  card: { ...CardStyle, overflow: 'hidden' },
-  listItem: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 13, gap: 12 },
+  listBody: { borderBottomWidth: 1, borderBottomColor: Colors.gray100 },
+  listItem: { flexDirection: 'row', alignItems: 'center', minHeight: 50, paddingVertical: 10, gap: 14 },
   listItemBorder: { borderTopWidth: 0.5, borderTopColor: Colors.gray100 },
-  iconWrap: { width: 34, height: 34, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
+  rowIcon: { width: 22 },
   itemInfoFlex: { flex: 1 },
   itemName: { flex: 1, fontSize: 14, fontWeight: '500', color: Colors.black },
   itemSub: { fontSize: 12, marginTop: 1 },

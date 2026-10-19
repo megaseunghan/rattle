@@ -5,15 +5,10 @@ import { router } from 'expo-router';
 import { Colors } from '../../constants/colors';
 import { Spacing } from '../../constants/designTokens';
 import { useRequestApprovals } from '../../lib/hooks/useRequestApprovals';
-import { AttendanceCorrection, ScheduleRequest } from '../../types';
+import { ScheduleRequest } from '../../types';
 import { AppBar, EmptyState } from '../../lib/components/ui';
 
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
-
-function fmtTime(iso: string | null): string {
-  if (!iso) return '—';
-  return new Date(iso).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
-}
 
 function ApproveButtons({ onApprove, onReject, disabled }: {
   onApprove: () => void; onReject: () => void; disabled: boolean;
@@ -32,18 +27,14 @@ function ApproveButtons({ onApprove, onReject, disabled }: {
 
 export default function RequestApprovalsScreen() {
   const {
-    scheduleRequests, corrections, loading, reviewingId, totalPending,
-    refetch, reviewSchedule, reviewAttendanceCorrection,
+    scheduleRequests, loading, reviewingId, totalPending,
+    refetch, reviewSchedule,
   } = useRequestApprovals();
 
   useEffect(() => { refetch(); }, [refetch]);
 
   function handleScheduleReview(request: ScheduleRequest & { employee_name: string }, approve: boolean) {
     reviewSchedule(request, approve).catch(() => {});
-  }
-
-  function handleCorrectionReview(correction: AttendanceCorrection & { employee_name: string }, approve: boolean) {
-    reviewAttendanceCorrection(correction, approve).catch(() => {});
   }
 
   return (
@@ -53,7 +44,7 @@ export default function RequestApprovalsScreen() {
         {loading ? (
           <ActivityIndicator color={Colors.primary} style={{ marginTop: 32 }} />
         ) : totalPending === 0 ? (
-          <EmptyState icon="checkmark-done-outline" title="대기 중인 요청이 없어요" description="스케줄 변경·근태 정정 요청이 오면 여기에 표시돼요" />
+          <EmptyState icon="checkmark-done-outline" title="대기 중인 요청이 없어요" description="스케줄 변경 요청이 오면 여기에 표시돼요" />
         ) : (
           <>
             {scheduleRequests.length > 0 && (
@@ -79,28 +70,6 @@ export default function RequestApprovalsScreen() {
               </View>
             )}
 
-            {corrections.length > 0 && (
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>근태 정정 요청</Text>
-                {corrections.map(c => (
-                  <View key={c.id} style={styles.card}>
-                    <Text style={styles.cardName}>{c.employee_name} · {c.attendance_date}</Text>
-                    {c.requested_clock_in && (
-                      <Text style={styles.dayLine}>출근 {fmtTime(c.original_clock_in)} → {fmtTime(c.requested_clock_in)}</Text>
-                    )}
-                    {c.requested_clock_out && (
-                      <Text style={styles.dayLine}>퇴근 {fmtTime(c.original_clock_out)} → {fmtTime(c.requested_clock_out)}</Text>
-                    )}
-                    <Text style={styles.reasonText}>{c.reason}</Text>
-                    <ApproveButtons
-                      disabled={reviewingId === c.id}
-                      onApprove={() => handleCorrectionReview(c, true)}
-                      onReject={() => handleCorrectionReview(c, false)}
-                    />
-                  </View>
-                ))}
-              </View>
-            )}
           </>
         )}
       </ScrollView>

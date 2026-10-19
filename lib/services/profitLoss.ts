@@ -23,16 +23,12 @@ export async function getYearlyProfitLoss(
   const results = await Promise.all(
     Array.from({ length: maxMonth }, (_, i) => i + 1).map(async (month) => {
       const yearMonth = `${year}-${String(month).padStart(2, '0')}`;
-      try {
-        const data = await getProfitLossByMonth(storeId, yearMonth, closingTime);
-        return { month, data };
-      } catch {
-        return null;
-      }
+      const data = await getProfitLossByMonth(storeId, yearMonth, closingTime);
+      return { month, data };
     })
   );
 
-  return results.filter(Boolean) as { month: number; data: ProfitLoss }[];
+  return results;
 }
 
 function getMonthRevenueRange(yearMonth: string, closingTime: string): { from: Date; to: Date } {
@@ -59,7 +55,7 @@ export async function getProfitLossByMonth(
   const year = Number(yearMonth.slice(0, 4));
   const month = Number(yearMonth.slice(5, 7));
 
-  const [revenueResult, manualSalesTotals, purchases, expenses, effectiveFixed, payrollResult, attendanceResult, wageHistory, employeesResult] = await Promise.all([
+  const [revenueResult, manualSalesTotals, purchases, expenses, effectiveFixed, payrollResult, wageHistory, employeesResult] = await Promise.all([
     supabase
       .from('toss_orders')
       .select('total_amount, card_amount, cash_amount')
@@ -73,26 +69,21 @@ export async function getProfitLossByMonth(
     getEffectiveFixedExpenses(storeId, yearMonth),
     supabase
       .from('payroll')
-      .select('gross, national_pension, health_insurance, long_term_care, employment_insurance, income_tax, local_income_tax, withholding_tax, employee_id')
+      .select('gross, national_pension, health_insurance, long_term_care, employment_insurance, income_tax, local_income_tax, withholding_tax, employee_id, worked_minutes, work_source, applied_hourly_wage, net_pay')
       .eq('store_id', storeId)
       .eq('year_month', yearMonth),
-    // 파트타이머 일일급여: 퇴근 기록의 daily_wage 합산 (영업일 범위)
-    supabase
-      .from('attendance')
-      .select('daily_wage')
-      .eq('store_id', storeId)
-      .eq('type', 'clock_out')
-      .gte('timestamp', from.toISOString())
-      .lte('timestamp', to.toISOString()),
     // 급여 이력 (정규직 일할 누적 계산용)
     getStoreWageHistory(storeId),
-    // 활성 직원 (고용형태·수습 판별)
+    // 퇴사한 파트타이머도 이미 작성한 급여의 고용형태를 확인한다.
     supabase
       .from('employees')
-      .select('id, employment_type, joined_at, is_resigned_during_probation')
-      .eq('store_id', storeId)
-      .eq('is_active', true),
+      .select('id, employment_type, joined_at, is_resigned_during_probation, is_active')
+      .eq('store_id', storeId),
   ]);
+
+  for (const result of [revenueResult, payrollResult, employeesResult]) {
+    if (result.error) throw new Error(result.error.message);
+  }
 
   // 1. 매출 (카드/현금 분리) — Toss POS 동기화분 + 수기 등록분 합산
   const orders = revenueResult.data ?? [];
@@ -153,13 +144,13 @@ export async function getProfitLossByMonth(
 
   // 정규직 세전: 급여 이력 기반 일할 누적 (인상/인하 시점 정확 분할, 과거 보존)
   for (const e of employees) {
-    if (e.employment_type === 'part_time') continue;
+    if (e.employment_type === 'part_time' || !e.is_active) continue;
     regularGross += regularGrossForMonth(historyByEmp[e.id] ?? [], year, month, asOf, probationFactor(e));
   }
 
   // 정규직 원천징수: payroll 명세 기준, 경과일 비율로 일할 (gross 정합)
   for (const p of payrolls) {
-    if (empTypes[p.employee_id] === 'part_time') continue;
+    if (empTypes[p.employee_id] === 'part_time' || p.applied_hourly_wage != null || p.work_source === 'legacy_attendance') continue;
     const withholding = Number(p.withholding_tax ?? 0) > 0
       ? Number(p.withholding_tax)
       : Number(p.national_pension ?? 0) + Number(p.health_insurance ?? 0) +
@@ -168,8 +159,12 @@ export async function getProfitLossByMonth(
     regularWithholding += Math.round(withholding * monthFactor);
   }
 
-  // 파트타이머 인건비: 퇴근 기록 일일급여 합산 (이미 실근무·당시 시급 기준이라 일할 불필요)
-  partTimeGross = (attendanceResult.data ?? []).reduce((s, a: any) => s + Number(a.daily_wage ?? 0), 0);
+  // 저장된 월별 급여 금액을 사용해 시급 변경·퇴사 이후에도 작성 당시 금액을 보존한다.
+  for (const p of payrolls) {
+    if (empTypes[p.employee_id] !== 'part_time' && p.applied_hourly_wage == null && p.work_source !== 'legacy_attendance') continue;
+    partTimeGross += Number(p.gross);
+    partTimeWithholding += Number(p.gross) - Number(p.net_pay ?? p.gross);
+  }
 
   const laborCost = regularGross + partTimeGross;
 

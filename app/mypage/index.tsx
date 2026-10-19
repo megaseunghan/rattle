@@ -23,9 +23,7 @@ function MenuRow({ icon, label, onPress, withBorder }: {
 }) {
   return (
     <TouchableOpacity style={[styles.menuRow, withBorder && styles.menuRowBorder]} onPress={onPress} activeOpacity={0.7}>
-      <View style={styles.menuIconWrap}>
-        <Ionicons name={icon} size={17} color={Colors.gray600} />
-      </View>
+      <Ionicons name={icon} size={19} color={Colors.gray600} style={styles.menuIcon} />
       <Text style={styles.menuLabel}>{label}</Text>
       <Ionicons name="chevron-forward" size={16} color={Colors.gray300} />
     </TouchableOpacity>
@@ -49,6 +47,7 @@ export default function MyPageScreen() {
   const roleLabel = !isPreviewing && currentRole === 'admin'
     ? '사장님'
     : myEmployee?.employment_type === 'part_time' ? '파트타이머' : '직원';
+  const todayDay = new Date().getDay();
 
   return (
     <SafeAreaView style={styles.container}>
@@ -74,20 +73,24 @@ export default function MyPageScreen() {
         </View>
 
         {myEmployee && (
-          <View style={styles.weekGrid}>
+          <View style={styles.scheduleSection}>
+            <Text style={styles.scheduleTitle}>기본 스케줄</Text>
             {WEEKDAYS.map((label, i) => {
               const row = schedule.find(s => s.day_of_week === i);
-              const working = row?.is_working;
+              const scheduleText = !row
+                ? '미설정'
+                : !row.is_working
+                  ? '휴무'
+                  : row.start_time && row.end_time
+                    ? `${fmtHHmm(row.start_time)} – ${row.end_time < row.start_time ? '익일 ' : ''}${fmtHHmm(row.end_time)}`
+                    : '시간 미설정';
               return (
-                <View key={label} style={styles.weekCol}>
-                  <Text style={styles.weekDayLabel}>{label}</Text>
-                  {working ? (
-                    <View style={styles.weekChip}>
-                      <Text style={styles.weekChipText}>{fmtHHmm(row?.start_time ?? null)}-{fmtHHmm(row?.end_time ?? null)}</Text>
-                    </View>
-                  ) : (
-                    <View style={styles.weekChipOff} />
-                  )}
+                <View key={label} style={[styles.scheduleRow, i > 0 && styles.scheduleRowBorder]}>
+                  <Text style={[styles.scheduleDay, i === todayDay && styles.scheduleDayToday]}>{label}요일</Text>
+                  {i === todayDay && <Text style={styles.todayLabel}>오늘</Text>}
+                  <Text style={[styles.scheduleTime, (!row || !row.is_working) && styles.scheduleTimeMuted]}>
+                    {scheduleText}
+                  </Text>
                 </View>
               );
             })}
@@ -95,14 +98,11 @@ export default function MyPageScreen() {
         )}
 
         <View style={styles.menuCard}>
-          {myEmployee && (
-            <MenuRow icon="calendar-outline" label="스케줄 설정" onPress={() => router.push('/mypage/schedule')} />
+          {myEmployee?.employment_type === 'part_time' && (
+            <MenuRow icon="time-outline" label="근무시간 제출" onPress={() => router.push('/mypage/work-minutes')} />
           )}
           {myEmployee && (
-            <MenuRow
-              icon="time-outline" label="근태 기록" withBorder
-              onPress={() => router.push(`/attendance/${myEmployee.id}?name=${encodeURIComponent(myEmployee.name)}`)}
-            />
+            <MenuRow icon="calendar-outline" label="스케줄 설정" onPress={() => router.push('/mypage/schedule')} />
           )}
           {myEmployee && (
             <MenuRow icon="document-text-outline" label="급여 명세서" withBorder onPress={() => router.push('/mypage/payslip')} />
@@ -111,7 +111,7 @@ export default function MyPageScreen() {
             <MenuRow icon="person-outline" label="개인정보 수정" withBorder={!!myEmployee} onPress={() => router.push('/settings/account')} />
           )}
           {realRole === 'admin' && (
-            <MenuRow icon="checkmark-done-outline" label="요청함 (스케줄·근태 정정)" withBorder onPress={() => router.push('/attendance/requests')} />
+            <MenuRow icon="checkmark-done-outline" label="요청함 (스케줄)" withBorder onPress={() => router.push('/mypage/requests')} />
           )}
         </View>
       </ScrollView>
@@ -138,16 +138,23 @@ const styles = StyleSheet.create({
   profileName: { fontSize: 16, fontWeight: '700', color: Colors.black },
   profileRole: { fontSize: 12, fontWeight: '500', color: Colors.gray400, marginTop: 2 },
 
-  weekGrid: { flexDirection: 'row', justifyContent: 'space-between' },
-  weekCol: { alignItems: 'center', gap: 6, flex: 1 },
-  weekDayLabel: { fontSize: 11, fontWeight: '600', color: Colors.gray400 },
-  weekChip: { backgroundColor: Colors.tinted, borderRadius: 8, paddingHorizontal: 4, paddingVertical: 4 },
-  weekChipText: { fontSize: 9, fontWeight: '600', color: Colors.primary },
-  weekChipOff: { width: 6, height: 6, borderRadius: 3, backgroundColor: Colors.gray200, marginTop: 8 },
+  scheduleSection: {
+    backgroundColor: Colors.white, borderRadius: 14,
+    borderWidth: 0.5, borderColor: Colors.gray100,
+    paddingHorizontal: 16, paddingTop: 16, paddingBottom: 4,
+  },
+  scheduleTitle: { fontSize: 15, fontWeight: '700', color: Colors.black, marginBottom: 8 },
+  scheduleRow: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  scheduleRowBorder: { borderTopWidth: 0.5, borderTopColor: Colors.gray100 },
+  scheduleDay: { width: 48, fontSize: 14, fontWeight: '600', color: Colors.gray600 },
+  scheduleDayToday: { color: Colors.primary },
+  todayLabel: { fontSize: 12, fontWeight: '600', color: Colors.primary },
+  scheduleTime: { flex: 1, textAlign: 'right', fontSize: 14, fontWeight: '600', color: Colors.black },
+  scheduleTimeMuted: { fontWeight: '500', color: Colors.gray400 },
 
   menuCard: { backgroundColor: Colors.white, borderRadius: 16, borderWidth: 0.5, borderColor: Colors.gray100, overflow: 'hidden' },
   menuRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 14, paddingVertical: 13 },
   menuRowBorder: { borderTopWidth: 0.5, borderTopColor: Colors.gray100 },
-  menuIconWrap: { width: 32, height: 32, borderRadius: 10, backgroundColor: Colors.gray50, alignItems: 'center', justifyContent: 'center' },
+  menuIcon: { width: 22 },
   menuLabel: { flex: 1, fontSize: 14, fontWeight: '500', color: Colors.black },
 });

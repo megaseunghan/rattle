@@ -84,7 +84,7 @@ export async function deleteEmployee(id: string): Promise<void> {
   }
 }
 
-/** 로그인 계정에 연결된 본인 직원 레코드 조회 (출퇴근용) */
+/** 로그인 계정에 연결된 본인 직원 레코드 조회 (급여 명세서·스케줄용) */
 export async function getMyEmployee(storeId: string, userId: string): Promise<Employee | null> {
   const { data, error } = await supabase
     .from('employees')

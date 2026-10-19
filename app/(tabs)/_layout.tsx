@@ -26,7 +26,6 @@ const QUICK_ADD_ITEMS: QuickAddAction[] = [
   { key: 'stock', label: '재고 등록', icon: 'cube-outline', route: '/stock/new' },
   { key: 'recipe', label: '레시피 등록', icon: 'restaurant-outline', route: '/recipes/new' },
   { key: 'employee', label: '직원 등록', icon: 'people-outline', tab: 'payroll' },
-  { key: 'attendance', label: '출퇴근 등록', icon: 'time-outline', route: '/attendance' },
 ];
 
 const MENU_WIDTH = 168;
