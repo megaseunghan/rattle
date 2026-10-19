@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { StyleSheet, useWindowDimensions } from 'react-native';
-import Animated, { cancelAnimation, runOnJS, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
+import Animated, { cancelAnimation, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
+import { scheduleOnRN } from 'react-native-worklets';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
@@ -58,25 +59,31 @@ function DraggableFabInner({ onPress, onDragEnd, iconName }: Omit<DraggableFabPr
   const y = useSharedValue(defaultY);
   const startX = useSharedValue(defaultX);
   const startY = useSharedValue(defaultY);
-  const hasDragged = useSharedValue(false);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
     AsyncStorage.getItem(STORAGE_KEY).then(raw => {
+      let restoredX = defaultX;
+      let restoredY = defaultY;
       if (raw) {
         try {
           const pos = JSON.parse(raw) as { x: number; y: number };
           if (!Number.isFinite(pos.x) || !Number.isFinite(pos.y)) throw new Error();
-          x.value = clamp(pos.x, minX, maxX);
-          y.value = clamp(pos.y, minY, maxY);
+          restoredX = clamp(pos.x, minX, maxX);
+          restoredY = clamp(pos.y, minY, maxY);
         } catch {
           // 저장된 값이 손상됐으면 기본 위치 유지
         }
       }
+      x.value = restoredX;
+      y.value = restoredY;
       setReady(true);
-      onDragEnd?.(x.value, y.value);
+      onDragEnd?.(restoredX, restoredY);
       // eslint-disable-next-line react-hooks/exhaustive-deps
-    }).catch(() => setReady(true));
+    }).catch(() => {
+      setReady(true);
+      onDragEnd?.(defaultX, defaultY);
+    });
   }, []);
 
   function persistPosition(px: number, py: number) {
@@ -85,32 +92,29 @@ function DraggableFabInner({ onPress, onDragEnd, iconName }: Omit<DraggableFabPr
   }
 
   const pan = Gesture.Pan()
-    .minDistance(0) // 움직임이 거의 없는 순수 탭에서도 제스처가 확실히 활성화되도록
+    .minDistance(DRAG_TAP_THRESHOLD)
     .onStart(() => {
       cancelAnimation(x);
       cancelAnimation(y);
-      hasDragged.value = false;
       startX.value = x.value;
       startY.value = y.value;
     })
     .onUpdate((e) => {
-      if (Math.abs(e.translationX) > DRAG_TAP_THRESHOLD || Math.abs(e.translationY) > DRAG_TAP_THRESHOLD) {
-        hasDragged.value = true;
-      }
       // 경계 안에서는 손끝에 1:1로 붙고, 밖으로 나가면 러버밴딩으로 저항 (apple-design §2, §9)
       x.value = withRubberband(startX.value + e.translationX, minX, maxX, width);
       y.value = withRubberband(startY.value + e.translationY, minY, maxY, height);
     })
-    .onFinalize((e, success) => {
-      const moved = hasDragged.value || Math.abs(e.translationX) > DRAG_TAP_THRESHOLD || Math.abs(e.translationY) > DRAG_TAP_THRESHOLD;
+    .onEnd((e) => {
       const finalX = clamp(x.value, minX, maxX);
       const finalY = clamp(y.value, minY, maxY);
       // 놓을 때의 제스처 속도를 그대로 스프링에 넘겨 손과 애니메이션 사이에 이질감이 없게 한다 (apple-design §5)
-      x.value = withSpring(finalX, { damping: 20, stiffness: 300, velocity: success && moved ? e.velocityX : 0 });
-      y.value = withSpring(finalY, { damping: 20, stiffness: 300, velocity: success && moved ? e.velocityY : 0 });
-      runOnJS(persistPosition)(finalX, finalY);
-      if (success && !moved) runOnJS(onPress)();
+      x.value = withSpring(finalX, { damping: 20, stiffness: 300, velocity: e.velocityX });
+      y.value = withSpring(finalY, { damping: 20, stiffness: 300, velocity: e.velocityY });
+      scheduleOnRN(persistPosition, finalX, finalY);
     });
+  const tap = Gesture.Tap().maxDistance(DRAG_TAP_THRESHOLD).onEnd((_event, success) => {
+    if (success) scheduleOnRN(onPress);
+  });
 
   const animatedStyle = useAnimatedStyle(() => ({
     left: x.value,
@@ -119,8 +123,10 @@ function DraggableFabInner({ onPress, onDragEnd, iconName }: Omit<DraggableFabPr
   }));
 
   return (
-    <GestureDetector gesture={pan}>
-      <Animated.View style={[styles.fab, animatedStyle]}>
+    <GestureDetector gesture={Gesture.Race(pan, tap)}>
+      <Animated.View style={[styles.fab, animatedStyle]} accessible accessibilityRole="button"
+        accessibilityLabel={iconName === 'close' ? '빠른 등록 닫기' : '빠른 등록 열기'}
+        onAccessibilityTap={onPress}>
         <Ionicons name={iconName} size={24} color={Colors.white} />
       </Animated.View>
     </GestureDetector>

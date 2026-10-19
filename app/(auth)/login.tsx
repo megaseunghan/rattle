@@ -54,8 +54,8 @@ export default function LoginScreen() {
           <View style={styles.logoDot} />
         </View>
 
-        <Text style={styles.headline}>간편하게 시작하는{'\n'}매장 손익관리</Text>
-        <Text style={styles.subheadline}>카카오 계정 하나로{'\n'}로그인하고 회원가입까지 한 번에</Text>
+        <Text style={styles.headline}>매장별 매출부터 손익까지</Text>
+        <Text style={styles.subheadline}>매출·매입·인건비를 모아{'\n'}이번 달 매장 손익을 확인하세요.</Text>
 
         <View style={styles.buttonWrap}>
           <Button

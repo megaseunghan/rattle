@@ -63,64 +63,44 @@ export default function PosSyncScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll}>
-        {/* ── 상태 배지 ── */}
-        <View style={[styles.statusBadge, status === 'connected' ? styles.statusConnected : styles.statusPending]}>
-          <Ionicons
-            name={status === 'connected' ? 'checkmark-circle' : 'time-outline'}
-            size={16}
-            color={status === 'connected' ? Colors.success : Colors.warning}
-          />
-          <Text style={[styles.statusText, status === 'connected' ? styles.statusTextConnected : styles.statusTextPending]}>
-            {status === 'connected' ? '연동완료' : '연동 대기중'}
-          </Text>
-        </View>
-
         {status === 'connected' ? (
           /* ── 연동완료 ── */
           <View style={styles.connectedCard}>
-            <Ionicons name="checkmark-circle" size={32} color={Colors.success} style={{ marginBottom: 12 }} />
+            <View style={styles.connectedStatus}>
+              <Ionicons name="checkmark-circle" size={18} color={Colors.success} />
+              <Text style={styles.connectedStatusText}>연동완료</Text>
+            </View>
             <Text style={styles.connectedTitle}>POS 연동이 완료되었습니다</Text>
             <Text style={styles.connectedDesc}>
               가맹점 ID: {merchantId}{'\n'}
-              매출 데이터는 POS 탭에서 확인할 수 있어요.
+              매출 데이터는 매출 탭에서 확인할 수 있어요.
             </Text>
             <TouchableOpacity style={styles.goToPosBtn} onPress={() => router.push('/pos')}>
-              <Text style={styles.goToPosBtnText}>POS 탭으로 이동</Text>
+              <Text style={styles.goToPosBtnText}>매출 확인</Text>
               <Ionicons name="arrow-forward" size={16} color={Colors.white} />
             </TouchableOpacity>
           </View>
         ) : (
           <>
-            {/* ── 1. 서비스코드 안내 ── */}
-            <Text style={styles.sectionTitle}>1. 포스에서 서비스코드 입력</Text>
+            <Text style={styles.sectionTitle}>포스에서 서비스코드를 입력하세요</Text>
+            <Text style={styles.sectionDesc}>토스 포스의 설정 &gt; 서비스 연동에서 사용합니다.</Text>
             <View style={styles.card}>
-              <Text style={styles.codeLabel}>Rattle 서비스코드</Text>
+              <Text style={styles.codeLabel}>Rattle 서비스코드 · 눌러서 복사</Text>
               <TouchableOpacity style={styles.codeBox} onPress={copyServiceCode} activeOpacity={0.7}>
                 <Text style={styles.codeText}>{SERVICE_CODE}</Text>
                 <Ionicons name="copy-outline" size={18} color={Colors.primary} />
               </TouchableOpacity>
-              <View style={styles.steps}>
-                <Text style={styles.stepText}>① 토스 포스에서 <Text style={styles.stepBold}>설정 &gt; 서비스 연동</Text> 이동</Text>
-                <Text style={styles.stepText}>② 위 서비스코드 <Text style={styles.stepBold}>{SERVICE_CODE}</Text> 입력</Text>
-                <Text style={styles.stepText}>③ 연결하면 <Text style={styles.stepBold}>자동으로 연동완료</Text>됩니다</Text>
+              <View style={styles.waitingRow}>
+                <ActivityIndicator size="small" color={Colors.gray500} />
+                <View style={styles.waitingCopy}>
+                  <Text style={styles.waitingTitle}>연동 대기중</Text>
+                  <Text style={styles.waitingDesc}>포스에서 연결하면 자동으로 완료 상태로 바뀝니다.</Text>
+                </View>
               </View>
             </View>
-
-            {/* ── 자동 연동 대기 안내 ── */}
-            <View style={styles.waitingCard}>
-              <ActivityIndicator size="small" color={Colors.warning} style={{ marginBottom: 10 }} />
-              <Text style={styles.waitingTitle}>연동을 기다리는 중이에요</Text>
-              <Text style={styles.waitingDesc}>
-                포스에서 서비스코드를 입력하면{'\n'}이 화면이 자동으로 연동완료로 바뀝니다.
-              </Text>
-            </View>
-
-            <View style={styles.notice}>
-              <Ionicons name="information-circle-outline" size={16} color={Colors.gray400} />
-              <Text style={styles.noticeText}>
-                사업자번호로 자동 연결되므로 별도 입력은 필요 없어요. 반영이 늦으면 이 화면을 다시 열어주세요.
-              </Text>
-            </View>
+            <Text style={styles.noticeText}>
+              사업자번호로 연결되므로 Rattle에 따로 입력할 내용은 없어요. 반영이 늦으면 이 화면을 다시 열어주세요.
+            </Text>
           </>
         )}
       </ScrollView>
@@ -138,25 +118,16 @@ const styles = StyleSheet.create({
   title: { fontSize: 17, fontWeight: '700', color: Colors.black },
   scroll: { padding: 20, paddingBottom: 48 },
 
-  statusBadge: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    alignSelf: 'flex-start', paddingHorizontal: 12, paddingVertical: 6,
-    borderRadius: 20, marginBottom: 24,
-  },
-  statusConnected: { backgroundColor: Colors.success + '18' },
-  statusPending: { backgroundColor: Colors.warning + '18' },
-  statusText: { fontSize: 13, fontWeight: '600' },
-  statusTextConnected: { color: Colors.success },
-  statusTextPending: { color: Colors.warning },
-
   // 연동완료
   connectedCard: {
     backgroundColor: Colors.white, borderRadius: 14,
-    padding: 24, borderWidth: 1, borderColor: Colors.gray100,
-    alignItems: 'center', marginBottom: 24,
+    padding: 20, borderWidth: 1, borderColor: Colors.gray100,
+    alignItems: 'flex-start',
   },
+  connectedStatus: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 16 },
+  connectedStatusText: { fontSize: 13, fontWeight: '700', color: Colors.success },
   connectedTitle: { fontSize: 16, fontWeight: '700', color: Colors.black, marginBottom: 8 },
-  connectedDesc: { fontSize: 14, color: Colors.gray500, textAlign: 'center', lineHeight: 22, marginBottom: 20 },
+  connectedDesc: { fontSize: 14, color: Colors.gray500, lineHeight: 22, marginBottom: 20 },
   goToPosBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
     backgroundColor: Colors.primary, borderRadius: 12,
@@ -165,35 +136,27 @@ const styles = StyleSheet.create({
   goToPosBtnText: { fontSize: 14, fontWeight: '700', color: Colors.white },
 
   // 서비스코드
-  sectionTitle: { fontSize: 15, fontWeight: '700', color: Colors.black, marginBottom: 10 },
+  sectionTitle: { fontSize: 20, fontWeight: '700', color: Colors.black, marginBottom: 6 },
+  sectionDesc: { fontSize: 14, color: Colors.gray600, lineHeight: 21, marginBottom: 20 },
   card: {
     backgroundColor: Colors.white, borderRadius: 14,
-    padding: 16, borderWidth: 1, borderColor: Colors.gray100, marginBottom: 24,
+    padding: 20, borderWidth: 1, borderColor: Colors.gray100, marginBottom: 16,
   },
-  codeLabel: { fontSize: 13, fontWeight: '600', color: Colors.gray600, marginBottom: 8 },
+  codeLabel: { fontSize: 13, fontWeight: '600', color: Colors.gray600, marginBottom: 10 },
   codeBox: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    backgroundColor: Colors.primary + '10', borderRadius: 10,
-    borderWidth: 1, borderColor: Colors.primary + '40',
-    paddingHorizontal: 16, paddingVertical: 14, marginBottom: 16,
+    backgroundColor: Colors.gray50, borderRadius: 10,
+    borderWidth: 1, borderColor: Colors.gray200,
+    paddingHorizontal: 16, paddingVertical: 16,
   },
-  codeText: { fontSize: 22, fontWeight: '800', color: Colors.primary, letterSpacing: 2 },
-  steps: { gap: 8 },
-  stepText: { fontSize: 13, color: Colors.gray600, lineHeight: 20 },
-  stepBold: { fontWeight: '700', color: Colors.black },
-
-  // 자동 연동 대기
-  waitingCard: {
-    backgroundColor: Colors.white, borderRadius: 14,
-    padding: 24, borderWidth: 1, borderColor: Colors.gray100,
-    alignItems: 'center', marginBottom: 12,
+  codeText: { fontSize: 24, fontWeight: '800', color: Colors.black, letterSpacing: 2 },
+  waitingRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    borderTopWidth: 1, borderTopColor: Colors.gray100,
+    marginTop: 20, paddingTop: 18,
   },
-  waitingTitle: { fontSize: 15, fontWeight: '700', color: Colors.black, marginBottom: 6 },
-  waitingDesc: { fontSize: 13, color: Colors.gray500, textAlign: 'center', lineHeight: 20 },
-
-  notice: {
-    flexDirection: 'row', gap: 8, padding: 14, marginTop: 12,
-    backgroundColor: Colors.gray100, borderRadius: 12,
-  },
-  noticeText: { flex: 1, fontSize: 13, color: Colors.gray500, lineHeight: 20 },
+  waitingCopy: { flex: 1, gap: 3 },
+  waitingTitle: { fontSize: 14, fontWeight: '700', color: Colors.black },
+  waitingDesc: { fontSize: 13, color: Colors.gray500, lineHeight: 19 },
+  noticeText: { fontSize: 13, color: Colors.gray500, lineHeight: 20 },
 });

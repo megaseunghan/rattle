@@ -82,7 +82,7 @@ export default function SalesSettingsScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="chevron-back" size={24} color={Colors.black} />
         </TouchableOpacity>
-        <Text style={styles.title}>매출 정산 설정하기</Text>
+        <Text style={styles.title}>매출 마감 시각</Text>
         <TouchableOpacity
           style={[styles.saveBtn, (!dirty || saving) && styles.saveBtnDisabled]}
           onPress={handleSave}
@@ -93,27 +93,18 @@ export default function SalesSettingsScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        {/* 선택값 미리보기 */}
-        <View style={styles.heroCard}>
-          <Text style={styles.heroCaption}>설정된 시간 기준으로 매장의 하루 매출을 정산합니다.</Text>
-          <Text style={styles.heroValue}>{label}</Text>
-          <View style={styles.heroRange}>
-            <Ionicons name="time-outline" size={14} color={Colors.primary} />
-            <Text style={styles.heroRangeText}>{label} → 익일 {label}</Text>
-          </View>
-        </View>
-
-        {/* 마감 시각 선택 (드롭다운) */}
+        <Text style={styles.fieldLabel}>하루 매출을 나누는 시각</Text>
+        <Text style={styles.fieldDescription}>자정을 지나 영업한다면 실제 마감 시각에 맞춰 주세요.</Text>
         <View style={styles.selectRow}>
           <SelectField value={meridiem} onPress={() => setPicker('meridiem')} flex={1} />
           <SelectField value={`${hour12}시`} onPress={() => setPicker('hour')} flex={1.2} />
         </View>
 
-        {/* 안내 */}
-        <View style={styles.guideCard}>
-          <Ionicons name="information-circle-outline" size={16} color={Colors.gray400} />
+        <View style={styles.rangeSummary}>
+          <Text style={styles.rangeLabel}>집계 범위</Text>
+          <Text style={styles.rangeValue}>{label} → 익일 {label}</Text>
           <Text style={styles.guideText}>
-            {label}부터 익일 {label}까지의 주문을 하루 매출로 정산합니다.
+            이 시간 사이의 주문을 하루 매출로 집계합니다.
           </Text>
         </View>
       </ScrollView>
@@ -182,20 +173,12 @@ const styles = StyleSheet.create({
 
   scroll: { padding: 20, paddingBottom: 48 },
 
-  heroCard: {
-    backgroundColor: Colors.tinted, borderRadius: 20, padding: 24, alignItems: 'center',
-    borderWidth: 1, borderColor: Colors.primary + '22',
-  },
-  heroCaption: { fontSize: 13, color: Colors.primary, fontWeight: '500' },
-  heroValue: { fontSize: 25, fontWeight: '800', color: Colors.primary, marginTop: 6, letterSpacing: -1 },
-  heroRange: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 10 },
-  heroRangeText: { fontSize: 13, color: Colors.primary, fontWeight: '600' },
-
-  guideCard: {
-    flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginTop: 16,
-    backgroundColor: Colors.gray100, borderRadius: 12, padding: 14,
-  },
-  guideText: { flex: 1, fontSize: 13, color: Colors.gray600, lineHeight: 19 },
+  fieldLabel: { fontSize: 17, fontWeight: '700', color: Colors.black },
+  fieldDescription: { fontSize: 14, color: Colors.gray600, lineHeight: 22, marginTop: 8 },
+  rangeSummary: { marginTop: 24, paddingTop: 24, borderTopWidth: 1, borderTopColor: Colors.gray200, gap: 8 },
+  rangeLabel: { fontSize: 13, color: Colors.gray500 },
+  rangeValue: { fontSize: 17, fontWeight: '600', color: Colors.black },
+  guideText: { fontSize: 13, color: Colors.gray600, lineHeight: 20 },
 
   selectRow: { flexDirection: 'row', gap: 10, marginTop: 20 },
   selectField: {

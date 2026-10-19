@@ -8,11 +8,6 @@
     "orientation": "portrait",
     "icon": "./assets/Rattle_ios_1024.png",
     "userInterfaceStyle": "light",
-    "splash": {
-      "image": "./assets/splash-blank.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
-    },
     "ios": {
       "supportsTablet": true,
       "icon": "./assets/Rattle_ios_1024.png",
@@ -35,6 +30,15 @@
     "plugins": [
       "expo-router",
       "expo-font",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/Rattle_1024x1024.png",
+          "imageWidth": 144,
+          "resizeMode": "contain",
+          "backgroundColor": "#ffffff"
+        }
+      ],
       "@react-native-community/datetimepicker",
       "expo-web-browser",
       "expo-secure-store"

@@ -48,12 +48,13 @@ function QuickAddMenu({
 
   // FAB 오른쪽 끝에 메뉴 오른쪽 끝을 맞추고, FAB 바로 위(아래에서부터 거리 기준)에 띄운다. 화면 밖으로 안 나가게 clamp
   const menuLeft = Math.min(Math.max(fabPos.x + FAB_SIZE - MENU_WIDTH, 8), width - MENU_WIDTH - 8);
-  const menuBottom = height - fabPos.y + 8;
+  const menuHeight = QUICK_ADD_ITEMS.length * 44 + 12;
+  const menuTop = Math.max(8, Math.min(fabPos.y - menuHeight - 8, height - menuHeight - 100));
 
   return (
     <>
-      <Pressable style={styles.menuOverlay} onPress={onClose} />
-      <View style={[styles.menuBox, { left: menuLeft, bottom: menuBottom }]}>
+      <Pressable style={styles.menuOverlay} onPress={onClose} accessibilityLabel="빠른 등록 닫기" />
+      <View style={[styles.menuBox, { left: menuLeft, top: menuTop }]}>
         {QUICK_ADD_ITEMS.map((item) => (
           <Pressable key={item.key} style={styles.menuItem} onPress={() => handleSelect(item)}>
             <Ionicons name={item.icon} size={16} color={Colors.primary} />
@@ -253,9 +254,11 @@ const styles = StyleSheet.create({
   menuOverlay: {
     position: 'absolute',
     top: 0, left: 0, right: 0, bottom: 0,
+    zIndex: 10,
   },
   menuBox: {
     position: 'absolute',
+    zIndex: 11,
     width: MENU_WIDTH,
     backgroundColor: Colors.white,
     borderRadius: 14,
