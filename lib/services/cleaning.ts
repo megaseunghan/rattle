@@ -1,3 +1,4 @@
+import { UserFacingError } from '../utils/error';
 import { supabase } from '../supabase';
 import { CleaningItem, CleaningLog, CleaningSegment } from '../../types';
 
@@ -35,7 +36,7 @@ export async function checkCleaningItem(
 ): Promise<CleaningLog> {
   const { data: userData } = await supabase.auth.getUser();
   const userId = userData.user?.id;
-  if (!userId) throw new Error('로그인이 필요합니다.');
+  if (!userId) throw new UserFacingError('로그인이 필요합니다.');
 
   const { data, error } = await supabase
     .from('cleaning_logs')

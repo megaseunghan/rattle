@@ -1,3 +1,4 @@
+import { getErrorMessage, UserFacingError } from '../utils/error';
 import { useState, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { getExpensesByMonth, getEffectiveFixedExpenses, createExpense, updateExpense, deleteExpense } from '../services/expenses';
@@ -28,7 +29,7 @@ export function useExpenses(yearMonth: string) {
         setCarriedFixedExpenses(carried.filter(e => e.year_month !== yearMonth));
       }
     } catch (e: any) {
-      setError(e.message);
+      setError(getErrorMessage(e));
     } finally {
       setLoading(false);
     }
@@ -39,7 +40,7 @@ export function useExpenses(yearMonth: string) {
     name: string;
     amount: number;
   }) => {
-    if (!store) throw new Error('매장 정보가 없습니다');
+    if (!store) throw new UserFacingError('매장 정보가 없습니다');
     const created = await createExpense({ ...data, store_id: store.id, year_month: yearMonth });
     setExpenses(prev => [...prev, created]);
     if (data.category === '고정비') setCarriedFixedExpenses([]);

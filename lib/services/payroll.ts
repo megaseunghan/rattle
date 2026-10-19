@@ -1,3 +1,4 @@
+import { UserFacingError } from '../utils/error';
 import { supabase } from '../supabase';
 import { Employee, Payroll } from '../../types';
 import { isInProbation, isInsuranceApplicable } from './employees';
@@ -226,7 +227,7 @@ export async function updatePayrollDeductions(
   const totalDeduction = Object.values(normalized).reduce((sum, value) => sum + value, 0);
 
   if (totalDeduction > payroll.gross) {
-    throw new Error('공제 합계는 세전 급여보다 클 수 없습니다.');
+    throw new UserFacingError('공제 합계는 세전 급여보다 클 수 없습니다.');
   }
 
   const { data, error } = await supabase

@@ -1,3 +1,4 @@
+import { getErrorMessage } from '../../lib/utils/error';
 import { useCallback, useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator, Alert, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -73,7 +74,7 @@ export default function PayrollSettlementScreen() {
             await settlePayrolls(unsettledIds);
             await load();
           } catch (e: any) {
-            Alert.alert('정산 실패', e.message);
+            Alert.alert('정산 실패', getErrorMessage(e));
           } finally {
             setSettling(false);
           }

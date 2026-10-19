@@ -77,7 +77,7 @@ describe('useIngredients 훅', () => {
 
     // 복원됨
     expect(result.current.data).toEqual([sampleIngredient]);
-    expect(result.current.error).toBe('삭제 실패');
+    expect(result.current.error).toBe('처리하지 못했어요. 다시 시도해주세요.');
   });
 
   it('서비스 에러 발생 시 error 상태를 설정한다', async () => {
@@ -86,7 +86,7 @@ describe('useIngredients 훅', () => {
     const { result } = renderHook(() => useIngredients());
     await act(async () => {});
 
-    expect(result.current.error).toBe('네트워크 오류');
+    expect(result.current.error).toBe('처리하지 못했어요. 다시 시도해주세요.');
     expect(result.current.data).toEqual([]);
   });
 });

@@ -1,3 +1,4 @@
+import { getErrorMessage } from '../utils/error';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../supabase';
@@ -186,7 +187,7 @@ export function useDashboard(): UseDashboardResult {
       }
       lastFetchedAt.current = Date.now();
     } catch (e: any) {
-      setError(e.message);
+      setError(getErrorMessage(e));
     } finally {
       setLoading(false);
     }

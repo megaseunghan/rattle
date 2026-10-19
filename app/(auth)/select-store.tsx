@@ -16,7 +16,7 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../lib/contexts/AuthContext';
 import { Colors } from '../../constants/colors';
 import { Spacing } from '../../constants/designTokens';
-import { getErrorMessage } from '../../lib/utils/error';
+import { getErrorMessage, UserFacingError } from '../../lib/utils/error';
 import { Button, Field, ListCard } from '../../lib/components/ui';
 
 export default function SelectStoreScreen() {
@@ -52,7 +52,7 @@ export default function SelectStoreScreen() {
 
     setLoading(true);
     try {
-      if (!user) throw new Error('로그인이 필요합니다.');
+      if (!user) throw new UserFacingError('로그인이 필요합니다.');
 
       const { data, error } = await supabase
         .from('stores')

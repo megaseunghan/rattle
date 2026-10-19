@@ -1,3 +1,4 @@
+import { UserFacingError } from '../utils/error';
 import { supabase } from '../supabase';
 import { Employee, EmploymentType } from '../../types';
 
@@ -66,7 +67,7 @@ export async function deactivateEmployee(id: string): Promise<void> {
 
   if (error) throw new Error(error.message);
   if (!data || data.length === 0) {
-    throw new Error('삭제 권한이 없거나 직원을 찾을 수 없습니다.');
+    throw new UserFacingError('삭제 권한이 없거나 직원을 찾을 수 없습니다.');
   }
 }
 
@@ -79,7 +80,7 @@ export async function deleteEmployee(id: string): Promise<void> {
 
   if (error) throw new Error(error.message);
   if (!data || data.length === 0) {
-    throw new Error('삭제 권한이 없거나 직원을 찾을 수 없습니다.');
+    throw new UserFacingError('삭제 권한이 없거나 직원을 찾을 수 없습니다.');
   }
 }
 

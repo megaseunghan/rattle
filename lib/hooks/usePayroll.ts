@@ -1,3 +1,4 @@
+import { getErrorMessage, UserFacingError } from '../utils/error';
 import { useState, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import {
@@ -26,14 +27,14 @@ export function usePayroll(yearMonth: string) {
       const result = await getPayrollByMonth(store.id, yearMonth);
       setPayrolls(result);
     } catch (e: any) {
-      setError(e.message);
+      setError(getErrorMessage(e));
     } finally {
       setLoading(false);
     }
   }, [store, yearMonth]);
 
   const calculate = useCallback(async (employee: Employee) => {
-    if (!store) throw new Error('매장 정보가 없습니다');
+    if (!store) throw new UserFacingError('매장 정보가 없습니다');
     setCalculating(employee.id);
     try {
       const result = await calculatePayroll(employee);

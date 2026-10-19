@@ -33,7 +33,7 @@ export default function PurchaseDetailScreen() {
       setPurchase(p);
       setItems(its);
     } catch (e: any) {
-      setError(e.message);
+      setError(getErrorMessage(e));
     } finally {
       setLoading(false);
     }

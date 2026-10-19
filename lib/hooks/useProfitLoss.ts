@@ -1,3 +1,4 @@
+import { getErrorMessage } from '../utils/error';
 import { useState, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { getProfitLossByMonth } from '../services/profitLoss';
@@ -18,7 +19,7 @@ export function useProfitLoss(yearMonth: string) {
       const result = await getProfitLossByMonth(store.id, yearMonth, closingTime);
       setData(result);
     } catch (e: any) {
-      setError(e.message);
+      setError(getErrorMessage(e));
     } finally {
       setLoading(false);
     }

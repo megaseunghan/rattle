@@ -1,3 +1,4 @@
+import { getErrorMessage, UserFacingError } from '../utils/error';
 import { useState, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import {
@@ -20,7 +21,7 @@ export function useEmployees() {
       const result = await getEmployees(store.id);
       setEmployees(result);
     } catch (e: any) {
-      setError(e.message);
+      setError(getErrorMessage(e));
     } finally {
       setLoading(false);
     }
@@ -38,7 +39,7 @@ export function useEmployees() {
     dependents: number;
     user_id?: string | null;
   }) => {
-    if (!store) throw new Error('매장 정보가 없습니다');
+    if (!store) throw new UserFacingError('매장 정보가 없습니다');
     const created = await createEmployee({ is_probation: false, ...data, store_id: store.id });
     // 초기 급여 이력 시드 (입사일 또는 오늘부터)
     await seedInitialWage({

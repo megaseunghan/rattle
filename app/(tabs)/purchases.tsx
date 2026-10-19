@@ -1,3 +1,4 @@
+import { getErrorMessage } from '../../lib/utils/error';
 import { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
@@ -97,7 +98,7 @@ function PurchasesView({ active }: { active: boolean }) {
   function confirmDeletePurchase(id: string) {
     Alert.alert('삭제', '이 매입 내역을 삭제할까요?', [
       { text: '취소', style: 'cancel' },
-      { text: '삭제', style: 'destructive', onPress: () => { animateListChange(); remove(id).catch(e => Alert.alert('삭제 실패', e.message)); } },
+      { text: '삭제', style: 'destructive', onPress: () => { animateListChange(); remove(id).catch(e => Alert.alert('삭제 실패', getErrorMessage(e))); } },
     ]);
   }
 
@@ -163,7 +164,7 @@ function PurchasesView({ active }: { active: boolean }) {
         params: { imageUri: assets[0].uri, ocrText: JSON.stringify(allItems) },
       });
     } catch (e: any) {
-      Alert.alert('OCR 오류', e.message);
+      Alert.alert('OCR 오류', getErrorMessage(e));
     } finally {
       setScanning(false);
     }

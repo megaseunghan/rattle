@@ -10,7 +10,7 @@ import { Colors } from '../../constants/colors';
 import { useAuth } from '../../lib/contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
 import { StoreMember } from '../../types';
-import { getErrorMessage } from '../../lib/utils/error';
+import { getErrorMessage, UserFacingError } from '../../lib/utils/error';
 
 export default function MembersScreen() {
   const { store } = useAuth();
@@ -89,7 +89,7 @@ export default function MembersScreen() {
               .delete({ count: 'exact' })
               .eq('id', member.id);
             if (error) throw error;
-            if (!count) throw new Error('제거 권한이 없습니다.');
+            if (!count) throw new UserFacingError('제거 권한이 없습니다.');
             await loadMembers();
           } catch (e: unknown) {
             Alert.alert('오류', getErrorMessage(e, '제거에 실패했습니다.'));

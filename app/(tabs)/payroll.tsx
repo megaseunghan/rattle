@@ -1,3 +1,4 @@
+import { getErrorMessage } from '../../lib/utils/error';
 import { useState, useCallback, useEffect } from 'react';
 import { router } from 'expo-router';
 import {
@@ -522,7 +523,7 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
         setModalVisible(false);
       }
     } catch (e: any) {
-      Alert.alert('저장 실패', e.message);
+      Alert.alert('저장 실패', getErrorMessage(e));
     } finally {
       setSaving(false);
     }
@@ -550,7 +551,7 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
       refetchEmp();
       refetchHist();
     } catch (e: any) {
-      Alert.alert('적용 실패', e.message);
+      Alert.alert('적용 실패', getErrorMessage(e));
     } finally {
       setApplyingWage(false);
     }
@@ -658,13 +659,13 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
               accrualLabel={`${month}월 ${elapsed}/${daysInMonth}일`}
               onShowHistory={() => setHistTarget(emp)}
               isCalculating={calculating === emp.id}
-              onCalculate={() => calculate(emp).catch(e => Alert.alert('계산 실패', e.message))}
+              onCalculate={() => calculate(emp).catch(e => Alert.alert('계산 실패', getErrorMessage(e)))}
               onSaveDeductions={deductions => {
                 const payroll = payrolls.find(p => p.employee_id === emp.id);
                 if (!payroll) return Promise.resolve();
                 return saveDeductions(payroll, deductions)
                   .then(() => { Alert.alert('저장 완료', '실제 공제 내역과 예상 실수령액을 반영했습니다.'); })
-                  .catch(e => { Alert.alert('저장 실패', e.message); throw e; });
+                  .catch(e => { Alert.alert('저장 실패', getErrorMessage(e)); throw e; });
               }}
               isSavingDeductions={savingDeductions === emp.id}
               canEditDeductions={isAdmin}
@@ -676,7 +677,7 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
                   { text: '취소', style: 'cancel' },
                   {
                     text: '삭제', style: 'destructive',
-                    onPress: () => { animateListChange(); removePayroll(p.id).catch(e => Alert.alert('삭제 실패', e.message)); },
+                    onPress: () => { animateListChange(); removePayroll(p.id).catch(e => Alert.alert('삭제 실패', getErrorMessage(e))); },
                   },
                 ]);
               }}
@@ -863,7 +864,7 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
                           await deactivate(editTarget.id);
                           setModalVisible(false);
                         } catch (e: any) {
-                          Alert.alert('삭제 실패', e.message);
+                          Alert.alert('삭제 실패', getErrorMessage(e));
                         }
                       },
                     },

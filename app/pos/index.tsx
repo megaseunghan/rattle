@@ -1,3 +1,4 @@
+import { getErrorMessage } from '../../lib/utils/error';
 import { useState, useCallback, useRef, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
@@ -158,7 +159,7 @@ export function PosScreen({ active = true }: { active?: boolean }) {
       await syncByMonth(queryYear, queryMonth);
       await fetchSummariesByRange(from, to);
     } catch (e: any) {
-      Alert.alert('동기화 실패', e.message);
+      Alert.alert('동기화 실패', getErrorMessage(e));
     } finally {
       setSyncing(false);
     }

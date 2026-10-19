@@ -1,3 +1,4 @@
+import { getErrorMessage } from '../../lib/utils/error';
 import { useState, useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, FlatList, Alert, ScrollView, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -64,7 +65,7 @@ export default function RecipesScreen() {
       setCatalogItems(items.filter(i => !existingNames.has(i.itemName)));
       setShowCatalogImport(true);
     } catch (e: any) {
-      Alert.alert('카탈로그 동기화 실패', e.message);
+      Alert.alert('카탈로그 동기화 실패', getErrorMessage(e));
     } finally {
       setSyncingCatalog(false);
     }
@@ -85,7 +86,7 @@ export default function RecipesScreen() {
       await refetch();
       Alert.alert('완료', `${count}개 품목이 레시피에 추가/업데이트되었습니다.`);
     } catch (e: any) {
-      Alert.alert('레시피 추가 실패', e.message);
+      Alert.alert('레시피 추가 실패', getErrorMessage(e));
     }
   }
 
@@ -98,7 +99,7 @@ export default function RecipesScreen() {
       setUnclassifiedCount(items.length);
       setShowBulkCat(true);
     } catch (e: any) {
-      Alert.alert('오류', e.message);
+      Alert.alert('오류', getErrorMessage(e));
     } finally {
       setLoadingBulkCat(false);
     }
@@ -116,7 +117,7 @@ export default function RecipesScreen() {
       setEditingCat(null);
       await refetch();
     } catch (e: any) {
-      Alert.alert('오류', e.message);
+      Alert.alert('오류', getErrorMessage(e));
     } finally {
       setCatOpLoading(false);
     }
@@ -140,7 +141,7 @@ export default function RecipesScreen() {
             await deleteRecipeCategory(store.id, name);
             await refetch();
           } catch (e: any) {
-            Alert.alert('오류', e.message);
+            Alert.alert('오류', getErrorMessage(e));
           } finally {
             setCatOpLoading(false);
           }

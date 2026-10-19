@@ -1,3 +1,4 @@
+import { UserFacingError } from '../utils/error';
 import { supabase } from '../supabase';
 
 let lastUrl: string | null = null;
@@ -20,7 +21,7 @@ export function completeAuthCallback(url: string, redirectUrl: string): Promise<
   const refreshToken = fragment.get('refresh_token');
   const error = callback.searchParams.get('error_description') ?? fragment.get('error_description') ??
     callback.searchParams.get('error') ?? fragment.get('error');
-  if (error) return Promise.reject(new Error('로그인 인증이 완료되지 않았습니다. 다시 시도해주세요.'));
+  if (error) return Promise.reject(new UserFacingError('로그인 인증이 완료되지 않았습니다. 다시 시도해주세요.'));
   if (!code && !(accessToken && refreshToken)) return Promise.resolve(false);
   if (lastUrl === url && lastResult) return lastResult;
   lastUrl = url;

@@ -1,3 +1,4 @@
+import { getErrorMessage } from '../../lib/utils/error';
 import { useEffect, useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch,
@@ -168,7 +169,7 @@ export default function ScheduleSettingsScreen() {
       await submit(days);
       Alert.alert('요청 완료', '변경한 스케줄은 사장님 승인 후 확정돼요.');
     } catch (e: any) {
-      Alert.alert('요청 실패', e.message ?? '잠시 후 다시 시도해주세요.');
+      Alert.alert('요청 실패', getErrorMessage(e, '잠시 후 다시 시도해주세요.'));
     }
   }
 

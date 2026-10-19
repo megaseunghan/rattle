@@ -1,3 +1,4 @@
+import { getErrorMessage } from '../../lib/utils/error';
 import { useState } from 'react';
 import {
   View,
@@ -199,7 +200,7 @@ export default function NewPurchaseScreen() {
       setQuickUnit('g');
       closePicker();
     } catch (e: any) {
-      Alert.alert('오류', e.message);
+      Alert.alert('오류', getErrorMessage(e));
     } finally {
       setQuickAdding(false);
     }
@@ -259,7 +260,7 @@ export default function NewPurchaseScreen() {
       bypassLeaveGuard();
       router.back();
     } catch (e: any) {
-      Alert.alert('오류', e.message ?? '매입 등록에 실패했습니다.');
+      Alert.alert('오류', getErrorMessage(e, '매입 등록에 실패했습니다.'));
     } finally {
       setSubmitting(false);
     }

@@ -1,3 +1,4 @@
+import { getErrorMessage } from '../utils/error';
 import { useState, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../contexts/AuthContext';
@@ -35,7 +36,7 @@ export function usePosAnalytics() {
       setSummaries(result);
       setHasMoreSummaries(result.length > 0);
     } catch (e: any) {
-      setError(e.message);
+      setError(getErrorMessage(e));
     } finally {
       setLoadingSummaries(false);
     }
@@ -56,7 +57,7 @@ export function usePosAnalytics() {
       setSummaryPage(nextPage);
       setHasMoreSummaries(result.length > 0);
     } catch (e: any) {
-      setError(e.message);
+      setError(getErrorMessage(e));
     } finally {
       setLoadingMoreSummaries(false);
     }
@@ -88,7 +89,7 @@ export function usePosAnalytics() {
       setSummaries(result);
       await AsyncStorage.setItem(key, JSON.stringify(result));
     } catch (e: any) {
-      setError(e.message);
+      setError(getErrorMessage(e));
     } finally {
       setLoadingSummaries(false);
     }
@@ -104,7 +105,7 @@ export function usePosAnalytics() {
       const result = await getDailyItems(store.id, dateFrom, dateTo);
       setItems(result);
     } catch (e: any) {
-      setError(e.message);
+      setError(getErrorMessage(e));
     } finally {
       setLoadingItems(false);
     }
