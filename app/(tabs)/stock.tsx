@@ -24,20 +24,27 @@ type ContentTab = '재고현황' | '레시피';
 function IngredientRow({ item }: { item: Ingredient }) {
   const ratio = item.min_stock > 0 ? item.current_stock / item.min_stock : 1;
   const capped = Math.min(ratio, 1);
-  const isDanger = ratio <= 0.2;
-  const isWarn = ratio > 0.2 && ratio <= 1;
+  const isDanger = item.current_stock <= 0 || (item.min_stock > 0 && ratio <= 0.2);
+  const isWarn = !isDanger && item.min_stock > 0 && ratio <= 1;
 
-  const barColor = isDanger ? '#E24B4A' : isWarn ? '#EF9F27' : Colors.primary;
-  const rowTint = isDanger ? styles.ingredientRowDanger : isWarn ? styles.ingredientRowWarn : null;
+  const barColor = isDanger ? Colors.negative : isWarn ? Colors.warning : Colors.primary;
+  const statusLabel = item.current_stock <= 0 ? '품절' : isDanger ? '부족' : isWarn ? '기준 이하' : null;
 
   return (
     <TouchableOpacity
-      style={[styles.ingredientRow, rowTint]}
+      style={styles.ingredientRow}
       onPress={() => router.push(`/stock/${item.id}`)}
       activeOpacity={0.7}
     >
       <View style={styles.ingredientInfo}>
-        <Text style={styles.ingredientName}>{item.name}</Text>
+        <View style={styles.ingredientHeader}>
+          <Text style={styles.ingredientName}>{item.name}</Text>
+          {statusLabel && (
+            <Text style={[styles.ingredientStatus, isDanger ? styles.ingredientStatusDanger : styles.ingredientStatusWarn]}>
+              {statusLabel}
+            </Text>
+          )}
+        </View>
         <Text style={styles.ingredientSub}>
           잔여 {formatStock(item.current_stock, item)}
           {item.min_stock > 0 ? ` / 기준 ${item.min_stock}${item.unit}` : ''}
@@ -192,7 +199,15 @@ export function StockScreen({ active = true }: { active?: boolean }) {
           renderItem={({ item }) => <IngredientRow item={item} />}
           onEndReached={hasMore ? loadMore : undefined}
           onEndReachedThreshold={0.5}
-          ListEmptyComponent={<EmptyState icon="cube-outline" title="재고 데이터가 없어요" />}
+          ListEmptyComponent={
+            <EmptyState
+              icon="cube-outline"
+              title="등록된 재고가 없어요"
+              description="식자재를 등록하면 잔여량과 기준 재고를 여기서 확인할 수 있어요."
+              ctaLabel="재고 등록"
+              onCtaPress={() => router.push('/stock/new')}
+            />
+          }
           ListFooterComponent={loadingMore ? <ActivityIndicator style={{ padding: 16 }} color={Colors.primary} /> : null}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />}
         />
@@ -203,7 +218,15 @@ export function StockScreen({ active = true }: { active?: boolean }) {
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
           renderItem={({ item }) => <RecipeCard recipe={item} onDelete={id => { animateListChange(); removeRecipe(id); }} isAdmin={canManageRecipes} />}
-          ListEmptyComponent={<EmptyState icon="restaurant-outline" title="레시피가 없어요" />}
+          ListEmptyComponent={
+            <EmptyState
+              icon="restaurant-outline"
+              title="등록된 레시피가 없어요"
+              description="재료와 판매가를 입력하면 원가를 계산할 수 있어요."
+              ctaLabel="레시피 등록"
+              onCtaPress={() => router.push('/recipes/new')}
+            />
+          }
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />}
         />
       )}
@@ -245,7 +268,7 @@ const styles = StyleSheet.create({
   innerTab: { flex: 1, paddingVertical: 7, borderRadius: 10, alignItems: 'center' },
   innerTabActive: { backgroundColor: Colors.white, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4, elevation: 2 },
   innerTabText: { fontSize: 14, fontWeight: '500', color: Colors.gray400 },
-  innerTabTextActive: { color: Colors.black, fontWeight: '700' },
+  innerTabTextActive: { color: Colors.primary, fontWeight: '700' },
 
   catScroll: { flexGrow: 0, flexShrink: 0 },
   catBar: { paddingHorizontal: 16, paddingVertical: 10, gap: 6, flexDirection: 'row', alignItems: 'center' },
@@ -258,7 +281,7 @@ const styles = StyleSheet.create({
     borderWidth: 0.5,
     borderColor: Colors.gray200,
   },
-  catTabActive: { backgroundColor: Colors.black, borderColor: Colors.black },
+  catTabActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
   catTabText: { fontSize: 12, fontWeight: '500', color: Colors.gray500 },
   catTabTextActive: { color: Colors.white, fontWeight: '600' },
   catManageBtn: {
@@ -268,25 +291,25 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.gray100, borderWidth: 0.5, borderColor: Colors.gray200,
   },
 
-  listContent: { padding: 16, paddingBottom: 100 },
+  listContent: { paddingHorizontal: 16, paddingBottom: 100, backgroundColor: Colors.white },
 
   // 재고 행
   ingredientRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     backgroundColor: Colors.white,
-    borderRadius: 14,
-    borderWidth: 0.5,
-    borderColor: Colors.gray100,
-    padding: 12,
-    marginBottom: 8,
+    borderBottomWidth: 0.5,
+    borderBottomColor: Colors.gray200,
+    paddingHorizontal: 4,
+    paddingVertical: 14,
     gap: 12,
   },
-  // 재고 상태(부족/임박)를 뱃지 대신 카드 배경/테두리 색으로 표현
-  ingredientRowDanger: { backgroundColor: '#FCEBEB', borderColor: '#F3C6C6' },
-  ingredientRowWarn: { backgroundColor: '#FAEEDA', borderColor: '#EED9AE' },
   ingredientInfo: { flex: 1 },
-  ingredientName: { fontSize: 14, fontWeight: '500', color: Colors.black, marginBottom: 2 },
+  ingredientHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
+  ingredientName: { flex: 1, fontSize: 14, fontWeight: '500', color: Colors.black, marginBottom: 2 },
+  ingredientStatus: { fontSize: 12, fontWeight: '600', paddingTop: 1 },
+  ingredientStatusDanger: { color: Colors.negative },
+  ingredientStatusWarn: { color: Colors.warningStroke },
   ingredientSub: { fontSize: 11, color: Colors.gray400, marginBottom: 6 },
   progressBg: { height: 4, backgroundColor: Colors.gray100, borderRadius: 2, overflow: 'hidden' },
   progressFill: { height: 4, borderRadius: 2 },

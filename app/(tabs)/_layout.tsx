@@ -6,7 +6,6 @@ import PagerView from 'react-native-pager-view';
 import { Colors } from '../../constants/colors';
 import { useAuth } from '../../lib/contexts/AuthContext';
 import { useEmployees } from '../../lib/hooks/useEmployees';
-import { useLowStockCount } from '../../lib/hooks/useLowStockCount';
 import { resolveSelfEmployee } from '../../lib/utils/resolveSelfEmployee';
 import { TabPagerContext, TabName, HomeMode, useTabPager } from '../../lib/contexts/TabPagerContext';
 import { DraggableFab } from '../../lib/components/DraggableFab';
@@ -97,7 +96,6 @@ function TabIcon({ tab, focused, badge }: { tab: TabName; focused: boolean; badg
 export default function TabsLayout() {
   const { user, currentRole, realRole, devPreviewMode, devPreviewEmployeeId } = useAuth();
   const { employees, refetch } = useEmployees();
-  const { count: lowStockCount } = useLowStockCount();
 
   useEffect(() => { refetch(); }, [refetch]);
 
@@ -179,7 +177,7 @@ export default function TabsLayout() {
         <View style={styles.tabBar}>
           {tabs.map((tab) => (
             <Pressable key={tab} style={styles.tabBarItem} onPress={() => goToTab(tab)}>
-              <TabIcon tab={tab} focused={activeTab === tab} badge={tab === 'stock' ? lowStockCount : undefined} />
+              <TabIcon tab={tab} focused={activeTab === tab} />
             </Pressable>
           ))}
         </View>

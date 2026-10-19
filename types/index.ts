@@ -16,23 +16,6 @@ export interface Store {
   cogs_ratio_target?: number;
 }
 
-export type AttendanceType = 'clock_in' | 'clock_out';
-
-export interface Attendance {
-  id: string;
-  store_id: string;
-  employee_id: string;
-  type: AttendanceType;
-  timestamp: string;
-  latitude: number;
-  longitude: number;
-  distance_m: number;
-  worked_minutes: number | null;       // 퇴근 시 계산된 근무 분
-  daily_wage: number | null;           // 파트타이머 일일급여 (시급/60 × 분)
-  note: string | null;
-  created_at: string;
-}
-
 // 발주
 export interface Order {
   id: string;

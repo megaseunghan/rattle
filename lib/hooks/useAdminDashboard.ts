@@ -1,71 +1,82 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import {
   getMultiStoreMonthlyPnl, getMultiStoreYearlyPnl, StorePnl,
   getMultiStoreMonthlyTrend, getMultiStoreYearlyTrend,
-  getTodayAttendanceStatus, AttendanceStatus,
   getWeeklyCleaningProgress, WeeklyCleaningDay,
   getWeeklyScheduleBreakdown, WeeklyScheduleDay,
 } from '../services/adminDashboard';
 
 export type DashboardPeriod = 'month' | 'year';
 
-export interface StoreOps {
-  storeId: string;
-  attendance: AttendanceStatus;
-}
-
 export function useAdminDashboard() {
   const { user, stores, memberRoles } = useAuth();
   // 실제 owner_id 기준 오너 매장 + admin 역할로 참여 중인 매장까지 포함 (다매장 최고관리자 시나리오)
-  const ownedStores = stores.filter(s => s.owner_id === user?.id || memberRoles[s.id] === 'admin');
+  const ownedStores = useMemo(() => stores.filter(s => s.owner_id === user?.id || memberRoles[s.id] === 'admin'), [stores, user?.id, memberRoles]);
 
   const now = new Date();
   const [period, setPeriod] = useState<DashboardPeriod>('month');
   const [anchorYear, setAnchorYear] = useState(now.getFullYear());
   const [anchorMonth, setAnchorMonth] = useState(now.getMonth() + 1);
 
-  const [pnl, setPnl] = useState<{ current: StorePnl[]; previous: StorePnl[] }>({ current: [], previous: [] });
-  const [trend, setTrend] = useState<{ label: string; value: number }[]>([]);
-  const [ops, setOps] = useState<Record<string, StoreOps>>({});
+  const [pnl, setPnl] = useState<{ current: StorePnl[]; previous: StorePnl[] } | null>(null);
+  const [trend, setTrend] = useState<{ label: string; value: number }[] | null>(null);
   const [weeklyCleaning, setWeeklyCleaning] = useState<Record<string, { days: WeeklyCleaningDay[]; pct: number }>>({});
   const [weeklySchedule, setWeeklySchedule] = useState<Record<string, WeeklyScheduleDay[]>>({});
+  const [errors, setErrors] = useState<{ pnl: boolean; trend: boolean; cleaning: Record<string, boolean>; schedule: Record<string, boolean> }>({ pnl: false, trend: false, cleaning: {}, schedule: {} });
   const [loading, setLoading] = useState(false);
+  const [loadedScope, setLoadedScope] = useState<string | null>(null);
+  const requestId = useRef(0);
 
   const yearMonth = `${anchorYear}-${String(anchorMonth).padStart(2, '0')}`;
   const isCurrentMonth = anchorYear === now.getFullYear() && anchorMonth === now.getMonth() + 1;
+  const storeIds = ownedStores.map(s => `${s.id}:${s.closing_time}`).join(',');
+  const scopeKey = `${user?.id ?? ''}:${storeIds}:${period}:${yearMonth}`;
+  const scopeRef = useRef(scopeKey);
+  scopeRef.current = scopeKey;
+  useEffect(() => () => { requestId.current += 1; }, []);
 
   const refetch = useCallback(async () => {
-    if (ownedStores.length === 0) return;
+    const currentRequest = ++requestId.current;
+    const requestedScope = scopeKey;
+    setLoadedScope(requestedScope);
+    setPnl(null);
+    setTrend(null);
+    setWeeklyCleaning({});
+    setWeeklySchedule({});
+    setErrors({ pnl: false, trend: false, cleaning: {}, schedule: {} });
+    if (ownedStores.length === 0) { setLoading(false); return; }
     setLoading(true);
-    try {
-      const [pnlResult, trendResult, opsResults, weeklyCleaningResults, weeklyScheduleResults] = await Promise.all([
+    const [pnlResult, trendResult, weeklyCleaningResults, weeklyScheduleResults] = await Promise.allSettled([
         period === 'month'
           ? getMultiStoreMonthlyPnl(ownedStores, yearMonth)
           : getMultiStoreYearlyPnl(ownedStores, anchorYear),
         period === 'month'
           ? getMultiStoreMonthlyTrend(ownedStores, yearMonth)
           : getMultiStoreYearlyTrend(ownedStores, anchorYear),
-        Promise.all(ownedStores.map(async s => ({ storeId: s.id, attendance: await getTodayAttendanceStatus(s.id) } as StoreOps))),
-        Promise.all(ownedStores.map(async s => ({ storeId: s.id, result: await getWeeklyCleaningProgress(s.id) }))),
-        Promise.all(ownedStores.map(async s => ({ storeId: s.id, days: await getWeeklyScheduleBreakdown(s.id) }))),
-      ]);
-      setPnl(pnlResult);
-      setTrend(trendResult);
-      const opsMap: Record<string, StoreOps> = {};
-      opsResults.forEach(o => { opsMap[o.storeId] = o; });
-      setOps(opsMap);
-      const weeklyCleaningMap: Record<string, { days: WeeklyCleaningDay[]; pct: number }> = {};
-      weeklyCleaningResults.forEach(r => { weeklyCleaningMap[r.storeId] = r.result; });
-      setWeeklyCleaning(weeklyCleaningMap);
-      const weeklyScheduleMap: Record<string, WeeklyScheduleDay[]> = {};
-      weeklyScheduleResults.forEach(r => { weeklyScheduleMap[r.storeId] = r.days; });
-      setWeeklySchedule(weeklyScheduleMap);
-    } finally {
-      setLoading(false);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ownedStores.map(s => s.id).join(','), period, yearMonth, anchorYear]);
+        Promise.allSettled(ownedStores.map(s => getWeeklyCleaningProgress(s.id))),
+        Promise.allSettled(ownedStores.map(s => getWeeklyScheduleBreakdown(s.id))),
+    ] as const);
+    if (currentRequest !== requestId.current || requestedScope !== scopeRef.current) return;
+    setPnl(pnlResult.status === 'fulfilled' ? pnlResult.value : null);
+    setTrend(trendResult.status === 'fulfilled' ? trendResult.value : null);
+    const cleaningMap: Record<string, { days: WeeklyCleaningDay[]; pct: number }> = {};
+    const scheduleMap: Record<string, WeeklyScheduleDay[]> = {};
+    const cleaningErrors: Record<string, boolean> = {};
+    const scheduleErrors: Record<string, boolean> = {};
+    ownedStores.forEach((store, i) => {
+      const cleaning = weeklyCleaningResults.status === 'fulfilled' ? weeklyCleaningResults.value[i] : undefined;
+      const schedule = weeklyScheduleResults.status === 'fulfilled' ? weeklyScheduleResults.value[i] : undefined;
+      if (cleaning?.status === 'fulfilled') cleaningMap[store.id] = cleaning.value;
+      else cleaningErrors[store.id] = true;
+      if (schedule?.status === 'fulfilled') scheduleMap[store.id] = schedule.value;
+      else scheduleErrors[store.id] = true;
+    });
+    setWeeklyCleaning(cleaningMap);
+    setWeeklySchedule(scheduleMap);
+    setErrors({ pnl: pnlResult.status === 'rejected', trend: trendResult.status === 'rejected', cleaning: cleaningErrors, schedule: scheduleErrors });
+    setLoading(false);
+  }, [scopeKey, ownedStores, period, yearMonth, anchorYear]);
 
   function goPrev() {
     if (period === 'year') { setAnchorYear(y => y - 1); return; }
@@ -80,8 +91,15 @@ export function useAdminDashboard() {
     else setAnchorMonth(m => m + 1);
   }
 
+  const visible = loadedScope === scopeKey;
   return {
     ownedStores, period, setPeriod, anchorYear, anchorMonth, yearMonth, isCurrentMonth,
-    pnl, trend, ops, weeklyCleaning, weeklySchedule, loading, refetch, goPrev, goNext,
+    pnl: visible ? pnl : null,
+    trend: visible ? trend : null,
+    weeklyCleaning: visible ? weeklyCleaning : {},
+    weeklySchedule: visible ? weeklySchedule : {},
+    errors: visible ? errors : { pnl: false, trend: false, cleaning: {}, schedule: {} },
+    loading: visible ? loading : ownedStores.length > 0,
+    refetch, goPrev, goNext,
   };
 }

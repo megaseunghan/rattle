@@ -1,81 +1,55 @@
-import { useCallback, useState } from 'react';
+import { UserFacingError } from '../utils/error';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { supabase } from '../supabase';
+import { HomeAlert, Store } from '../../types';
+import { buildHomeAlerts, getHomeAlertReads, getHomeAlertStock, hasMonthlyFixedExpense, markHomeAlertRead } from '../services/homeAlerts';
 
-/** 월마감 며칠 전부터 리마인더를 띄울지 */
-const MONTH_CLOSE_LEAD_DAYS = 3;
-
-export interface HomeAlert {
-  key: 'fixedExpenseMissing' | 'tossNotSynced' | 'monthClose';
-  message: string;
-  actionLabel: string;
-  route: string;
-}
-
-function daysInMonth(year: number, month: number): number {
-  return new Date(year, month, 0).getDate();
-}
-
-export function useHomeAlerts() {
-  const { store } = useAuth();
-  const [fixedExpenseMissing, setFixedExpenseMissing] = useState(false);
-  const [loading, setLoading] = useState(false);
-
+export function useHomeAlerts(todaySales?: number, selectedStore?: Store, financial = true) {
+  const { store, user } = useAuth();
+  const targetStore = selectedStore ?? store;
+  const storeId = targetStore?.id;
+  const userId = user?.id;
+  const tossLinked = !!targetStore?.toss_merchant_id;
+  const scope = `${userId}:${storeId}:${financial}`;
+  const scopeRef = useRef(scope);
+  scopeRef.current = scope;
+  const requestId = useRef(0);
+  const [state, setState] = useState<{ scope: string; alerts: HomeAlert[]; loading: boolean; error: string | null }>({
+    scope: '', alerts: [], loading: false, error: null,
+  });
+  useEffect(() => () => { requestId.current += 1; }, []);
   const refetch = useCallback(async () => {
-    if (!store) return;
-    setLoading(true);
+    const request = ++requestId.current;
+    if (!storeId || !userId) return;
+    setState(previous => ({ scope, alerts: previous.scope === scope ? previous.alerts : [], loading: true, error: null }));
     try {
-      const today = new Date();
-      const yearMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
-      const { data } = await supabase
-        .from('expenses')
-        .select('id')
-        .eq('store_id', store.id)
-        .eq('year_month', yearMonth)
-        .eq('category', '고정비')
-        .limit(1);
-      setFixedExpenseMissing(!data || data.length === 0);
-    } finally {
-      setLoading(false);
+      const now = new Date();
+      const yearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+      const [stock, hasFixed] = await Promise.all([
+        getHomeAlertStock(storeId), financial ? hasMonthlyFixedExpense(storeId, yearMonth) : undefined,
+      ]);
+      const alerts = buildHomeAlerts({ stock, now, fixedExpenseMissing: financial ? !hasFixed : undefined,
+        tossNotSynced: financial && tossLinked && todaySales === 0 });
+      const read = new Set(await getHomeAlertReads(storeId, userId, alerts.map(alert => alert.key)));
+      if (request !== requestId.current || scopeRef.current !== scope) return;
+      setState({ scope, alerts: alerts.filter(alert => !read.has(alert.key)), loading: false, error: null });
+    } catch {
+      if (request !== requestId.current || scopeRef.current !== scope) return;
+      setState(previous => ({ scope, alerts: previous.scope === scope ? previous.alerts : [], loading: false,
+        error: '홈 알림을 불러오지 못했어요. 다시 시도해 주세요.' }));
     }
-  }, [store?.id]);
-
-  function buildAlerts(todaySales: number): HomeAlert[] {
-    const alerts: HomeAlert[] = [];
-    const today = new Date();
-    const year = today.getFullYear();
-    const month = today.getMonth() + 1;
-
-    if (fixedExpenseMissing) {
-      alerts.push({
-        key: 'fixedExpenseMissing',
-        message: `${month}월 고정비가 아직 등록되지 않았어요`,
-        actionLabel: '등록하기',
-        route: '/expenses',
-      });
+  }, [storeId, userId, scope, financial, tossLinked, todaySales]);
+  const markRead = useCallback(async (key: string) => {
+    if (!storeId || !userId) throw new UserFacingError('로그인과 매장을 확인해 주세요.');
+    await markHomeAlertRead(storeId, userId, key);
+    if (scopeRef.current === scope) {
+      requestId.current += 1;
+      setState(previous => previous.scope === scope ? { ...previous, loading: false, alerts: previous.alerts.filter(alert => alert.key !== key) } : previous);
+      return true;
     }
-
-    if (store?.toss_merchant_id && todaySales === 0) {
-      alerts.push({
-        key: 'tossNotSynced',
-        message: '오늘 토스 매출이 아직 동기화되지 않았어요',
-        actionLabel: '동기화',
-        route: '/settings/pos-sync',
-      });
-    }
-
-    const daysLeft = daysInMonth(year, month) - today.getDate();
-    if (daysLeft >= 0 && daysLeft <= MONTH_CLOSE_LEAD_DAYS) {
-      alerts.push({
-        key: 'monthClose',
-        message: daysLeft === 0 ? '오늘이 월마감일이에요' : `월마감까지 ${daysLeft}일 남았어요`,
-        actionLabel: '손익 확인',
-        route: '/profit-loss',
-      });
-    }
-
-    return alerts;
-  }
-
-  return { buildAlerts, refetch, loading };
+    return false;
+  }, [storeId, userId, scope]);
+  const visible = state.scope === scope;
+  return { alerts: visible ? state.alerts : [], loading: visible ? state.loading : !!storeId,
+    error: visible ? state.error : null, refetch, markRead };
 }
