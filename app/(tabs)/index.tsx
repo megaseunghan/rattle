@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator,
-  RefreshControl,
+  RefreshControl, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -20,6 +20,7 @@ import { ProfitLoss } from '../../types';
 import { resolveSelfEmployee } from '../../lib/utils/resolveSelfEmployee';
 import { Badge, SectionHeader } from '../../lib/components/ui';
 import { ErrorMessage } from '../../lib/components/ErrorMessage';
+import { getErrorMessage } from '../../lib/utils/error';
 
 type QuickAction = { key: string; label: string; icon: keyof typeof Ionicons.glyphMap; route?: string; tab?: TabName };
 
@@ -105,10 +106,23 @@ function StoreSwitcherDropdown({
 }: {
   visible: boolean; onClose: () => void;
   stores: { id: string; name: string }[]; currentStoreId: string | undefined;
-  onSelect: (storeId: string) => void;
+  onSelect: (storeId: string) => Promise<void>;
   /** 사장님 본인 계정일 때만 노출 — 통합 대시보드로 돌아가기 */
   onShowDashboard?: () => void;
 }) {
+  const [switching, setSwitching] = useState(false);
+  async function selectStore(storeId: string) {
+    if (switching) return;
+    setSwitching(true);
+    try {
+      await onSelect(storeId);
+      onClose();
+    } catch (e) {
+      Alert.alert('매장 전환', getErrorMessage(e, '매장을 바꾸지 못했어요. 다시 시도해주세요.'));
+    } finally {
+      setSwitching(false);
+    }
+  }
   if (!visible) return null;
   return (
     <>
@@ -139,7 +153,8 @@ function StoreSwitcherDropdown({
             <TouchableOpacity
               key={s.id}
               style={[styles.storeDropdownItem, styles.storeDropdownItemBorder]}
-              onPress={() => { onSelect(s.id); onClose(); }}
+              onPress={() => { void selectStore(s.id); }}
+              disabled={switching}
               activeOpacity={0.7}
             >
               <Text style={[styles.storeDropdownItemText, isActive && styles.storeDropdownItemTextActive]} numberOfLines={1}>

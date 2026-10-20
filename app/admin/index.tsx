@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, NativeSyntheticEvent, NativeScrollEvent, LayoutChangeEvent } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, NativeSyntheticEvent, NativeScrollEvent, LayoutChangeEvent, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -10,6 +10,7 @@ import { useAdminDashboard } from '../../lib/hooks/useAdminDashboard';
 import { StorePnl, WeeklyCleaningDay, WeeklyScheduleDay } from '../../lib/services/adminDashboard';
 import { Badge } from '../../lib/components/ui';
 import { HomeAlertsPanel } from '../../lib/components/HomeAlertsPanel';
+import { getErrorMessage } from '../../lib/utils/error';
 
 const WEEKDAY_LABELS = ['월', '화', '수', '목', '금', '토', '일'];
 const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0]; // 0=일 ~ 6=토 (DB 값) → 월~일 표시 순서
@@ -269,14 +270,22 @@ export function AdminDashboardScreen() {
   }
 
   async function goToDetail(storeId: string) {
-    await switchStore(storeId);
-    router.push('/profit-loss');
+    try {
+      await switchStore(storeId);
+      router.push('/profit-loss');
+    } catch (e) {
+      Alert.alert('매장 전환', getErrorMessage(e, '매장을 바꾸지 못했어요. 다시 시도해주세요.'));
+    }
   }
 
   /** 헤더 드롭다운에서 매장을 고르면 그 매장의 일반 홈 화면으로 전환한다 (대시보드는 사장님 전체 요약 전용) */
   async function switchToStoreHome(storeId: string) {
-    await switchStore(storeId);
-    setHomeMode('store');
+    try {
+      await switchStore(storeId);
+      setHomeMode('store');
+    } catch (e) {
+      Alert.alert('매장 전환', getErrorMessage(e, '매장을 바꾸지 못했어요. 다시 시도해주세요.'));
+    }
   }
 
   return (

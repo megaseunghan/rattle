@@ -1,5 +1,5 @@
 import { getErrorMessage, UserFacingError } from '../utils/error';
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import {
   getEmployees, createEmployee, updateEmployee, deactivateEmployee, deleteEmployee,
@@ -12,20 +12,27 @@ export function useEmployees(includeInactive = false) {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const requestId = useRef(0);
+  const scope = `${store?.id ?? ''}:${includeInactive}`;
+  const currentScope = useRef(scope);
+  currentScope.current = scope;
+  useEffect(() => () => { requestId.current += 1; }, [scope]);
 
   const refetch = useCallback(async () => {
-    if (!store) return;
+    const id = ++requestId.current;
+    setEmployees([]);
+    if (!store) { setLoading(false); return; }
     setLoading(true);
     setError(null);
     try {
       const result = await getEmployees(store.id, includeInactive);
-      setEmployees(result);
+      if (id === requestId.current && scope === currentScope.current) setEmployees(result);
     } catch (e: any) {
-      setError(getErrorMessage(e));
+      if (id === requestId.current && scope === currentScope.current) setError(getErrorMessage(e));
     } finally {
-      setLoading(false);
+      if (id === requestId.current && scope === currentScope.current) setLoading(false);
     }
-  }, [store, includeInactive]);
+  }, [store, includeInactive, scope]);
 
   const add = useCallback(async (data: {
     name: string;

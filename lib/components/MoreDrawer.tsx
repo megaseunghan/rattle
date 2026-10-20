@@ -10,6 +10,7 @@ import { Colors } from '../../constants/colors';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../supabase';
 import { animateListChange } from '../utils/layoutAnimation';
+import { getErrorMessage } from '../utils/error';
 
 const DRAWER_WIDTH = Math.min(320, Dimensions.get('window').width * 0.82);
 
@@ -80,9 +81,14 @@ export function MoreDrawer({ visible, onClose }: { visible: boolean; onClose: ()
   async function handleSwitchStore(storeId: string) {
     if (storeId === currentStore?.id) return;
     setSwitching(storeId);
-    await switchStore(storeId);
-    setSwitching(null);
-    onClose();
+    try {
+      await switchStore(storeId);
+      onClose();
+    } catch (e) {
+      Alert.alert('매장 전환', getErrorMessage(e, '매장을 바꾸지 못했어요. 다시 시도해주세요.'));
+    } finally {
+      setSwitching(null);
+    }
   }
 
   function go(path: string) {

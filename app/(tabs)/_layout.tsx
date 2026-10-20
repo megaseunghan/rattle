@@ -95,7 +95,7 @@ function TabIcon({ tab, focused, badge }: { tab: TabName; focused: boolean; badg
 }
 
 export default function TabsLayout() {
-  const { user, currentRole, realRole, devPreviewMode, devPreviewEmployeeId } = useAuth();
+  const { user, store, currentRole, realRole, devPreviewMode, devPreviewEmployeeId } = useAuth();
   const { employees, refetch } = useEmployees();
 
   useEffect(() => { refetch(); }, [refetch]);
@@ -170,7 +170,7 @@ export default function TabsLayout() {
         >
           {tabs.map((tab, idx) => (
             <View key={tab} style={styles.flex}>
-              {visited.has(idx) ? <TabPage tab={tab} active={activeIndex === idx} /> : null}
+              {visited.has(idx) ? <TabPage key={store?.id} tab={tab} active={activeIndex === idx} /> : null}
             </View>
           ))}
         </PagerView>
