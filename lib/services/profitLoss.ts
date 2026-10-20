@@ -20,13 +20,18 @@ export async function getYearlyProfitLoss(
   const currentMonth = now.getMonth() + 1;
   const maxMonth = year === currentYear ? currentMonth : 12;
 
-  const results = await Promise.all(
-    Array.from({ length: maxMonth }, (_, i) => i + 1).map(async (month) => {
-      const yearMonth = `${year}-${String(month).padStart(2, '0')}`;
-      const data = await getProfitLossByMonth(storeId, yearMonth, closingTime);
-      return { month, data };
-    })
-  );
+  const results: { month: number; data: ProfitLoss }[] = [];
+  // 한 달에도 여러 DB 조회가 필요하므로 연간 조회가 한꺼번에 몰리지 않게 한다.
+  for (let firstMonth = 1; firstMonth <= maxMonth; firstMonth += 2) {
+    const batch = await Promise.all(
+      Array.from({ length: Math.min(2, maxMonth - firstMonth + 1) }, (_, i) => firstMonth + i).map(async (month) => {
+        const yearMonth = `${year}-${String(month).padStart(2, '0')}`;
+        const data = await getProfitLossByMonth(storeId, yearMonth, closingTime);
+        return { month, data };
+      })
+    );
+    results.push(...batch);
+  }
 
   return results;
 }

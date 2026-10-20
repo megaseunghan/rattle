@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, Pressable,
   Modal, ActivityIndicator,
@@ -10,6 +10,8 @@ import { Colors } from '../../constants/colors';
 import { useAuth } from '../../lib/contexts/AuthContext';
 import { getYearlyProfitLoss } from '../../lib/services/profitLoss';
 import { ProfitLoss } from '../../types';
+import { ErrorMessage } from '../../lib/components/ErrorMessage';
+import { getErrorMessage } from '../../lib/utils/error';
 
 function fmt(v: number | null | undefined) {
   if (v == null) return '—';
@@ -133,26 +135,41 @@ export default function ProfitLossScreen() {
   const [loading, setLoading] = useState(false);
   const [monthlyData, setMonthlyData] = useState<{ month: number; data: ProfitLoss }[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const requestId = useRef(0);
   const [selected, setSelected] = useState<{ month: number; data: ProfitLoss } | null>(null);
 
   const load = useCallback(async (y: number) => {
-    if (!store) return;
-    setLoading(true);
+    const id = ++requestId.current;
+    setMonthlyData([]);
+    setSelected(null);
     setLoaded(false);
+    setError(null);
+    if (!store) { setLoading(false); return; }
+    setLoading(true);
     try {
       const ct = (store.closing_time as string | null)?.slice(0, 5) ?? '23:00';
       const results = await getYearlyProfitLoss(store.id, y, ct);
-      setMonthlyData(results);
-      setLoaded(true);
+      if (id === requestId.current) {
+        setMonthlyData(results);
+        setLoaded(true);
+      }
+    } catch (e) {
+      if (id === requestId.current) setError(getErrorMessage(e, '손익을 불러오지 못했어요.'));
     } finally {
-      setLoading(false);
+      if (id === requestId.current) setLoading(false);
     }
   }, [store]);
 
-  function prevYear() { const y = year - 1; setYear(y); load(y); }
+  useEffect(() => {
+    void load(year);
+    return () => { requestId.current += 1; };
+  }, [load, year]);
+
+  function prevYear() { setYear(y => y - 1); }
   function nextYear() {
     if (year >= today.getFullYear()) return;
-    const y = year + 1; setYear(y); load(y);
+    setYear(y => y + 1);
   }
 
   const yearTotal = monthlyData.reduce(
@@ -192,8 +209,9 @@ export default function ProfitLossScreen() {
         </View>
 
         {loading && <ActivityIndicator color={Colors.primary} style={{ marginTop: 32 }} />}
+        {!loading && error && <ErrorMessage message={error} onRetry={() => { void load(year); }} />}
 
-        {!loading && !loaded && (
+        {!loading && !loaded && !error && (
           <View style={styles.emptyHint}>
             <Ionicons name="bar-chart-outline" size={36} color={Colors.gray300} />
             <Text style={styles.emptyText}>연도를 선택하면{'\n'}해당 연도 손익을 불러옵니다</Text>
