@@ -1,3 +1,4 @@
+import { getErrorMessage } from '../../lib/utils/error';
 import { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
@@ -28,7 +29,7 @@ export default function RecipeDetailScreen() {
       const data = await getRecipeById(id);
       setRecipe(data);
     } catch (e: any) {
-      setError(e.message);
+      setError(getErrorMessage(e));
     } finally {
       setLoading(false);
     }
@@ -50,7 +51,7 @@ export default function RecipeDetailScreen() {
             await deleteRecipe(id);
             router.back();
           } catch (e: any) {
-            Alert.alert('삭제 실패', e.message);
+            Alert.alert('삭제 실패', getErrorMessage(e));
           } finally {
             setSaving(false);
           }

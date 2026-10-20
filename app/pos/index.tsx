@@ -1,3 +1,4 @@
+import { getErrorMessage } from '../../lib/utils/error';
 import { useState, useCallback, useRef, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
@@ -158,19 +159,19 @@ export function PosScreen({ active = true }: { active?: boolean }) {
       await syncByMonth(queryYear, queryMonth);
       await fetchSummariesByRange(from, to);
     } catch (e: any) {
-      Alert.alert('동기화 실패', e.message);
+      Alert.alert('동기화 실패', getErrorMessage(e));
     } finally {
       setSyncing(false);
     }
   }
 
-  const statusLabel = status === 'connected' ? '연동완료' : '미연동';
+  const statusLabel = status === 'connected' ? 'Toss POS 연동' : 'Toss POS 미연동';
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <View>
-          <Text style={styles.title}>Toss Place POS</Text>
+          <Text style={styles.title}>매출</Text>
           {status === 'connected' && lastSyncAt && (
             <Text style={styles.lastSync}>
               마지막 동기화{' '}
@@ -209,29 +210,15 @@ export function PosScreen({ active = true }: { active?: boolean }) {
                 <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
                   {/* 날짜 요약 카드 (선택된 날짜 or 오늘) */}
                   <View style={styles.todayCard}>
-                    <View style={styles.todayCardItem}>
-                      <View style={styles.todayIconBg}>
-                        <Ionicons name="cash-outline" size={20} color={Colors.dark} />
-                      </View>
-                      <Text style={styles.todayValue}>
-                        {(selectedSummary ? selectedSummary.totalAmount : todaySales).toLocaleString('ko-KR')}원
-                      </Text>
-                      <Text style={styles.todayLabel}>
-                        {selectedSummary ? `${queryMonth}월 ${selectedDay}일 매출` : '오늘 매출'}
-                      </Text>
-                    </View>
-                    <View style={styles.todayDivider} />
-                    <View style={styles.todayCardItem}>
-                      <View style={styles.todayIconBg}>
-                        <Ionicons name="receipt-outline" size={20} color={Colors.dark} />
-                      </View>
-                      <Text style={styles.todayValue}>
-                        {selectedSummary ? selectedSummary.orderCount : todayOrderCount}건
-                      </Text>
-                      <Text style={styles.todayLabel}>
-                        {selectedSummary ? `${queryMonth}월 ${selectedDay}일 주문` : '오늘 주문'}
-                      </Text>
-                    </View>
+                    <Text style={styles.todayLabel}>
+                      {selectedSummary ? `${queryMonth}월 ${selectedDay}일 매출` : '오늘 매출'}
+                    </Text>
+                    <Text style={styles.todayValue}>
+                      {(selectedSummary ? selectedSummary.totalAmount : todaySales).toLocaleString('ko-KR')}원
+                    </Text>
+                    <Text style={styles.todayOrderCount}>
+                      주문 {selectedSummary ? selectedSummary.orderCount : todayOrderCount}건
+                    </Text>
                   </View>
 
                   {/* 월 조회 */}
@@ -563,26 +550,16 @@ const styles = StyleSheet.create({
   checkBtnText: { fontSize: 14, fontWeight: '600', color: Colors.primary },
 
   todayCard: {
-    flexDirection: 'row',
-    backgroundColor: Colors.tinted,
-    borderRadius: 20,
-    padding: 20,
-    marginBottom: 20,
-    shadowColor: Colors.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 12,
-    elevation: 3,
+    paddingTop: 8,
+    paddingBottom: 24,
+    marginBottom: 24,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.gray200,
+    gap: 8,
   },
-  todayCardItem: { flex: 1, alignItems: 'center', gap: 6 },
-  todayDivider: { width: 1, backgroundColor: Colors.pale, marginVertical: 4 },
-  todayIconBg: {
-    width: 40, height: 40, borderRadius: 12,
-    backgroundColor: Colors.pale + '80',
-    justifyContent: 'center', alignItems: 'center',
-  },
-  todayValue: { fontSize: 20, fontWeight: '800', color: Colors.deeper, letterSpacing: -0.5 },
-  todayLabel: { fontSize: 12, color: Colors.dark, fontWeight: '500' },
+  todayValue: { fontSize: 28, fontWeight: '700', color: Colors.black, fontVariant: ['tabular-nums'] },
+  todayLabel: { fontSize: 13, color: Colors.gray600, fontWeight: '500' },
+  todayOrderCount: { fontSize: 14, color: Colors.gray600 },
 
   querySection: { marginBottom: 20 },
   queryRow: { flexDirection: 'row', gap: 10 },

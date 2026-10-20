@@ -36,10 +36,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 0,
   },
   title: {
-    fontSize: Type.xs,
-    fontWeight: '600',
-    color: Colors.gray400,
-    letterSpacing: 0.4,
+    fontSize: Type.md,
+    fontWeight: '700',
+    color: Colors.black,
   },
   action: {
     fontSize: Type.xs + 1,

@@ -6,23 +6,18 @@
     "scheme": "rattle",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets2/ios_AppStore_1024.png",
+    "icon": "./assets/Rattle_ios_1024.png",
     "userInterfaceStyle": "light",
-    "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
-    },
     "ios": {
       "supportsTablet": true,
-      "icon": "./assets2/ios_AppStore_1024.png",
+      "icon": "./assets/Rattle_ios_1024.png",
       "bundleIdentifier": "com.seunghan.rattle",
       "buildNumber": "1"
     },
     "android": {
-      "icon": "./assets2/android_playstore_512.png",
+      "icon": "./assets/Rattle_512x512.png",
       "adaptiveIcon": {
-        "foregroundImage": "./assets2/android_playstore_512.png",
+        "foregroundImage": "./assets/Rattle_adaptive_fg.png",
         "backgroundColor": "#ffffff"
       },
       "predictiveBackGestureEnabled": false,
@@ -30,21 +25,18 @@
       "versionCode": 1
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/Rattle_192x192.png"
     },
     "plugins": [
       "expo-router",
       "expo-font",
       [
-        "expo-image-picker",
+        "expo-splash-screen",
         {
-          "cameraPermission": "납품서 촬영을 위해 카메라 접근이 필요합니다."
-        }
-      ],
-      [
-        "expo-location",
-        {
-          "locationWhenInUsePermission": "출퇴근 기록을 위해 위치 접근이 필요합니다."
+          "image": "./assets/Rattle_1024x1024.png",
+          "imageWidth": 144,
+          "resizeMode": "contain",
+          "backgroundColor": "#ffffff"
         }
       ],
       "@react-native-community/datetimepicker",

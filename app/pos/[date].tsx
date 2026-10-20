@@ -121,9 +121,13 @@ const styles = StyleSheet.create({
   filterChipActive: { backgroundColor: Colors.dark, borderColor: Colors.dark },
   filterChipText: { fontSize: 13, fontWeight: '600', color: Colors.gray500 },
   filterChipTextActive: { color: Colors.white },
-  list: { paddingHorizontal: 16, paddingVertical: 12 },
+  list: {
+    margin: 16, paddingHorizontal: 16,
+    backgroundColor: Colors.white, borderRadius: 14,
+    borderWidth: 0.5, borderColor: Colors.gray100,
+  },
   itemRow: {
-    backgroundColor: Colors.white, borderRadius: 12, padding: 16,
+    paddingVertical: 14,
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
   },
   itemLeft: { flex: 1 },
@@ -131,7 +135,7 @@ const styles = StyleSheet.create({
   itemCategory: { fontSize: 12, color: Colors.gray400, marginTop: 2 },
   itemRight: { alignItems: 'flex-end', gap: 2 },
   itemQty: { fontSize: 13, color: Colors.gray500 },
-  itemAmount: { fontSize: 15, fontWeight: '700', color: Colors.primary },
-  separator: { height: 8 },
+  itemAmount: { fontSize: 15, fontWeight: '700', color: Colors.black },
+  separator: { height: 0.5, backgroundColor: Colors.gray100 },
   emptyText: { textAlign: 'center', color: Colors.gray400, paddingVertical: 40 },
 });

@@ -1,3 +1,4 @@
+import { getErrorMessage } from '../../lib/utils/error';
 import { useState } from 'react';
 import {
   View,
@@ -59,7 +60,7 @@ export default function NewIngredientScreen() {
       bypassLeaveGuard();
       router.back();
     } catch (e: any) {
-      Alert.alert('오류', e.message ?? '식자재 등록에 실패했습니다.');
+      Alert.alert('오류', getErrorMessage(e, '식자재 등록에 실패했습니다.'));
     } finally {
       setSubmitting(false);
     }

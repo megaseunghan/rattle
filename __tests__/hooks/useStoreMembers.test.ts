@@ -1,0 +1,40 @@
+import { act, renderHook } from '@testing-library/react-native';
+import { useStoreMembers } from '../../lib/hooks/useStoreMembers';
+let mockUser = { id: 'admin' };
+let mockStore = { id: 'first' };
+const mockGetMembers = jest.fn();
+jest.mock('../../lib/contexts/AuthContext', () => ({ useAuth: () => ({ user: mockUser, store: mockStore }) }));
+jest.mock('../../lib/services/storeMembers', () => ({ getStoreMembers: (...args: unknown[]) => mockGetMembers(...args) }));
+beforeEach(() => { jest.clearAllMocks(); mockStore = { id: 'first' }; mockUser = { id: 'admin' }; });
+it('멤버 조회 실패를 빈 목록 성공과 구분하고 재시도한다', async () => {
+  mockGetMembers.mockRejectedValueOnce(new Error('DB 연결 오류')).mockResolvedValueOnce([{ id: 'member' }]);
+  const { result } = renderHook(() => useStoreMembers());
+  await act(async () => { await result.current.refetch(); });
+  expect(result.current.error).toBe('멤버 목록을 불러오지 못했어요.');
+  expect(result.current.error).not.toContain('DB');
+  await act(async () => { await result.current.refetch(); });
+  expect(result.current.error).toBeNull();
+  expect(result.current.members).toEqual([{ id: 'member' }]);
+});
+it('매장 변경 후 도착한 이전 매장 응답을 버린다', async () => {
+  let finish!: (rows: unknown[]) => void;
+  mockGetMembers.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; })).mockResolvedValueOnce([{ id: 'new' }]);
+  const { result, rerender } = renderHook(() => useStoreMembers());
+  let oldRequest!: Promise<void>;
+  act(() => { oldRequest = result.current.refetch(); });
+  mockStore = { id: 'second' };
+  rerender({});
+  expect(result.current.members).toEqual([]);
+  await act(async () => { await result.current.refetch(); });
+  await act(async () => { finish([{ id: 'old' }]); await oldRequest; });
+  expect(result.current.members).toEqual([{ id: 'new' }]);
+});
+it('계정이 바뀌면 이전 계정의 멤버 목록을 즉시 숨긴다', async () => {
+  mockGetMembers.mockResolvedValue([{ id: 'admin-only' }]);
+  const { result, rerender } = renderHook(() => useStoreMembers());
+  await act(async () => { await result.current.refetch(); });
+  mockUser = { id: 'other' };
+  rerender({});
+  expect(result.current.members).toEqual([]);
+  expect(result.current.loading).toBe(true);
+});

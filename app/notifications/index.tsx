@@ -13,7 +13,6 @@ type FilterKey = 'all' | NotificationCategory;
 
 const FILTERS: { key: FilterKey; label: string }[] = [
   { key: 'all', label: '전체' },
-  { key: 'attendance', label: '근태' },
   { key: 'stock', label: '재고' },
   { key: 'sales', label: '매출' },
 ];
@@ -105,7 +104,7 @@ export default function NotificationsScreen() {
         {loading ? (
           <ActivityIndicator color={Colors.primary} style={{ marginTop: 32 }} />
         ) : filtered.length === 0 ? (
-          <EmptyState icon="notifications-outline" title="새로운 알림이 없어요" description="근태, 재고, 매출 알림이 오면 이곳에 모여요" />
+          <EmptyState icon="notifications-outline" title="새로운 알림이 없어요" description="재고, 매출 알림이 오면 이곳에 모여요" />
         ) : (
           filtered.map(n => <NotificationRow key={n.id} item={n} onPress={() => handlePress(n)} />)
         )}

@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { getErrorMessage } from '../../lib/utils/error';
+import { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -22,15 +23,12 @@ import { usePurchases } from '../../lib/hooks/usePurchases';
 import { useIngredients } from '../../lib/hooks/useIngredients';
 import { Ingredient, PurchaseType } from '../../types';
 import { convertQuantity, recipeUnitOptions } from '../../lib/utils/unit';
-import { usePurchaseCategories } from '../../lib/hooks/usePurchaseCategories';
+import { usePurchaseTypes } from '../../lib/hooks/usePurchaseTypes';
 import { useCategories } from '../../lib/hooks/useCategories';
 import { CategoryManageModal } from '../../lib/components/CategoryManageModal';
 import { useConfirmLeave } from '../../lib/hooks/useConfirmLeave';
 
 const COMMON_UNITS = ['g', 'kg', 'ml', 'L', '개', '병', '봉', '박스'];
-const PURCHASE_TYPES: PurchaseType[] = ['쿠팡', '네이버', '수기'];
-
-type Mode = '품목별' | '금액만';
 
 interface PurchaseItemForm {
   ingredient: Ingredient;
@@ -56,26 +54,14 @@ function parseInitialDate(value?: string): Date {
 }
 
 export default function NewPurchaseScreen() {
-  const { store } = useAuth();
+  const { store, currentRole } = useAuth();
+  const purchaseTypes = usePurchaseTypes();
+  const [typeModalVisible, setTypeModalVisible] = useState(false);
   const params = useLocalSearchParams<{ date?: string }>();
   // 이번 달 매입 훅 (등록 후 refetch 위해 화면 진입 달 기준)
   const yearMonth = formatDate(parseInitialDate(params.date)).slice(0, 7);
-  const { purchases, add, addWithItems, refetch: refetchPurchases } = usePurchases(yearMonth);
+  const { purchases, addWithItems, refetch: refetchPurchases } = usePurchases(yearMonth);
   const { data: ingredients, create: createIngredient, refetch: refetchIngredients } = useIngredients();
-  const purchaseCategoriesBase = usePurchaseCategories();
-  const [categoryModalVisible, setCategoryModalVisible] = useState(false);
-  // 카테고리 이름변경/삭제는 서버의 purchases.category도 바꾸므로, 캐시된 매입 목록을 즉시 재조회한다
-  const purchaseCategories = {
-    ...purchaseCategoriesBase,
-    rename: async (oldName: string, newName: string) => {
-      await purchaseCategoriesBase.rename(oldName, newName);
-      await refetchPurchases();
-    },
-    remove: async (name: string) => {
-      await purchaseCategoriesBase.remove(name);
-      await refetchPurchases();
-    },
-  };
   const ingredientCategoriesBase = useCategories();
   const [ingredientCategoryModalVisible, setIngredientCategoryModalVisible] = useState(false);
   // 카테고리 이름변경/삭제는 서버의 ingredients.category도 바꾸므로, 캐시된 재료 목록을 즉시 재조회한다
@@ -92,27 +78,26 @@ export default function NewPurchaseScreen() {
   };
   const filterCategories = ['전체', ...ingredientCategories.categories];
 
-  const [mode, setMode] = useState<Mode>('품목별');
   const [supplier, setSupplier] = useState('');
   const [date, setDate] = useState(parseInitialDate(params.date));
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showSupplierPicker, setShowSupplierPicker] = useState(false);
-  const [purchaseType, setPurchaseType] = useState<PurchaseType>('수기');
+  const [purchaseType, setPurchaseType] = useState<PurchaseType>('');
   const [submitting, setSubmitting] = useState(false);
+  useEffect(() => {
+    if (!purchaseTypes.loading && !purchaseTypes.error && !purchaseTypes.types.includes(purchaseType)) {
+      setPurchaseType(purchaseTypes.types.includes('수기') ? '수기' : purchaseTypes.types[0] ?? '');
+    }
+  }, [purchaseTypes.loading, purchaseTypes.error, purchaseTypes.types, purchaseType]);
 
-  // 품목별 모드
+  // 매입 품목
   const [items, setItems] = useState<PurchaseItemForm[]>([]);
   const [showPicker, setShowPicker] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState('전체');
   const [selectedIngredients, setSelectedIngredients] = useState<Set<string>>(new Set());
 
-  // 금액만 모드 — 카테고리별로 각각 등록하지 않고 하나의 카드에서 일괄 입력
-  const [amountByCategory, setAmountByCategory] = useState<Record<string, string>>({});
-
-  const isDirty = supplier.trim().length > 0
-    || items.length > 0
-    || Object.values(amountByCategory).some(v => v.trim().length > 0);
+  const isDirty = supplier.trim().length > 0 || items.length > 0;
   const bypassLeaveGuard = useConfirmLeave(isDirty, { message: '지금 나가면 입력한 매입 내용이 저장되지 않아요.' });
 
   // 새 식자재 빠른 등록
@@ -199,67 +184,50 @@ export default function NewPurchaseScreen() {
       setQuickUnit('g');
       closePicker();
     } catch (e: any) {
-      Alert.alert('오류', e.message);
+      Alert.alert('오류', getErrorMessage(e));
     } finally {
       setQuickAdding(false);
     }
   }
 
   async function handleSubmit() {
+    if (purchaseTypes.loading || purchaseTypes.error || !purchaseTypes.types.includes(purchaseType)) {
+      Alert.alert('유형 확인', '현재 매입 유형을 불러온 뒤 선택해주세요.'); return;
+    }
     if (!supplier.trim()) {
       Alert.alert('입력 오류', '거래처명을 입력해주세요.');
       return;
     }
     setSubmitting(true);
     try {
-      if (mode === '품목별') {
-        if (items.length === 0) {
-          Alert.alert('입력 오류', '매입 품목을 1개 이상 추가해주세요.');
-          setSubmitting(false);
-          return;
-        }
-        await addWithItems({
-          date: formatDate(date),
-          supplier: supplier.trim(),
-          type: purchaseType,
-          items: items.map(i => {
-            const qty = parseFloat(i.quantity) || 0;
-            const price = parseFloat(i.unit_price) || 0;
-            // 입력 단위 → 재고 단위 환산 (예: 5000g → 5kg)
-            const factor = convertQuantity(1, i.unit, i.ingredient.unit) || 1;
-            return {
-              ingredient_id: i.ingredient.id,
-              name: i.ingredient.name,
-              quantity: qty * factor,             // 재고 단위 기준 수량 → current_stock 증가량
-              unit: i.ingredient.unit,            // 재고 단위로 저장
-              unit_price: factor !== 0 ? price / factor : price, // 재고 단위당 단가 (합계 보존)
-              category: i.ingredient.category,
-            };
-          }),
-        });
-      } else {
-        const entries = purchaseCategories.categories
-          .map(cat => ({ cat, amt: Number((amountByCategory[cat] ?? '').replace(/,/g, '')) }))
-          .filter(e => e.amt > 0);
-        if (entries.length === 0) {
-          Alert.alert('입력 오류', '금액을 1개 이상 입력해주세요.');
-          setSubmitting(false);
-          return;
-        }
-        // 카테고리별로 별도 매입 행이 생기지만, 화면에서는 한 카드에서 한 번에 일괄 등록
-        await Promise.all(entries.map(({ cat, amt }) => add({
-          date: formatDate(date),
-          supplier: supplier.trim(),
-          amount: amt,
-          category: cat,
-          type: purchaseType,
-          note: null,
-        })));
+      if (items.length === 0) {
+        Alert.alert('입력 오류', '매입 품목을 1개 이상 추가해주세요.');
+        setSubmitting(false);
+        return;
       }
+      await addWithItems({
+        date: formatDate(date),
+        supplier: supplier.trim(),
+        type: purchaseType,
+        items: items.map(i => {
+          const qty = parseFloat(i.quantity) || 0;
+          const price = parseFloat(i.unit_price) || 0;
+          // 입력 단위 → 재고 단위 환산 (예: 5000g → 5kg)
+          const factor = convertQuantity(1, i.unit, i.ingredient.unit) || 1;
+          return {
+            ingredient_id: i.ingredient.id,
+            name: i.ingredient.name,
+            quantity: qty * factor,             // 재고 단위 기준 수량 → current_stock 증가량
+            unit: i.ingredient.unit,            // 재고 단위로 저장
+            unit_price: factor !== 0 ? price / factor : price, // 재고 단위당 단가 (합계 보존)
+            category: i.ingredient.category,
+          };
+        }),
+      });
       bypassLeaveGuard();
       router.back();
     } catch (e: any) {
-      Alert.alert('오류', e.message ?? '매입 등록에 실패했습니다.');
+      Alert.alert('오류', getErrorMessage(e, '매입 등록에 실패했습니다.'));
     } finally {
       setSubmitting(false);
     }
@@ -271,14 +239,8 @@ export default function NewPurchaseScreen() {
     return matchSearch && matchCategory;
   });
 
-  const amountTotal = purchaseCategories.categories.reduce((s, cat) => s + (Number((amountByCategory[cat] ?? '').replace(/,/g, '')) || 0), 0);
-
-  const totalAmount =
-    mode === '품목별'
-      ? items.reduce((s, i) => s + (parseFloat(i.quantity) || 0) * (parseFloat(i.unit_price) || 0), 0)
-      : amountTotal;
-
-  const canSubmit = mode === '품목별' ? items.length > 0 : amountTotal > 0;
+  const totalAmount = items.reduce((sum, item) => sum + (Number(item.quantity) || 0) * (Number(item.unit_price) || 0), 0);
+  const canSubmit = items.length > 0;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -292,24 +254,7 @@ export default function NewPurchaseScreen() {
 
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-          {/* 모드 토글 */}
-          <View style={styles.modeRow}>
-            {(['품목별', '금액만'] as Mode[]).map(m => (
-              <TouchableOpacity
-                key={m}
-                style={[styles.modeTab, mode === m && styles.modeTabActive]}
-                onPress={() => setMode(m)}
-                activeOpacity={0.7}
-              >
-                <Text style={[styles.modeText, mode === m && styles.modeTextActive]}>{m}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-          <Text style={styles.modeHint}>
-            {mode === '품목별'
-              ? '품목·수량을 입력하면 재고가 자동으로 늘어나요'
-              : '재고 반영 없이 금액만 손익계산서에 누적돼요'}
-          </Text>
+          <Text style={styles.modeHint}>품목·수량·단가를 입력하면 매입 금액과 재고에 함께 반영돼요.</Text>
 
           <Text style={styles.label}>거래처명</Text>
           <View style={styles.supplierRow}>
@@ -345,9 +290,15 @@ export default function NewPurchaseScreen() {
             />
           )}
 
-          <Text style={styles.label}>유형</Text>
+          <View style={styles.amountLabelRow}>
+            <Text style={styles.label}>유형</Text>
+            {currentRole === 'admin' && <TouchableOpacity onPress={() => setTypeModalVisible(true)} accessibilityRole="button" style={{ minHeight: 44, justifyContent: 'center' }}>
+              <Text style={{ color: Colors.primary }}>유형 관리</Text>
+            </TouchableOpacity>}
+          </View>
+          {purchaseTypes.error && <Text style={{ color: Colors.negative }}>{purchaseTypes.error}</Text>}
           <View style={styles.chipRow}>
-            {PURCHASE_TYPES.map(t => (
+            {purchaseTypes.types.map(t => (
               <TouchableOpacity
                 key={t}
                 style={[styles.chip, purchaseType === t && styles.chipActive]}
@@ -358,101 +309,71 @@ export default function NewPurchaseScreen() {
             ))}
           </View>
 
-          {mode === '금액만' ? (
-            <>
-              <View style={styles.amountLabelRow}>
-                <Text style={styles.label}>카테고리별 금액</Text>
-                <TouchableOpacity onPress={() => setCategoryModalVisible(true)} hitSlop={8}>
-                  <Ionicons name="pricetags-outline" size={18} color={Colors.gray500} />
-                </TouchableOpacity>
-              </View>
-              <Text style={styles.modeHint}>여러 카테고리에 지출했다면 각각 입력 후 한 번에 등록하세요</Text>
-              <View style={styles.amountCard}>
-                {purchaseCategories.categories.map((cat, i) => (
-                  <View key={cat} style={[styles.amountRow, i > 0 && styles.amountRowBorder]}>
-                    <Text style={styles.amountRowLabel}>{cat}</Text>
-                    <TextInput
-                      style={styles.amountRowInput}
-                      value={amountByCategory[cat] ?? ''}
-                      onChangeText={v => setAmountByCategory(prev => ({ ...prev, [cat]: v }))}
-                      placeholder="0"
-                      placeholderTextColor={Colors.gray400}
-                      keyboardType="numeric"
-                    />
-                    <Text style={styles.amountRowWon}>원</Text>
-                  </View>
-                ))}
-              </View>
-            </>
-          ) : (
-            <>
-              <View style={styles.itemsHeader}>
-                <Text style={styles.label}>매입 품목</Text>
-                <TouchableOpacity style={styles.addItemBtn} onPress={() => setShowPicker(true)}>
-                  <Text style={styles.addItemText}>+ 추가</Text>
-                </TouchableOpacity>
-              </View>
+          <View style={styles.itemsHeader}>
+            <Text style={styles.label}>매입 품목</Text>
+            <TouchableOpacity style={styles.addItemBtn} onPress={() => setShowPicker(true)}>
+              <Text style={styles.addItemText}>+ 추가</Text>
+            </TouchableOpacity>
+          </View>
 
-              {items.length === 0 ? (
-                <View style={styles.emptyItems}>
-                  <Text style={styles.emptyItemsText}>품목을 추가해주세요</Text>
-                </View>
-              ) : (
-                items.map(item => (
-                  <View key={item.ingredient.id} style={styles.itemCard}>
-                    <View style={styles.itemCardTop}>
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.itemName}>{item.ingredient.name}</Text>
-                        <Text style={styles.itemCategory}>{item.ingredient.category}</Text>
-                      </View>
-                      <TouchableOpacity onPress={() => removeItem(item.ingredient.id)}>
-                        <Ionicons name="close" size={16} color={Colors.gray400} />
-                      </TouchableOpacity>
-                    </View>
-                    {(() => {
-                      const unitOptions = recipeUnitOptions(item.ingredient.unit);
-                      return (
-                        <>
-                          {unitOptions.length > 1 && (
-                            <View style={styles.unitToggleRow}>
-                              {unitOptions.map(u => (
-                                <TouchableOpacity
-                                  key={u}
-                                  style={[styles.unitToggle, item.unit === u && styles.unitToggleActive]}
-                                  onPress={() => setItemUnit(item.ingredient.id, u)}
-                                >
-                                  <Text style={[styles.unitToggleText, item.unit === u && styles.unitToggleTextActive]}>{u}</Text>
-                                </TouchableOpacity>
-                              ))}
-                            </View>
-                          )}
-                          <View style={styles.itemInputs}>
-                            <View style={styles.inputGroup}>
-                              <Text style={styles.inputLabel}>수량 ({item.unit})</Text>
-                              <TextInput
-                                style={styles.smallInput}
-                                value={item.quantity}
-                                onChangeText={v => updateItem(item.ingredient.id, 'quantity', v)}
-                                keyboardType="numeric"
-                              />
-                            </View>
-                            <View style={styles.inputGroup}>
-                              <Text style={styles.inputLabel}>단가 (원/{item.unit})</Text>
-                              <TextInput
-                                style={styles.smallInput}
-                                value={item.unit_price}
-                                onChangeText={v => updateItem(item.ingredient.id, 'unit_price', v)}
-                                keyboardType="numeric"
-                              />
-                            </View>
-                          </View>
-                        </>
-                      );
-                    })()}
+          {items.length === 0 ? (
+            <View style={styles.emptyItems}>
+              <Text style={styles.emptyItemsText}>품목을 추가해주세요</Text>
+            </View>
+          ) : (
+            items.map(item => (
+              <View key={item.ingredient.id} style={styles.itemCard}>
+                <View style={styles.itemCardTop}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.itemName}>{item.ingredient.name}</Text>
+                    <Text style={styles.itemCategory}>{item.ingredient.category}</Text>
                   </View>
-                ))
-              )}
-            </>
+                  <TouchableOpacity onPress={() => removeItem(item.ingredient.id)}>
+                    <Ionicons name="close" size={16} color={Colors.gray400} />
+                  </TouchableOpacity>
+                </View>
+                {(() => {
+                  const unitOptions = recipeUnitOptions(item.ingredient.unit);
+                  return (
+                    <>
+                      {unitOptions.length > 1 && (
+                        <View style={styles.unitToggleRow}>
+                          {unitOptions.map(u => (
+                            <TouchableOpacity
+                              key={u}
+                              style={[styles.unitToggle, item.unit === u && styles.unitToggleActive]}
+                              onPress={() => setItemUnit(item.ingredient.id, u)}
+                            >
+                              <Text style={[styles.unitToggleText, item.unit === u && styles.unitToggleTextActive]}>{u}</Text>
+                            </TouchableOpacity>
+                          ))}
+                        </View>
+                      )}
+                      <View style={styles.itemInputs}>
+                        <View style={styles.inputGroup}>
+                          <Text style={styles.inputLabel}>수량 ({item.unit})</Text>
+                          <TextInput
+                            style={styles.smallInput}
+                            value={item.quantity}
+                            onChangeText={v => updateItem(item.ingredient.id, 'quantity', v)}
+                            keyboardType="numeric"
+                          />
+                        </View>
+                        <View style={styles.inputGroup}>
+                          <Text style={styles.inputLabel}>단가 (원/{item.unit})</Text>
+                          <TextInput
+                            style={styles.smallInput}
+                            value={item.unit_price}
+                            onChangeText={v => updateItem(item.ingredient.id, 'unit_price', v)}
+                            keyboardType="numeric"
+                          />
+                        </View>
+                      </View>
+                    </>
+                  );
+                })()}
+              </View>
+            ))
           )}
         </ScrollView>
       </KeyboardAvoidingView>
@@ -469,7 +390,7 @@ export default function NewPurchaseScreen() {
           disabled={submitting || !canSubmit}
         >
           <Text style={styles.bottomSubmitText}>
-            {submitting ? '등록 중...' : mode === '품목별' && items.length > 0 ? `매입 등록 (${items.length})` : '매입 등록'}
+            {submitting ? '등록 중...' : items.length > 0 ? `매입 등록 (${items.length})` : '매입 등록'}
           </Text>
         </TouchableOpacity>
       </View>
@@ -502,9 +423,9 @@ export default function NewPurchaseScreen() {
       </Modal>
 
       {/* 식자재 선택 모달 */}
-      <Modal visible={showPicker} animationType="slide" transparent>
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={closePicker}>
-          <TouchableOpacity activeOpacity={1} onPress={() => {}} style={styles.modalSheet}>
+      <Modal visible={showPicker} animationType="slide" transparent onRequestClose={closePicker}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={closePicker} accessible={false}>
+          <TouchableOpacity activeOpacity={1} onPress={() => {}} style={styles.modalSheet} accessible={false}>
             <View style={styles.modalHeader}>
               {showQuickAdd ? (
                 <>
@@ -651,18 +572,13 @@ export default function NewPurchaseScreen() {
         </TouchableOpacity>
       </Modal>
 
-      <CategoryManageModal
-        visible={categoryModalVisible}
-        onClose={() => setCategoryModalVisible(false)}
-        title="매입 카테고리 관리"
-        removeConfirmHint="해당 카테고리의 기존 매입 내역은 '기타'로 이동해요."
-        categories={purchaseCategories.categories}
-        loading={purchaseCategories.loading}
-        add={purchaseCategories.add}
-        rename={purchaseCategories.rename}
-        remove={purchaseCategories.remove}
-      />
-
+      <CategoryManageModal visible={typeModalVisible} onClose={() => setTypeModalVisible(false)} title="매입 유형 관리" noun="유형"
+        removeConfirmHint="" categories={purchaseTypes.types} loading={purchaseTypes.loading}
+        add={purchaseTypes.add} rename={async (oldName, newName) => {
+          await purchaseTypes.rename(oldName, newName);
+          if (purchaseType === oldName) setPurchaseType(newName.trim());
+          await refetchPurchases();
+        }} />
       <CategoryManageModal
         visible={ingredientCategoryModalVisible}
         onClose={() => { setIngredientCategoryModalVisible(false); setShowPicker(true); }}
@@ -694,18 +610,6 @@ const styles = StyleSheet.create({
   headerSpacer: { width: 48 },
   content: { padding: 20, paddingBottom: 32 },
 
-  modeRow: { flexDirection: 'row', gap: 4, backgroundColor: Colors.gray100, borderRadius: 12, padding: 3 },
-  modeTab: { flex: 1, paddingVertical: 9, borderRadius: 10, alignItems: 'center' },
-  modeTabActive: {
-    backgroundColor: Colors.white,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  modeText: { fontSize: 14, fontWeight: '500', color: Colors.gray400 },
-  modeTextActive: { color: Colors.black, fontWeight: '700' },
   modeHint: { fontSize: 12, color: Colors.gray400, marginTop: 8 },
 
   dateInput: {
@@ -809,15 +713,6 @@ const styles = StyleSheet.create({
   },
 
   amountLabelRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  amountCard: {
-    backgroundColor: Colors.white, borderRadius: 14, borderWidth: 0.5, borderColor: Colors.gray200,
-    overflow: 'hidden',
-  },
-  amountRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 12, gap: 10 },
-  amountRowBorder: { borderTopWidth: 0.5, borderTopColor: Colors.gray100 },
-  amountRowLabel: { fontSize: 14, color: Colors.gray600, width: 76 },
-  amountRowInput: { flex: 1, fontSize: 15, color: Colors.black, textAlign: 'right', paddingVertical: 4 },
-  amountRowWon: { fontSize: 13, color: Colors.gray400 },
 
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: {
@@ -856,9 +751,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.black,
   },
-  filterTabsContainer: { borderBottomWidth: 1, borderBottomColor: Colors.gray100 },
-  filterTabsContent: { paddingHorizontal: 12, paddingVertical: 8, gap: 6 },
+  filterTabsContainer: { flexGrow: 0, flexShrink: 0, minHeight: 60, borderBottomWidth: 1, borderBottomColor: Colors.gray100 },
+  filterTabsContent: { paddingHorizontal: 12, paddingVertical: 8, alignItems: 'center', gap: 6 },
   filterTab: {
+    minHeight: 44,
+    justifyContent: 'center',
     paddingHorizontal: 14,
     paddingVertical: 6,
     borderRadius: 20,
@@ -871,7 +768,7 @@ const styles = StyleSheet.create({
   filterTabText: { fontSize: 13, color: Colors.gray600, fontWeight: '600' },
   filterTabTextActive: { color: Colors.white },
   filterTabManageBtn: {
-    width: 28, height: 28, borderRadius: 14, alignSelf: 'center',
+    width: 44, height: 44, borderRadius: 20, alignSelf: 'center',
     alignItems: 'center', justifyContent: 'center',
     backgroundColor: Colors.gray100, borderWidth: 0.5, borderColor: Colors.gray200,
   },

@@ -1,3 +1,4 @@
+import { getErrorMessage } from '../../lib/utils/error';
 import { useState, useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, FlatList, Alert, ScrollView, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -16,6 +17,7 @@ import { Modal, TextInput } from 'react-native';
 import { RecipeWithIngredients, upsertRecipesFromCatalog, getRecipesByCategory, renameRecipeCategory, deleteRecipeCategory } from '../../lib/services/recipes';
 import { Ingredient, TossCatalogItem } from '../../types';
 import { RecipeCard } from '../../lib/components/RecipeCard';
+import { EmptyState } from '../../lib/components/ui';
 import { recipeLineCost } from '../../lib/utils/unit';
 
 type SortKey = 'name' | 'margin_desc' | 'cost_asc';
@@ -64,7 +66,7 @@ export default function RecipesScreen() {
       setCatalogItems(items.filter(i => !existingNames.has(i.itemName)));
       setShowCatalogImport(true);
     } catch (e: any) {
-      Alert.alert('카탈로그 동기화 실패', e.message);
+      Alert.alert('카탈로그 동기화 실패', getErrorMessage(e));
     } finally {
       setSyncingCatalog(false);
     }
@@ -85,7 +87,7 @@ export default function RecipesScreen() {
       await refetch();
       Alert.alert('완료', `${count}개 품목이 레시피에 추가/업데이트되었습니다.`);
     } catch (e: any) {
-      Alert.alert('레시피 추가 실패', e.message);
+      Alert.alert('레시피 추가 실패', getErrorMessage(e));
     }
   }
 
@@ -98,7 +100,7 @@ export default function RecipesScreen() {
       setUnclassifiedCount(items.length);
       setShowBulkCat(true);
     } catch (e: any) {
-      Alert.alert('오류', e.message);
+      Alert.alert('오류', getErrorMessage(e));
     } finally {
       setLoadingBulkCat(false);
     }
@@ -116,7 +118,7 @@ export default function RecipesScreen() {
       setEditingCat(null);
       await refetch();
     } catch (e: any) {
-      Alert.alert('오류', e.message);
+      Alert.alert('오류', getErrorMessage(e));
     } finally {
       setCatOpLoading(false);
     }
@@ -140,7 +142,7 @@ export default function RecipesScreen() {
             await deleteRecipeCategory(store.id, name);
             await refetch();
           } catch (e: any) {
-            Alert.alert('오류', e.message);
+            Alert.alert('오류', getErrorMessage(e));
           } finally {
             setCatOpLoading(false);
           }
@@ -205,20 +207,13 @@ export default function RecipesScreen() {
       />
 
       {data.length === 0 ? (
-        <View style={styles.emptyState}>
-          <View style={styles.emptyIconBg}>
-            <Ionicons name="restaurant-outline" size={28} color={Colors.gray400} />
-          </View>
-          <Text style={styles.emptyText}>레시피가 없어요</Text>
-          <Text style={styles.emptySubtext}>
-            레시피를 등록하면 원가와{'\n'}마진율을 자동으로 계산해드려요
-          </Text>
-          {canManageRecipes && (
-            <TouchableOpacity style={styles.addFirstButton} onPress={() => router.push('/recipes/new')}>
-              <Text style={styles.addFirstText}>첫 레시피 등록하기</Text>
-            </TouchableOpacity>
-          )}
-        </View>
+        <EmptyState
+          icon="restaurant-outline"
+          title="등록된 레시피가 없어요"
+          description="재료와 판매가를 입력하면 원가와 마진율을 확인할 수 있어요."
+          ctaLabel={canManageRecipes ? '레시피 등록' : undefined}
+          onCtaPress={canManageRecipes ? () => router.push('/recipes/new') : undefined}
+        />
       ) : (
         <>
           {/* 정렬 옵션 */}
@@ -562,33 +557,6 @@ const styles = StyleSheet.create({
 
   // 레시피 리스트
   listContent: { paddingHorizontal: 16, paddingBottom: 32 },
-
-  // 빈 상태
-  emptyState: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 32 },
-  emptyIconBg: {
-    width: 72,
-    height: 72,
-    borderRadius: 22,
-    backgroundColor: Colors.gray100,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 18,
-  },
-  emptyText: { fontSize: 17, fontWeight: '700', color: Colors.gray700, marginBottom: 8 },
-  emptySubtext: {
-    fontSize: 14,
-    color: Colors.gray400,
-    textAlign: 'center',
-    lineHeight: 21,
-    marginBottom: 28,
-  },
-  addFirstButton: {
-    backgroundColor: Colors.primary,
-    paddingHorizontal: 28,
-    paddingVertical: 14,
-    borderRadius: 14,
-  },
-  addFirstText: { color: Colors.white, fontSize: 15, fontWeight: '700' },
 
   // 미분류 배너
   unclassifiedBanner: {

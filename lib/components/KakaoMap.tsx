@@ -1,3 +1,4 @@
+import { getErrorMessage } from '../utils/error';
 import { useEffect, useMemo, useRef, useState, useImperativeHandle, forwardRef } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { WebView, WebViewMessageEvent } from 'react-native-webview';
@@ -116,7 +117,7 @@ const KakaoMap = forwardRef<KakaoMapRef, Props>(({ initialLat, initialLng, radiu
   const webViewRef = useRef<WebView>(null);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>(JS_KEY ? 'loading' : 'error');
   const [errorMessage, setErrorMessage] = useState<string | null>(
-    JS_KEY ? null : 'EXPO_PUBLIC_KAKAO_JS_KEY가 설정되지 않았습니다. .env 확인 후 앱을 다시 빌드해주세요.',
+    JS_KEY ? null : '지도를 불러오지 못했어요.',
   );
 
   // 초기 좌표가 바뀔 때만 새로 만든다 — radiusM은 postMessage(setRadius)로만 갱신해서
@@ -161,7 +162,7 @@ const KakaoMap = forwardRef<KakaoMapRef, Props>(({ initialLat, initialLng, radiu
         setStatus('ready');
       } else if (data.type === 'error') {
         setStatus('error');
-        setErrorMessage(data.message ?? '지도를 불러오지 못했습니다.');
+        setErrorMessage(getErrorMessage(data, '지도를 불러오지 못했어요.'));
       } else if ((data.type === 'dragend' || data.type === 'moved') && onPinMoved) {
         onPinMoved(data.lat, data.lng);
       }
@@ -181,8 +182,8 @@ const KakaoMap = forwardRef<KakaoMapRef, Props>(({ initialLat, initialLng, radiu
           mixedContentMode="always"
           allowsFullscreenVideo={false}
           onMessage={onMessage}
-          onError={(e) => { setStatus('error'); setErrorMessage(`WebView 오류: ${e.nativeEvent.description}`); }}
-          onHttpError={(e) => { setStatus('error'); setErrorMessage(`네트워크 오류 (${e.nativeEvent.statusCode})`); }}
+          onError={(e) => { setStatus('error'); setErrorMessage('지도를 불러오지 못했어요.'); }}
+          onHttpError={(e) => { setStatus('error'); setErrorMessage('연결하지 못했어요. 다시 시도해주세요.'); }}
           scrollEnabled={false}
           style={styles.webview}
         />

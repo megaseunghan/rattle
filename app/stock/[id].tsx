@@ -1,3 +1,4 @@
+import { getErrorMessage } from '../../lib/utils/error';
 import { useState, useEffect } from 'react';
 import {
   View,
@@ -54,7 +55,7 @@ export default function EditIngredientScreen() {
         setMinStock(String(item.min_stock));
         setLastPrice(String(item.last_price));
       })
-      .catch((e) => setFetchError(e.message ?? '식자재를 불러오지 못했습니다.'))
+      .catch((e) => setFetchError(getErrorMessage(e, '식자재를 불러오지 못했습니다.')))
       .finally(() => setFetchLoading(false));
   }, [id]);
 
@@ -90,7 +91,7 @@ export default function EditIngredientScreen() {
       bypassLeaveGuard();
       router.back();
     } catch (e: any) {
-      Alert.alert('오류', e.message ?? '수정에 실패했습니다.');
+      Alert.alert('오류', getErrorMessage(e, '수정에 실패했습니다.'));
     } finally {
       setSubmitting(false);
     }

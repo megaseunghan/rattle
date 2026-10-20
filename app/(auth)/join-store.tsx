@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, Alert, SafeAreaView,
 } from 'react-native';
 import { router } from 'expo-router';
-import { supabase } from '../../lib/supabase';
+import { requestStoreMembership } from '../../lib/services/storeMembers';
 import { useAuth } from '../../lib/contexts/AuthContext';
 import { Colors } from '../../constants/colors';
 import { Spacing } from '../../constants/designTokens';
@@ -32,53 +32,19 @@ export default function JoinStoreScreen() {
       Alert.alert('알림', '사업자번호 10자리를 입력해주세요.\n예: 1234567890');
       return;
     }
-    if (!user) return;
+    if (!/^01[016789][0-9]{7,8}$/.test(phone.replace(/[^0-9]/g, ''))) {
+      Alert.alert('입력 확인', '직원 정보에 등록한 휴대폰 번호를 입력해주세요.');
+      return;
+    }
+    if (!user || loading) return;
 
     setLoading(true);
     try {
-      const { data: rows, error: storeError } = await supabase
-        .rpc('find_store_by_business_number', { p_number: cleaned });
-      const storeData = rows?.[0] ?? null;
-
-      if (storeError || !storeData) {
-        Alert.alert('매장을 찾을 수 없습니다', '사업자번호를 다시 확인해주세요.');
-        return;
-      }
-
-      const { data: existing } = await supabase
-        .from('store_members')
-        .select('id, status')
-        .eq('store_id', storeData.id)
-        .eq('user_id', user.id)
-        .single();
-
-      if (existing) {
-        const messages: Record<string, string> = {
-          pending: '관리자의 승인을 기다리고 있습니다.',
-          approved: '이미 해당 매장의 멤버입니다.',
-          rejected: '참여가 거절된 상태입니다. 관리자에게 문의해주세요.',
-        };
-        Alert.alert('알림', messages[existing.status] ?? '이미 신청한 매장입니다.');
-        return;
-      }
-
-      const { error: insertError } = await supabase
-        .from('store_members')
-        .insert({
-          store_id: storeData.id,
-          user_id: user.id,
-          user_email: user.email ?? null,
-          applicant_name: trimmedName,
-          phone: phone.trim() || null,
-          role: 'member',
-          status: 'pending',
-        });
-
-      if (insertError) throw insertError;
+      const result = await requestStoreMembership(cleaned, trimmedName, phone);
 
       Alert.alert(
         '참여 신청 완료',
-        `"${storeData.name}" 매장에 참여 신청했습니다.\n관리자가 승인하면 접속할 수 있습니다.`,
+        `"${result.store_name}" 매장에 참여 신청했습니다.\n관리자가 신청을 확인하면 직원 정보에 연결되고 접속할 수 있어요.`,
         [{ text: '확인', onPress: () => { bypassLeaveGuard(); router.back(); } }],
       );
     } catch (e: unknown) {
@@ -93,17 +59,19 @@ export default function JoinStoreScreen() {
       <AppBar title="기존 매장 참여" onBack={() => router.back()} />
 
       <View style={styles.content}>
-        <Text style={styles.subtitle}>참여할 매장 정보와 본인 정보를 입력하세요</Text>
+        <Text style={styles.subtitle}>사업자번호로 매장을 찾고, 이름·연락처로 직원 정보를 연결해요. 관리자 확인 후 참여할 수 있어요.</Text>
 
         <View style={styles.fieldGroup}>
           <Field
             label="이름"
-            placeholder="출퇴근·급여에 사용돼요"
+            placeholder="직원 정보에 등록된 이름"
+            maxLength={100}
             value={name}
             onChangeText={setName}
           />
           <Field
-            label="연락처 (선택)"
+            label="휴대폰 번호"
+            helpText="관리자가 등록한 직원 정보와 같은 번호를 입력해주세요"
             placeholder="010-0000-0000"
             value={phone}
             onChangeText={setPhone}

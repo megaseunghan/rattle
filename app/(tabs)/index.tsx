@@ -10,23 +10,22 @@ import { Colors } from '../../constants/colors';
 import { Fonts } from '../../constants/fonts';
 import { useAuth } from '../../lib/contexts/AuthContext';
 import { useIngredients } from '../../lib/hooks/useIngredients';
-import { useProfitLoss } from '../../lib/hooks/useProfitLoss';
 import { useEmployees } from '../../lib/hooks/useEmployees';
-import { useHomeAlerts, HomeAlert } from '../../lib/hooks/useHomeAlerts';
+import { HomeAlertsPanel } from '../../lib/components/HomeAlertsPanel';
 import { useNotifications } from '../../lib/hooks/useNotifications';
 import { useTossSync } from '../../lib/hooks/useTossSync';
-import { useAttendance } from '../../lib/hooks/useAttendance';
 import { useProfitLossTrendChart, TrendBar } from '../../lib/hooks/useProfitLossTrendChart';
 import { useTabPager, TabName } from '../../lib/contexts/TabPagerContext';
 import { ProfitLoss } from '../../types';
 import { resolveSelfEmployee } from '../../lib/utils/resolveSelfEmployee';
-import { Badge, Button, SectionHeader } from '../../lib/components/ui';
+import { Badge, SectionHeader } from '../../lib/components/ui';
+import { ErrorMessage } from '../../lib/components/ErrorMessage';
+import { getErrorMessage } from '../../lib/utils/error';
 
 type QuickAction = { key: string; label: string; icon: keyof typeof Ionicons.glyphMap; route?: string; tab?: TabName };
 
 const QUICK_ACTIONS: Record<'admin' | 'member' | 'part_time', QuickAction[]> = {
   admin: [
-    { key: 'attendance', label: '출퇴근 관리', icon: 'time-outline',   route: '/attendance' },
     { key: 'employees',  label: '직원 관리',   icon: 'people-outline', tab: 'payroll' },
     { key: 'purchases',  label: '매입 관리',   icon: 'cart-outline',   tab: 'purchases' },
     { key: 'stock',      label: '재고/레시피', icon: 'cube-outline',   tab: 'stock' },
@@ -34,7 +33,6 @@ const QUICK_ACTIONS: Record<'admin' | 'member' | 'part_time', QuickAction[]> = {
     { key: 'profitLoss', label: '손익 정산',   icon: 'document-text-outline', route: '/profit-loss' },
   ],
   member: [
-    { key: 'attendance', label: '출퇴근 관리',   icon: 'time-outline',   route: '/attendance' },
     { key: 'parttime',   label: '파트타이머 관리', icon: 'people-outline', tab: 'payroll' },
     { key: 'purchases',  label: '매입 관리',     icon: 'cart-outline',   tab: 'purchases' },
     { key: 'stock',      label: '재고/레시피',   icon: 'cube-outline',   tab: 'stock' },
@@ -42,25 +40,24 @@ const QUICK_ACTIONS: Record<'admin' | 'member' | 'part_time', QuickAction[]> = {
     { key: 'profitLoss', label: '손익 정산',     icon: 'document-text-outline', route: '/profit-loss' },
   ],
   part_time: [
-    { key: 'attendance', label: '출퇴근 관리', icon: 'time-outline', route: '/attendance' },
+    { key: 'workMinutes', label: '근무시간 제출', icon: 'time-outline', route: '/mypage/work-minutes' },
     { key: 'stock',      label: '재고 관리',   icon: 'cube-outline', tab: 'stock' },
   ],
 };
 
-function QuickActionsGrid({ actions, goToTab }: { actions: QuickAction[]; goToTab: (tab: TabName) => void }) {
+function QuickActionsList({ actions, goToTab }: { actions: QuickAction[]; goToTab: (tab: TabName) => void }) {
   return (
-    <View style={styles.quickGrid}>
-      {actions.map(a => (
+    <View style={styles.quickList}>
+      {actions.map((a, index) => (
         <TouchableOpacity
           key={a.key}
-          style={styles.quickCard}
+          style={[styles.quickRow, index > 0 && styles.quickRowBorder]}
           activeOpacity={0.75}
           onPress={() => a.tab ? goToTab(a.tab) : router.push(a.route as any)}
         >
-          <View style={styles.quickIconWrap}>
-            <Ionicons name={a.icon} size={18} color={Colors.primary} />
-          </View>
-          <Text style={styles.quickLabel} numberOfLines={2}>{a.label}</Text>
+          <Ionicons name={a.icon} size={19} color={Colors.gray600} />
+          <Text style={styles.quickLabel} numberOfLines={1}>{a.label}</Text>
+          <Ionicons name="chevron-forward" size={16} color={Colors.gray400} />
         </TouchableOpacity>
       ))}
     </View>
@@ -81,124 +78,6 @@ function fmtTrend(v: number | null | undefined): string | null {
   if (v == null) return null;
   const arrow = v > 0 ? '▲' : v < 0 ? '▼' : '';
   return `${arrow}${Math.abs(v).toFixed(1)}%`;
-}
-
-function pad2(n: number): string {
-  return String(n).padStart(2, '0');
-}
-
-function formatClockTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
-}
-
-/** 출근 시각부터 현재까지 경과 시간을 HH:MM으로. startIso가 없으면 null 반환 */
-function useElapsedSince(startIso: string | null): string | null {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    if (!startIso) return;
-    const id = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(id);
-  }, [startIso]);
-  if (!startIso) return null;
-  const elapsedMs = Math.max(0, now - new Date(startIso).getTime());
-  const totalMinutes = Math.floor(elapsedMs / 60000);
-  const h = Math.floor(totalMinutes / 60);
-  const m = totalMinutes % 60;
-  return `${pad2(h)}:${pad2(m)}`;
-}
-
-/** 실시간 현재 시각을 HH:MM으로 (근무 전/후에 00:00 대신 표시) */
-function useNowClock(): string {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(id);
-  }, []);
-  return formatClockTime(new Date(now).toISOString());
-}
-
-/** 화면 01 — 출퇴근 카드 (tinted, 실시간 타이머 + 출근/퇴근 pill 버튼) */
-function AttendanceCard({ employeeId }: { employeeId: string }) {
-  const { todayRecords, actionLoading, refetch, stamp, isClockedIn, lastRecord } = useAttendance(employeeId);
-
-  useEffect(() => { refetch(); }, [refetch]);
-
-  const clockInRecord = todayRecords.find(r => r.type === 'clock_in');
-  const clockOutRecord = todayRecords.findLast(r => r.type === 'clock_out');
-  const elapsed = useElapsedSince(isClockedIn ? clockInRecord?.timestamp ?? null : null);
-  const nowClock = useNowClock();
-  const displayTime = elapsed ?? nowClock;
-  const hasClockedOutToday = !isClockedIn && lastRecord?.type === 'clock_out';
-
-  function handlePress() {
-    const type = isClockedIn ? 'clock_out' : 'clock_in';
-    Alert.alert(
-      isClockedIn ? '퇴근 처리할까요?' : '출근 처리할까요?',
-      undefined,
-      [
-        { text: '취소', style: 'cancel' },
-        {
-          text: '확인',
-          onPress: async () => {
-            const result = await stamp(type);
-            if (!result.success && result.message) {
-              Alert.alert('처리 실패', result.message);
-            }
-          },
-        },
-      ],
-    );
-  }
-
-  const statusText = isClockedIn ? '근무 중' : hasClockedOutToday ? '오늘 근무 종료' : '근무 전';
-
-  return (
-    <View style={styles.attendanceCard}>
-      <View style={styles.attendanceLeft}>
-        <Text style={styles.attendanceTimer}>{displayTime}</Text>
-        <Text style={styles.attendanceStatus}>{statusText}</Text>
-        {(clockInRecord || clockOutRecord) && (
-          <View style={styles.attendanceTimeRow}>
-            {clockInRecord && (
-              <Text style={styles.attendanceTimeText}>출근 {formatClockTime(clockInRecord.timestamp)}</Text>
-            )}
-            {clockOutRecord && (
-              <Text style={styles.attendanceTimeText}>퇴근 {formatClockTime(clockOutRecord.timestamp)}</Text>
-            )}
-          </View>
-        )}
-      </View>
-      {!hasClockedOutToday && (
-        <Button
-          label={isClockedIn ? '퇴근하기' : '출근하기'}
-          variant="pill"
-          onPress={handlePress}
-          loading={actionLoading}
-        />
-      )}
-    </View>
-  );
-}
-
-/** 출근 카드 위에 뜨는 경고 배너 목록 (고정비 미입력 / 토스 미동기화 / 월마감 리마인더) */
-function AlertBanners({ alerts }: { alerts: HomeAlert[] }) {
-  if (alerts.length === 0) return null;
-  return (
-    <View style={styles.alertList}>
-      {alerts.map(a => (
-        <TouchableOpacity
-          key={a.key}
-          style={styles.alertRow}
-          onPress={() => router.push(a.route as any)}
-          activeOpacity={0.7}
-        >
-          <View style={styles.alertDot} />
-          <Text style={styles.alertText} numberOfLines={1}>{a.message}</Text>
-          <Text style={styles.alertAction}>{a.actionLabel} ›</Text>
-        </TouchableOpacity>
-      ))}
-    </View>
-  );
 }
 
 type MetricKey = 'revenue' | 'purchase' | 'labor' | 'expense' | 'profit';
@@ -227,10 +106,23 @@ function StoreSwitcherDropdown({
 }: {
   visible: boolean; onClose: () => void;
   stores: { id: string; name: string }[]; currentStoreId: string | undefined;
-  onSelect: (storeId: string) => void;
+  onSelect: (storeId: string) => Promise<void>;
   /** 사장님 본인 계정일 때만 노출 — 통합 대시보드로 돌아가기 */
   onShowDashboard?: () => void;
 }) {
+  const [switching, setSwitching] = useState(false);
+  async function selectStore(storeId: string) {
+    if (switching) return;
+    setSwitching(true);
+    try {
+      await onSelect(storeId);
+      onClose();
+    } catch (e) {
+      Alert.alert('매장 전환', getErrorMessage(e, '매장을 바꾸지 못했어요. 다시 시도해주세요.'));
+    } finally {
+      setSwitching(false);
+    }
+  }
   if (!visible) return null;
   return (
     <>
@@ -261,7 +153,8 @@ function StoreSwitcherDropdown({
             <TouchableOpacity
               key={s.id}
               style={[styles.storeDropdownItem, styles.storeDropdownItemBorder]}
-              onPress={() => { onSelect(s.id); onClose(); }}
+              onPress={() => { void selectStore(s.id); }}
+              disabled={switching}
               activeOpacity={0.7}
             >
               <Text style={[styles.storeDropdownItemText, isActive && styles.storeDropdownItemTextActive]} numberOfLines={1}>
@@ -339,7 +232,15 @@ function MetricChipsSection({ pnl, loading, bars, selected, onSelect }: {
   );
 }
 
-/** 화면 01 — 월 이동 ‹› + 최근 6개월 막대그래프. 막대를 누르면 해당 월로 이동 */
+function compactAmount(value: number): string {
+  const amount = Math.abs(value);
+  const sign = value < 0 ? '−' : '';
+  if (amount >= 100_000_000) return `${sign}${(amount / 100_000_000).toFixed(1)}억`;
+  if (amount >= 10_000) return `${sign}${(amount / 10_000).toFixed(amount < 100_000 ? 1 : 0)}만`;
+  return `${sign}${amount.toLocaleString('ko-KR')}`;
+}
+
+/** 선택한 달까지 최근 6개월. 음수는 0선 아래, 조회 실패는 빈 값으로 표시한다. */
 function TrendChartSection({
   periodLabel, onPrev, onNext, nextDisabled, bars, loading, metric, onSelectBar,
 }: {
@@ -347,7 +248,10 @@ function TrendChartSection({
   bars: TrendBar[]; loading: boolean; metric: MetricKey; onSelectBar: (yearMonth: string) => void;
 }) {
   const values = bars.map(b => metricValue(b.data, metric) ?? 0);
-  const maxValue = Math.max(1, ...values.map(v => Math.abs(v)));
+  const positive = Math.max(0, ...values);
+  const negative = Math.max(0, ...values.map(value => -value));
+  const range = Math.max(1, positive + negative);
+  const zeroBottom = negative / range * 112;
 
   return (
     <View style={styles.trendSection}>
@@ -368,21 +272,29 @@ function TrendChartSection({
           {bars.map((bar, i) => {
             const isEmpty = bar.data === null;
             const value = values[i];
-            const heightPct = Math.max(6, (Math.abs(value) / maxValue) * 100);
+            const height = value === 0 ? 0 : Math.max(2, Math.abs(value) / range * 112);
             return (
               <TouchableOpacity
                 key={bar.key}
                 style={styles.trendBarCol}
                 onPress={() => onSelectBar(bar.key)}
                 activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityState={{ selected: bar.isCurrent }}
+                accessibilityLabel={`${bar.key} ${METRIC_CHIPS.find(chip => chip.key === metric)?.label} ${isEmpty ? '조회 실패' : fmt(value)}`}
               >
+                <Text style={[styles.trendAmount, value < 0 && styles.metricValueNegative]} numberOfLines={1}>
+                  {isEmpty ? '—' : compactAmount(value)}
+                </Text>
                 <View style={styles.trendBarTrack}>
-                  {!isEmpty && (
+                  <View style={[styles.trendZeroLine, { bottom: zeroBottom }]} />
+                  {!isEmpty && value !== 0 && (
                     <View
                       style={[
                         styles.trendBarFill,
-                        { height: `${heightPct}%` },
+                        { height, bottom: value > 0 ? zeroBottom : undefined, top: value < 0 ? 112 - zeroBottom : undefined },
                         bar.isCurrent ? styles.trendBarFillActive : styles.trendBarFillInactive,
+                        value < 0 && styles.trendBarFillNegative,
                       ]}
                     />
                   )}
@@ -415,10 +327,9 @@ export function HomeScreen({ active = true }: { active?: boolean }) {
   const [anchorMonth, setAnchorMonth] = useState(realMonth);
 
   const yearMonth = `${anchorYear}-${String(anchorMonth).padStart(2, '0')}`;
-  const { data: pnl, loading: pnlLoading, refetch: fetchPnl } = useProfitLoss(yearMonth);
-  const { buildAlerts, refetch: refetchHomeAlerts } = useHomeAlerts();
   const { todaySales, autoSyncOnForeground, loadTodaySales } = useTossSync();
-  const { bars, loading: trendLoading, refetch: fetchTrend } = useProfitLossTrendChart(anchorYear, anchorMonth);
+  const { bars, loading: trendLoading, error: trendError, refetch: fetchTrend } = useProfitLossTrendChart(anchorYear, anchorMonth);
+  const pnl = bars.find(bar => bar.key === yearMonth)?.data ?? null;
 
   const isCurrentPeriod = anchorYear === realYear && anchorMonth === realMonth;
 
@@ -449,50 +360,55 @@ export function HomeScreen({ active = true }: { active?: boolean }) {
   const isPartTime = effectiveRole === 'part_time';
 
   const [refreshing, setRefreshing] = useState(false);
+  const [alertRefreshKey, setAlertRefreshKey] = useState(0);
 
   async function loadAll() {
     await Promise.all([
       refetch(),
       refetchEmp(),
       refetchNotifications(),
-      ...(isPartTime ? [] : [fetchPnl(), refetchHomeAlerts(), loadTodaySales(), fetchTrend()]),
+      ...(isPartTime ? [] : [loadTodaySales(), fetchTrend()]),
     ]);
   }
 
   async function onRefresh() {
     setRefreshing(true);
+    setAlertRefreshKey(value => value + 1);
     try { await loadAll(); } finally { setRefreshing(false); }
   }
 
   useEffect(() => {
     if (!active) return;
     loadAll();
-  }, [active, refetch, refetchEmp, refetchNotifications, fetchPnl, refetchHomeAlerts, loadTodaySales, fetchTrend, isPartTime]);
+  }, [active, refetch, refetchEmp, refetchNotifications, loadTodaySales, fetchTrend, isPartTime]);
 
   useEffect(() => {
     if (!active) return;
     autoSyncOnForeground();
   }, [active, autoSyncOnForeground]);
 
-  const lowStockAll = ingredients.filter(i => i.current_stock <= i.min_stock);
   const monthLabel = today.toLocaleDateString('ko-KR', { year: 'numeric', month: 'long' });
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.appBar}>
-        <TouchableOpacity onPress={() => goToTab('more')} hitSlop={8}>
+        <View style={styles.appBarSide}>
+        <TouchableOpacity onPress={() => goToTab('more')} style={styles.appBarButton} accessibilityLabel="더보기" accessibilityRole="button">
           <Ionicons name="ellipsis-horizontal" size={20} color={Colors.gray600} />
         </TouchableOpacity>
-        <TouchableOpacity style={styles.storeSwitcher} onPress={() => setStoreDropdownVisible(true)} activeOpacity={0.7}>
+        </View>
+        <View style={styles.appBarCenter}>
+        <TouchableOpacity style={styles.storeSwitcher} onPress={() => setStoreDropdownVisible(true)} activeOpacity={0.7} accessibilityLabel="매장 전환" accessibilityRole="button">
           <Text style={styles.storeSwitcherText} numberOfLines={1}>{store?.name ?? ''}</Text>
-          <Ionicons name={storeDropdownVisible ? 'chevron-up' : 'chevron-down'} size={14} color={Colors.gray500} />
+          <Ionicons name={storeDropdownVisible ? 'chevron-up' : 'chevron-down'} size={14} color={Colors.gray500} style={styles.storeChevron} />
         </TouchableOpacity>
+        </View>
         <View style={styles.appBarRightGroup}>
-          <TouchableOpacity onPress={() => router.push('/notifications')} hitSlop={8} style={styles.bellBtn}>
+          <TouchableOpacity onPress={() => router.push('/notifications')} style={[styles.appBarButton, styles.bellBtn]} accessibilityLabel="알림" accessibilityRole="button">
             <Ionicons name="notifications-outline" size={20} color={Colors.gray600} />
             {unreadCount > 0 && <View style={styles.bellDot} />}
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => router.push('/mypage')} hitSlop={8}>
+          <TouchableOpacity onPress={() => router.push('/mypage')} style={styles.appBarButton} accessibilityLabel="마이페이지" accessibilityRole="button">
             <Ionicons name="person-circle-outline" size={22} color={Colors.gray600} />
           </TouchableOpacity>
         </View>
@@ -503,19 +419,20 @@ export function HomeScreen({ active = true }: { active?: boolean }) {
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />}
       >
-        {!isPartTime && <AlertBanners alerts={buildAlerts(todaySales)} />}
+        <HomeAlertsPanel active={active} refreshKey={alertRefreshKey} todaySales={todaySales} financial={!isPartTime} />
 
-        {myEmployee && <AttendanceCard employeeId={myEmployee.id} />}
 
         {!isPartTime && (
           <MetricChipsSection
             pnl={pnl}
-            loading={pnlLoading}
+            loading={trendLoading}
             bars={bars}
             selected={selectedMetric}
             onSelect={setSelectedMetric}
           />
         )}
+
+        {!isPartTime && trendError && <ErrorMessage message={trendError} onRetry={fetchTrend} />}
 
         {!isPartTime && (
           <TrendChartSection
@@ -530,16 +447,8 @@ export function HomeScreen({ active = true }: { active?: boolean }) {
           />
         )}
 
-        {!isPartTime && lowStockAll.length > 0 && (
-          <TouchableOpacity style={styles.lowStockBanner} onPress={() => goToTab('stock')} activeOpacity={0.7}>
-            <View style={styles.lowStockDot} />
-            <Text style={styles.lowStockText}>품절 임박 {lowStockAll.length}건</Text>
-            <Text style={styles.lowStockAction}>등록하기 ›</Text>
-          </TouchableOpacity>
-        )}
-
         <SectionHeader title="바로가기" insetHorizontalPadding={false} />
-        <QuickActionsGrid actions={QUICK_ACTIONS[effectiveRole]} goToTab={goToTab} />
+        <QuickActionsList actions={QUICK_ACTIONS[effectiveRole]} goToTab={goToTab} />
 
         <Text style={styles.footerCaption}>{store?.name ?? ''} · {monthLabel}</Text>
       </ScrollView>
@@ -561,15 +470,19 @@ const styles = StyleSheet.create({
 
   appBar: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 20, paddingTop: 16, paddingBottom: 14,
+    paddingHorizontal: 8, paddingTop: 8, paddingBottom: 8,
     backgroundColor: Colors.white, borderBottomWidth: 0.5, borderBottomColor: Colors.gray100,
   },
-  storeSwitcher: { flexDirection: 'row', alignItems: 'center', gap: 4, maxWidth: 200 },
-  appBarRightGroup: { flexDirection: 'row', alignItems: 'center', gap: 14 },
-  storeSwitcherText: { fontSize: 16, fontWeight: '700', color: Colors.black },
+  appBarSide: { width: 88 },
+  appBarCenter: { flex: 1, minWidth: 0, alignItems: 'center' },
+  appBarButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  storeSwitcher: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 18, minHeight: 44, maxWidth: '100%' },
+  storeChevron: { position: 'absolute', right: 0 },
+  appBarRightGroup: { width: 88, flexDirection: 'row', alignItems: 'center' },
+  storeSwitcherText: { flexShrink: 1, fontSize: 16, fontWeight: '700', color: Colors.black },
   bellBtn: { position: 'relative' },
   bellDot: {
-    position: 'absolute', top: -1, right: -1, width: 8, height: 8, borderRadius: 4,
+    position: 'absolute', top: 8, right: 8, width: 8, height: 8, borderRadius: 4,
     backgroundColor: Colors.negative, borderWidth: 1.5, borderColor: Colors.white,
   },
 
@@ -616,22 +529,11 @@ const styles = StyleSheet.create({
   alertText: { flex: 1, fontSize: 13, fontWeight: '600', color: Colors.black },
   alertAction: { fontSize: 12, fontWeight: '700', color: Colors.primary },
 
-  // 출퇴근 카드
-  attendanceCard: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    backgroundColor: Colors.tinted, borderRadius: 16, padding: 16,
-  },
-  attendanceLeft: { gap: 2 },
-  attendanceTimer: { fontSize: 28, fontWeight: '700', fontFamily: Fonts.spaceGroteskBold, color: Colors.black, letterSpacing: -0.5 },
-  attendanceStatus: { fontSize: 12, fontWeight: '500', color: Colors.gray500 },
-  attendanceTimeRow: { flexDirection: 'row', gap: 10, marginTop: 4 },
-  attendanceTimeText: { fontSize: 11, fontWeight: '500', color: Colors.gray400 },
-
   // 지표 칩 섹션
   metricSection: { gap: 12 },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   metricChip: { paddingVertical: 8, paddingHorizontal: 16, borderRadius: 20, borderWidth: 1, borderColor: Colors.gray200 },
-  metricChipActive: { backgroundColor: Colors.black, borderColor: Colors.black },
+  metricChipActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
   metricChipText: { fontSize: 13, fontWeight: '500', color: Colors.gray600 },
   metricChipTextActive: { color: Colors.white, fontWeight: '600' },
   metricValueRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
@@ -647,13 +549,16 @@ const styles = StyleSheet.create({
   trendNavRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 20 },
   trendNavBtn: { width: 28, height: 28, alignItems: 'center', justifyContent: 'center' },
   trendNavLabel: { fontSize: 15, fontWeight: '700', color: Colors.black, minWidth: 96, textAlign: 'center' },
-  trendLoading: { height: 96 },
-  trendBarRow: { flexDirection: 'row', alignItems: 'flex-end', height: 96, gap: 8 },
-  trendBarCol: { flex: 1, alignItems: 'center', height: '100%', justifyContent: 'flex-end', gap: 6 },
-  trendBarTrack: { width: '100%', height: 72, justifyContent: 'flex-end' },
-  trendBarFill: { width: '100%', borderRadius: 6, minHeight: 6 },
-  trendBarFillActive: { backgroundColor: Colors.black },
+  trendLoading: { height: 160 },
+  trendBarRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 8 },
+  trendBarCol: { flex: 1, minWidth: 0, alignItems: 'center', gap: 8 },
+  trendAmount: { fontSize: 11, color: Colors.gray600, fontVariant: ['tabular-nums'] },
+  trendBarTrack: { width: '100%', height: 112 },
+  trendZeroLine: { position: 'absolute', left: 0, right: 0, height: 1, backgroundColor: Colors.gray200 },
+  trendBarFill: { position: 'absolute', left: '20%', width: '60%', borderRadius: 4 },
+  trendBarFillActive: { backgroundColor: Colors.primary },
   trendBarFillInactive: { backgroundColor: Colors.gray200 },
+  trendBarFillNegative: { backgroundColor: Colors.negative },
   trendBarLabel: { fontSize: 11, fontWeight: '500', color: Colors.gray400 },
   trendBarLabelActive: { color: Colors.black, fontWeight: '700' },
 
@@ -666,20 +571,17 @@ const styles = StyleSheet.create({
   lowStockText: { flex: 1, fontSize: 13, fontWeight: '600', color: Colors.black },
   lowStockAction: { fontSize: 12, fontWeight: '700', color: Colors.primary },
 
-  // 빠른 메뉴 그리드 (3열)
-  quickGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  quickCard: {
-    flexBasis: '31%', flexGrow: 1,
-    backgroundColor: Colors.white, borderRadius: 16,
+  // 바로가기: 아이콘 장식 대신 작업명이 먼저 읽히는 목록
+  quickList: {
+    backgroundColor: Colors.white, borderRadius: 14,
     borderWidth: 0.5, borderColor: Colors.gray100,
-    paddingVertical: 16, paddingHorizontal: 10,
-    alignItems: 'center', gap: 8,
+    paddingHorizontal: 16,
   },
-  quickIconWrap: {
-    width: 34, height: 34, borderRadius: 11,
-    backgroundColor: Colors.tinted, justifyContent: 'center', alignItems: 'center',
+  quickRow: {
+    minHeight: 54, flexDirection: 'row', alignItems: 'center', gap: 14,
   },
-  quickLabel: { fontSize: 12, fontWeight: '600', color: Colors.black, textAlign: 'center' },
+  quickRowBorder: { borderTopWidth: 0.5, borderTopColor: Colors.gray100 },
+  quickLabel: { flex: 1, fontSize: 15, fontWeight: '600', color: Colors.black },
 
   footerCaption: { fontSize: 12, fontWeight: '500', color: Colors.gray400, textAlign: 'center' },
 });

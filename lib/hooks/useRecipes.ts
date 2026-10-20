@@ -1,3 +1,4 @@
+import { getErrorMessage } from '../utils/error';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import {
@@ -52,7 +53,7 @@ export function useRecipes(): UseRecipesResult {
       setHasMore(result.length === PAGE_SIZE);
       lastFetchedAt.current = Date.now();
     } catch (e: any) {
-      setError(e.message);
+      setError(getErrorMessage(e));
     } finally {
       setLoading(false);
     }
@@ -68,7 +69,7 @@ export function useRecipes(): UseRecipesResult {
       setPage(nextPage);
       setHasMore(result.length === PAGE_SIZE);
     } catch (e: any) {
-      setError(e.message);
+      setError(getErrorMessage(e));
     } finally {
       setLoadingMore(false);
     }
@@ -97,7 +98,7 @@ export function useRecipes(): UseRecipesResult {
       await deleteRecipe(id);
     } catch (e: any) {
       setData(previous);
-      setError(e.message);
+      setError(getErrorMessage(e));
     }
   }
 

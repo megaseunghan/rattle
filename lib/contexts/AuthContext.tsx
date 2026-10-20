@@ -1,8 +1,9 @@
-import { createContext, useContext, useEffect, useState, useCallback, ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, useCallback, useRef, ReactNode } from 'react';
 import { Session, User } from '@supabase/supabase-js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../supabase';
 import { Store } from '../../types';
+import { UserFacingError } from '../utils/error';
 
 const LAST_STORE_ID_KEY = 'LAST_STORE_ID';
 
@@ -42,6 +43,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [devPreviewMode, setDevPreviewMode] = useState<DevPreviewMode>('self');
   const [devPreviewEmployeeId, setDevPreviewEmployeeId] = useState<string | null>(null);
+  const storeRequestId = useRef(0);
+  const authRequestId = useRef(0);
 
   const setDevPreview = useCallback((mode: DevPreviewMode, employeeId: string | null) => {
     setDevPreviewMode(mode);
@@ -49,6 +52,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   async function loadStores(userId: string) {
+    const requestId = ++storeRequestId.current;
     const [ownedRes, memberRes] = await Promise.all([
       supabase
         .from('stores')
@@ -62,6 +66,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .eq('status', 'approved'),
     ]);
 
+    if (requestId !== storeRequestId.current) return;
+    if (ownedRes.error) throw new Error(ownedRes.error.message);
+    if (memberRes.error) throw new Error(memberRes.error.message);
+
     const ownedStores: Store[] = (ownedRes.data ?? []) as Store[];
 
     const roles: Record<string, 'admin' | 'member'> = {};
@@ -72,7 +80,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         memberStores.push(m.stores as Store);
       }
     }
-    setMemberRoles(roles);
 
     // 소유 매장 우선, 멤버 매장 중복 제거 후 병합
     const storeMap = new Map<string, Store>();
@@ -80,32 +87,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     memberStores.forEach(s => { if (!storeMap.has(s.id)) storeMap.set(s.id, s); });
 
     const storeList = Array.from(storeMap.values());
-
-    if (storeList.length === 0) {
-      setStores([]);
-      setStore(null);
-      setStoresLoaded(true);
-      return;
-    }
-
-    setStores(storeList);
     const lastStoreId = await AsyncStorage.getItem(LAST_STORE_ID_KEY);
-    const selectedStore = lastStoreId ? storeList.find(s => s.id === lastStoreId) : storeList[0];
+    if (requestId !== storeRequestId.current) return;
+    const selectedStore = storeList.find(s => s.id === lastStoreId) ?? storeList[0];
+    setMemberRoles(roles);
+    setStores(storeList);
     setStore(selectedStore ?? null);
     setStoresLoaded(true);
   }
 
   const switchStore = useCallback(async (storeId: string) => {
+    const selectedStore = stores.find(s => s.id === storeId);
+    if (!user || !selectedStore) throw new UserFacingError('매장 목록을 다시 확인해주세요.');
+    // 선택할 때 서버를 재조회하지 않는다. 이전 조회도 현재 선택을 덮어쓸 수 없다.
+    const requestId = ++storeRequestId.current;
     await AsyncStorage.setItem(LAST_STORE_ID_KEY, storeId);
+    if (requestId !== storeRequestId.current) throw new UserFacingError('매장 목록이 변경됐어요. 다시 선택해주세요.');
+    setStore(selectedStore);
     setDevPreview('self', null);
-    if (user) await loadStores(user.id);
-  }, [user, setDevPreview]);
+  }, [user, stores, setDevPreview]);
 
   const refreshStore = useCallback(async () => {
     if (user) await loadStores(user.id);
   }, [user]);
 
   async function signOut() {
+    storeRequestId.current += 1;
+    authRequestId.current += 1;
     await AsyncStorage.removeItem(LAST_STORE_ID_KEY);
     await supabase.auth.signOut();
     setUser(null);
@@ -130,6 +138,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
+        const eventRequestId = ++authRequestId.current;
+        storeRequestId.current += 1;
         setLoading(true);
 
         if (session?.user) {
@@ -139,12 +149,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // onAuthStateChange 콜백 안에서 Supabase 쿼리를 직접 호출하면
           // 내부 잠금으로 인해 데드락이 발생하므로 setTimeout으로 defer
           setTimeout(async () => {
+            if (eventRequestId !== authRequestId.current) return;
             try {
               await loadStores(user.id);
             } catch (e) {
               console.error('[Auth] loadStores error:', e);
             } finally {
-              setLoading(false);
+              if (eventRequestId === authRequestId.current) setLoading(false);
             }
           }, 0);
         } else {
@@ -159,7 +170,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     );
 
-    return () => subscription.unsubscribe();
+    return () => {
+      storeRequestId.current += 1;
+      authRequestId.current += 1;
+      subscription.unsubscribe();
+    };
   }, []);
 
   return (

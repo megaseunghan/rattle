@@ -1,3 +1,4 @@
+import { getErrorMessage, UserFacingError } from '../utils/error';
 import { useState, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { getPurchasesByMonth, createPurchase, deletePurchase, createPurchaseWithItems } from '../services/purchases';
@@ -17,7 +18,7 @@ export function usePurchases(yearMonth: string) {
       const result = await getPurchasesByMonth(store.id, yearMonth);
       setPurchases(result);
     } catch (e: any) {
-      setError(e.message);
+      setError(getErrorMessage(e));
     } finally {
       setLoading(false);
     }
@@ -31,7 +32,7 @@ export function usePurchases(yearMonth: string) {
     type: PurchaseType;
     note?: string | null;
   }) => {
-    if (!store) throw new Error('매장 정보가 없습니다');
+    if (!store) throw new UserFacingError('매장 정보가 없습니다');
     const created = await createPurchase({ ...data, store_id: store.id });
     setPurchases(prev => [created, ...prev]);
     return created;
@@ -43,7 +44,7 @@ export function usePurchases(yearMonth: string) {
     type: PurchaseType;
     items: PurchaseItemInput[];
   }) => {
-    if (!store) throw new Error('매장 정보가 없습니다');
+    if (!store) throw new UserFacingError('매장 정보가 없습니다');
     await createPurchaseWithItems({ ...data, store_id: store.id });
     await refetch();
   }, [store, refetch]);

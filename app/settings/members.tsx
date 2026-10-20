@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, Alert,
   ScrollView, ActivityIndicator,
@@ -8,94 +8,72 @@ import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import { Colors } from '../../constants/colors';
 import { useAuth } from '../../lib/contexts/AuthContext';
-import { supabase } from '../../lib/supabase';
+import { approveStoreMember, rejectStoreMember, removeStoreMember } from '../../lib/services/storeMembers';
+import { useStoreMembers } from '../../lib/hooks/useStoreMembers';
+import { ErrorMessage } from '../../lib/components/ErrorMessage';
 import { StoreMember } from '../../types';
 import { getErrorMessage } from '../../lib/utils/error';
 
 export default function MembersScreen() {
   const { store } = useAuth();
-  const [members, setMembers] = useState<StoreMember[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { members, loading, error, refetch: loadMembers } = useStoreMembers();
+  const [busy, setBusy] = useState(false);
+  const busyRef = useRef(false);
+  const scope = store?.id;
+  const scopeRef = useRef(scope);
+  scopeRef.current = scope;
+  const mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  useFocusEffect(useCallback(() => { void loadMembers(); }, [loadMembers]));
 
-  const loadMembers = useCallback(async () => {
-    if (!store) return;
-    setLoading(true);
-    try {
-      const { data, error } = await supabase
-        .from('store_members')
-        .select('*')
-        .eq('store_id', store.id)
-        .order('created_at', { ascending: true });
-      if (error) throw error;
-      setMembers((data ?? []) as StoreMember[]);
-    } catch (e: unknown) {
-      Alert.alert('오류', getErrorMessage(e, '멤버 목록을 불러오지 못했습니다.'));
+  async function runAction(action: () => Promise<void>) {
+    if (busyRef.current || !store) return;
+    busyRef.current = true;
+    setBusy(true);
+    try { await action(); }
+    catch (e: unknown) {
+      if (mounted.current && scopeRef.current === scope) Alert.alert('처리 확인', getErrorMessage(e, '처리하지 못했어요. 다시 시도해주세요.'), [
+        { text: '확인' }, { text: '직원 정보 확인', onPress: () => router.dismissTo({ pathname: '/(tabs)', params: { targetTab: 'payroll' } }) },
+      ]);
     } finally {
-      setLoading(false);
-    }
-  }, [store]);
-
-  useFocusEffect(useCallback(() => { loadMembers(); }, [loadMembers]));
-
-  async function handleApprove(member: StoreMember) {
-    try {
-      const { error } = await supabase
-        .from('store_members')
-        .update({ status: 'approved' })
-        .eq('id', member.id);
-      if (error) throw error;
-      await loadMembers();
-      Alert.alert(
-        '승인 완료',
-        `${member.applicant_name ?? member.user_email ?? '신청자'} 님이 직원으로 추가됐어요.\n인건비 탭에서 급여 정보를 입력해주세요.`,
-      );
-    } catch (e: unknown) {
-      Alert.alert('오류', getErrorMessage(e, '승인에 실패했습니다.'));
+      busyRef.current = false;
+      if (mounted.current) setBusy(false);
     }
   }
 
-  async function handleReject(member: StoreMember) {
-    Alert.alert('거절', `"${member.user_email ?? member.user_id}" 의 참여를 거절하시겠습니까?`, [
+  function handleApprove(member: StoreMember) {
+    void runAction(async () => {
+      const result = await approveStoreMember(member.id);
+      if (!mounted.current || scopeRef.current !== scope) return;
+      await loadMembers();
+      if (!mounted.current || scopeRef.current !== scope) return;
+      Alert.alert('승인 완료', `${result.employee_name} 님의 직원 정보에 계정을 연결했어요.\n처음 등록된 직원은 인건비에서 고용형태·시급·급여 정보를 확인해주세요.`);
+    });
+  }
+
+  function handleReject(member: StoreMember) {
+    Alert.alert('참여 거절', `${member.applicant_name ?? member.user_email ?? '신청자'} 님의 참여를 거절할까요?`, [
       { text: '취소', style: 'cancel' },
-      {
-        text: '거절',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            const { error } = await supabase
-              .from('store_members')
-              .update({ status: 'rejected' })
-              .eq('id', member.id);
-            if (error) throw error;
-            await loadMembers();
-          } catch (e: unknown) {
-            Alert.alert('오류', getErrorMessage(e, '거절에 실패했습니다.'));
-          }
-        },
-      },
+      { text: '거절', style: 'destructive', onPress: () => {
+        if (scopeRef.current !== scope) return;
+        void runAction(async () => {
+          await rejectStoreMember(member.store_id, member.id);
+          if (mounted.current && scopeRef.current === scope) await loadMembers();
+        });
+      } },
     ]);
   }
 
-  async function handleRemove(member: StoreMember) {
-    Alert.alert('멤버 제거', `"${member.user_email ?? member.user_id}" 를 매장에서 제거하시겠습니까?`, [
+  function handleRemove(member: StoreMember) {
+    Alert.alert('멤버 제거', `${member.applicant_name ?? member.user_email ?? '이 멤버'} 님을 매장에서 제거할까요?`, [
       { text: '취소', style: 'cancel' },
-      {
-        text: '제거',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            const { error, count } = await supabase
-              .from('store_members')
-              .delete({ count: 'exact' })
-              .eq('id', member.id);
-            if (error) throw error;
-            if (!count) throw new Error('제거 권한이 없습니다.');
-            await loadMembers();
-          } catch (e: unknown) {
-            Alert.alert('오류', getErrorMessage(e, '제거에 실패했습니다.'));
-          }
-        },
-      },
+      { text: '제거', style: 'destructive', onPress: () => {
+        if (scopeRef.current !== scope) return;
+        void runAction(async () => {
+          await removeStoreMember(member.store_id, member.id);
+          if (mounted.current && scopeRef.current === scope) await loadMembers();
+        });
+      } },
     ]);
   }
 
@@ -117,6 +95,8 @@ export default function MembersScreen() {
         <ActivityIndicator style={{ marginTop: 40 }} color={Colors.primary} />
       ) : (
         <ScrollView contentContainerStyle={styles.scroll}>
+          {error && <ErrorMessage message={error} onRetry={loadMembers} />}
+          <Text style={styles.emptyText}>승인하면 이름·휴대폰 번호가 같은 기존 직원에 계정이 연결돼요. 같은 직원이 없으면 새로 등록돼요.</Text>
           {/* 승인 대기 */}
           {pending.length > 0 && (
             <>
@@ -132,15 +112,15 @@ export default function MembersScreen() {
                       <View style={styles.rowInfo}>
                         <Text style={styles.email}>{m.applicant_name ?? m.user_email ?? '알 수 없는 사용자'}</Text>
                         <Text style={styles.date}>
-                          {m.user_email ? `${m.user_email} · ` : ''}{new Date(m.created_at).toLocaleDateString('ko-KR')} 신청
+                          {m.phone ? `${m.phone} · ` : ''}{new Date(m.created_at).toLocaleDateString('ko-KR')} 신청
                         </Text>
                       </View>
                     </View>
                     <View style={styles.actionBtns}>
-                      <TouchableOpacity style={styles.approveBtn} onPress={() => handleApprove(m)}>
+                      <TouchableOpacity style={styles.approveBtn} disabled={busy} onPress={() => handleApprove(m)}>
                         <Text style={styles.approveBtnText}>승인</Text>
                       </TouchableOpacity>
-                      <TouchableOpacity style={styles.rejectBtn} onPress={() => handleReject(m)}>
+                      <TouchableOpacity style={styles.rejectBtn} disabled={busy} onPress={() => handleReject(m)}>
                         <Text style={styles.rejectBtnText}>거절</Text>
                       </TouchableOpacity>
                     </View>
@@ -170,7 +150,7 @@ export default function MembersScreen() {
                     </View>
                   </View>
                   {m.role !== 'admin' && (
-                    <TouchableOpacity onPress={() => handleRemove(m)} hitSlop={10}>
+                    <TouchableOpacity disabled={busy} onPress={() => handleRemove(m)} hitSlop={10}>
                       <Ionicons name="person-remove-outline" size={20} color={Colors.danger} />
                     </TouchableOpacity>
                   )}
@@ -194,7 +174,7 @@ export default function MembersScreen() {
                         </Text>
                       </View>
                     </View>
-                    <TouchableOpacity onPress={() => handleRemove(m)} hitSlop={10}>
+                    <TouchableOpacity disabled={busy} onPress={() => handleRemove(m)} hitSlop={10}>
                       <Ionicons name="close-circle-outline" size={20} color={Colors.gray400} />
                     </TouchableOpacity>
                   </View>

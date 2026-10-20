@@ -1,3 +1,4 @@
+import { getErrorMessage } from '../../lib/utils/error';
 import { useCallback, useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -46,7 +47,7 @@ export default function CleaningEditScreen() {
       await addItem(segment, title, segment === 'weekday' ? newWeekday : null);
       setNewTitle('');
     } catch (e: any) {
-      Alert.alert('추가 실패', e.message);
+      Alert.alert('추가 실패', getErrorMessage(e));
     } finally {
       setSaving(false);
     }
@@ -65,14 +66,14 @@ export default function CleaningEditScreen() {
       await editItem(editingId, title);
       setEditingId(null);
     } catch (e: any) {
-      Alert.alert('수정 실패', e.message);
+      Alert.alert('수정 실패', getErrorMessage(e));
     }
   }
 
   function confirmRemove(id: string, title: string) {
     Alert.alert('항목 삭제', `"${title}" 항목을 삭제할까요?`, [
       { text: '취소', style: 'cancel' },
-      { text: '삭제', style: 'destructive', onPress: () => removeItem(id).catch(e => Alert.alert('삭제 실패', e.message)) },
+      { text: '삭제', style: 'destructive', onPress: () => removeItem(id).catch(e => Alert.alert('삭제 실패', getErrorMessage(e))) },
     ]);
   }
 
@@ -82,7 +83,7 @@ export default function CleaningEditScreen() {
     try {
       await reorder(data);
     } catch (e: any) {
-      Alert.alert('순서 저장 실패', e.message);
+      Alert.alert('순서 저장 실패', getErrorMessage(e));
     } finally {
       setReordering(false);
     }

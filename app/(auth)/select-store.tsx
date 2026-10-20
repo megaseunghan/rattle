@@ -16,7 +16,8 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../lib/contexts/AuthContext';
 import { Colors } from '../../constants/colors';
 import { Spacing } from '../../constants/designTokens';
-import { getErrorMessage } from '../../lib/utils/error';
+import { getErrorMessage, UserFacingError } from '../../lib/utils/error';
+import { ErrorMessage } from '../../lib/components/ErrorMessage';
 import { Button, Field, ListCard } from '../../lib/components/ui';
 
 export default function SelectStoreScreen() {
@@ -24,6 +25,7 @@ export default function SelectStoreScreen() {
   const [loading, setLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const { user, store, stores, storesLoaded, switchStore, refreshStore, signOut } = useAuth();
   const router = useRouter();
 
@@ -34,14 +36,26 @@ export default function SelectStoreScreen() {
     ]);
   }
 
-  useFocusEffect(useCallback(() => {
+  const reload = useCallback(async () => {
     setIsRefreshing(true);
-    refreshStore().finally(() => setIsRefreshing(false));
-  }, []));
+    setLoadError(null);
+    try {
+      await refreshStore();
+    } catch (e) {
+      setLoadError(getErrorMessage(e, '매장 목록을 불러오지 못했어요.'));
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [refreshStore]);
+  useFocusEffect(useCallback(() => { void reload(); }, [reload]));
 
   async function handleSelectStore(storeId: string) {
-    await switchStore(storeId);
-    router.replace('/(tabs)');
+    try {
+      await switchStore(storeId);
+      router.replace('/(tabs)');
+    } catch (e) {
+      Alert.alert('매장 전환', getErrorMessage(e, '매장을 바꾸지 못했어요. 다시 시도해주세요.'));
+    }
   }
 
   async function handleCreateStore() {
@@ -52,7 +66,7 @@ export default function SelectStoreScreen() {
 
     setLoading(true);
     try {
-      if (!user) throw new Error('로그인이 필요합니다.');
+      if (!user) throw new UserFacingError('로그인이 필요합니다.');
 
       const { data, error } = await supabase
         .from('stores')
@@ -92,6 +106,7 @@ export default function SelectStoreScreen() {
         <ActivityIndicator style={{ marginTop: 60 }} color={Colors.primary} />
       ) : (
       <ScrollView contentContainerStyle={styles.scrollContent}>
+        {loadError && <ErrorMessage message={loadError} onRetry={() => { void reload(); }} />}
         {/* 기존 매장 목록 */}
         {hasStores && (
           <View style={styles.storeList}>

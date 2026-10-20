@@ -1,4 +1,5 @@
-import { useState, useCallback, useEffect } from 'react';
+import { getErrorMessage } from '../../lib/utils/error';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { router } from 'expo-router';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, Pressable,
@@ -9,14 +10,17 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../constants/colors';
 import { CardStyle } from '../../constants/designTokens';
-import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../lib/contexts/AuthContext';
 import { useEmployees } from '../../lib/hooks/useEmployees';
 import { usePayroll } from '../../lib/hooks/usePayroll';
-import { Employee, EmploymentType, StoreMember } from '../../types';
+import { Employee, EmploymentType } from '../../types';
 import { isInProbation, isInsuranceApplicable } from '../../lib/services/employees';
-import { getMonthlyWageByEmployee } from '../../lib/services/attendance';
-import { probationFactor } from '../../lib/services/payroll';
+import { PayrollSubmissionReview } from '../../lib/components/PayrollSubmissionReview';
+import { PayrollWorkSubmission } from '../../types';
+import { WorkMinutesForm } from '../../lib/components/WorkMinutesForm';
+import { ErrorMessage } from '../../lib/components/ErrorMessage';
+import { formatWorkedMinutes } from '../../lib/utils/workMinutes';
+import { getPayrollSettlementGaps, PayrollDeductions, probationFactor } from '../../lib/services/payroll';
 import {
   getStoreWageHistory, addWageChange, regularGrossForMonth, todayISO,
 } from '../../lib/services/wageHistory';
@@ -24,7 +28,6 @@ import { WageHistory } from '../../types';
 import { animateListChange } from '../../lib/utils/layoutAnimation';
 import { Badge, EmptyState, Field } from '../../lib/components/ui';
 
-type WageAccum = { totalWage: number; totalMinutes: number; days: number };
 
 /** 경과일 기준 일할 계수 (라벨 표기용): 지난 달 1, 다음 달 0, 진행 중인 달은 경과일/총일수 */
 function accruedFactor(year: number, month: number): number {
@@ -41,12 +44,44 @@ function toYearMonth(year: number, month: number) {
   return `${year}-${String(month).padStart(2, '0')}`;
 }
 
-/** 영수증 스타일 공제 항목 행 (항목 / 금액 두 컬럼) */
-function ReceiptLine({ label, value }: { label: string; value: number }) {
+type DeductionDraft = Record<keyof PayrollDeductions, string>;
+
+function moneyInput(value: number): string {
+  return value > 0 ? value.toLocaleString() : '';
+}
+
+function parseMoneyInput(value: string): number {
+  return Number(value.replace(/[^0-9]/g, '')) || 0;
+}
+
+function DeductionInputLine({
+  label,
+  value,
+  editable,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  editable: boolean;
+  onChange: (value: string) => void;
+}) {
   return (
     <View style={styles.receiptRow}>
       <Text style={styles.receiptLabel}>{label}</Text>
-      <Text style={styles.receiptValue}>-{value.toLocaleString()}원</Text>
+      <View style={[styles.deductionInputWrap, !editable && styles.deductionInputWrapDisabled]}>
+        <Text style={styles.deductionMinus}>−</Text>
+        <TextInput
+          value={value}
+          onChangeText={text => onChange(moneyInput(parseMoneyInput(text)))}
+          editable={editable}
+          keyboardType="number-pad"
+          selectTextOnFocus
+          placeholder="0"
+          placeholderTextColor={Colors.gray300}
+          style={styles.deductionInput}
+        />
+        <Text style={styles.deductionWon}>원</Text>
+      </View>
     </View>
   );
 }
@@ -54,30 +89,69 @@ function ReceiptLine({ label, value }: { label: string; value: number }) {
 function EmployeeCard({
   employee,
   payroll,
-  wage,
   accruedGross,
   accrualLabel,
   onShowHistory,
   isCalculating,
   onCalculate,
+  onSaveDeductions,
+  isSavingDeductions,
+  canEditDeductions,
   onEdit,
+  canCalculate,
+  onWorkMinutes,
   onRemovePayroll,
 }: {
   employee: Employee;
   payroll: ReturnType<typeof usePayroll>['payrolls'][0] | undefined;
-  wage?: WageAccum;
   accruedGross: number;
   accrualLabel: string;
   onShowHistory: () => void;
   isCalculating: boolean;
   onCalculate: () => void;
+  canCalculate: boolean;
+  onSaveDeductions: (deductions: PayrollDeductions) => Promise<void>;
+  isSavingDeductions: boolean;
+  canEditDeductions: boolean;
   onEdit: () => void;
+  onWorkMinutes?: () => void;
   onRemovePayroll?: () => void;
 }) {
   const probation = isInProbation(employee);
   const insurance = isInsuranceApplicable(employee);
   const isPart = employee.employment_type === 'part_time';
   const [expanded, setExpanded] = useState(false);
+  const [deductionDraft, setDeductionDraft] = useState<DeductionDraft>({
+    national_pension: '',
+    health_insurance: '',
+    long_term_care: '',
+    employment_insurance: '',
+    income_tax: '',
+    local_income_tax: '',
+    withholding_tax: '',
+  });
+
+  useEffect(() => {
+    if (!payroll) return;
+    setDeductionDraft({
+      national_pension: moneyInput(payroll.national_pension),
+      health_insurance: moneyInput(payroll.health_insurance),
+      long_term_care: moneyInput(payroll.long_term_care),
+      employment_insurance: moneyInput(payroll.employment_insurance),
+      income_tax: moneyInput(payroll.income_tax),
+      local_income_tax: moneyInput(payroll.local_income_tax),
+      withholding_tax: moneyInput(payroll.withholding_tax),
+    });
+  }, [
+    payroll?.id,
+    payroll?.national_pension,
+    payroll?.health_insurance,
+    payroll?.long_term_care,
+    payroll?.employment_insurance,
+    payroll?.income_tax,
+    payroll?.local_income_tax,
+    payroll?.withholding_tax,
+  ]);
 
   function toggleExpanded() {
     animateListChange();
@@ -88,8 +162,18 @@ function EmployeeCard({
   const baseValue = isPart
     ? (employee.hourly_wage != null ? `${Number(employee.hourly_wage).toLocaleString()}원` : '—')
     : `${employee.base_salary.toLocaleString()}원`;
-  const summaryNetPay = isPart ? (wage?.totalWage ?? 0) : (payroll ? payroll.net_pay : null);
-  const summaryNetLabel = isPart ? '세전 누적액' : '실수령액';
+  const summaryNetPay = payroll ? payroll.net_pay : null;
+  const summaryNetLabel = payroll?.is_settled ? '확정 실수령액' : '월 예상 지급액';
+  const deductions = Object.fromEntries(
+    Object.entries(deductionDraft).map(([key, value]) => [key, parseMoneyInput(value)]),
+  ) as unknown as PayrollDeductions;
+  const deductionTotal = Object.values(deductions).reduce((sum, value) => sum + value, 0);
+  const previewNetPay = payroll ? Math.max(0, payroll.gross - deductionTotal) : 0;
+  const deductionsInvalid = payroll ? deductionTotal > payroll.gross : false;
+
+  function updateDeduction(key: keyof PayrollDeductions, value: string) {
+    setDeductionDraft(current => ({ ...current, [key]: value }));
+  }
 
   return (
     <View style={styles.employeeCard}>
@@ -106,6 +190,7 @@ function EmployeeCard({
             </View>
           )}
           {!insurance && <Badge label="3.3%" variant="neutral" />}
+          {payroll?.work_source === 'legacy_attendance' && <Badge label="이전 내역 · 공제 확인" variant="neutral" />}
         </View>
         <View style={styles.headerActions}>
           <TouchableOpacity onPress={onShowHistory} style={styles.histBtn} hitSlop={8}>
@@ -133,70 +218,86 @@ function EmployeeCard({
         </View>
       </TouchableOpacity>
 
-      {expanded && (isPart ? (
-        <>
-          <View style={styles.payrollDivider} />
-          <View style={styles.payrollRow}>
-            <Text style={styles.payrollLabel}>세전 누적액</Text>
-            <Text style={styles.payrollNetPay}>{(wage?.totalWage ?? 0).toLocaleString()}원</Text>
-          </View>
-          <View style={styles.payrollRow}>
-            <Text style={styles.payrollDeductLabel}>이번 달 근무</Text>
-            <Text style={styles.payrollDeduct}>
-              {wage && wage.days > 0
-                ? `${wage.days}일 · ${Math.floor(wage.totalMinutes / 60)}시간 ${wage.totalMinutes % 60}분`
-                : '기록 없음'}
-            </Text>
-          </View>
-          <Text style={styles.partHint}>출퇴근 시 분 단위로 자동 적립됩니다</Text>
-        </>
-      ) : (
+      {isPart && <View style={styles.payrollRow}>
+        <Text style={styles.payrollLabel}>급여 작성 근무</Text>
+        <Text style={styles.payrollDeduct}>{formatWorkedMinutes(payroll?.worked_minutes)}</Text>
+      </View>}
+      {isPart && onWorkMinutes && <TouchableOpacity style={styles.recalcBtn} onPress={onWorkMinutes} disabled={isCalculating}>
+        <Text style={[styles.recalcBtnText, payroll?.worked_minutes == null && styles.recalcBtnNeeded]}>
+          {payroll?.worked_minutes == null ? '근무시간 입력 →' : '근무시간 수정 · 이력'}
+        </Text>
+      </TouchableOpacity>}
+      {expanded && (
       <>
       <View style={styles.payrollDivider} />
       <View style={styles.payrollRow}>
         <Text style={styles.payrollLabel}>세전 누적액</Text>
-        <Text style={styles.payrollNetPay}>{accruedGross.toLocaleString()}원</Text>
+        <Text style={styles.payrollNetPay}>{(isPart ? (payroll?.gross ?? 0) : accruedGross).toLocaleString()}원</Text>
       </View>
       <View style={styles.payrollRow}>
-        <Text style={styles.payrollDeductLabel}>일할 기준</Text>
-        <Text style={styles.payrollDeduct}>{accrualLabel}</Text>
+        <Text style={styles.payrollDeductLabel}>{isPart ? '근무시간 기준' : '일할 기준'}</Text>
+        <Text style={styles.payrollDeduct}>{isPart ? formatWorkedMinutes(payroll?.worked_minutes) : accrualLabel}</Text>
       </View>
 
       {payroll ? (
         <View style={styles.payrollResult}>
           <View style={styles.receiptDivider} />
-          <Text style={styles.receiptHeading}>공제 내역</Text>
+          <View style={styles.receiptHeadingRow}>
+            <Text style={styles.receiptHeading}>공제 내역 직접 입력</Text>
+            <Badge label={payroll.is_settled ? '정산완료' : '검토 필요'} variant={payroll.is_settled ? 'positive' : 'neutral'} />
+          </View>
+          <View style={styles.payrollRow}>
+            <Text style={styles.payrollDeductLabel}>월 급여 기준액</Text>
+            <Text style={styles.payrollDeduct}>{payroll.gross.toLocaleString()}원</Text>
+          </View>
+          <Text style={styles.deductionHint}>자동 계산값이 채워져 있어요. 급여 지급 전 실제 고지액으로 수정해주세요.</Text>
           {insurance ? (
             <>
-              <ReceiptLine label="국민연금" value={payroll.national_pension} />
-              <ReceiptLine label="건강·장기요양" value={payroll.health_insurance + payroll.long_term_care} />
-              <ReceiptLine label="고용보험" value={payroll.employment_insurance} />
-              <ReceiptLine label="소득세" value={payroll.income_tax} />
-              <ReceiptLine label="지방소득세" value={payroll.local_income_tax} />
+              <DeductionInputLine label="국민연금" value={deductionDraft.national_pension} editable={canEditDeductions && !isSavingDeductions} onChange={value => updateDeduction('national_pension', value)} />
+              <DeductionInputLine label="건강보험" value={deductionDraft.health_insurance} editable={canEditDeductions && !isSavingDeductions} onChange={value => updateDeduction('health_insurance', value)} />
+              <DeductionInputLine label="장기요양" value={deductionDraft.long_term_care} editable={canEditDeductions && !isSavingDeductions} onChange={value => updateDeduction('long_term_care', value)} />
+              <DeductionInputLine label="고용보험" value={deductionDraft.employment_insurance} editable={canEditDeductions && !isSavingDeductions} onChange={value => updateDeduction('employment_insurance', value)} />
+              <DeductionInputLine label="소득세" value={deductionDraft.income_tax} editable={canEditDeductions && !isSavingDeductions} onChange={value => updateDeduction('income_tax', value)} />
+              <DeductionInputLine label="지방소득세" value={deductionDraft.local_income_tax} editable={canEditDeductions && !isSavingDeductions} onChange={value => updateDeduction('local_income_tax', value)} />
             </>
           ) : (
-            <ReceiptLine label="3.3% 원천징수" value={payroll.withholding_tax} />
+            <DeductionInputLine label="3.3% 원천징수" value={deductionDraft.withholding_tax} editable={canEditDeductions && !isSavingDeductions} onChange={value => updateDeduction('withholding_tax', value)} />
           )}
+          {deductionsInvalid && <Text style={styles.deductionError}>공제 합계가 세전 급여보다 큽니다.</Text>}
           <View style={styles.receiptTotalLine} />
           <View style={styles.receiptNetRow}>
-            <Text style={styles.receiptNetLabel}>실수령액</Text>
-            <Text style={styles.receiptNetValue}>{payroll.net_pay.toLocaleString()}원</Text>
+            <Text style={styles.receiptNetLabel}>{payroll.is_settled ? '확정 실수령액' : '예상 실수령액'}</Text>
+            <Text style={styles.receiptNetValue}>{previewNetPay.toLocaleString()}원</Text>
           </View>
           <View style={styles.payrollActions}>
-            <TouchableOpacity style={styles.recalcBtn} onPress={onCalculate} disabled={isCalculating}>
+            {canCalculate && <TouchableOpacity style={styles.recalcBtn} onPress={onCalculate} disabled={isCalculating}>
               {isCalculating
                 ? <ActivityIndicator size="small" color={Colors.gray500} />
-                : <Text style={styles.recalcBtnText}>재계산</Text>
+                : <Text style={styles.recalcBtnText}>자동 계산값 다시 불러오기</Text>
               }
-            </TouchableOpacity>
-            {onRemovePayroll && (
-              <TouchableOpacity style={styles.removePayrollBtn} onPress={onRemovePayroll}>
-                <Text style={styles.removePayrollBtnText}>삭제</Text>
+            </TouchableOpacity>}
+            {canEditDeductions && (
+              <TouchableOpacity
+                style={[styles.saveDeductionBtn, (isSavingDeductions || deductionsInvalid) && styles.saveDeductionBtnDisabled]}
+                onPress={() => onSaveDeductions(deductions)}
+                disabled={isSavingDeductions || deductionsInvalid}
+                activeOpacity={0.8}
+              >
+                {isSavingDeductions
+                  ? <ActivityIndicator size="small" color={Colors.white} />
+                  : <Text style={styles.saveDeductionBtnText}>공제 내역 저장</Text>}
               </TouchableOpacity>
             )}
           </View>
+          {onRemovePayroll && (
+            <View style={styles.removePayrollRow}>
+              <TouchableOpacity style={styles.removePayrollBtn} onPress={onRemovePayroll}>
+                <Text style={styles.removePayrollBtnText}>삭제</Text>
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
-      ) : (
+      ) : canCalculate ? (
         <TouchableOpacity
           style={[styles.calcBtn, isCalculating && { opacity: 0.5 }]}
           onPress={onCalculate}
@@ -207,9 +308,9 @@ function EmployeeCard({
             : <><Ionicons name="calculator-outline" size={14} color={Colors.white} /><Text style={styles.calcBtnText}>급여 계산</Text></>
           }
         </TouchableOpacity>
-      )}
+      ) : null}
       </>
-      ))}
+      )}
     </View>
   );
 }
@@ -236,16 +337,32 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
 
   const yearMonth = toYearMonth(year, month);
   const { employees, loading: empLoading, refetch: refetchEmp, add, update, deactivate } = useEmployees();
-  const { payrolls, loading: payLoading, calculating, refetch: refetchPay, calculate, remove: removePayroll } = usePayroll(yearMonth);
+  const {
+    payrolls,
+    loading: payLoading,
+    calculating,
+    savingDeductions,
+    refetch: refetchPay,
+    calculate,
+    saveWork,
+    error: payrollError,
+    saveDeductions,
+    remove: removePayroll,
+  } = usePayroll(yearMonth);
 
   const { store, currentRole } = useAuth();
   const isAdmin = currentRole === 'admin';
+  const workScope = `${store?.id}:${yearMonth}`;
+  const workScopeRef = useRef(workScope);
+  workScopeRef.current = workScope;
+  useEffect(() => () => { workScopeRef.current = ''; }, []);
   const [modalVisible, setModalVisible] = useState(false);
   const [editTarget, setEditTarget] = useState<Employee | null>(null);
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
-  const [members, setMembers] = useState<StoreMember[]>([]);
-  const [wageMap, setWageMap] = useState<Record<string, WageAccum>>({});
+  const [workTarget, setWorkTarget] = useState<Employee | null>(null);
+  const [workSubmission, setWorkSubmission] = useState<PayrollWorkSubmission | undefined>();
+  useEffect(() => { setWorkTarget(null); setWorkSubmission(undefined); }, [workScope]);
   const [histMap, setHistMap] = useState<Record<string, WageHistory[]>>({});
 
   // 급여 변경 확인 모달
@@ -257,13 +374,6 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
   const [applyingWage, setApplyingWage] = useState(false);
   // 급여 이력 보기 모달
   const [histTarget, setHistTarget] = useState<Employee | null>(null);
-
-  const refetchWage = useCallback(() => {
-    if (!store) return;
-    getMonthlyWageByEmployee(store.id, yearMonth, store.closing_time ?? '23:00')
-      .then(setWageMap)
-      .catch(() => setWageMap({}));
-  }, [store, yearMonth]);
 
   const refetchHist = useCallback(() => {
     if (!store) return;
@@ -280,27 +390,15 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
     if (!active) return;
     refetchEmp();
     refetchPay();
-    refetchWage();
     refetchHist();
-  }, [active, refetchEmp, refetchPay, refetchWage, refetchHist]);
+  }, [active, refetchEmp, refetchPay, refetchHist]);
 
   const [refreshing, setRefreshing] = useState(false);
   async function onRefresh() {
     setRefreshing(true);
-    try { await Promise.all([refetchEmp(), refetchPay(), refetchWage(), refetchHist()]); }
+    try { await Promise.all([refetchEmp(), refetchPay(), refetchHist()]); }
     finally { setRefreshing(false); }
   }
-
-  // 계정 연결용 매장 멤버 목록 (관리자만)
-  useEffect(() => {
-    if (!store || currentRole !== 'admin') return;
-    supabase
-      .from('store_members')
-      .select('*')
-      .eq('store_id', store.id)
-      .eq('status', 'approved')
-      .then(({ data }) => setMembers((data ?? []) as StoreMember[]));
-  }, [store, currentRole]);
 
   function prevMonth() {
     if (month === 1) { setYear(y => y - 1); setMonth(12); }
@@ -373,7 +471,6 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
       account_number: form.account_number.trim() || null,
       weekly_hours: isPart ? wh : null,
       dependents: dep,
-      user_id: form.user_id,
     };
 
     setSaving(true);
@@ -408,7 +505,7 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
         setModalVisible(false);
       }
     } catch (e: any) {
-      Alert.alert('저장 실패', e.message);
+      Alert.alert('저장 실패', getErrorMessage(e));
     } finally {
       setSaving(false);
     }
@@ -436,25 +533,27 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
       refetchEmp();
       refetchHist();
     } catch (e: any) {
-      Alert.alert('적용 실패', e.message);
+      Alert.alert('적용 실패', getErrorMessage(e));
     } finally {
       setApplyingWage(false);
     }
   }
 
-  // 누적 기준 합계 (정규직: 급여 이력 기반 일할, 파트타이머: 출퇴근 일급 누적)
+  // 정규직은 기존 일할 계산, 파트타이머는 월별 작성 급여 기준
   const accrualNow = new Date();
-  const monthFactor = accruedFactor(year, month);
-  const partTimeWageTotal = Object.values(wageMap).reduce((s, w) => s + w.totalWage, 0);
+  const monthPayrolls = payrolls.filter(p => p.year_month === yearMonth && p.store_id === store?.id);
+  const partTimePayrolls = monthPayrolls.filter(p => p.applied_hourly_wage != null || employees.some(e => e.id === p.employee_id && e.employment_type === 'part_time') || p.work_source === 'legacy_attendance');
+  const partTimeWageTotal = partTimePayrolls.reduce((s, p) => s + Number(p.gross), 0);
+  const { missingPayroll, missingPartTimeMinutes } = getPayrollSettlementGaps(employees, monthPayrolls);
   const regularEmps = employees.filter(e => e.employment_type !== 'part_time');
   const regularAccruedGross = regularEmps.reduce(
     (s, e) => s + regularGrossForMonth(histMap[e.id] ?? [], year, month, accrualNow, probationFactor(e)), 0);
-  const regularAccruedNet = payrolls.reduce((s, p) => {
+  const regularExpectedNet = monthPayrolls.reduce((s, p) => {
     const emp = regularEmps.find(e => e.id === p.employee_id);
-    return emp ? s + Math.round(p.net_pay * monthFactor) : s;
+    return emp ? s + p.net_pay : s;
   }, 0);
   const totalLaborCost = regularAccruedGross + partTimeWageTotal;
-  const totalNetPay = regularAccruedNet + partTimeWageTotal;
+  const totalExpectedPay = regularExpectedNet + partTimePayrolls.reduce((s, p) => s + Number(p.net_pay), 0);
   const monthLabel = `${year}년 ${month}월`;
 
   const canSaveEmployee = form.name.trim().length > 0 && (
@@ -482,6 +581,12 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
         </View>
       </View>
 
+      {workTarget && store && <WorkMinutesForm
+        key={`${store.id}:${workTarget.id}:${yearMonth}`}
+        storeId={store.id} employee={workTarget} yearMonth={yearMonth}
+        payroll={monthPayrolls.find(p => p.employee_id === workTarget.id)}
+        submission={workSubmission} onClose={() => { setWorkTarget(null); setWorkSubmission(undefined); }} onSave={(input, previous) => saveWork(workTarget, input, previous)}
+      />}
       <ScrollView
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}
@@ -499,6 +604,14 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
           </TouchableOpacity>
         </View>
 
+        {!empLoading && !payLoading && (missingPayroll.length > 0 || missingPartTimeMinutes.length > 0) && (
+          <View style={styles.workWarning}>
+            {missingPayroll.length > 0 && <Text style={styles.workWarningTitle}>급여 미작성 {missingPayroll.length}명</Text>}
+            {missingPartTimeMinutes.length > 0 && <Text style={styles.workWarningTitle}>파트타이머 근무시간 미입력 {missingPartTimeMinutes.length}명</Text>}
+            <Text style={styles.workWarningBody}>정규직은 급여를 계산하고, 파트타이머는 총 근무 분을 입력해 주세요. 0분도 입력한 값으로 인정해요.</Text>
+          </View>
+        )}
+
         {/* 요약 카드 */}
         <View style={styles.summaryRow}>
           <View style={styles.summaryCard}>
@@ -510,15 +623,22 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
             <Text style={styles.summarySub}>세전 누적 (일할)</Text>
           </View>
           <View style={styles.summaryCard}>
-            <Text style={styles.summaryLabel}>총 실수령액</Text>
+            <Text style={styles.summaryLabel}>총 지급 예정액</Text>
             {payLoading
               ? <ActivityIndicator size="small" color={Colors.gray300} style={styles.summaryLoader} />
-              : <Text style={styles.summaryValue}>{totalNetPay > 0 ? `${totalNetPay.toLocaleString()}원` : '—'}</Text>
+              : <Text style={styles.summaryValue}>{totalExpectedPay > 0 ? `${totalExpectedPay.toLocaleString()}원` : '—'}</Text>
             }
-            <Text style={styles.summarySub}>공제 후 누적</Text>
+            <Text style={styles.summarySub}>월 급여 · 입력 공제 기준</Text>
           </View>
         </View>
 
+        {payrollError && <ErrorMessage message={payrollError} onRetry={refetchPay} />}
+        {isAdmin && <PayrollSubmissionReview key={`${store?.id}:${yearMonth}`} yearMonth={yearMonth} active={active}
+          employees={employees} payrolls={monthPayrolls} onApply={async (employee, submission) => {
+            await refetchPay();
+            if (workScopeRef.current !== workScope) return;
+            setWorkSubmission(submission); setWorkTarget(employee);
+          }} />}
         {/* 직원 목록 */}
         <Text style={styles.sectionLabel}>직원</Text>
 
@@ -539,25 +659,35 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
             <EmployeeCard
               key={emp.id}
               employee={emp}
-              payroll={payrolls.find(p => p.employee_id === emp.id)}
-              wage={wageMap[emp.id]}
+              payroll={monthPayrolls.find(p => p.employee_id === emp.id)}
               accruedGross={regularGrossForMonth(histMap[emp.id] ?? [], year, month, accrualNow, probationFactor(emp))}
               accrualLabel={`${month}월 ${elapsed}/${daysInMonth}일`}
               onShowHistory={() => setHistTarget(emp)}
+              canCalculate={isAdmin}
               isCalculating={calculating === emp.id}
-              onCalculate={() => calculate(emp).catch(e => Alert.alert('계산 실패', e.message))}
+              onCalculate={() => { if (!isAdmin) { Alert.alert('관리자 확인 필요', '급여 작성은 관리자에게 요청해주세요.'); return; } setWorkSubmission(undefined); emp.employment_type === 'part_time' ? setWorkTarget(emp) : calculate(emp).catch(e => Alert.alert('계산 실패', getErrorMessage(e))); }}
+              onWorkMinutes={isAdmin && !payLoading && !payrollError && emp.employment_type === 'part_time' ? () => { setWorkSubmission(undefined); setWorkTarget(emp); } : undefined}
+              onSaveDeductions={deductions => {
+                const payroll = monthPayrolls.find(p => p.employee_id === emp.id);
+                if (!payroll) return Promise.resolve();
+                return saveDeductions(payroll, deductions)
+                  .then(() => { Alert.alert('저장 완료', '실제 공제 내역과 예상 실수령액을 반영했습니다.'); })
+                  .catch(e => { Alert.alert('저장 실패', getErrorMessage(e)); throw e; });
+              }}
+              isSavingDeductions={savingDeductions === emp.id}
+              canEditDeductions={isAdmin}
               onEdit={() => openEdit(emp)}
-              onRemovePayroll={() => {
+              onRemovePayroll={isAdmin ? () => {
                 const p = payrolls.find(pr => pr.employee_id === emp.id);
                 if (!p) return;
                 Alert.alert('인건비 삭제', `${emp.name}의 ${yearMonth} 인건비를 삭제할까요?`, [
                   { text: '취소', style: 'cancel' },
                   {
                     text: '삭제', style: 'destructive',
-                    onPress: () => { animateListChange(); removePayroll(p.id).catch(e => Alert.alert('삭제 실패', e.message)); },
+                    onPress: () => { animateListChange(); removePayroll(p.id).catch(e => Alert.alert('삭제 실패', getErrorMessage(e))); },
                   },
                 ]);
-              }}
+              } : undefined}
             />
             );
           })
@@ -704,27 +834,11 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
 
             {currentRole === 'admin' && (
               <>
-                <Text style={styles.fieldLabel}>출퇴근 계정 연결</Text>
-                <Text style={styles.fieldHint}>연결된 계정으로 로그인한 직원만 본인 출퇴근을 찍을 수 있어요.</Text>
-                <View style={styles.memberWrap}>
-                  <TouchableOpacity
-                    style={[styles.memberChip, form.user_id == null && styles.memberChipOn]}
-                    onPress={() => setForm(f => ({ ...f, user_id: null }))}
-                  >
-                    <Text style={[styles.memberChipText, form.user_id == null && styles.memberChipTextOn]}>연결 안함</Text>
-                  </TouchableOpacity>
-                  {members.map(m => (
-                    <TouchableOpacity
-                      key={m.user_id}
-                      style={[styles.memberChip, form.user_id === m.user_id && styles.memberChipOn]}
-                      onPress={() => setForm(f => ({ ...f, user_id: m.user_id }))}
-                    >
-                      <Text style={[styles.memberChipText, form.user_id === m.user_id && styles.memberChipTextOn]}>
-                        {m.applicant_name ?? m.user_email ?? m.user_id.slice(0, 8)}{m.role === 'admin' ? ' (관리자)' : ''}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
+                <Text style={styles.fieldLabel}>직원 계정</Text>
+                <Text style={styles.fieldHint}>
+                  {form.user_id ? '참여 계정이 연결되어 있어요.' : '직원이 사업자번호로 참여 신청하면 승인 시 이름·연락처로 자동 연결돼요.'}
+                  {'\n'}신청 정보와 같은 이름·휴대폰 번호를 저장해주세요.
+                </Text>
               </>
             )}
 
@@ -741,7 +855,7 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
                           await deactivate(editTarget.id);
                           setModalVisible(false);
                         } catch (e: any) {
-                          Alert.alert('삭제 실패', e.message);
+                          Alert.alert('삭제 실패', getErrorMessage(e));
                         }
                       },
                     },
@@ -915,20 +1029,33 @@ const styles = StyleSheet.create({
   summaryRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   summaryNetLabel: { fontSize: 11, color: Colors.gray400, textAlign: 'right' },
   summaryNetValue: { fontSize: 14, fontWeight: '700', color: Colors.black, textAlign: 'right' },
-  partHint: { fontSize: 11, color: Colors.gray400, marginTop: 8 },
+  workWarning: { backgroundColor: Colors.warningBg, borderRadius: 10, padding: 14, gap: 4 },
+  workWarningTitle: { fontSize: 14, fontWeight: '700', color: Colors.black },
+  workWarningBody: { fontSize: 12, color: Colors.gray700, lineHeight: 18 },
   calcBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: Colors.black, borderRadius: 10, paddingVertical: 10, marginTop: 12 },
   calcBtnText: { fontSize: 13, fontWeight: '600', color: Colors.white },
   payrollResult: { marginTop: 4 },
   payrollDivider: { height: 0.5, backgroundColor: Colors.gray100, marginVertical: 10 },
   // Nostalgia: 급여명세서 영수증 스타일
   receiptDivider: { height: 0.5, backgroundColor: Colors.gray200, marginVertical: 10 },
-  receiptHeading: { fontSize: 11, fontWeight: '700', color: Colors.gray400, letterSpacing: 2, marginBottom: 6 },
+  receiptHeadingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
+  receiptHeading: { fontSize: 11, fontWeight: '700', color: Colors.gray500, letterSpacing: 1.2 },
+  deductionHint: { fontSize: 11, lineHeight: 16, color: Colors.gray400, marginTop: 6, marginBottom: 8 },
   receiptRow: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingVertical: 4, borderBottomWidth: 0.5, borderBottomColor: Colors.gray100, borderStyle: 'dashed',
+    minHeight: 42, borderBottomWidth: 0.5, borderBottomColor: Colors.gray100,
   },
   receiptLabel: { fontSize: 12, color: Colors.gray500 },
-  receiptValue: { fontSize: 12, color: Colors.gray700 },
+  deductionInputWrap: {
+    minWidth: 128, height: 34, paddingHorizontal: 10, borderRadius: 9,
+    borderWidth: 1, borderColor: Colors.gray200, backgroundColor: Colors.white,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end',
+  },
+  deductionInputWrapDisabled: { backgroundColor: Colors.gray50, borderColor: Colors.gray100 },
+  deductionMinus: { fontSize: 13, color: Colors.gray400, marginRight: 2 },
+  deductionInput: { minWidth: 72, paddingVertical: 0, fontSize: 13, fontWeight: '600', color: Colors.gray700, textAlign: 'right' },
+  deductionWon: { fontSize: 12, color: Colors.gray500, marginLeft: 2 },
+  deductionError: { fontSize: 11, color: Colors.negative, marginTop: 8, textAlign: 'right' },
   receiptTotalLine: { borderTopWidth: 2, borderTopColor: Colors.gray300, borderStyle: 'dashed', marginTop: 12 },
   receiptNetRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 10 },
   receiptNetLabel: { fontSize: 15, fontWeight: '800', color: Colors.black },
@@ -938,9 +1065,14 @@ const styles = StyleSheet.create({
   payrollNetPay: { fontSize: 14, fontWeight: '700', color: Colors.primary },
   payrollDeductLabel: { fontSize: 12, color: Colors.gray400 },
   payrollDeduct: { fontSize: 12, color: Colors.gray500 },
-  payrollActions: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 },
-  recalcBtn: { paddingVertical: 8 },
+  payrollActions: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 14 },
+  recalcBtn: { flex: 1, paddingVertical: 10, alignItems: 'center' },
   recalcBtnText: { fontSize: 12, color: Colors.gray400 },
+  recalcBtnNeeded: { fontWeight: '700', color: Colors.primary },
+  saveDeductionBtn: { flex: 1.15, minHeight: 40, borderRadius: 10, backgroundColor: Colors.primary, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12 },
+  saveDeductionBtnDisabled: { opacity: 0.45 },
+  saveDeductionBtnText: { fontSize: 13, fontWeight: '700', color: Colors.white },
+  removePayrollRow: { flexDirection: 'row', justifyContent: 'flex-end' },
   removePayrollBtn: { paddingVertical: 8, paddingHorizontal: 4 },
   removePayrollBtnText: { fontSize: 12, color: '#D94040' },
   addBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: Colors.white, borderRadius: 14, borderWidth: 0.5, borderColor: Colors.gray200, paddingVertical: 14 },
@@ -960,11 +1092,6 @@ const styles = StyleSheet.create({
   fieldHint: { fontSize: 11, color: Colors.gray400, marginBottom: 8, lineHeight: 16 },
   input: { borderWidth: 1, borderColor: Colors.gray200, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, color: Colors.black, backgroundColor: Colors.gray50 },
   modalFieldGroup: { gap: 14, marginTop: 14 },
-  memberWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  memberChip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, borderWidth: 1, borderColor: Colors.gray200, backgroundColor: Colors.gray50 },
-  memberChipOn: { borderColor: Colors.primary, backgroundColor: Colors.tinted },
-  memberChipText: { fontSize: 12, color: Colors.gray500, fontWeight: '500' },
-  memberChipTextOn: { color: Colors.primary, fontWeight: '700' },
   chipRow: { flexDirection: 'row', gap: 8 },
   chip: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, borderWidth: 1, borderColor: Colors.gray200, backgroundColor: Colors.gray50 },
   chipActive: { backgroundColor: Colors.black, borderColor: Colors.black },

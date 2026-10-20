@@ -9,6 +9,7 @@ import { useAuth } from '../../lib/contexts/AuthContext';
 import { useEmployees } from '../../lib/hooks/useEmployees';
 import { getMyPayroll } from '../../lib/services/payroll';
 import { Payroll } from '../../types';
+import { formatWorkedMinutes } from '../../lib/utils/workMinutes';
 import { resolveSelfEmployee } from '../../lib/utils/resolveSelfEmployee';
 import { AppBar } from '../../lib/components/ui';
 
@@ -112,6 +113,9 @@ export default function PayslipScreen() {
             <View style={styles.summaryCard}>
               <Text style={styles.netPay}>{fmt(payroll.net_pay)}</Text>
               <Text style={styles.summaryLine}>지급 {fmt(payroll.gross)} − 공제 {fmt(totalDeduction)}</Text>
+              {(isPartTime || payroll.worked_minutes != null) && (
+                <Text style={styles.summaryLine}>급여 작성 근무: {formatWorkedMinutes(payroll.worked_minutes)}</Text>
+              )}
             </View>
 
             <Group title="지급 항목">

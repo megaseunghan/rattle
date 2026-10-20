@@ -14,25 +14,6 @@ export interface Store {
   longitude?: number | null;
   labor_ratio_target?: number;
   cogs_ratio_target?: number;
-  attendance_radius_m?: number;
-  attendance_block_outside?: boolean;
-}
-
-export type AttendanceType = 'clock_in' | 'clock_out';
-
-export interface Attendance {
-  id: string;
-  store_id: string;
-  employee_id: string;
-  type: AttendanceType;
-  timestamp: string;
-  latitude: number;
-  longitude: number;
-  distance_m: number;
-  worked_minutes: number | null;       // 퇴근 시 계산된 근무 분
-  daily_wage: number | null;           // 파트타이머 일일급여 (시급/60 × 분)
-  note: string | null;
-  created_at: string;
 }
 
 // 발주
@@ -92,24 +73,6 @@ export interface RecipeIngredient {
   ingredient_id: string;
   quantity: number;
   unit: string;
-}
-
-// OCR 결과
-export interface OcrResult {
-  id: string;
-  store_id: string;
-  image_url: string;
-  raw_text: string;
-  parsed_items: OcrParsedItem[];
-  status: 'processing' | 'completed' | 'failed';
-  created_at: string;
-}
-
-export interface OcrParsedItem {
-  name: string;
-  quantity: number;
-  unit: string;
-  price: number;
 }
 
 // Toss Place POS 연동
@@ -174,19 +137,6 @@ export interface TossOrderItemRecord {
   created_at: string;
 }
 
-// OCR 라인 아이템 (리뷰 화면용)
-export interface OcrLineItem {
-  raw: string;                          // Gemini 응답 원본 아이템 (JSON.stringify된 문자열)
-  name: string;                         // 파싱된 품목명
-  quantity: number;
-  unit: string;
-  unit_price: number;
-  confidence: 'high' | 'low';           // low = 주황색 하이라이트
-  matched_ingredient: Ingredient | null; // 재고 자동 매칭 결과
-  match_candidates: Ingredient[];        // 후보 2개 이상일 때
-  prev_price: number | null;            // 이전 발주 단가 (변동 표시용)
-}
-
 // Toss Place 카탈로그 (DB row)
 export interface TossCatalogEntry {
   id: string;
@@ -221,17 +171,27 @@ export interface StoreMember {
   created_at: string;
 }
 
+export interface StoreJoinResult {
+  store_id: string;
+  store_name: string;
+}
+
+export interface MemberApprovalResult {
+  employee_id: string;
+  employee_name: string;
+}
+
 // 직원
 export type EmploymentType = 'regular' | 'part_time';
 
 export interface Employee {
   id: string;
   store_id: string;
-  user_id: string | null;              // 연결된 로그인 계정 (출퇴근 본인 확인용)
+  user_id: string | null;              // 연결된 로그인 계정 (급여 명세서·스케줄 본인 확인용)
   name: string;
   employment_type: EmploymentType;
   base_salary: number;
-  hourly_wage: number | null;          // 파트타이머 시급 (분 단위 일일급여 계산용)
+  hourly_wage: number | null;          // 파트타이머 시급 (분 단위 급여 계산용)
   non_taxable: number;
   joined_at: string | null;            // 'YYYY-MM-DD' 입사일 (61일 수습 자동 적용)
   phone: string | null;
@@ -277,13 +237,46 @@ export interface Payroll {
   net_pay: number;
   is_settled: boolean;
   settled_at: string | null;
+  worked_minutes?: number | null;  // 월별 급여 작성용 수기 입력 (0분과 미입력 구분)
+  applied_hourly_wage?: number | null;
+  work_note?: string | null;
+  work_source?: 'manual' | 'legacy_attendance' | null;
+  work_submission_id?: string | null;
+  revision?: number;
+  updated_at?: string;
+  updated_by?: string | null;
   created_at: string;
+}
+
+export interface PayrollWorkSubmission {
+  id: string;
+  store_id: string;
+  employee_id: string;
+  year_month: string;
+  worked_minutes: number;
+  note: string;
+  version: number;
+  status: 'pending' | 'approved' | 'rejected' | 'superseded';
+  submitted_by: string | null;
+  submitted_at: string;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  review_note: string | null;
+}
+
+export interface PayrollWorkHistory {
+  id: string;
+  operation: 'INSERT' | 'UPDATE' | 'DELETE';
+  old_record: Payroll | null;
+  new_record: Payroll | null;
+  changed_at: string;
+  changed_by: string | null;
 }
 
 // 매입
 // 매장별로 자유롭게 추가/수정/삭제 가능 (stores.purchase_categories) — 고정 enum이 아님
 export type PurchaseCategory = string;
-export type PurchaseType = '쿠팡' | '네이버' | '수기';
+export type PurchaseType = string;
 
 export interface Purchase {
   id: string;
@@ -389,6 +382,14 @@ export interface ManualSale {
 // 알림 센터 (화면 38/52)
 export type NotificationCategory = 'attendance' | 'stock' | 'sales';
 
+export interface HomeAlert {
+  key: string;
+  kind: 'stock' | 'fixedExpenseMissing' | 'tossNotSynced' | 'monthClose';
+  message: string;
+  actionLabel: string;
+  route: string;
+}
+
 export interface AppNotification {
   id: string;
   store_id: string;
@@ -452,28 +453,6 @@ export interface ScheduleRequest {
   reviewed_at: string | null;
   reviewed_by: string | null;
 }
-
-// 근태 정정 요청 (화면 51)
-export type CorrectionTarget = 'clock_in' | 'clock_out' | 'both';
-
-export interface AttendanceCorrection {
-  id: string;
-  store_id: string;
-  employee_id: string;
-  attendance_date: string; // 'YYYY-MM-DD'
-  target: CorrectionTarget;
-  original_clock_in: string | null;
-  original_clock_out: string | null;
-  requested_clock_in: string | null;
-  requested_clock_out: string | null;
-  reason: string;
-  photo_url: string | null;
-  status: RequestStatus;
-  requested_at: string;
-  reviewed_at: string | null;
-  reviewed_by: string | null;
-}
-
 
 export interface CleaningLog {
   id: string;

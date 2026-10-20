@@ -61,7 +61,7 @@ export default function AccountScreen() {
           style={styles.input}
           value={fullName}
           onChangeText={setFullName}
-          placeholder="실명 (출퇴근·급여에 사용)"
+          placeholder="실명 (급여·직원 관리에 사용)"
           placeholderTextColor={Colors.gray400}
         />
         <Text style={styles.label}>연락처</Text>

@@ -1,3 +1,4 @@
+import { getErrorMessage } from '../../lib/utils/error';
 import { useState, useMemo, useEffect } from 'react';
 import {
   View,
@@ -89,7 +90,7 @@ export default function NewRecipeScreen() {
       setVolumeTarget(null);
       setVolInput('');
     } catch (e: any) {
-      Alert.alert('오류', e.message);
+      Alert.alert('오류', getErrorMessage(e));
     } finally {
       setSavingVol(false);
     }
@@ -181,7 +182,7 @@ export default function NewRecipeScreen() {
       setShowNewForm(false);
       setShowPicker(false);
     } catch (e: any) {
-      Alert.alert('오류', e.message);
+      Alert.alert('오류', getErrorMessage(e));
     } finally {
       setSavingNew(false);
     }
@@ -249,7 +250,7 @@ export default function NewRecipeScreen() {
       bypassLeaveGuard();
       router.back();
     } catch (e: any) {
-      Alert.alert('오류', e.message ?? '작업에 실패했습니다.');
+      Alert.alert('오류', getErrorMessage(e, '작업에 실패했습니다.'));
     } finally {
       setSubmitting(false);
     }

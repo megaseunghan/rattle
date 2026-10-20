@@ -1,12 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, useWindowDimensions } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import PagerView from 'react-native-pager-view';
 import { Colors } from '../../constants/colors';
 import { useAuth } from '../../lib/contexts/AuthContext';
 import { useEmployees } from '../../lib/hooks/useEmployees';
-import { useLowStockCount } from '../../lib/hooks/useLowStockCount';
 import { resolveSelfEmployee } from '../../lib/utils/resolveSelfEmployee';
 import { TabPagerContext, TabName, HomeMode, useTabPager } from '../../lib/contexts/TabPagerContext';
 import { DraggableFab } from '../../lib/components/DraggableFab';
@@ -26,7 +25,6 @@ const QUICK_ADD_ITEMS: QuickAddAction[] = [
   { key: 'stock', label: '재고 등록', icon: 'cube-outline', route: '/stock/new' },
   { key: 'recipe', label: '레시피 등록', icon: 'restaurant-outline', route: '/recipes/new' },
   { key: 'employee', label: '직원 등록', icon: 'people-outline', tab: 'payroll' },
-  { key: 'attendance', label: '출퇴근 등록', icon: 'time-outline', route: '/attendance' },
 ];
 
 const MENU_WIDTH = 168;
@@ -50,12 +48,13 @@ function QuickAddMenu({
 
   // FAB 오른쪽 끝에 메뉴 오른쪽 끝을 맞추고, FAB 바로 위(아래에서부터 거리 기준)에 띄운다. 화면 밖으로 안 나가게 clamp
   const menuLeft = Math.min(Math.max(fabPos.x + FAB_SIZE - MENU_WIDTH, 8), width - MENU_WIDTH - 8);
-  const menuBottom = height - fabPos.y + 8;
+  const menuHeight = QUICK_ADD_ITEMS.length * 44 + 12;
+  const menuTop = Math.max(8, Math.min(fabPos.y - menuHeight - 8, height - menuHeight - 100));
 
   return (
     <>
-      <Pressable style={styles.menuOverlay} onPress={onClose} />
-      <View style={[styles.menuBox, { left: menuLeft, bottom: menuBottom }]}>
+      <Pressable style={styles.menuOverlay} onPress={onClose} accessibilityLabel="빠른 등록 닫기" />
+      <View style={[styles.menuBox, { left: menuLeft, top: menuTop }]}>
         {QUICK_ADD_ITEMS.map((item) => (
           <Pressable key={item.key} style={styles.menuItem} onPress={() => handleSelect(item)}>
             <Ionicons name={item.icon} size={16} color={Colors.primary} />
@@ -96,9 +95,8 @@ function TabIcon({ tab, focused, badge }: { tab: TabName; focused: boolean; badg
 }
 
 export default function TabsLayout() {
-  const { user, currentRole, realRole, devPreviewMode, devPreviewEmployeeId } = useAuth();
+  const { user, store, currentRole, realRole, devPreviewMode, devPreviewEmployeeId } = useAuth();
   const { employees, refetch } = useEmployees();
-  const { count: lowStockCount } = useLowStockCount();
 
   useEffect(() => { refetch(); }, [refetch]);
 
@@ -124,6 +122,19 @@ export default function TabsLayout() {
   const [quickAddVisible, setQuickAddVisible] = useState(false);
   const [fabPos, setFabPos] = useState({ x: 0, y: 0 });
   const [moreOpen, setMoreOpen] = useState(false);
+
+  const routeParams = useLocalSearchParams<{ targetTab?: string }>();
+  const tabRouter = useRouter();
+  useEffect(() => {
+    if (!routeParams.targetTab) return;
+    const index = tabs.indexOf(routeParams.targetTab as TabName);
+    if (index >= 0) {
+      setVisited(prev => new Set(prev).add(index));
+      setActiveIndex(index);
+      pagerRef.current?.setPageWithoutAnimation(index);
+    }
+    tabRouter.setParams({ targetTab: undefined });
+  }, [routeParams.targetTab, tabs, tabRouter]);
 
   // 파트타이머 여부가 바뀌어 탭 개수가 줄면 인덱스 보정
   useEffect(() => {
@@ -159,7 +170,7 @@ export default function TabsLayout() {
         >
           {tabs.map((tab, idx) => (
             <View key={tab} style={styles.flex}>
-              {visited.has(idx) ? <TabPage tab={tab} active={activeIndex === idx} /> : null}
+              {visited.has(idx) ? <TabPage key={store?.id} tab={tab} active={activeIndex === idx} /> : null}
             </View>
           ))}
         </PagerView>
@@ -167,7 +178,7 @@ export default function TabsLayout() {
         <View style={styles.tabBar}>
           {tabs.map((tab) => (
             <Pressable key={tab} style={styles.tabBarItem} onPress={() => goToTab(tab)}>
-              <TabIcon tab={tab} focused={activeTab === tab} badge={tab === 'stock' ? lowStockCount : undefined} />
+              <TabIcon tab={tab} focused={activeTab === tab} />
             </Pressable>
           ))}
         </View>
@@ -243,9 +254,11 @@ const styles = StyleSheet.create({
   menuOverlay: {
     position: 'absolute',
     top: 0, left: 0, right: 0, bottom: 0,
+    zIndex: 10,
   },
   menuBox: {
     position: 'absolute',
+    zIndex: 11,
     width: MENU_WIDTH,
     backgroundColor: Colors.white,
     borderRadius: 14,

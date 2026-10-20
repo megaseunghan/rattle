@@ -3,15 +3,13 @@ import { AppNotification, NotificationCategory } from '../../types';
 
 export interface NotificationSettingDef {
   key: string;
-  group: '근태' | '재고' | '매출·손익';
+  group: '재고' | '매출·손익';
   label: string;
   description: string;
   default: boolean;
 }
 
 export const NOTIFICATION_SETTING_DEFS: NotificationSettingDef[] = [
-  { key: 'attendance_late', group: '근태', label: '지각 알림', description: '출근 시간을 넘긴 직원이 있을 때', default: true },
-  { key: 'attendance_no_show', group: '근태', label: '미출근 알림', description: '스케줄 시작 30분 후에도 출근 기록이 없을 때', default: true },
   { key: 'stock_low', group: '재고', label: '품절 임박 알림', description: '설정한 안전 수량 이하로 떨어졌을 때', default: true },
   { key: 'stock_reported', group: '재고', label: '품절 보고 알림', description: '직원이 품절 품목을 보고했을 때', default: false },
   { key: 'sales_daily_report', group: '매출·손익', label: '일일 마감 리포트', description: '영업 마감 시각에 그날의 매출·손익 요약', default: true },
@@ -19,7 +17,7 @@ export const NOTIFICATION_SETTING_DEFS: NotificationSettingDef[] = [
 ];
 
 export async function getNotifications(storeId: string, category?: NotificationCategory): Promise<AppNotification[]> {
-  let query = supabase.from('notifications').select('*').eq('store_id', storeId).order('created_at', { ascending: false });
+  let query = supabase.from('notifications').select('*').eq('store_id', storeId).neq('category', 'attendance').order('created_at', { ascending: false });
   if (category) query = query.eq('category', category);
   const { data, error } = await query;
   if (error) throw new Error(error.message);
@@ -31,7 +29,8 @@ export async function getUnreadCount(storeId: string): Promise<number> {
     .from('notifications')
     .select('*', { count: 'exact', head: true })
     .eq('store_id', storeId)
-    .eq('is_read', false);
+    .eq('is_read', false)
+    .neq('category', 'attendance');
   if (error) throw new Error(error.message);
   return count ?? 0;
 }

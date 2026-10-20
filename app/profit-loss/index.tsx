@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, Pressable,
   Modal, ActivityIndicator,
@@ -10,6 +10,8 @@ import { Colors } from '../../constants/colors';
 import { useAuth } from '../../lib/contexts/AuthContext';
 import { getYearlyProfitLoss } from '../../lib/services/profitLoss';
 import { ProfitLoss } from '../../types';
+import { ErrorMessage } from '../../lib/components/ErrorMessage';
+import { getErrorMessage } from '../../lib/utils/error';
 
 function fmt(v: number | null | undefined) {
   if (v == null) return '—';
@@ -77,7 +79,7 @@ function PnLDetailSheet({ pnl, month, onClose }: { pnl: ProfitLoss; month: numbe
         {/* 5. 영업이익 */}
         <View style={sheet.profitRow}>
           <Text style={sheet.profitLabel}>5. 영업이익</Text>
-          <Text style={[sheet.profitValue, pnl.operatingProfit < 0 && sheet.profitNeg]}>
+          <Text style={[sheet.profitValue, pnl.operatingProfit > 0 && sheet.profitPos, pnl.operatingProfit < 0 && sheet.profitNeg]}>
             {fmt(pnl.operatingProfit)}
           </Text>
         </View>
@@ -133,26 +135,41 @@ export default function ProfitLossScreen() {
   const [loading, setLoading] = useState(false);
   const [monthlyData, setMonthlyData] = useState<{ month: number; data: ProfitLoss }[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const requestId = useRef(0);
   const [selected, setSelected] = useState<{ month: number; data: ProfitLoss } | null>(null);
 
   const load = useCallback(async (y: number) => {
-    if (!store) return;
-    setLoading(true);
+    const id = ++requestId.current;
+    setMonthlyData([]);
+    setSelected(null);
     setLoaded(false);
+    setError(null);
+    if (!store) { setLoading(false); return; }
+    setLoading(true);
     try {
       const ct = (store.closing_time as string | null)?.slice(0, 5) ?? '23:00';
       const results = await getYearlyProfitLoss(store.id, y, ct);
-      setMonthlyData(results);
-      setLoaded(true);
+      if (id === requestId.current) {
+        setMonthlyData(results);
+        setLoaded(true);
+      }
+    } catch (e) {
+      if (id === requestId.current) setError(getErrorMessage(e, '손익을 불러오지 못했어요.'));
     } finally {
-      setLoading(false);
+      if (id === requestId.current) setLoading(false);
     }
   }, [store]);
 
-  function prevYear() { const y = year - 1; setYear(y); load(y); }
+  useEffect(() => {
+    void load(year);
+    return () => { requestId.current += 1; };
+  }, [load, year]);
+
+  function prevYear() { setYear(y => y - 1); }
   function nextYear() {
     if (year >= today.getFullYear()) return;
-    const y = year + 1; setYear(y); load(y);
+    setYear(y => y + 1);
   }
 
   const yearTotal = monthlyData.reduce(
@@ -192,8 +209,9 @@ export default function ProfitLossScreen() {
         </View>
 
         {loading && <ActivityIndicator color={Colors.primary} style={{ marginTop: 32 }} />}
+        {!loading && error && <ErrorMessage message={error} onRetry={() => { void load(year); }} />}
 
-        {!loading && !loaded && (
+        {!loading && !loaded && !error && (
           <View style={styles.emptyHint}>
             <Ionicons name="bar-chart-outline" size={36} color={Colors.gray300} />
             <Text style={styles.emptyText}>연도를 선택하면{'\n'}해당 연도 손익을 불러옵니다</Text>
@@ -208,6 +226,12 @@ export default function ProfitLossScreen() {
             {/* 연간 합계 카드 */}
             <View style={styles.summaryCard}>
               <Text style={styles.summaryTitle}>{year}년 연간 합계</Text>
+              <View style={styles.summaryProfit}>
+                <Text style={styles.summaryProfitLabel}>영업이익</Text>
+                <Text style={[styles.summaryProfitValue, yearTotal.operatingProfit > 0 && styles.profit, yearTotal.operatingProfit < 0 && styles.loss]}>
+                  {fmt(yearTotal.operatingProfit)}
+                </Text>
+              </View>
               <View style={styles.summaryGrid}>
                 <View style={styles.summaryItem}>
                   <Text style={styles.summaryItemLabel}>매출</Text>
@@ -220,12 +244,6 @@ export default function ProfitLossScreen() {
                 <View style={styles.summaryItem}>
                   <Text style={styles.summaryItemLabel}>인건비</Text>
                   <Text style={styles.summaryItemValue}>{fmt(yearTotal.laborCost)}</Text>
-                </View>
-                <View style={styles.summaryItem}>
-                  <Text style={styles.summaryItemLabel}>영업이익</Text>
-                  <Text style={[styles.summaryItemValue, yearTotal.operatingProfit >= 0 ? styles.profit : styles.loss]}>
-                    {fmt(yearTotal.operatingProfit)}
-                  </Text>
                 </View>
               </View>
             </View>
@@ -249,7 +267,7 @@ export default function ProfitLossScreen() {
                     </View>
                     <View style={styles.monthValueItem}>
                       <Text style={styles.monthValueLabel}>영업이익</Text>
-                      <Text style={[styles.monthValueNum, data.operatingProfit >= 0 ? styles.profit : styles.loss]}>
+                      <Text style={[styles.monthValueNum, data.operatingProfit > 0 && styles.profit, data.operatingProfit < 0 && styles.loss]}>
                         {fmt(data.operatingProfit)}
                       </Text>
                     </View>
@@ -311,11 +329,14 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.white, borderRadius: 16,
     borderWidth: 0.5, borderColor: Colors.gray100, padding: 16,
   },
-  summaryTitle: { fontSize: 13, fontWeight: '600', color: Colors.gray500, marginBottom: 12 },
-  summaryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  summaryItem: { width: '47%' },
-  summaryItemLabel: { fontSize: 11, color: Colors.gray400, marginBottom: 2 },
-  summaryItemValue: { fontSize: 16, fontWeight: '600', color: Colors.black },
+  summaryTitle: { fontSize: 13, fontWeight: '600', color: Colors.gray500, marginBottom: 14 },
+  summaryProfit: { paddingBottom: 16, marginBottom: 14, borderBottomWidth: 1, borderBottomColor: Colors.gray100 },
+  summaryProfitLabel: { fontSize: 13, fontWeight: '600', color: Colors.gray600, marginBottom: 4 },
+  summaryProfitValue: { fontSize: 26, fontWeight: '700', color: Colors.black },
+  summaryGrid: { gap: 10 },
+  summaryItem: { flexDirection: 'row', justifyContent: 'space-between', gap: 12 },
+  summaryItemLabel: { fontSize: 13, color: Colors.gray500 },
+  summaryItemValue: { fontSize: 14, fontWeight: '600', color: Colors.black },
 
   monthList: { backgroundColor: Colors.white, borderRadius: 16, borderWidth: 0.5, borderColor: Colors.gray100, overflow: 'hidden' },
   monthRow: {
@@ -329,8 +350,8 @@ const styles = StyleSheet.create({
   monthValueLabel: { fontSize: 11, color: Colors.gray400 },
   monthValueNum: { fontSize: 13, fontWeight: '500', color: Colors.black },
 
-  profit: { color: Colors.primary },
-  loss: { color: '#D94040' },
+  profit: { color: Colors.positive },
+  loss: { color: Colors.negative },
 
   modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.4)' },
 });
@@ -369,9 +390,10 @@ const sheet = StyleSheet.create({
   profitRow: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     paddingVertical: 12, paddingHorizontal: 12,
-    backgroundColor: Colors.tinted, borderRadius: 12, marginTop: 8,
+    backgroundColor: Colors.gray50, borderRadius: 12, marginTop: 8,
   },
-  profitLabel: { fontSize: 14, fontWeight: '700', color: Colors.deeper },
-  profitValue: { fontSize: 16, fontWeight: '800', color: Colors.primary },
-  profitNeg: { color: '#D94040' },
+  profitLabel: { fontSize: 14, fontWeight: '700', color: Colors.black },
+  profitValue: { fontSize: 16, fontWeight: '800', color: Colors.black },
+  profitPos: { color: Colors.positive },
+  profitNeg: { color: Colors.negative },
 });

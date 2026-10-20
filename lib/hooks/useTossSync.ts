@@ -1,3 +1,4 @@
+import { UserFacingError, getErrorMessage } from '../utils/error';
 import { useState, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../supabase';
@@ -35,7 +36,7 @@ export function useTossSync(): UseTossSyncResult {
   const [todayOrderCount, setTodayOrderCount] = useState(0);
 
   async function getMerchantId(): Promise<string> {
-    if (!store) throw new Error('매장 정보가 없습니다');
+    if (!store) throw new UserFacingError('매장 정보가 없습니다');
 
     const { data, error } = await supabase
       .from('stores')
@@ -44,7 +45,7 @@ export function useTossSync(): UseTossSyncResult {
       .single();
 
     if (error) throw new Error(error.message);
-    if (!data.toss_merchant_id) throw new Error('Toss Place 연동이 설정되지 않았습니다');
+    if (!data.toss_merchant_id) throw new UserFacingError('Toss Place 연동이 설정되지 않았습니다');
 
     return data.toss_merchant_id as string;
   }
@@ -60,7 +61,7 @@ export function useTossSync(): UseTossSyncResult {
   }
 
   const syncOrders = useCallback(async (dateFrom: string, dateTo: string): Promise<TossOrder[]> => {
-    if (!store) throw new Error('매장 정보가 없습니다');
+    if (!store) throw new UserFacingError('매장 정보가 없습니다');
     setLoading(true);
     setError(null);
     try {
@@ -91,7 +92,7 @@ export function useTossSync(): UseTossSyncResult {
       setLastSyncAt(new Date().toISOString());
       return orders;
     } catch (e: any) {
-      setError(e.message);
+      setError(getErrorMessage(e));
       throw e;
     } finally {
       setLoading(false);
@@ -100,7 +101,7 @@ export function useTossSync(): UseTossSyncResult {
   }, [store]);
 
   const syncCatalog = useCallback(async (): Promise<TossCatalogItem[]> => {
-    if (!store) throw new Error('매장 정보가 없습니다');
+    if (!store) throw new UserFacingError('매장 정보가 없습니다');
     setLoading(true);
     setError(null);
     try {
@@ -111,7 +112,7 @@ export function useTossSync(): UseTossSyncResult {
       }
       return items;
     } catch (e: any) {
-      setError(e.message);
+      setError(getErrorMessage(e));
       throw e;
     } finally {
       setLoading(false);
@@ -240,7 +241,7 @@ export function useTossSync(): UseTossSyncResult {
 
   /** 특정 날짜 영업일 수동 동기화 */
   const syncByDate = useCallback(async (date: string): Promise<void> => {
-    if (!store) throw new Error('매장 정보가 없습니다');
+    if (!store) throw new UserFacingError('매장 정보가 없습니다');
     const closingTime = await getClosingTime();
     const { from, to } = getBusinessDayRange(date, closingTime);
     await syncOrders(from, to);
@@ -248,7 +249,7 @@ export function useTossSync(): UseTossSyncResult {
 
   /** 특정 월 전체 동기화 (1일 영업일 시작 ~ 말일 영업일 종료) */
   const syncByMonth = useCallback(async (year: number, month: number): Promise<void> => {
-    if (!store) throw new Error('매장 정보가 없습니다');
+    if (!store) throw new UserFacingError('매장 정보가 없습니다');
     const closingTime = await getClosingTime();
     const [h, m] = closingTime.split(':').map(Number);
 
