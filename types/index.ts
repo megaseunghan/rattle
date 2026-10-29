@@ -1,8 +1,14 @@
+export type FinancialShareScope = 'none' | 'regular_only' | 'all_staff';
+export type PosSetupChoice = 'now' | 'later';
+
 // 매장
 export interface Store {
   id: string;
   name: string;
   owner_id: string;
+  financial_share_scope?: FinancialShareScope;
+  pos_setup_choice?: PosSetupChoice | null;
+  setup_request_id?: string | null;
   categories?: string[];
   closing_time?: string | null;
   created_at: string;
@@ -14,6 +20,16 @@ export interface Store {
   longitude?: number | null;
   labor_ratio_target?: number;
   cogs_ratio_target?: number;
+}
+
+/** 매장별 관리 항목의 ID는 이름 변경 후에도 유지한다. */
+export interface StoreTaxonomy {
+  id: string;
+  store_id: string;
+  domain: 'ingredient' | 'purchase' | 'purchase_type';
+  name: string;
+  sort_order: number;
+  is_active: boolean;
 }
 
 // 발주
@@ -42,6 +58,7 @@ export interface OrderItem {
 export interface Ingredient {
   id: string;
   store_id: string;
+  category_id?: string | null;
   name: string;
   category: string;
   current_stock: number;
@@ -176,6 +193,42 @@ export interface StoreJoinResult {
   store_name: string;
 }
 
+export interface MemberApprovalCandidate {
+  id: string;
+  name: string;
+  phone: string | null;
+  is_active: boolean;
+  joined_at: string | null;
+  created_at: string;
+  has_other_account: boolean;
+  is_applicant_account: boolean;
+}
+
+export type MemberApprovalChoice =
+  | { kind: 'auto' }
+  | { kind: 'rehire'; employeeId: string }
+  | { kind: 'new' };
+
+export interface JoinOnboardingInput {
+  employment_type: 'regular' | 'part_time';
+  hourly_wage: number | null;
+  weekly_hours: number | null;
+  base_salary: number;
+  non_taxable: number;
+  joined_at: string;
+  bank_name: string;
+  account_number: string;
+}
+
+export interface JoinOnboardingProfile extends JoinOnboardingInput {
+  member_id: string;
+  store_id: string;
+  applicant_user_id: string;
+  revision: number;
+  reviewed_revision: number | null;
+  reviewed_profile?: JoinOnboardingInput | null;
+}
+
 export interface MemberApprovalResult {
   employee_id: string;
   employee_name: string;
@@ -185,6 +238,7 @@ export interface MemberApprovalResult {
 export type EmploymentType = 'regular' | 'part_time';
 
 export interface Employee {
+  wage_history_missing?: boolean;
   id: string;
   store_id: string;
   user_id: string | null;              // 연결된 로그인 계정 (급여 명세서·스케줄 본인 확인용)
@@ -221,6 +275,7 @@ export interface WageHistory {
 
 // 급여 명세
 export interface Payroll {
+  calculation_version?: string | null;
   id: string;
   store_id: string;
   employee_id: string;
@@ -242,10 +297,41 @@ export interface Payroll {
   work_note?: string | null;
   work_source?: 'manual' | 'legacy_attendance' | null;
   work_submission_id?: string | null;
+  daily_work_snapshot?: DailyWorkSnapshot[] | null;
+  regular_wage_snapshot?: import('../lib/utils/regularWages').RegularWageSnapshot | null;
   revision?: number;
   updated_at?: string;
   updated_by?: string | null;
   created_at: string;
+}
+
+export interface DailyWorkSnapshot {
+  id: string;
+  revision: number;
+  work_date: string;
+  worked_minutes: number;
+  applied_hourly_wage: number;
+  gross: number;
+  status: 'pending' | 'approved' | 'rejected';
+}
+export interface DailyWorkRecord extends DailyWorkSnapshot {
+  store_id: string;
+  employee_id: string;
+  note: string;
+  submitted_by: string | null;
+  reviewed_by: string | null;
+  review_note: string | null;
+  updated_at: string;
+}
+export interface DailyWorkHistory {
+  id: string;
+  store_id: string;
+  employee_id: string;
+  work_date: string;
+  old_record: DailyWorkRecord | null;
+  new_record: DailyWorkRecord;
+  changed_by: string | null;
+  changed_at: string;
 }
 
 export interface PayrollWorkSubmission {
@@ -281,6 +367,8 @@ export type PurchaseType = string;
 export interface Purchase {
   id: string;
   store_id: string;
+  category_id?: string | null;
+  purchase_type_id?: string | null;
   date: string;           // 'YYYY-MM-DD'
   supplier: string;
   amount: number;
@@ -294,6 +382,7 @@ export interface PurchaseItem {
   id: string;
   purchase_id: string;
   store_id: string;
+  category_id?: string | null;
   ingredient_id: string | null;
   name: string;
   quantity: number;
@@ -330,6 +419,7 @@ export interface Expense {
 // 손익계산서
 export interface ProfitLoss {
   yearMonth: string;
+  missingWageEmployeeIds?: string[]; // 적용 이력과 월 급여가 모두 없는 재직 직원
   // 1. 매출
   cardRevenue: number;
   cashRevenue: number;
@@ -339,11 +429,11 @@ export interface ProfitLoss {
   purchaseCost: number;
   grossProfit: number;
   // 3. 인건비
-  regularGross: number;       // 직원 인건비 (세전)
+  regularGross: number | null;       // 직원 인건비 (세전)
   regularWithholding: number; // 직원 원천징수 (4대보험+소득세)
   partTimeGross: number;      // 파트타이머 인건비
   partTimeWithholding: number;// 파트타이머 3.3% 원천징수
-  laborCost: number;          // 합계
+  laborCost: number | null;          // 합계
   // 4. 비용 (카테고리별)
   fixedExpense: number;
   marketingExpense: number;
@@ -352,9 +442,9 @@ export interface ProfitLoss {
   cardFeeExpense: number;     // 카드 수수료 (카드매출 × 1.25%, 자동 계산)
   variableExpense: number;    // 마케팅+시설보수+공과금+카드수수료 합계
   // 5. 이익
-  operatingProfit: number;
+  operatingProfit: number | null;
   taxReserve: number;
-  netProfit: number;
+  netProfit: number | null;
 }
 
 // POS 상품별 집계 (일별 상세)
@@ -380,7 +470,7 @@ export interface ManualSale {
 }
 
 // 알림 센터 (화면 38/52)
-export type NotificationCategory = 'attendance' | 'stock' | 'sales';
+export type NotificationCategory = 'attendance' | 'stock' | 'sales' | 'members';
 
 export interface HomeAlert {
   key: string;
@@ -459,7 +549,23 @@ export interface CleaningLog {
   store_id: string;
   item_id: string;
   date: string; // 'YYYY-MM-DD'
-  checked_by: string;
+  checked_by: string | null;
   checked_by_name: string;
   checked_at: string;
 }
+
+/** 홈 공유용 매장 합계. 직원 개인 급여·공제 내역은 포함하지 않는다. */
+export interface HomeFinancialSummary {
+  yearMonth: string;
+  revenue: number;
+  purchaseCost: number;
+  laborCost: number | null;
+  fixedExpense: number;
+  variableExpense: number;
+  operatingProfit: number | null;
+}
+
+/** Store-wide home shortcuts; ordering is persisted separately for each part of the day. */
+export type HomePhase = 'open' | 'business' | 'close';
+export type HomeActionId = 'open_check' | 'close_check' | 'weekday_check' | 'stock' | 'stock_edit' | 'schedule' | 'purchase' | 'recipes' | 'sales' | 'expenses';
+export type HomeWorkflow = Record<HomePhase, HomeActionId[]>;

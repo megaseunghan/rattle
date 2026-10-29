@@ -27,3 +27,16 @@ jobs:
 
       - name: Run tests
         run: npm test -- --no-coverage
+
+      - name: SQL authorization and recovery tests
+        run: npm run test:sql
+
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Edge Functions type check
+        run: deno check --config supabase/functions/deno.json supabase/functions/delete-account/index.ts supabase/functions/account-unlink-retry/index.ts supabase/functions/toss-webhook/index.ts supabase/functions/toss-proxy/index.ts
+
+      - name: Account unlink recovery tests
+        run: deno test --config supabase/functions/deno.json supabase/functions/_shared/accountUnlinks.test.ts supabase/functions/_shared/appleUnlink.test.ts
