@@ -1,3 +1,4 @@
+import { SheetModal } from '../../lib/components/ui/SheetModal';
 import { getErrorMessage } from '../../lib/utils/error';
 import { useState, useMemo, useEffect } from 'react';
 import {
@@ -140,6 +141,7 @@ export default function NewRecipeScreen() {
     }
   }
 
+  const costKnown = items.length > 0 && items.every(item => item.ingredient.last_price != null);
   const cost = useMemo(() => {
     return items.reduce((sum, item) => {
       const qty = parseFloat(item.quantity) || 0;
@@ -150,10 +152,11 @@ export default function NewRecipeScreen() {
   const marginRate = useMemo(() => {
     const sp = parseFloat(sellingPrice) || 0;
     if (sp <= 0) return 0;
-    return Math.max(0, ((sp - cost) / sp) * 100);
+    return ((sp - cost) / sp) * 100;
   }, [sellingPrice, cost]);
 
   function getMarginColor(): string {
+    if (!costKnown || !(parseFloat(sellingPrice) > 0)) return Colors.gray600;
     if (marginRate >= 60) return Colors.success;
     if (marginRate >= 30) return Colors.warning;
     return Colors.danger;
@@ -271,7 +274,7 @@ export default function NewRecipeScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.actionButton} accessibilityRole="button">
           <Text style={styles.back}>취소</Text>
         </TouchableOpacity>
         <Text style={styles.title}>{isEdit ? '레시피 수정' : '새 레시피'}</Text>
@@ -352,13 +355,13 @@ export default function NewRecipeScreen() {
           <View style={styles.costPreview}>
             <View style={styles.costItem}>
               <Text style={styles.costLabel}>예상 원가</Text>
-              <Text style={styles.costValue}>{Math.round(cost).toLocaleString('ko-KR')}원</Text>
+              <Text style={styles.costValue}>{costKnown ? `${Math.round(cost).toLocaleString('ko-KR')}원` : items.length ? '단가 확인 필요' : '재료 미등록'}</Text>
             </View>
             <View style={styles.costDivider} />
             <View style={styles.costItem}>
               <Text style={styles.costLabel}>마진율</Text>
               <Text style={[styles.costValue, { color: marginColor }]}>
-                {sellingPriceNum > 0 ? `${marginRate.toFixed(1)}%` : '-%'}
+                {costKnown && sellingPriceNum > 0 ? `${marginRate.toFixed(1)}%` : '확인 필요'}
               </Text>
             </View>
           </View>
@@ -407,7 +410,7 @@ export default function NewRecipeScreen() {
                   ) : (
                     <Text style={styles.unitText}>{item.unit}</Text>
                   )}
-                  <TouchableOpacity onPress={() => removeItem(item.ingredient.id)}>
+                  <TouchableOpacity onPress={() => removeItem(item.ingredient.id)} style={styles.actionButton} accessibilityRole="button">
                     <Ionicons name="close" size={16} color={Colors.gray400} />
                   </TouchableOpacity>
                 </View>
@@ -417,12 +420,12 @@ export default function NewRecipeScreen() {
         </ScrollView>
       </KeyboardAvoidingView>
 
-      <Modal visible={showPicker} animationType="slide" transparent>
-        <Pressable style={styles.modalOverlay} onPress={() => { setShowPicker(false); setShowNewForm(false); }}>
-          <Pressable style={styles.modalSheet} onPress={() => {}}>
+      <SheetModal visible={showPicker} onRequestClose={() => { setShowPicker(false); setShowNewForm(false); }}>
+        <Pressable accessible={false} style={styles.modalOverlay} onPress={() => { setShowPicker(false); setShowNewForm(false); }}>
+          <Pressable accessible={false} accessibilityViewIsModal style={styles.modalSheet} onPress={() => {}}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>식자재 선택</Text>
-              <TouchableOpacity onPress={() => { setShowPicker(false); setShowNewForm(false); }}>
+              <TouchableOpacity onPress={() => { setShowPicker(false); setShowNewForm(false); }} style={styles.actionButton} accessibilityRole="button">
                 <Text style={styles.modalClose}>닫기</Text>
               </TouchableOpacity>
             </View>
@@ -508,18 +511,18 @@ export default function NewRecipeScreen() {
             )}
           </Pressable>
         </Pressable>
-      </Modal>
+      </SheetModal>
 
       {/* 개당 용량 입력 모달 */}
       <Modal visible={volumeTarget !== null} animationType="fade" transparent>
         <Pressable style={styles.volOverlay} onPress={() => setVolumeTarget(null)}>
           <Pressable style={styles.volSheet} onPress={() => {}}>
             <View style={styles.volHeader}>
-              <TouchableOpacity onPress={() => setVolumeTarget(null)} hitSlop={8}>
+              <TouchableOpacity onPress={() => setVolumeTarget(null)} hitSlop={8} style={styles.actionButton} accessibilityRole="button">
                 <Text style={styles.volHeaderCancel}>나중에</Text>
               </TouchableOpacity>
               <Text style={styles.volHeaderTitle} numberOfLines={1}>{volumeTarget?.name} 개당 용량</Text>
-              <TouchableOpacity onPress={handleSaveVolume} disabled={savingVol} hitSlop={8}>
+              <TouchableOpacity onPress={handleSaveVolume} disabled={savingVol} hitSlop={8} style={styles.actionButton} accessibilityRole="button">
                 {savingVol
                   ? <ActivityIndicator size="small" color={Colors.primary} />
                   : <Text style={styles.volHeaderSave}>저장</Text>}
@@ -558,39 +561,38 @@ export default function NewRecipeScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.gray50 },
+  actionButton: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
+  container: { flex: 1, backgroundColor: Colors.homeCanvas},
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
     paddingVertical: 14,
-    backgroundColor: Colors.white,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.gray100,
+    backgroundColor: Colors.homeCanvas,
+    borderBottomWidth: 0,
+    borderBottomColor: Colors.homeBorder,
   },
   back: { fontSize: 15, color: Colors.primary, fontWeight: '600' },
-  title: { fontSize: 17, fontWeight: '700', color: Colors.black },
+  title: { fontSize: 22, fontWeight: '700', color: Colors.black, flexShrink: 1 },
   submitBtn: {
     backgroundColor: Colors.primary,
     paddingHorizontal: 16,
     paddingVertical: 7,
-    borderRadius: 9,
-  },
+    borderRadius: 14, minHeight: 44, justifyContent: 'center' },
   submitBtnDisabled: { opacity: 0.5 },
   submitText: { color: Colors.white, fontSize: 14, fontWeight: '700' },
   content: { padding: 20, paddingBottom: 40 },
   label: { fontSize: 14, fontWeight: '600', color: Colors.gray700, marginBottom: 6, marginTop: 16 },
   input: {
     backgroundColor: Colors.white,
-    borderRadius: 10,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: Colors.gray200,
+    borderColor: Colors.homeBorder,
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 15,
-    color: Colors.black,
-  },
+    color: Colors.black, minHeight: 44 },
   categoryGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -600,13 +602,12 @@ const styles = StyleSheet.create({
   categoryChip: {
     paddingHorizontal: 12,
     paddingVertical: 8,
-    borderRadius: 10,
+    borderRadius: 14,
     backgroundColor: Colors.white,
     borderWidth: 1,
-    borderColor: Colors.gray200,
+    borderColor: Colors.homeBorder,
     flexDirection: 'row',
-    alignItems: 'center',
-  },
+    alignItems: 'center', minHeight: 44, justifyContent: 'center' },
   categoryChipActive: {
     backgroundColor: Colors.primary,
     borderColor: Colors.primary,
@@ -627,15 +628,15 @@ const styles = StyleSheet.create({
   costPreview: {
     flexDirection: 'row',
     backgroundColor: Colors.white,
-    borderRadius: 12,
+    borderRadius: 24,
     borderWidth: 1,
-    borderColor: Colors.gray200,
+    borderColor: Colors.homeBorder,
     marginTop: 12,
     overflow: 'hidden',
   },
   costItem: { flex: 1, padding: 14, alignItems: 'center' },
   costDivider: { width: 1, backgroundColor: Colors.gray200 },
-  costLabel: { fontSize: 12, color: Colors.gray500, marginBottom: 4 },
+  costLabel: { fontSize: 13, color: Colors.gray500, marginBottom: 4 },
   costValue: { fontSize: 16, fontWeight: '700', color: Colors.black },
   itemsHeader: {
     flexDirection: 'row',
@@ -647,64 +648,63 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.bg,
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 8,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: Colors.pale,
-  },
+    borderColor: Colors.pale, minHeight: 44, justifyContent: 'center' },
   addItemText: { fontSize: 13, color: Colors.dark, fontWeight: '600' },
   emptyItems: {
     backgroundColor: Colors.white,
-    borderRadius: 10,
+    borderRadius: 20,
     borderWidth: 1,
-    borderColor: Colors.gray200,
+    borderColor: Colors.homeBorder,
     padding: 24,
     alignItems: 'center',
     marginTop: 6,
   },
   emptyItemsText: { color: Colors.gray400, fontSize: 14 },
   recipeItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'column',
+    alignItems: 'stretch',
+    gap: 12,
     backgroundColor: Colors.white,
-    borderRadius: 12,
+    borderRadius: 20,
     borderWidth: 1,
-    borderColor: Colors.gray200,
+    borderColor: Colors.homeBorder,
     padding: 12,
     marginTop: 8,
   },
-  recipeItemLeft: { flex: 1 },
+  recipeItemLeft: { minWidth: 0 },
   recipeItemName: { fontSize: 15, fontWeight: '600', color: Colors.black, marginBottom: 2 },
-  recipeItemPrice: { fontSize: 12, color: Colors.gray400 },
-  recipeItemRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  recipeItemPrice: { fontSize: 13, color: Colors.gray500},
+  recipeItemRight: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8 },
   qtyInput: {
+    flex: 1,
     backgroundColor: Colors.gray50,
-    borderRadius: 8,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: Colors.gray200,
+    borderColor: Colors.homeBorder,
     paddingHorizontal: 10,
     paddingVertical: 6,
     fontSize: 14,
     fontWeight: '600',
     color: Colors.black,
     minWidth: 56,
-    textAlign: 'right',
-  },
+    textAlign: 'right', minHeight: 44 },
   unitText: { fontSize: 13, color: Colors.gray500 },
-  unitToggle: { flexDirection: 'row', gap: 4 },
+  unitToggle: { flexDirection: 'row', flexWrap: 'wrap', flexShrink: 1, gap: 4 },
   unitToggleChip: {
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 8,
-    backgroundColor: Colors.gray100,
-  },
+    borderRadius: 12,
+    backgroundColor: Colors.gray100, minHeight: 44, justifyContent: 'center', minWidth: 44, alignItems: 'center' },
   unitToggleChipActive: { backgroundColor: Colors.primary },
   unitToggleText: { fontSize: 12, color: Colors.gray500, fontWeight: '600' },
   unitToggleTextActive: { color: Colors.white },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
+  modalOverlay: { flex: 1, backgroundColor: Colors.overlay, justifyContent: 'flex-end' },
   modalSheet: {
-    backgroundColor: Colors.white,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    backgroundColor: Colors.homeCanvas,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
     maxHeight: '70%',
   },
   modalHeader: {
@@ -732,32 +732,28 @@ const styles = StyleSheet.create({
   pickerUnit: { fontSize: 13, color: Colors.gray500 },
   newIngredientBtn: {
     marginHorizontal: 20, marginVertical: 10,
-    paddingVertical: 10, borderRadius: 10,
+    paddingVertical: 10, borderRadius: 14,
     borderWidth: 1, borderColor: Colors.primary,
-    alignItems: 'center',
-  },
+    alignItems: 'center', minHeight: 44, justifyContent: 'center' },
   newIngredientBtnText: { fontSize: 14, fontWeight: '600', color: Colors.primary },
-  newIngredientForm: { padding: 16, gap: 8, borderBottomWidth: 1, borderBottomColor: Colors.gray100 },
+  newIngredientForm: { padding: 20, gap: 8, borderBottomWidth: 1, borderBottomColor: Colors.gray100 },
   newInput: {
-    borderWidth: 1, borderColor: Colors.gray200, borderRadius: 10,
+    borderWidth: 1, borderColor: Colors.homeBorder, borderRadius: 12,
     paddingHorizontal: 12, paddingVertical: 9, fontSize: 14,
-    color: Colors.black, backgroundColor: Colors.gray50,
-  },
+    color: Colors.black, backgroundColor: Colors.gray50, minHeight: 44 },
   newInputRow: { flexDirection: 'row', gap: 8 },
   newCancelBtn: {
-    flex: 1, paddingVertical: 10, borderRadius: 10,
-    borderWidth: 1, borderColor: Colors.gray200, alignItems: 'center',
-  },
+    flex: 1, paddingVertical: 10, borderRadius: 14,
+    borderWidth: 1, borderColor: Colors.gray200, alignItems: 'center', minHeight: 44, justifyContent: 'center' },
   newCancelText: { fontSize: 14, fontWeight: '600', color: Colors.gray500 },
   newSaveBtn: {
-    flex: 2, paddingVertical: 10, borderRadius: 10,
-    backgroundColor: Colors.primary, alignItems: 'center',
-  },
+    flex: 2, paddingVertical: 10, borderRadius: 14,
+    backgroundColor: Colors.primary, alignItems: 'center', minHeight: 44, justifyContent: 'center' },
   newSaveText: { fontSize: 14, fontWeight: '700', color: Colors.white },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
 
-  volOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', paddingHorizontal: 28 },
-  volSheet: { backgroundColor: Colors.white, borderRadius: 18, padding: 22 },
+  volOverlay: { flex: 1, backgroundColor: Colors.overlay, justifyContent: 'center', paddingHorizontal: 20},
+  volSheet: { backgroundColor: Colors.white, borderRadius: 24, padding: 20, borderWidth: 1, borderColor: Colors.homeBorder },
   volTitle: { fontSize: 17, fontWeight: '700', color: Colors.black },
   volHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4, gap: 10 },
   volHeaderTitle: { flex: 1, textAlign: 'center', fontSize: 16, fontWeight: '700', color: Colors.black },
@@ -766,23 +762,20 @@ const styles = StyleSheet.create({
   volDesc: { fontSize: 13, color: Colors.gray500, marginTop: 8, lineHeight: 19 },
   volInputRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 18 },
   volInput: {
-    flex: 1, backgroundColor: Colors.gray50, borderRadius: 10, borderWidth: 1, borderColor: Colors.gray200,
-    paddingHorizontal: 14, paddingVertical: 11, fontSize: 15, color: Colors.black,
-  },
+    flex: 1, backgroundColor: Colors.gray50, borderRadius: 12, borderWidth: 1, borderColor: Colors.homeBorder,
+    paddingHorizontal: 14, paddingVertical: 11, fontSize: 15, color: Colors.black, minHeight: 44 },
   volUnitToggle: { flexDirection: 'row', gap: 4 },
   volUnitChip: {
-    paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10,
-    borderWidth: 1, borderColor: Colors.gray200, backgroundColor: Colors.gray50,
-  },
+    paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12,
+    borderWidth: 1, borderColor: Colors.gray200, backgroundColor: Colors.gray50, minHeight: 44, justifyContent: 'center' },
   volUnitChipActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
   volUnitText: { fontSize: 14, fontWeight: '600', color: Colors.gray500 },
   volUnitTextActive: { color: Colors.white },
   volActions: { flexDirection: 'row', gap: 10, marginTop: 22 },
   volSkipBtn: {
-    flex: 1, paddingVertical: 12, borderRadius: 10,
-    borderWidth: 1, borderColor: Colors.gray200, alignItems: 'center',
-  },
+    flex: 1, paddingVertical: 12, borderRadius: 14,
+    borderWidth: 1, borderColor: Colors.gray200, alignItems: 'center', minHeight: 44, justifyContent: 'center' },
   volSkipText: { fontSize: 13, fontWeight: '600', color: Colors.gray500 },
-  volSaveBtn: { flex: 1, paddingVertical: 12, borderRadius: 10, backgroundColor: Colors.primary, alignItems: 'center' },
+  volSaveBtn: { flex: 1, paddingVertical: 12, borderRadius: 14, backgroundColor: Colors.primary, alignItems: 'center', minHeight: 44, justifyContent: 'center' },
   volSaveText: { fontSize: 14, fontWeight: '700', color: Colors.white },
 });

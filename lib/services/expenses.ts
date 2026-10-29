@@ -1,3 +1,5 @@
+import { readAllRows } from './readAllRows';
+import { invalidateCachedStore } from './cacheInvalidation';
 import { supabase } from '../supabase';
 import { Expense, ExpenseCategory } from '../../types';
 
@@ -5,14 +7,13 @@ export async function getExpensesByMonth(
   storeId: string,
   yearMonth: string, // 'YYYY-MM'
 ): Promise<Expense[]> {
-  const { data, error } = await supabase
+  const data = await readAllRows((start, end) => supabase
     .from('expenses')
     .select('*')
     .eq('store_id', storeId)
     .eq('year_month', yearMonth)
-    .order('created_at', { ascending: true });
+    .order('created_at', { ascending: true }).order('id').range(start, end));
 
-  if (error) throw new Error(error.message);
   return (data ?? []) as Expense[];
 }
 
@@ -25,30 +26,15 @@ export async function getEffectiveFixedExpenses(
   storeId: string,
   yearMonth: string,
 ): Promise<Expense[]> {
-  // 1. 해당 월에 직접 등록된 고정비
-  const { data: current, error: curErr } = await supabase
-    .from('expenses')
-    .select('*')
-    .eq('store_id', storeId)
-    .eq('year_month', yearMonth)
-    .eq('category', '고정비');
-  if (curErr) throw new Error(curErr.message);
-  if (current && current.length > 0) return current as Expense[];
-
-  // 2. 직전 가장 최근 등록 월의 고정비를 이어받음
-  const { data: prev, error: prevErr } = await supabase
-    .from('expenses')
-    .select('*')
-    .eq('store_id', storeId)
-    .eq('category', '고정비')
-    .lt('year_month', yearMonth)
-    .order('year_month', { ascending: false });
-  if (prevErr) throw new Error(prevErr.message);
-
-  const rows = (prev ?? []) as Expense[];
-  if (rows.length === 0) return [];
-  const latestMonth = rows[0].year_month;
-  return rows.filter(r => r.year_month === latestMonth);
+  // 먼저 적용할 최근 월 하나를 찾고, 그 월의 고정비를 빠짐없이 읽는다.
+  const { data, error } = await supabase.from('expenses').select('year_month')
+    .eq('store_id', storeId).eq('category', '고정비').lte('year_month', yearMonth)
+    .order('year_month', { ascending: false }).limit(1);
+  if (error) throw error;
+  if (!data?.length) return [];
+  return await readAllRows((start, end) => supabase.from('expenses').select('*')
+    .eq('store_id', storeId).eq('category', '고정비').eq('year_month', data[0].year_month)
+    .order('id').range(start, end)) as Expense[];
 }
 
 export async function createExpense(data: {
@@ -65,6 +51,7 @@ export async function createExpense(data: {
     .single();
 
   if (error) throw new Error(error.message);
+  await invalidateCachedStore(data.store_id);
   return row as Expense;
 }
 
@@ -80,12 +67,14 @@ export async function updateExpense(
     .single();
 
   if (error) throw new Error(error.message);
+  await invalidateCachedStore();
   return row as Expense;
 }
 
 export async function deleteExpense(id: string): Promise<void> {
   const { error } = await supabase.from('expenses').delete().eq('id', id);
   if (error) throw new Error(error.message);
+  await invalidateCachedStore();
 }
 
 export async function getExpensesTotalByMonth(

@@ -1,5 +1,6 @@
 import { UserFacingError } from '../utils/error';
 import { supabase } from '../supabase';
+import { invalidateCachedStore } from './cacheInvalidation';
 
 export const DEFAULT_PURCHASE_TYPES = ['쿠팡', '네이버', '수기'];
 export function validatePurchaseType(value: string): string {
@@ -8,13 +9,15 @@ export function validatePurchaseType(value: string): string {
   return name;
 }
 export async function getPurchaseTypes(storeId: string): Promise<string[]> {
-  const { data, error } = await supabase.from('stores').select('purchase_types').eq('id', storeId).single();
-  if (error) throw new Error(error.message);
-  return data.purchase_types ?? DEFAULT_PURCHASE_TYPES;
+  const { data, error } = await supabase.from('store_taxonomies').select('name')
+    .eq('store_id', storeId).eq('domain', 'purchase_type').eq('is_active', true).order('sort_order').order('id');
+  if (error) throw error;
+  return (data ?? []).map(row => row.name);
 }
 export async function changePurchaseType(storeId: string, oldName: string | null, value: string): Promise<string[]> {
   const name = validatePurchaseType(value);
-  const { data, error } = await supabase.rpc('change_purchase_type', { p_store_id: storeId, p_old_name: oldName, p_new_name: name });
+  const { data, error } = await supabase.rpc('change_store_taxonomy', { p_store_id: storeId, p_domain: 'purchase_type', p_old_name: oldName, p_new_name: name, p_action: oldName == null ? 'add' : 'rename' });
   if (error) throw new Error(error.message);
+  await invalidateCachedStore(storeId);
   return data as string[];
 }

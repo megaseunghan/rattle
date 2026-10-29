@@ -1,9 +1,26 @@
+import { invalidateCachedStore } from './cacheInvalidation';
 import { supabase } from '../supabase';
 import { Recipe, RecipeIngredient, Ingredient } from '../../types';
 
 export type RecipeWithIngredients = Recipe & {
   recipe_ingredients: (RecipeIngredient & { ingredient: Ingredient | null })[];
 };
+
+async function withCurrentCosts(rows: RecipeWithIngredients[]): Promise<RecipeWithIngredients[]> {
+  if (!rows.length) return rows;
+  const { data, error } = await supabase.from('recipe_costs').select('recipe_id,cost,margin_rate')
+    .in('recipe_id', rows.map(row => row.id));
+  if (error) throw error;
+  const costs = new Map((data ?? []).map(row => [row.recipe_id, row]));
+  return rows.map(row => {
+    const cost = costs.get(row.id);
+    if (!cost || cost.cost == null || cost.margin_rate == null
+      || !Number.isFinite(Number(cost.cost)) || !Number.isFinite(Number(cost.margin_rate))) {
+      throw new Error('RECIPE_COST_REQUIRED');
+    }
+    return { ...row, cost: Number(cost.cost), margin_rate: Number(cost.margin_rate) };
+  });
+}
 
 export async function getRecipes(
   storeId: string,
@@ -23,7 +40,7 @@ export async function getRecipes(
 
   const { data, error } = await query;
   if (error) throw new Error(error.message);
-  return (data ?? []) as RecipeWithIngredients[];
+  return withCurrentCosts((data ?? []) as RecipeWithIngredients[]);
 }
 
 export async function getRecipeById(id: string): Promise<RecipeWithIngredients> {
@@ -34,7 +51,7 @@ export async function getRecipeById(id: string): Promise<RecipeWithIngredients> 
     .single();
 
   if (error) throw new Error(error.message);
-  return data as RecipeWithIngredients;
+  return (await withCurrentCosts([data as RecipeWithIngredients]))[0];
 }
 
 export async function createRecipeWithIngredients(
@@ -53,6 +70,7 @@ export async function createRecipeWithIngredients(
   });
 
   if (error) throw new Error(error.message);
+  await invalidateCachedStore(storeId);
   return data as string;
 }
 export async function updateRecipeFull(
@@ -70,11 +88,13 @@ export async function updateRecipeFull(
     p_ingredients: ingredients,
   });
   if (error) throw new Error(error.message);
+  await invalidateCachedStore();
 }
 
 export async function updateRecipeCategory(id: string, category: string): Promise<void> {
   const { error } = await supabase.from('recipes').update({ category }).eq('id', id);
   if (error) throw new Error(error.message);
+  await invalidateCachedStore();
 }
 
 export async function renameRecipeCategory(
@@ -89,6 +109,7 @@ export async function renameRecipeCategory(
     .eq('category', oldName);
 
   if (error) throw new Error(error.message);
+  await invalidateCachedStore(storeId);
 }
 
 export async function deleteRecipeCategory(
@@ -102,6 +123,7 @@ export async function deleteRecipeCategory(
     .eq('category', category);
 
   if (error) throw new Error(error.message);
+  await invalidateCachedStore(storeId);
 }
 
 export async function getRecipesByCategory(storeId: string, category: string): Promise<{ id: string; name: string }[]> {
@@ -122,6 +144,7 @@ export async function deleteRecipe(id: string): Promise<void> {
     .eq('id', id);
 
   if (error) throw new Error(error.message);
+  await invalidateCachedStore();
 }
 
 export async function upsertRecipesFromCatalog(
@@ -174,5 +197,15 @@ export async function upsertRecipesFromCatalog(
     if (insertError) throw new Error(insertError.message);
   }
 
+  await invalidateCachedStore(storeId);
   return items.length;
+}
+
+/** One store-scoped update and one cache invalidation for the whole selection. */
+export async function updateRecipeCategories(storeId: string, ids: string[], category: string): Promise<void> {
+  if (!ids.length) return;
+  const { error } = await supabase.from('recipes').update({ category })
+    .in('id', [...new Set(ids)]).eq('store_id', storeId);
+  if (error) throw new Error(error.message);
+  await invalidateCachedStore(storeId);
 }

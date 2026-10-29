@@ -1,3 +1,5 @@
+jest.mock('../../lib/services/cacheInvalidation', () => ({ invalidateCachedStore: jest.fn().mockResolvedValue(undefined) }));
+
 import { supabase } from '../../lib/supabase';
 import {
   getRecipes,
@@ -24,7 +26,11 @@ describe('recipes 서비스', () => {
         eq: jest.fn().mockReturnThis(),
         order: jest.fn().mockResolvedValue({ data: mockData, error: null }),
       };
-      (mockSupabase.from as jest.Mock).mockReturnValue(builder);
+      const costBuilder = {
+        select: jest.fn().mockReturnThis(),
+        in: jest.fn().mockResolvedValue({ data: [{ recipe_id: 'r1', cost: 800, margin_rate: 80 }], error: null }),
+      };
+      (mockSupabase.from as jest.Mock).mockImplementation((table: string) => table === 'recipe_costs' ? costBuilder : builder);
 
       const result = await getRecipes('store-1');
 

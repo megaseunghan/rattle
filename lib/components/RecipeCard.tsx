@@ -26,6 +26,7 @@ export function RecipeCard({
     ]);
   }
 
+  const costKnown = recipe.recipe_ingredients.length > 0 && recipe.recipe_ingredients.every(ri => ri.ingredient !== null && ri.ingredient.last_price != null);
   const currentCost = useMemo(() => {
     return recipe.recipe_ingredients.reduce((sum, ri) => {
       if (!ri.ingredient) return sum;
@@ -35,10 +36,10 @@ export function RecipeCard({
 
   const currentMarginRate = useMemo(() => {
     if (recipe.selling_price <= 0) return 0;
-    return Math.max(0, ((recipe.selling_price - currentCost) / recipe.selling_price) * 100);
+    return ((recipe.selling_price - currentCost) / recipe.selling_price) * 100;
   }, [recipe.selling_price, currentCost]);
 
-  const marginColor = currentMarginRate >= 60
+  const marginColor = !costKnown || recipe.selling_price <= 0 ? Colors.gray600 : currentMarginRate >= 60
     ? Colors.success
     : currentMarginRate >= 30
     ? Colors.warning
@@ -51,6 +52,7 @@ export function RecipeCard({
       style={styles.recipeCard}
       onPress={() => router.push(`/recipes/${recipe.id}`)}
       activeOpacity={0.75}
+      accessibilityRole="button"
     >
       <View style={styles.recipeHeader}>
         <View style={styles.recipeLeft}>
@@ -60,7 +62,7 @@ export function RecipeCard({
           </View>
         </View>
         {isAdmin && (
-          <TouchableOpacity onPress={handleDelete} style={styles.deleteBtn}>
+          <TouchableOpacity onPress={handleDelete} style={styles.deleteBtn} accessibilityRole="button" accessibilityLabel={`${recipe.name} 레시피 삭제`}>
             <Ionicons name="trash-outline" size={15} color={Colors.gray300} />
           </TouchableOpacity>
         )}
@@ -74,21 +76,22 @@ export function RecipeCard({
         <View style={styles.recipeStatDivider} />
         <View style={styles.recipeStat}>
           <Text style={styles.recipeStatLabel}>원가</Text>
-          <Text style={styles.recipeStatValue}>{Math.round(currentCost).toLocaleString('ko-KR')}원</Text>
+          <Text style={styles.recipeStatValue}>{costKnown ? `${Math.round(currentCost).toLocaleString('ko-KR')}원` : '확인 필요'}</Text>
         </View>
         <View style={styles.recipeStatDivider} />
         <View style={styles.recipeStat}>
           <Text style={styles.recipeStatLabel}>마진율</Text>
           <Text style={[styles.recipeStatValue, styles.recipeStatMargin, { color: marginColor }]}>
-            {currentMarginRate.toFixed(1)}%
+            {costKnown && recipe.selling_price > 0 ? `${currentMarginRate.toFixed(1)}%` : '확인 필요'}
           </Text>
         </View>
       </View>
 
       {/* 마진율 시각 바 */}
-      <View style={styles.marginBarTrack}>
+      {!costKnown && <Text style={styles.recipeStatLabel}>{recipe.recipe_ingredients.length ? '재료 단가를 확인해주세요' : '재료 미등록'}</Text>}
+      {costKnown && recipe.selling_price > 0 && <View style={styles.marginBarTrack}>
         <View style={[styles.marginBarFill, { width: marginBarWidth, backgroundColor: marginColor }]} />
-      </View>
+      </View>}
     </TouchableOpacity>
   );
 }
@@ -96,14 +99,11 @@ export function RecipeCard({
 const styles = StyleSheet.create({
   recipeCard: {
     backgroundColor: Colors.white,
-    borderRadius: 18,
+    borderRadius: 20,
     padding: 16,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.07,
-    shadowRadius: 8,
-    elevation: 2,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: Colors.homeBorder,
   },
   recipeHeader: {
     flexDirection: 'row',
@@ -122,8 +122,8 @@ const styles = StyleSheet.create({
   },
   categoryPillText: { fontSize: 11, fontWeight: '600', color: Colors.gray500 },
   deleteBtn: {
-    width: 32,
-    height: 32,
+    width: 44,
+    height: 44,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -141,7 +141,7 @@ const styles = StyleSheet.create({
     height: 28,
     backgroundColor: Colors.gray100,
   },
-  recipeStatLabel: { fontSize: 11, color: Colors.gray400, marginBottom: 4, fontWeight: '500' },
+  recipeStatLabel: { fontSize: 13, color: Colors.gray500, marginBottom: 4, fontWeight: '500' },
   recipeStatValue: { fontSize: 14, fontWeight: '700', color: Colors.black },
   recipeStatMargin: { fontSize: 15 },
   marginBarTrack: {

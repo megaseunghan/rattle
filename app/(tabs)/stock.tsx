@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { GlassBackdrop } from '../../lib/components/GlassBackdrop';
+import { useState, useEffect, useContext } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
   ScrollView, ActivityIndicator, RefreshControl,
@@ -14,9 +15,11 @@ import { useCategories } from '../../lib/hooks/useCategories';
 import { Ingredient } from '../../types';
 import { formatStock } from '../../lib/utils/unit';
 import { RecipeCard } from '../../lib/components/RecipeCard';
+import { CategoryManageButton } from '../../lib/components/CategoryManageButton';
 import { CategoryManageModal } from '../../lib/components/CategoryManageModal';
 import { animateListChange } from '../../lib/utils/layoutAnimation';
 import { EmptyState } from '../../lib/components/ui';
+import { TabPagerContext } from '../../lib/contexts/TabPagerContext';
 
 type ContentTab = '재고현황' | '레시피';
 
@@ -35,6 +38,8 @@ function IngredientRow({ item }: { item: Ingredient }) {
       style={styles.ingredientRow}
       onPress={() => router.push(`/stock/${item.id}`)}
       activeOpacity={0.7}
+      accessibilityRole="button"
+      accessibilityLabel={`${item.name}, 잔여 ${formatStock(item.current_stock, item)}${statusLabel ? `, ${statusLabel}` : ''}`}
     >
       <View style={styles.ingredientInfo}>
         <View style={styles.ingredientHeader}>
@@ -61,11 +66,15 @@ function IngredientRow({ item }: { item: Ingredient }) {
 
 // ─── 메인 스크린 ──────────────────────────────────────────────
 export function StockScreen({ active = true }: { active?: boolean }) {
-  const [activeTab, setActiveTab] = useState<ContentTab>('재고현황');
-  const [activeCategory, setActiveCategory] = useState('전체');
+  const scope = useContext(TabPagerContext);
+  const [activeTab, setActiveTabState] = useState<ContentTab>(scope?.viewState?.['stock.section'] === '레시피' ? '레시피' : '재고현황');
+  const [activeCategory, setActiveCategoryState] = useState(scope?.viewState?.['stock.category'] ?? '전체');
+  const [filterNotice, setFilterNotice] = useState<string | null>(null);
+  function setActiveTab(tab: ContentTab) { setActiveTabState(tab); scope?.setViewState?.('stock.section', tab); }
+  function setActiveCategory(category: string) { setActiveCategoryState(category); scope?.setViewState?.('stock.category', category); }
 
   const {
-    data: ingredients, loading: ingLoading,
+    data: ingredients, loading: ingLoading, error: ingError,
     loadingMore, hasMore, loadMore, refetch: refetchIng,
   } = useIngredients();
   const { data: recipes, loading: recLoading, refetch: refetchRec, remove: removeRecipe } = useRecipes();
@@ -89,21 +98,31 @@ export function StockScreen({ active = true }: { active?: boolean }) {
   const contentTabs: ContentTab[] = canManageRecipes
     ? ['재고현황', '레시피']
     : ['재고현황'];
+  useEffect(() => {
+    if (!canManageRecipes && activeTab === '레시피') setActiveTab('재고현황');
+  }, [canManageRecipes, activeTab]);
+  useEffect(() => {
+    if (ingLoading || ingError || hasMore || ingredientCategoriesBase.loading || ingredientCategoriesBase.error || activeCategory === '전체') return;
+    if (!ingredientCategoriesBase.categories.includes(activeCategory) && !ingredients.some(item => item.category === activeCategory)) {
+      setFilterNotice('이 매장에 없는 분류라 전체 품목으로 바꿨어요.');
+      setActiveCategory('전체');
+    }
+  }, [ingLoading, ingError, hasMore, ingredients, activeCategory, ingredientCategoriesBase.categories, ingredientCategoriesBase.loading, ingredientCategoriesBase.error]);
 
   useEffect(() => {
     if (!active) return;
-    if (activeTab === '재고현황') refetchIng();
-    else refetchRec();
+    if (activeTab === '재고현황') refetchIng(false);
+    else refetchRec(false);
   }, [active, activeTab, refetchIng, refetchRec]);
 
   const [refreshing, setRefreshing] = useState(false);
   async function onRefresh() {
     setRefreshing(true);
-    try { await (activeTab === '재고현황' ? refetchIng() : refetchRec()); }
+    try { await Promise.all([activeTab === '재고현황' ? refetchIng() : refetchRec(), ingredientCategoriesBase.refetch()]); }
     finally { setRefreshing(false); }
   }
 
-  const categories = ['전체', ...Array.from(new Set(ingredients.map(i => i.category))).sort()];
+  const categories = ['전체', ...Array.from(new Set([...ingredientCategoriesBase.categories, ...ingredients.map(i => i.category), ...(activeCategory === '전체' ? [] : [activeCategory])])).sort()];
   const filtered = (activeCategory === '전체' ? ingredients : ingredients.filter(i => i.category === activeCategory))
     .slice()
     .sort((a, b) => {
@@ -119,11 +138,12 @@ export function StockScreen({ active = true }: { active?: boolean }) {
   const isLoading = activeTab === '재고현황' ? ingLoading : recLoading;
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['left', 'right']}><GlassBackdrop />
+      {filterNotice && <Text accessibilityLiveRegion="polite" style={{ paddingHorizontal: 20, paddingVertical: 8, color: Colors.gray700 }}>{filterNotice}</Text>}
       {/* 헤더 */}
       <View style={styles.topBar}>
         <View style={styles.headingRow}>
-          <Text style={styles.title}>재고</Text>
+          <Text style={styles.title}>{canManageRecipes ? '재고 및 레시피' : '재고'}</Text>
           {activeTab === '레시피' && canManageRecipes && (
             <TouchableOpacity
               style={styles.recipeAddButton}
@@ -157,6 +177,8 @@ export function StockScreen({ active = true }: { active?: boolean }) {
                 key={tab}
                 style={[styles.innerTab, activeTab === tab && styles.innerTabActive]}
                 onPress={() => setActiveTab(tab)}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: activeTab === tab }}
                 activeOpacity={0.7}
               >
                 <Text style={[styles.innerTabText, activeTab === tab && styles.innerTabTextActive]}>
@@ -181,21 +203,15 @@ export function StockScreen({ active = true }: { active?: boolean }) {
               key={cat}
               style={[styles.catTab, activeCategory === cat && styles.catTabActive]}
               onPress={() => setActiveCategory(cat)}
+              accessibilityRole="button"
+              accessibilityState={{ selected: activeCategory === cat }}
             >
               <Text style={[styles.catTabText, activeCategory === cat && styles.catTabTextActive]}>
                 {cat}
               </Text>
             </TouchableOpacity>
           ))}
-          {isAdmin && (
-            <TouchableOpacity
-              style={styles.catManageBtn}
-              onPress={() => setCategoryModalVisible(true)}
-              hitSlop={8}
-            >
-              <Ionicons name="add" size={16} color={Colors.gray600} />
-            </TouchableOpacity>
-          )}
+          {isAdmin && <CategoryManageButton label="재고 카테고리 관리" onPress={() => setCategoryModalVisible(true)} />}
         </ScrollView>
       )}
 
@@ -214,10 +230,10 @@ export function StockScreen({ active = true }: { active?: boolean }) {
           onEndReached={hasMore ? loadMore : undefined}
           onEndReachedThreshold={0.5}
           ListEmptyComponent={
-            <EmptyState
+            ingError ? <EmptyState icon="alert-circle-outline" title="재고를 불러오지 못했어요" description="다시 불러온 뒤 확인해 주세요." ctaLabel="다시 시도" onCtaPress={() => { void refetchIng(); }} /> : hasMore ? <EmptyState icon="cube-outline" title="이 분류의 재고를 찾고 있어요" description="아직 불러오지 않은 품목이 있어요." ctaLabel="더 불러오기" onCtaPress={() => { void loadMore(); }} /> : <EmptyState
               icon="cube-outline"
-              title="등록된 재고가 없어요"
-              description="식자재를 등록하면 잔여량과 기준 재고를 여기서 확인할 수 있어요."
+              title={activeCategory === '전체' ? '등록된 재고가 없어요' : `${activeCategory}에 등록된 재고가 없어요`}
+              description="식자재를 등록하고 잔여량과 기준 재고를 확인하세요."
               ctaLabel="재고 등록"
               onCtaPress={() => router.push('/stock/new')}
             />
@@ -261,73 +277,74 @@ export function StockScreen({ active = true }: { active?: boolean }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.gray50 },
+  container: { flex: 1, backgroundColor: Colors.homeCanvas },
 
   topBar: {
     paddingHorizontal: 20,
     paddingTop: 16,
     paddingBottom: 12,
-    backgroundColor: Colors.white,
-    borderBottomWidth: 0.5,
-    borderBottomColor: Colors.gray100,
-    gap: 12,
+    backgroundColor: 'transparent',
+    gap: 14,
   },
   headingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 44, gap: 12 },
   recipeAddButton: { flexDirection: 'row', alignItems: 'center', gap: 4, minHeight: 44, paddingHorizontal: 12, borderRadius: 10, backgroundColor: Colors.tinted },
   recipeAddText: { fontSize: 14, fontWeight: '600', color: Colors.primary },
-  title: { fontSize: 20, fontWeight: '700', color: Colors.black },
-  summaryRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between' },
-  summaryLabel: { fontSize: 12, fontWeight: '500', color: Colors.gray500, marginBottom: 2 },
+  title: { fontSize: 22, fontWeight: '700', color: Colors.black },
+  summaryRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12, padding: 20, borderRadius: 24, backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.homeBorder },
+  summaryLabel: { fontSize: 13, fontWeight: '500', color: Colors.gray500, marginBottom: 2 },
   summaryValue: { fontSize: 30, fontWeight: '700', color: Colors.black, letterSpacing: -0.5 },
   summaryLowStock: { fontSize: 13, fontWeight: '600', color: Colors.negative },
 
   innerTabRow: { flexDirection: 'row', gap: 4, backgroundColor: Colors.gray100, borderRadius: 12, padding: 3 },
-  innerTab: { flex: 1, paddingVertical: 7, borderRadius: 10, alignItems: 'center' },
-  innerTabActive: { backgroundColor: Colors.white, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4, elevation: 2 },
-  innerTabText: { fontSize: 14, fontWeight: '500', color: Colors.gray400 },
+  innerTab: { flex: 1, minHeight: 44, justifyContent: 'center', paddingVertical: 9, borderRadius: 10, alignItems: 'center' },
+  innerTabActive: { backgroundColor: Colors.white, shadowColor: Colors.black, shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4, elevation: 2 },
+  innerTabText: { fontSize: 14, fontWeight: '500', color: Colors.gray500 },
   innerTabTextActive: { color: Colors.primary, fontWeight: '700' },
 
   catScroll: { flexGrow: 0, flexShrink: 0 },
-  catBar: { paddingHorizontal: 16, paddingVertical: 10, gap: 6, flexDirection: 'row', alignItems: 'center' },
+  catBar: { paddingHorizontal: 20, paddingVertical: 10, gap: 6, flexDirection: 'row', alignItems: 'center' },
   catTab: {
     alignSelf: 'center',
     paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderRadius: 20,
+    paddingVertical: 10,
+    minHeight: 44, justifyContent: 'center',
+    borderRadius: 14,
     backgroundColor: Colors.white,
     borderWidth: 0.5,
     borderColor: Colors.gray200,
   },
   catTabActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
-  catTabText: { fontSize: 12, fontWeight: '500', color: Colors.gray500 },
+  catTabText: { fontSize: 13, fontWeight: '500', color: Colors.gray500 },
   catTabTextActive: { color: Colors.white, fontWeight: '600' },
   catManageBtn: {
     alignSelf: 'center',
-    width: 28, height: 28, borderRadius: 14,
+    width: 44, height: 44, borderRadius: 14,
     alignItems: 'center', justifyContent: 'center',
     backgroundColor: Colors.gray100, borderWidth: 0.5, borderColor: Colors.gray200,
   },
 
-  listContent: { paddingHorizontal: 16, paddingBottom: 100, backgroundColor: Colors.white },
+  listContent: { paddingHorizontal: 20, paddingTop: 2, paddingBottom: 100 },
 
   // 재고 행
   ingredientRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     backgroundColor: Colors.white,
-    borderBottomWidth: 0.5,
-    borderBottomColor: Colors.gray200,
-    paddingHorizontal: 4,
-    paddingVertical: 14,
+    borderWidth: 1,
+    borderColor: Colors.homeBorder,
+    borderRadius: 20,
+    marginBottom: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
     gap: 12,
   },
   ingredientInfo: { flex: 1 },
   ingredientHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
-  ingredientName: { flex: 1, fontSize: 14, fontWeight: '500', color: Colors.black, marginBottom: 2 },
+  ingredientName: { flex: 1, fontSize: 15, fontWeight: '600', color: Colors.black, marginBottom: 2 },
   ingredientStatus: { fontSize: 12, fontWeight: '600', paddingTop: 1 },
   ingredientStatusDanger: { color: Colors.negative },
   ingredientStatusWarn: { color: Colors.warningStroke },
-  ingredientSub: { fontSize: 11, color: Colors.gray400, marginBottom: 6 },
+  ingredientSub: { fontSize: 13, color: Colors.gray500, marginBottom: 10, lineHeight: 19 },
   progressBg: { height: 4, backgroundColor: Colors.gray100, borderRadius: 2, overflow: 'hidden' },
   progressFill: { height: 4, borderRadius: 2 },
 

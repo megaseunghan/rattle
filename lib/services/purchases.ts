@@ -1,5 +1,14 @@
+import { readAllRows } from './readAllRows';
+import { invalidateCachedStore } from './cacheInvalidation';
 import { supabase } from '../supabase';
 import { Purchase, PurchaseCategory, PurchaseType, PurchaseItem, PurchaseItemInput } from '../../types';
+
+export class PurchaseWriteError extends Error {
+  constructor(readonly outcome: 'rejected' | 'unknown', readonly original: unknown) {
+    super('매입 등록 결과를 확인해주세요.');
+    this.name = 'PurchaseWriteError';
+  }
+}
 
 // 품목 매입 등록: 카테고리별 매입 분할 + 재고 증가 + last_price 갱신 (원자적, RPC)
 export async function createPurchaseWithItems(input: {
@@ -8,15 +17,34 @@ export async function createPurchaseWithItems(input: {
   supplier: string;
   type: PurchaseType;
   items: PurchaseItemInput[];
-}): Promise<void> {
-  const { error } = await supabase.rpc('create_purchase_with_items', {
-    p_store_id: input.store_id,
-    p_date: input.date,
-    p_supplier: input.supplier,
-    p_type: input.type,
-    p_items: input.items,
-  });
-  if (error) throw new Error(error.message);
+}): Promise<{ refreshFailed: boolean }> {
+  let result;
+  try {
+    result = await supabase.rpc('create_purchase_with_items', {
+      p_store_id: input.store_id,
+      p_date: input.date,
+      p_supplier: input.supplier,
+      p_type: input.type,
+      p_items: input.items,
+    });
+  } catch (error) {
+    throw new PurchaseWriteError('unknown', error);
+  }
+  if (result.error) {
+    // SQL/PGRST rejection confirms the transaction did not succeed. Transport
+    // errors and gateway timeouts can arrive after a committed write.
+    const code = result.error.code ?? '';
+    const rejected = (/^[0-9A-Z]{5}$/.test(code) && !code.startsWith('08')) || /^PGRST\d+$/.test(code);
+    throw new PurchaseWriteError(rejected ? 'rejected' : 'unknown', result.error);
+  }
+  try {
+    await invalidateCachedStore(input.store_id);
+    return { refreshFailed: false };
+  } catch {
+    // The RPC already acknowledged success. Never turn refresh failure into a
+    // failed write that encourages duplicate inventory increments.
+    return { refreshFailed: true };
+  }
 }
 
 export async function getPurchaseById(id: string): Promise<Purchase> {
@@ -41,13 +69,12 @@ export async function getPurchaseItems(purchaseId: string): Promise<PurchaseItem
 
 /** 여러 매입 건의 품목을 한 번에 조회 (손익 카테고리별 집계용) */
 export async function getPurchaseItemsForPurchases(purchaseIds: string[]): Promise<PurchaseItem[]> {
-  if (purchaseIds.length === 0) return [];
-  const { data, error } = await supabase
-    .from('purchase_items')
-    .select('*')
-    .in('purchase_id', purchaseIds);
-  if (error) throw new Error(error.message);
-  return (data ?? []) as PurchaseItem[];
+  const rows: PurchaseItem[] = [];
+  for (let i = 0; i < purchaseIds.length; i += 100) {
+    rows.push(...await readAllRows((start, end) => supabase.from('purchase_items').select('*')
+      .in('purchase_id', purchaseIds.slice(i, i + 100)).order('id').range(start, end)) as PurchaseItem[]);
+  }
+  return rows;
 }
 
 /** 매입 건별 품목 수 (목록에서 "N개 품목" 표시용) */
@@ -78,6 +105,7 @@ export async function updatePurchaseItem(
     p_unit_price: unitPrice,
   });
   if (error) throw new Error(error.message);
+  await invalidateCachedStore();
 }
 
 export async function getPurchasesByMonth(
@@ -92,15 +120,14 @@ export async function getPurchasesByMonth(
   ).getDate();
   const to = `${yearMonth}-${String(lastDay).padStart(2, '0')}`;
 
-  const { data, error } = await supabase
+  const data = await readAllRows((start, end) => supabase
     .from('purchases')
     .select('*')
     .eq('store_id', storeId)
     .gte('date', from)
     .lte('date', to)
-    .order('date', { ascending: false });
+    .order('date', { ascending: false }).order('id').range(start, end));
 
-  if (error) throw new Error(error.message);
   return (data ?? []) as Purchase[];
 }
 
@@ -120,12 +147,14 @@ export async function createPurchase(data: {
     .single();
 
   if (error) throw new Error(error.message);
+  await invalidateCachedStore(data.store_id);
   return row as Purchase;
 }
 
 export async function deletePurchase(id: string): Promise<void> {
   const { error } = await supabase.from('purchases').delete().eq('id', id);
   if (error) throw new Error(error.message);
+  await invalidateCachedStore();
 }
 
 export async function getPurchasesTotalByMonth(

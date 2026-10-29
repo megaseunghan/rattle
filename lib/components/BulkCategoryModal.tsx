@@ -170,38 +170,36 @@ export function BulkCategoryModal({ visible, items, categories, onConfirm, onClo
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.gray50 },
+  container: { flex: 1, backgroundColor: Colors.homeCanvas},
 
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 16, paddingVertical: 14,
-    backgroundColor: Colors.white, borderBottomWidth: 1, borderBottomColor: Colors.gray100,
+    paddingHorizontal: 20, paddingVertical: 14,
+    backgroundColor: Colors.homeCanvas, borderBottomWidth: 0, borderBottomColor: Colors.homeBorder,
   },
   closeBtn: {
-    width: 32, height: 32, borderRadius: 10,
+    width: 44, height: 44, borderRadius: 14,
     backgroundColor: Colors.gray100, justifyContent: 'center', alignItems: 'center',
   },
-  headerCenter: { alignItems: 'center', gap: 2 },
-  title: { fontSize: 16, fontWeight: '700', color: Colors.black },
-  headerCount: { fontSize: 12, color: Colors.gray400 },
+  headerCenter: { alignItems: 'center', gap: 2, flex: 1, minWidth: 0, paddingHorizontal: 8 },
+  title: { fontSize: 18, fontWeight: '700', color: Colors.black, textAlign: 'center' },
+  headerCount: { fontSize: 13, color: Colors.gray500},
   selectAllBtn: {
-    paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, backgroundColor: Colors.tinted,
-  },
+    paddingHorizontal: 10, paddingVertical: 6, borderRadius: 14, backgroundColor: Colors.tinted, minHeight: 44, justifyContent: 'center' },
   selectAllText: { fontSize: 13, color: Colors.primary, fontWeight: '700' },
 
-  scroll: { padding: 16, paddingBottom: 24 },
+  scroll: { padding: 20, paddingBottom: 24 },
 
   sectionLabel: {
-    fontSize: 12, fontWeight: '700', color: Colors.gray500,
-    marginTop: 16, marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.5,
+    fontSize: 13, fontWeight: '700', color: Colors.gray500,
+    marginTop: 16, marginBottom: 10,
   },
 
   categoryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   catChip: {
-    paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20,
-    backgroundColor: Colors.white, borderWidth: 1.5, borderColor: Colors.gray200,
-    flexDirection: 'row', alignItems: 'center',
-  },
+    paddingHorizontal: 14, paddingVertical: 8, borderRadius: 14,
+    backgroundColor: Colors.white, borderWidth: 1.5, borderColor: Colors.homeBorder,
+    flexDirection: 'row', alignItems: 'center', minHeight: 44, justifyContent: 'center' },
   customCatChip: {
     borderStyle: 'dashed',
     borderColor: Colors.primary + '80',
@@ -219,25 +217,24 @@ const styles = StyleSheet.create({
   newCatInput: {
     borderWidth: 1.5, borderColor: Colors.primary,
     borderRadius: 12, paddingHorizontal: 14, paddingVertical: 11,
-    paddingRight: 40,
+    paddingRight: 44,
     fontSize: 14, color: Colors.black, backgroundColor: Colors.white,
   },
   clearInputBtn: {
     position: 'absolute',
-    right: 12,
-    width: 24,
-    height: 24,
+    right: 0,
+    width: 44,
+    height: 44,
     justifyContent: 'center',
     alignItems: 'center',
   },
 
   itemRow: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
-    backgroundColor: Colors.white, borderRadius: 12,
-    padding: 14, marginBottom: 6,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04, shadowRadius: 3, elevation: 1,
-  },
+    backgroundColor: Colors.white, borderRadius: 20,
+    padding: 16, marginBottom: 8,
+
+       borderWidth: 1, borderColor: Colors.homeBorder },
   itemRowChecked: { backgroundColor: Colors.tinted },
   checkbox: {
     width: 22, height: 22, borderRadius: 7,
@@ -249,13 +246,12 @@ const styles = StyleSheet.create({
   itemNameChecked: { fontWeight: '600', color: Colors.dark },
 
   footer: {
-    padding: 16, paddingBottom: 24,
-    backgroundColor: Colors.white, borderTopWidth: 1, borderTopColor: Colors.gray100,
+    padding: 20, paddingBottom: 24,
+    backgroundColor: Colors.white, borderTopWidth: 1, borderTopColor: Colors.homeBorder,
   },
   confirmBtn: {
     alignItems: 'center', justifyContent: 'center',
-    backgroundColor: Colors.primary, borderRadius: 14, paddingVertical: 16,
-  },
+    backgroundColor: Colors.primary, borderRadius: 14, paddingVertical: 16, minHeight: 48 },
   confirmBtnDisabled: { opacity: 0.4 },
   confirmBtnText: { color: Colors.white, fontSize: 15, fontWeight: '700' },
 });

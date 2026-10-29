@@ -1,3 +1,5 @@
+import { GlassBackdrop } from '../../lib/components/GlassBackdrop';
+import { SheetModal } from '../../lib/components/ui/SheetModal';
 import { getErrorMessage } from '../../lib/utils/error';
 import { useState, useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, FlatList, Alert, ScrollView, ActivityIndicator } from 'react-native';
@@ -52,7 +54,7 @@ export default function RecipesScreen() {
 
   useFocusEffect(useCallback(() => {
     if (sortParam === 'margin') setSortBy('margin_desc');
-    refetch();
+    refetch(false);
     if (store) {
       getRecipesByCategory(store.id, '미분류').then(items => setUnclassifiedCount(items.length));
     }
@@ -155,11 +157,8 @@ export default function RecipesScreen() {
     return data
       .filter(r => activeCategory === '전체' || r.category === activeCategory)
       .map(r => {
-        const cost = r.recipe_ingredients.reduce((sum, ri) => {
-          if (!ri.ingredient) return sum;
-          return sum + recipeLineCost(ri.quantity, ri.unit ?? ri.ingredient.unit, ri.ingredient);
-        }, 0);
-        const marginRate = r.selling_price > 0 ? ((r.selling_price - cost) / r.selling_price) * 100 : 0;
+        const cost = r.cost;
+        const marginRate = r.margin_rate;
         return { ...r, calculatedCost: cost, calculatedMarginRate: marginRate };
       })
       .sort((a, b) => {
@@ -173,7 +172,7 @@ export default function RecipesScreen() {
   if (error) return <ErrorMessage message={error} onRetry={refetch} />;
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container}><GlassBackdrop />
       <View style={styles.header}>
         <View>
           <Text style={styles.title}>레시피</Text>
@@ -291,7 +290,7 @@ export default function RecipesScreen() {
           />
 
           {/* 카테고리 편집 모달 */}
-          <Modal visible={showCategoryModal} animationType="slide" transparent>
+          <SheetModal visible={showCategoryModal} onRequestClose={() => setShowCategoryModal(false)}>
             <TouchableOpacity
               style={styles.modalOverlay}
               activeOpacity={1}
@@ -354,7 +353,7 @@ export default function RecipesScreen() {
                 </ScrollView>
               </TouchableOpacity>
             </TouchableOpacity>
-          </Modal>
+          </SheetModal>
 
           <FlatList
             data={displayed}
@@ -373,7 +372,7 @@ export default function RecipesScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.gray50 },
+  container: { flex: 1, backgroundColor: Colors.homeCanvas},
 
   header: {
     flexDirection: 'row',
@@ -381,18 +380,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingTop: 16,
-    paddingBottom: 12,
-  },
-  title: { fontSize: 24, fontWeight: '800', color: Colors.black, letterSpacing: -0.5 },
-  subtitle: { fontSize: 13, color: Colors.gray400, marginTop: 2 },
+    paddingBottom: 12, backgroundColor: 'transparent' },
+  title: { fontSize: 22, fontWeight: '700', color: Colors.black, letterSpacing: -0.5, flexShrink: 1 },
+  subtitle: { fontSize: 13, color: Colors.gray500, marginTop: 2 },
   headerButtons: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
   },
   syncButton: {
-    width: 38,
-    height: 38,
+    width: 44,
+    height: 44,
     borderRadius: 12,
     backgroundColor: Colors.tinted,
     borderWidth: 1.5,
@@ -408,13 +406,12 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary,
     paddingHorizontal: 14,
     paddingVertical: 9,
-    borderRadius: 12,
-  },
+    borderRadius: 14, minHeight: 44, justifyContent: 'center' },
   addText: { color: Colors.white, fontSize: 14, fontWeight: '700' },
 
   // 정렬 바
   sortBar: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
     paddingBottom: 8,
     gap: 6,
     flexDirection: 'row',
@@ -422,19 +419,14 @@ const styles = StyleSheet.create({
   sortChip: {
     paddingHorizontal: 14,
     paddingVertical: 7,
-    borderRadius: 20,
+    borderRadius: 14,
     backgroundColor: Colors.white,
     flex: 1,
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 2,
-    elevation: 1,
-  },
+
+     minHeight: 44, justifyContent: 'center', borderColor: Colors.homeBorder, borderWidth: 1 },
   sortChipActive: {
-    backgroundColor: Colors.dark,
-  },
+    backgroundColor: Colors.primary, borderColor: Colors.primary },
   sortChipText: { fontSize: 13, fontWeight: '600', color: Colors.gray500 },
   sortChipTextActive: { color: Colors.white },
 
@@ -447,7 +439,7 @@ const styles = StyleSheet.create({
   },
   categoryScroll: { flex: 1 },
   categoryBar: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
     paddingBottom: 12,
     gap: 6,
     flexDirection: 'row',
@@ -455,39 +447,28 @@ const styles = StyleSheet.create({
   categoryChip: {
     paddingHorizontal: 14,
     paddingVertical: 7,
-    borderRadius: 20,
+    borderRadius: 14,
     backgroundColor: Colors.white,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 2,
-    elevation: 1,
-  },
+
+     minHeight: 44, justifyContent: 'center', borderColor: Colors.homeBorder, borderWidth: 1 },
   categoryChipActive: {
-    backgroundColor: Colors.primary,
-  },
+    backgroundColor: Colors.primary, borderColor: Colors.primary },
   categoryChipText: { fontSize: 13, fontWeight: '600', color: Colors.gray500 },
   categoryChipTextActive: { color: Colors.white },
   editCatBtn: {
-    width: 34,
-    height: 34,
+    width: 44,
+    height: 44,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 10,
     marginRight: 4,
-    borderRadius: 10,
-    backgroundColor: Colors.white,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 2,
-    elevation: 1,
-  },
+    borderRadius: 14,
+    backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.homeBorder },
 
   // 카테고리 모달
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
+  modalOverlay: { flex: 1, backgroundColor: Colors.overlay, justifyContent: 'flex-end' },
   modalSheet: {
-    backgroundColor: Colors.white,
+    backgroundColor: Colors.homeCanvas,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     maxHeight: '75%',
@@ -512,8 +493,8 @@ const styles = StyleSheet.create({
   },
   modalTitle: { fontSize: 17, fontWeight: '700', color: Colors.black },
   modalCloseBtn: {
-    width: 32,
-    height: 32,
+    width: 44,
+    height: 44,
     borderRadius: 10,
     backgroundColor: Colors.gray100,
     justifyContent: 'center',
@@ -535,12 +516,11 @@ const styles = StyleSheet.create({
     borderBottomWidth: 2,
     borderBottomColor: Colors.primary,
     paddingVertical: 2,
-    marginRight: 8,
-  },
+    marginRight: 8, minHeight: 44 },
   catActions: { flexDirection: 'row', gap: 4 },
   catActionBtn: {
-    width: 36,
-    height: 36,
+    width: 44,
+    height: 44,
     borderRadius: 10,
     backgroundColor: Colors.gray50,
     justifyContent: 'center',
@@ -551,27 +531,25 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     backgroundColor: Colors.primary,
     borderRadius: 10,
-    marginRight: 4,
-  },
+    marginRight: 4, minHeight: 44, justifyContent: 'center' },
   catConfirmText: { fontSize: 13, color: Colors.white, fontWeight: '700' },
 
   // 레시피 리스트
-  listContent: { paddingHorizontal: 16, paddingBottom: 32 },
+  listContent: { paddingHorizontal: 20, paddingBottom: 32 },
 
   // 미분류 배너
   unclassifiedBanner: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginHorizontal: 16,
+    marginHorizontal: 20,
     marginBottom: 8,
     paddingHorizontal: 14,
     paddingVertical: 10,
-    borderRadius: 12,
+    borderRadius: 20,
     backgroundColor: Colors.warning + '12',
     borderWidth: 1,
-    borderColor: Colors.warning + '40',
-  },
+    borderColor: Colors.warning + '40', minHeight: 44 },
   unclassifiedLeft: { flexDirection: 'row', alignItems: 'center', gap: 7 },
   unclassifiedText: { fontSize: 13, fontWeight: '600', color: Colors.warning },
   unclassifiedAction: { fontSize: 13, fontWeight: '600', color: Colors.warning },

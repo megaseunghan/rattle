@@ -1,11 +1,15 @@
 import { getErrorMessage, UserFacingError } from '../utils/error';
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { getExpensesByMonth, getEffectiveFixedExpenses, createExpense, updateExpense, deleteExpense } from '../services/expenses';
 import { Expense, ExpenseCategory } from '../../types';
 
 export function useExpenses(yearMonth: string) {
   const { store } = useAuth();
+  const identity = `${store?.id ?? ''}:${yearMonth}`;
+  const currentIdentity = useRef(identity);
+  currentIdentity.current = identity;
+  const requestVersion = useRef(0);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [carriedFixedExpenses, setCarriedFixedExpenses] = useState<Expense[]>([]);
   const [loading, setLoading] = useState(false);
@@ -13,10 +17,13 @@ export function useExpenses(yearMonth: string) {
 
   const refetch = useCallback(async () => {
     if (!store) return;
+    const version = ++requestVersion.current;
+    const current = () => currentIdentity.current === identity && requestVersion.current === version;
     setLoading(true);
     setError(null);
     try {
       const result = await getExpensesByMonth(store.id, yearMonth);
+      if (!current()) return;
       setExpenses(result);
 
       // 이번 달에 직접 등록된 고정비가 없으면, 손익계산서에 반영 중인
@@ -26,14 +33,14 @@ export function useExpenses(yearMonth: string) {
         setCarriedFixedExpenses([]);
       } else {
         const carried = await getEffectiveFixedExpenses(store.id, yearMonth);
-        setCarriedFixedExpenses(carried.filter(e => e.year_month !== yearMonth));
+        if (current()) setCarriedFixedExpenses(carried.filter(e => e.year_month !== yearMonth));
       }
     } catch (e: any) {
-      setError(getErrorMessage(e));
+      if (current()) setError(getErrorMessage(e));
     } finally {
-      setLoading(false);
+      if (current()) setLoading(false);
     }
-  }, [store, yearMonth]);
+  }, [store, yearMonth, identity]);
 
   const add = useCallback(async (data: {
     category: ExpenseCategory;

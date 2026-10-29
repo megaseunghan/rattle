@@ -1,3 +1,4 @@
+import { SheetModal } from '../../lib/components/ui/SheetModal';
 import { useEffect, useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator,
@@ -7,6 +8,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Colors } from '../../constants/colors';
+import { Fonts } from '../../constants/fonts';
 import { getPurchaseById, getPurchaseItems, updatePurchaseItem } from '../../lib/services/purchases';
 import { Purchase, PurchaseItem } from '../../types';
 import { getErrorMessage } from '../../lib/utils/error';
@@ -70,11 +72,11 @@ export default function PurchaseDetailScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.headerAction} accessibilityRole="button" accessibilityLabel="뒤로">
           <Ionicons name="chevron-back" size={24} color={Colors.black} />
         </TouchableOpacity>
         <Text style={styles.title}>매입 상세</Text>
-        <View style={{ width: 24 }} />
+        <View style={{ width: 44 }} />
       </View>
 
       {loading ? (
@@ -94,7 +96,7 @@ export default function PurchaseDetailScreen() {
               <View style={styles.pill}><Text style={styles.pillText}>{purchase.type}</Text></View>
             </View>
             <Text style={styles.date}>{purchase.date}</Text>
-            <Text style={styles.amount}>{purchase.amount.toLocaleString()}원</Text>
+            <Text style={styles.amount} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{purchase.amount.toLocaleString()}원</Text>
           </View>
 
           <Text style={styles.sectionLabel}>품목</Text>
@@ -127,16 +129,16 @@ export default function PurchaseDetailScreen() {
         </ScrollView>
       ) : null}
 
-      <Modal visible={editTarget != null} animationType="slide" transparent onRequestClose={() => setEditTarget(null)}>
+      <SheetModal visible={editTarget != null} onRequestClose={() => setEditTarget(null)}>
         <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <View style={styles.modalSheet}>
             <View style={styles.modalHandle} />
             <View style={styles.sheetHeader}>
-              <TouchableOpacity onPress={() => setEditTarget(null)} hitSlop={8}>
+              <TouchableOpacity onPress={() => setEditTarget(null)} hitSlop={8} style={styles.headerAction}>
                 <Text style={styles.sheetCancelText}>취소</Text>
               </TouchableOpacity>
               <Text style={styles.sheetHeaderTitle}>{editTarget?.name}</Text>
-              <TouchableOpacity onPress={handleSaveEdit} disabled={saving} hitSlop={8}>
+              <TouchableOpacity onPress={handleSaveEdit} disabled={saving} hitSlop={8} style={styles.headerAction}>
                 {saving
                   ? <ActivityIndicator size="small" color={Colors.primary} />
                   : <Text style={styles.sheetSaveText}>저장</Text>}
@@ -168,30 +170,30 @@ export default function PurchaseDetailScreen() {
             </Text>
           </View>
         </KeyboardAvoidingView>
-      </Modal>
+      </SheetModal>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.gray50 },
+  headerAction: { minWidth: 44, minHeight: 44, justifyContent: 'center' },
+  container: { flex: 1, backgroundColor: Colors.homeCanvas},
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingVertical: 16,
-  },
-  title: { fontSize: 18, fontWeight: '700', color: Colors.black },
+    paddingVertical: 16, backgroundColor: Colors.homeCanvas, borderBottomWidth: 0, borderBottomColor: Colors.homeBorder },
+  title: { fontSize: 22, fontWeight: '700', color: Colors.black, flexShrink: 1 },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   errorText: { fontSize: 14, color: Colors.gray500 },
-  scroll: { padding: 16, gap: 14 },
+  scroll: { padding: 20, gap: 16, paddingBottom: 40 },
 
   summaryCard: {
     backgroundColor: Colors.white,
-    borderRadius: 16,
-    borderWidth: 0.5,
-    borderColor: Colors.gray100,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: Colors.homeBorder,
     padding: 20,
     gap: 6,
   },
@@ -199,16 +201,16 @@ const styles = StyleSheet.create({
   pillRow: { flexDirection: 'row', gap: 6 },
   pill: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, backgroundColor: Colors.gray100 },
   pillText: { fontSize: 11, color: Colors.gray500 },
-  date: { fontSize: 13, color: Colors.gray400, marginTop: 2 },
-  amount: { fontSize: 26, fontWeight: '800', color: Colors.black, marginTop: 4 },
+  date: { fontSize: 13, color: Colors.gray500, marginTop: 2 },
+  amount: { fontFamily: Fonts.spaceGroteskBold, fontSize: 26, fontWeight: '800', color: Colors.black, marginTop: 4 },
 
-  sectionLabel: { fontSize: 11, fontWeight: '500', color: Colors.gray400, textTransform: 'uppercase', letterSpacing: 0.5 },
-  listCard: { backgroundColor: Colors.white, borderRadius: 16, borderWidth: 0.5, borderColor: Colors.gray100 },
+  sectionLabel: { fontSize: 13, fontWeight: '500', color: Colors.gray600,  },
+  listCard: { backgroundColor: Colors.white, borderRadius: 20, borderWidth: 1, borderColor: Colors.homeBorder},
   emptyCard: {
     backgroundColor: Colors.white,
-    borderRadius: 16,
-    borderWidth: 0.5,
-    borderColor: Colors.gray100,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: Colors.homeBorder,
     padding: 24,
     alignItems: 'center',
   },
@@ -216,20 +218,19 @@ const styles = StyleSheet.create({
   itemRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 13, gap: 10 },
   rowBorder: { borderBottomWidth: 0.5, borderBottomColor: Colors.gray100 },
   itemName: { fontSize: 14, fontWeight: '500', color: Colors.black },
-  itemSub: { fontSize: 12, color: Colors.gray400, marginTop: 2 },
+  itemSub: { fontSize: 13, color: Colors.gray500, marginTop: 2 },
   itemSubtotal: { fontSize: 14, fontWeight: '600', color: Colors.black },
 
-  modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.3)' },
-  modalSheet: { backgroundColor: Colors.white, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24 },
+  modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: Colors.overlay },
+  modalSheet: { backgroundColor: Colors.homeCanvas, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20},
   modalHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: Colors.gray200, alignSelf: 'center', marginBottom: 20 },
   sheetHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, paddingBottom: 12, borderBottomWidth: 0.5, borderBottomColor: Colors.gray100 },
-  sheetHeaderTitle: { fontSize: 16, fontWeight: '700', color: Colors.black },
+  sheetHeaderTitle: { fontSize: 16, fontWeight: '700', color: Colors.black, flex: 1, textAlign: 'center' },
   sheetCancelText: { fontSize: 15, fontWeight: '500', color: Colors.gray500 },
   sheetSaveText: { fontSize: 15, fontWeight: '700', color: Colors.primary },
   fieldLabel: { fontSize: 13, fontWeight: '600', color: Colors.gray600, marginBottom: 6, marginTop: 14 },
   input: {
-    backgroundColor: Colors.gray50, borderWidth: 1, borderColor: Colors.gray200,
-    borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: Colors.black,
-  },
+    backgroundColor: Colors.gray50, borderWidth: 1, borderColor: Colors.homeBorder,
+    borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: Colors.black, minHeight: 44 },
   editSubtotal: { fontSize: 14, fontWeight: '600', color: Colors.gray600, marginTop: 20, textAlign: 'right' },
 });
