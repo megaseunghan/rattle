@@ -43,7 +43,7 @@ export function createTossProxyHandler(deps: Dependencies) {
       if (status !== 200) return json({ error: status === 401 ? 'Unauthorized' : 'Forbidden' }, status);
       if (!deps.accessKey || !deps.accessSecret) return json({ error: '서버 설정 오류' }, 500);
       const response = await deps.fetchUpstream(url.toString(), {
-        method: 'GET', redirect: 'error',
+        method: 'GET', redirect: 'error', signal: AbortSignal.timeout(20000),
         headers: { 'x-access-key': deps.accessKey, 'x-secret-key': deps.accessSecret, 'Content-Type': 'application/json' },
       });
       if (response.status === 204) return new Response(null, { status: 204, headers: CORS });

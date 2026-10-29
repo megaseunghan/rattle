@@ -1,10 +1,11 @@
-import { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, Platform } from 'react-native';
+import { useRef, useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, Platform, KeyboardAvoidingView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Colors } from '../../constants/colors';
+import { Fonts } from '../../constants/fonts';
 import { Spacing } from '../../constants/designTokens';
 import { useAuth } from '../../lib/contexts/AuthContext';
 import { saveManualSale } from '../../lib/services/manualSales';
@@ -41,6 +42,8 @@ export default function ManualSaleNewScreen() {
   const [discountAmount, setDiscountAmount] = useState('');
   const [memo, setMemo] = useState('');
   const [saving, setSaving] = useState(false);
+  const scrollRef = useRef<ScrollView>(null);
+  const memoFocused = useRef(false);
 
   const cashNum = toNum(cashAmount);
   const cardNum = toNum(cardAmount);
@@ -74,7 +77,8 @@ export default function ManualSaleNewScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <AppBar title="매출 추가" onBack={() => router.back()} />
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <ScrollView ref={scrollRef} onLayout={() => { if (memoFocused.current) scrollRef.current?.scrollToEnd({ animated: true }); }} contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
         <Text style={styles.label}>날짜</Text>
         <TouchableOpacity style={styles.dateInput} onPress={() => setShowDatePicker(v => !v)} activeOpacity={0.7}>
           <Text style={styles.dateText}>{formatDate(date)}</Text>
@@ -101,6 +105,7 @@ export default function ManualSaleNewScreen() {
           <TextInput
             style={styles.amountInput}
             value={cashAmount}
+            accessibilityLabel="현금 매출, 원"
             onChangeText={t => setCashAmount(onlyDigits(t))}
             placeholder="0"
             placeholderTextColor={Colors.gray300}
@@ -115,6 +120,7 @@ export default function ManualSaleNewScreen() {
           <TextInput
             style={styles.amountInput}
             value={cardAmount}
+            accessibilityLabel="카드 매출, 원"
             onChangeText={t => setCardAmount(onlyDigits(t))}
             placeholder="0"
             placeholderTextColor={Colors.gray300}
@@ -129,6 +135,7 @@ export default function ManualSaleNewScreen() {
           <TextInput
             style={styles.amountInput}
             value={discountAmount}
+            accessibilityLabel="오늘 할인액, 원, 선택"
             onChangeText={t => setDiscountAmount(onlyDigits(t))}
             placeholder="0"
             placeholderTextColor={Colors.gray300}
@@ -139,7 +146,7 @@ export default function ManualSaleNewScreen() {
 
         <View style={styles.totalCard}>
           <Text style={styles.totalLabel}>총 매출</Text>
-          <Text style={styles.totalValue}>{fmtWon(total)}</Text>
+          <Text style={styles.totalValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{fmtWon(total)}</Text>
           {discountNum > 0 && (
             <Text style={styles.totalSub}>할인 {fmtWon(discountNum)} 포함 · 할인 전 {fmtWon(total + discountNum)}</Text>
           )}
@@ -149,49 +156,54 @@ export default function ManualSaleNewScreen() {
         <TextInput
           style={styles.memoInput}
           value={memo}
+          accessibilityLabel="메모, 선택"
+          onFocus={() => { memoFocused.current = true; scrollRef.current?.scrollToEnd({ animated: true }); }}
+          onBlur={() => { memoFocused.current = false; }}
           onChangeText={setMemo}
           placeholder="예: POS 미연동 매장 수기 마감"
           placeholderTextColor={Colors.gray400}
           multiline
         />
 
-        <Button label={saving ? '등록 중...' : '등록하기'} variant="primary" onPress={handleSave} loading={saving} />
       </ScrollView>
+      <View style={styles.footer}>
+        <Button label={saving ? '등록 중...' : '등록하기'} variant="primary" onPress={handleSave} loading={saving} />
+      </View>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.gray50 },
+  container: { flex: 1, backgroundColor: Colors.homeCanvas},
   scroll: { padding: Spacing.screenX, paddingBottom: 40, gap: 10 },
+  footer: { paddingHorizontal: Spacing.screenX, paddingVertical: 12, backgroundColor: Colors.homeCanvas },
 
   label: { fontSize: 13, fontWeight: '700', color: Colors.gray600, marginTop: 6 },
-  hint: { fontSize: 11, fontWeight: '400', color: Colors.gray400, marginTop: -4 },
+  hint: { fontSize: 13, fontWeight: '400', color: Colors.gray500, marginTop: -4, lineHeight: 19 },
 
   dateInput: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    borderWidth: 1, borderColor: Colors.gray200, borderRadius: 12,
-    paddingHorizontal: 14, paddingVertical: 13, backgroundColor: Colors.white,
-  },
+    borderWidth: 1, borderColor: Colors.homeBorder, borderRadius: 12,
+    paddingHorizontal: 14, paddingVertical: 13, backgroundColor: Colors.white, minHeight: 44 },
   dateText: { fontSize: 14, fontWeight: '600', color: Colors.black },
 
   amountRow: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
-    borderWidth: 1, borderColor: Colors.gray200, borderRadius: 12,
+    borderWidth: 1, borderColor: Colors.homeBorder, borderRadius: 12,
     paddingHorizontal: 14, backgroundColor: Colors.white,
   },
   amountInput: { flex: 1, fontSize: 18, fontWeight: '700', color: Colors.black, paddingVertical: 13 },
   amountUnit: { fontSize: 14, fontWeight: '600', color: Colors.gray400 },
 
   totalCard: {
-    backgroundColor: Colors.tinted, borderRadius: 14, padding: 16, gap: 3, marginTop: 4,
-  },
-  totalLabel: { fontSize: 12, fontWeight: '600', color: Colors.gray500 },
-  totalValue: { fontSize: 24, fontWeight: '700', color: Colors.black, letterSpacing: -0.5 },
-  totalSub: { fontSize: 11, fontWeight: '500', color: Colors.gray500 },
+    backgroundColor: Colors.white, borderRadius: 24, padding: 20, gap: 6, marginTop: 4, borderWidth: 1, borderColor: Colors.homeBorder },
+  totalLabel: { fontSize: 13, fontWeight: '600', color: Colors.gray500 },
+  totalValue: { fontFamily: Fonts.spaceGroteskBold, fontSize: 24, fontWeight: '700', color: Colors.black, letterSpacing: -0.5 },
+  totalSub: { fontSize: 13, fontWeight: '500', color: Colors.gray500 },
 
   memoInput: {
-    minHeight: 64, borderWidth: 1, borderColor: Colors.gray200, borderRadius: 12,
+    minHeight: 64, borderWidth: 1, borderColor: Colors.homeBorder, borderRadius: 12,
     padding: 12, fontSize: 14, color: Colors.black, backgroundColor: Colors.white,
     textAlignVertical: 'top',
   },

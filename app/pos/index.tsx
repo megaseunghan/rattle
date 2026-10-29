@@ -1,5 +1,6 @@
+import { GlassBackdrop } from '../../lib/components/GlassBackdrop';
 import { getErrorMessage } from '../../lib/utils/error';
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useContext } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   Alert, ActivityIndicator, TextInput,
@@ -8,6 +9,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../constants/colors';
+import { Fonts } from '../../constants/fonts';
 import { useTossSync } from '../../lib/hooks/useTossSync';
 import { usePosAnalytics } from '../../lib/hooks/usePosAnalytics';
 import { useAuth } from '../../lib/contexts/AuthContext';
@@ -16,6 +18,7 @@ import { getStoreDetails } from '../../lib/services/stores';
 import { useManualSales } from '../../lib/hooks/useManualSales';
 import { DailySummary } from '../../types';
 import { Badge, EmptyState } from '../../lib/components/ui';
+import { TabPagerContext } from '../../lib/contexts/TabPagerContext';
 
 type SyncStatus = 'unregistered' | 'connected';
 
@@ -34,29 +37,46 @@ function toDateKey(year: number, month: number, day: number) {
   return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
 
-export function PosScreen({ active = true }: { active?: boolean }) {
-  const { store } = useAuth();
+export function PosScreen({ active = true, reserveFab = false }: { active?: boolean; reserveFab?: boolean }) {
+  const tabScope = useContext(TabPagerContext);
+  const { store, currentRole } = useAuth();
   const {
     lastSyncAt, todaySales, todayOrderCount,
-    loadTodaySales, syncByMonth, autoSyncing, autoSyncRecent,
+    loadTodaySales, syncByMonth, autoSyncing, autoSyncRecent, error: syncError,
   } = useTossSync();
-  const { summaries, loadingSummaries, fetchSummariesByRange } = usePosAnalytics();
+  const { summaries, loadingSummaries, fetchSummariesByRange, error: summariesError } = usePosAnalytics();
 
   const [status, setStatus] = useState<SyncStatus>('unregistered');
   const [loadingStatus, setLoadingStatus] = useState(true);
 
-  const [queryYear, setQueryYear] = useState(new Date().getFullYear());
-  const [queryMonth, setQueryMonth] = useState(new Date().getMonth() + 1);
+  const initialMonth = tabScope?.selectedMonth ?? `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
+  const [queryYear, setQueryYear] = useState(Number(initialMonth.slice(0, 4)));
+  const [queryMonth, setQueryMonth] = useState(Number(initialMonth.slice(5)));
   const [syncing, setSyncing] = useState(false);
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
 
-  const hasLoadedRef = useRef(false);
-  const selectedYearRef = useRef(new Date().getFullYear());
-  const selectedMonthRef = useRef(new Date().getMonth() + 1);
+  const statusStore = useRef<string | undefined>(undefined);
+  const statusRequest = useRef(0);
+  const currentStoreId = useRef(store?.id);
+  currentStoreId.current = store?.id;
+  const [statusError, setStatusError] = useState<string | null>(null);
+  useEffect(() => () => { statusRequest.current += 1; }, []);
+  const selectedYearRef = useRef(Number(initialMonth.slice(0, 4)));
+  const selectedMonthRef = useRef(Number(initialMonth.slice(5)));
 
   const closingTime = (store?.closing_time as string | null | undefined)?.slice(0, 5) ?? '23:00';
 
   const manualYearMonth = `${queryYear}-${String(queryMonth).padStart(2, '0')}`;
+  useEffect(() => {
+    if (!tabScope?.selectedMonth || tabScope.selectedMonth === manualYearMonth) return;
+    const [year, month] = tabScope.selectedMonth.split('-').map(Number);
+    setQueryYear(year); setQueryMonth(month); setSelectedDay(null);
+    selectedYearRef.current = year; selectedMonthRef.current = month;
+    if (active && status === 'connected') {
+      const { from, to } = getMonthRange(year, month, closingTime);
+      void fetchSummariesByRange(from, to);
+    }
+  }, [tabScope?.selectedMonth, active, status, closingTime, fetchSummariesByRange]);
   const { sales: manualSales, loading: loadingManualSales, total: manualTotal, refetch: refetchManualSales, remove: removeManualSale } = useManualSales(manualYearMonth);
 
   useEffect(() => {
@@ -70,6 +90,8 @@ export function PosScreen({ active = true }: { active?: boolean }) {
   }, [status, refetchManualSales]));
 
   function prevQueryMonth() {
+    const previous = new Date(queryYear, queryMonth - 2, 1);
+    tabScope?.setSelectedMonth(`${previous.getFullYear()}-${String(previous.getMonth() + 1).padStart(2, '0')}`);
     setSelectedDay(null);
     if (queryMonth === 1) {
       const y = queryYear - 1; const m = 12;
@@ -88,6 +110,8 @@ export function PosScreen({ active = true }: { active?: boolean }) {
   function nextQueryMonth() {
     const now = new Date();
     if (queryYear === now.getFullYear() && queryMonth === now.getMonth() + 1) return;
+    const next = new Date(queryYear, queryMonth, 1);
+    tabScope?.setSelectedMonth(`${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}`);
     setSelectedDay(null);
     if (queryMonth === 12) {
       const y = queryYear + 1; const m = 1;
@@ -116,47 +140,43 @@ export function PosScreen({ active = true }: { active?: boolean }) {
 
   const loadStoreStatus = useCallback(async () => {
     if (!store) return;
+    const request = ++statusRequest.current;
+    const valid = () => request === statusRequest.current && currentStoreId.current === store.id;
+    setStatusError(null);
+    // Re-entering the same store must not replace its content with a full-screen loader.
+    if (statusStore.current !== store.id) setLoadingStatus(true);
     try {
       const data = await getStoreDetails(store.id);
-
+      if (!valid()) return;
       const newStatus: SyncStatus = data.toss_merchant_id ? 'connected' : 'unregistered';
       setStatus(newStatus);
-
+      statusStore.current = store.id;
+      setLoadingStatus(false);
       if (newStatus === 'connected') {
-        const ct = (data.closing_time as string | null | undefined)?.slice(0, 5) ?? '23:00';
-        await autoSyncRecent(ct, 30);
-        loadTodaySales();
-
-        if (!hasLoadedRef.current) {
-          hasLoadedRef.current = true;
-          const curYear = new Date().getFullYear();
-          const curMonth = new Date().getMonth() + 1;
-          selectedYearRef.current = curYear;
-          selectedMonthRef.current = curMonth;
-          setQueryYear(curYear);
-          setQueryMonth(curMonth);
-          const { from, to } = getMonthRange(curYear, curMonth, ct);
-          await fetchSummariesByRange(from, to);
-        } else {
+        const ct = data.closing_time?.slice(0, 5) ?? '23:00';
+        // Show saved sales immediately, independently of the slower POS import.
+        const refreshSaved = () => {
           const { from, to } = getMonthRange(selectedYearRef.current, selectedMonthRef.current, ct);
-          await fetchSummariesByRange(from, to);
-        }
+          return Promise.all([loadTodaySales(), fetchSummariesByRange(from, to)]);
+        };
+        const saved = refreshSaved();
+        await autoSyncRecent(ct, 30);
+        await saved;
+        if (valid()) await refreshSaved();
       }
-    } catch {}
-    setLoadingStatus(false);
+    } catch {
+      if (valid()) setStatusError('매출 정보를 확인하지 못했어요. 잠시 후 다시 시도해 주세요.');
+    } finally { if (valid()) setLoadingStatus(false); }
   }, [store, loadTodaySales, fetchSummariesByRange, autoSyncRecent]);
 
-  useEffect(() => {
-    if (!active) return;
-    setLoadingStatus(true);
-    loadStoreStatus();
-  }, [active, loadStoreStatus]);
+  useEffect(() => { if (active) void loadStoreStatus(); }, [active, loadStoreStatus]);
 
   async function handleManualSync() {
     setSyncing(true);
     try {
       const { from, to } = getMonthRange(queryYear, queryMonth, closingTime);
-      await syncByMonth(queryYear, queryMonth);
+      if (currentRole === 'admin') await syncByMonth(queryYear, queryMonth);
+      await loadTodaySales();
       await fetchSummariesByRange(from, to);
     } catch (e: any) {
       Alert.alert('동기화 실패', getErrorMessage(e));
@@ -168,9 +188,9 @@ export function PosScreen({ active = true }: { active?: boolean }) {
   const statusLabel = status === 'connected' ? 'Toss POS 연동' : 'Toss POS 미연동';
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={tabScope ? ['left', 'right'] : ['top', 'left', 'right', 'bottom']}><GlassBackdrop />
       <View style={styles.header}>
-        <View>
+        <View style={styles.headerTitle}>
           <Text style={styles.title}>매출</Text>
           {status === 'connected' && lastSyncAt && (
             <Text style={styles.lastSync}>
@@ -180,7 +200,7 @@ export function PosScreen({ active = true }: { active?: boolean }) {
           )}
         </View>
         <View style={styles.headerRight}>
-          {status === 'connected' && autoSyncing && (
+          {status === 'connected' && (autoSyncing || syncing) && (
             <View style={styles.syncingBadge}>
               <ActivityIndicator size="small" color={Colors.primary} />
               <Text style={styles.syncingText}>동기화 중</Text>
@@ -190,8 +210,9 @@ export function PosScreen({ active = true }: { active?: boolean }) {
         </View>
       </View>
 
-      {loadingStatus
-        ? <LoadingSpinner fullScreen={false} />
+      {statusError && <View style={styles.notice}><Text style={styles.noticeText}>{statusError}</Text><TouchableOpacity onPress={() => { void loadStoreStatus(); }} accessibilityRole="button" style={{ minHeight: 44, justifyContent: 'center' }}><Text style={{ color: Colors.action }}>다시 시도</Text></TouchableOpacity></View>}
+      {loadingStatus || currentStoreId.current !== statusStore.current
+        ? <View style={styles.scroll}><View style={styles.todayCard}><Text style={styles.todayLabel}>매출을 준비하고 있어요</Text><LoadingSpinner fullScreen={false} /><Text style={styles.todayOrderCount}>저장된 매출을 먼저 불러오고 있어요.</Text></View></View>
         : status === 'connected'
           ? (() => {
               const summaryByDay = new Map<string, DailySummary>();
@@ -213,7 +234,7 @@ export function PosScreen({ active = true }: { active?: boolean }) {
                     <Text style={styles.todayLabel}>
                       {selectedSummary ? `${queryMonth}월 ${selectedDay}일 매출` : '오늘 매출'}
                     </Text>
-                    <Text style={styles.todayValue}>
+                    <Text style={styles.todayValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
                       {(selectedSummary ? selectedSummary.totalAmount : todaySales).toLocaleString('ko-KR')}원
                     </Text>
                     <Text style={styles.todayOrderCount}>
@@ -225,11 +246,11 @@ export function PosScreen({ active = true }: { active?: boolean }) {
                   <View style={styles.querySection}>
                     <View style={styles.queryRow}>
                       <View style={styles.monthPickerRow}>
-                        <TouchableOpacity onPress={prevQueryMonth} style={styles.monthNavBtn} activeOpacity={0.7}>
+                        <TouchableOpacity onPress={prevQueryMonth} style={styles.monthNavBtn} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel="이전 달">
                           <Ionicons name="chevron-back" size={18} color={Colors.gray600} />
                         </TouchableOpacity>
                         <Text style={styles.monthPickerText}>{queryYear}년 {queryMonth}월</Text>
-                        <TouchableOpacity onPress={nextQueryMonth} style={styles.monthNavBtn} activeOpacity={0.7}>
+                        <TouchableOpacity onPress={nextQueryMonth} style={styles.monthNavBtn} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel="다음 달">
                           <Ionicons name="chevron-forward" size={18} color={Colors.gray600} />
                         </TouchableOpacity>
                       </View>
@@ -249,14 +270,14 @@ export function PosScreen({ active = true }: { active?: boolean }) {
                   {/* 월 합계 헤더 */}
                   <View style={styles.sectionHeader}>
                     <Text style={styles.sectionTitle}>{queryYear}년 {queryMonth}월 매출</Text>
-                    {!loadingSummaries && monthTotal > 0 && (
+                    {monthTotal > 0 && (
                       <Text style={styles.sectionTotal}>{monthTotal.toLocaleString('ko-KR')}원</Text>
                     )}
                   </View>
 
-                  {loadingSummaries
-                    ? <LoadingSpinner fullScreen={false} />
-                    : (
+                  {(autoSyncing || syncing || loadingSummaries) && <View style={styles.notice} accessibilityLiveRegion="polite"><ActivityIndicator size="small" color={Colors.primary} /><Text style={styles.noticeText}>{summaries.length ? '기존 매출을 보여드리고 있어요. 동기화가 끝나면 갱신돼요.' : '매출을 불러오는 중이에요. 잠시만 기다려 주세요.'}</Text></View>}
+                  {(summariesError || syncError) && <View style={styles.notice}><Text style={styles.noticeText}>최신 매출을 불러오지 못했어요. 조회 버튼을 눌러 다시 시도해 주세요.</Text></View>}
+                  {(
                       <>
                         {/* 캘린더 */}
                         <View style={styles.calendarCard}>
@@ -302,7 +323,7 @@ export function PosScreen({ active = true }: { active?: boolean }) {
                         </View>
 
                         {/* 선택된 날짜 매출 요약 */}
-                        {selectedDay !== null && (
+                        {selectedDay !== null && (selectedSummary || !(loadingSummaries || autoSyncing || syncing || summariesError || syncError)) && (
                           selectedSummary ? (
                             <TouchableOpacity
                               style={styles.selectedDayCard}
@@ -328,7 +349,7 @@ export function PosScreen({ active = true }: { active?: boolean }) {
                         )}
 
                         {/* 날짜 미선택 + 데이터 없음 */}
-                        {selectedDay === null && summaries.length === 0 && (
+                        {selectedDay === null && summaries.length === 0 && !loadingSummaries && !autoSyncing && !syncing && !summariesError && !syncError && (
                           <EmptyState
                             icon="storefront-outline"
                             title="이 달의 내역이 없어요"
@@ -352,6 +373,7 @@ export function PosScreen({ active = true }: { active?: boolean }) {
                 </Text>
                 <TouchableOpacity
                   style={styles.applyBtn}
+                  accessibilityRole="button"
                   onPress={() => router.push('/settings/pos-sync')}
                 >
                   <Text style={styles.applyBtnText}>POS 연동하기</Text>
@@ -372,11 +394,11 @@ export function PosScreen({ active = true }: { active?: boolean }) {
               </View>
 
               <View style={styles.monthPickerRow}>
-                <TouchableOpacity onPress={prevQueryMonth} style={styles.monthNavBtn} activeOpacity={0.7}>
+                <TouchableOpacity onPress={prevQueryMonth} style={styles.monthNavBtn} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel="이전 달">
                   <Ionicons name="chevron-back" size={18} color={Colors.gray600} />
                 </TouchableOpacity>
                 <Text style={styles.monthPickerText}>{queryYear}년 {queryMonth}월</Text>
-                <TouchableOpacity onPress={nextQueryMonth} style={styles.monthNavBtn} activeOpacity={0.7}>
+                <TouchableOpacity onPress={nextQueryMonth} style={styles.monthNavBtn} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel="다음 달">
                   <Ionicons name="chevron-forward" size={18} color={Colors.gray600} />
                 </TouchableOpacity>
               </View>
@@ -430,12 +452,13 @@ export function PosScreen({ active = true }: { active?: boolean }) {
             </ScrollView>
           )
       }
+      {reserveFab && <View style={{ height: 72 }} />}
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.gray50 },
+  container: { flex: 1, backgroundColor: Colors.homeCanvas },
 
   header: {
     flexDirection: 'row',
@@ -444,13 +467,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 16,
     paddingBottom: 14,
-    backgroundColor: Colors.white,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.gray100,
+    flexWrap: 'wrap',
+    gap: 12,
+    backgroundColor: 'transparent',
   },
-  title: { fontSize: 20, fontWeight: '800', color: Colors.black, letterSpacing: -0.5 },
+  headerTitle: { flexGrow: 1, minWidth: 120 },
+  title: { fontSize: 22, fontWeight: '700', color: Colors.black, letterSpacing: -0.5 },
   lastSync: { fontSize: 12, color: Colors.gray400, marginTop: 3 },
-  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  headerRight: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8 },
   syncingBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -462,26 +486,30 @@ const styles = StyleSheet.create({
   },
   syncingText: { fontSize: 12, color: Colors.dark, fontWeight: '600' },
 
-  scroll: { padding: 16, paddingBottom: 48 },
+  scroll: { padding: 20, paddingTop: 8, paddingBottom: 48 },
 
   infoCard: {
-    backgroundColor: Colors.tinted,
-    borderRadius: 20,
+    backgroundColor: Colors.white,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: Colors.homeBorder,
     padding: 24,
     alignItems: 'center',
     marginBottom: 24,
   },
-  infoTitle: { fontSize: 16, fontWeight: '800', color: Colors.deeper, marginBottom: 8 },
-  infoDesc: { fontSize: 13, color: Colors.dark, textAlign: 'center', lineHeight: 20 },
+  infoTitle: { fontSize: 17, fontWeight: '700', color: Colors.black, marginBottom: 8 },
+  infoDesc: { fontSize: 13, color: Colors.gray600, textAlign: 'center', lineHeight: 20 },
 
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'baseline',
+    flexWrap: 'wrap',
+    gap: 8,
     marginBottom: 10,
   },
   sectionTitle: {
-    fontSize: 15,
+    fontSize: 17,
     fontWeight: '700',
     color: Colors.black,
     marginBottom: 10,
@@ -492,8 +520,8 @@ const styles = StyleSheet.create({
     color: Colors.primary,
   },
   card: {
-    backgroundColor: Colors.white, borderRadius: 14,
-    padding: 16, borderWidth: 1, borderColor: Colors.gray100, marginBottom: 16,
+    backgroundColor: Colors.white, borderRadius: 20,
+    padding: 16, borderWidth: 1, borderColor: Colors.homeBorder, marginBottom: 16,
   },
   fieldLabel: { fontSize: 13, fontWeight: '600', color: Colors.gray600, marginBottom: 6, marginTop: 12 },
   input: {
@@ -502,11 +530,11 @@ const styles = StyleSheet.create({
     color: Colors.black, backgroundColor: Colors.gray50,
   },
   applyBtn: {
-    backgroundColor: Colors.primary, borderRadius: 10,
-    paddingVertical: 12, alignItems: 'center', marginTop: 20,
+    backgroundColor: Colors.contextBg, borderRadius: 12, alignSelf: 'center',
+    minHeight: 44, paddingHorizontal: 16, paddingVertical: 10, justifyContent: 'center', alignItems: 'center', marginTop: 12,
   },
   applyBtnDisabled: { opacity: 0.5 },
-  applyBtnText: { color: Colors.white, fontSize: 15, fontWeight: '700' },
+  applyBtnText: { color: Colors.action, fontSize: 13, fontWeight: '600' },
   notice: {
     flexDirection: 'row', gap: 8, padding: 14,
     backgroundColor: Colors.gray100, borderRadius: 12, marginBottom: 16,
@@ -514,7 +542,7 @@ const styles = StyleSheet.create({
   noticeText: { flex: 1, fontSize: 13, color: Colors.gray500, lineHeight: 20 },
 
   manualList: {
-    backgroundColor: Colors.white, borderRadius: 16, borderWidth: 0.5, borderColor: Colors.gray100,
+    backgroundColor: Colors.white, borderRadius: 20, borderWidth: 1, borderColor: Colors.homeBorder,
     overflow: 'hidden', marginTop: 8,
   },
   manualRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, paddingVertical: 12 },
@@ -531,7 +559,7 @@ const styles = StyleSheet.create({
 
   pendingCard: {
     backgroundColor: Colors.white, borderRadius: 20,
-    padding: 32, borderWidth: 1, borderColor: Colors.gray100,
+    padding: 32, borderWidth: 1, borderColor: Colors.homeBorder,
     marginTop: 8,
   },
   pendingTitle: { fontSize: 16, fontWeight: '700', color: Colors.black, marginBottom: 8, textAlign: 'center' },
@@ -550,33 +578,35 @@ const styles = StyleSheet.create({
   checkBtnText: { fontSize: 14, fontWeight: '600', color: Colors.primary },
 
   todayCard: {
-    paddingTop: 8,
-    paddingBottom: 24,
-    marginBottom: 24,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.gray200,
-    gap: 8,
+    backgroundColor: Colors.white,
+    borderRadius: 24,
+    padding: 20,
+    marginBottom: 18,
+    borderWidth: 1,
+    borderColor: Colors.homeBorder,
+    gap: 10,
   },
-  todayValue: { fontSize: 28, fontWeight: '700', color: Colors.black, fontVariant: ['tabular-nums'] },
+  todayValue: { fontSize: 34, fontFamily: Fonts.spaceGroteskBold, fontWeight: '700', color: Colors.black, letterSpacing: -1, fontVariant: ['tabular-nums'] },
   todayLabel: { fontSize: 13, color: Colors.gray600, fontWeight: '500' },
   todayOrderCount: { fontSize: 14, color: Colors.gray600 },
 
   querySection: { marginBottom: 20 },
-  queryRow: { flexDirection: 'row', gap: 10 },
+  queryRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   monthPickerRow: {
     flex: 1,
+    minWidth: 220,
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: Colors.white,
-    borderWidth: 1.5,
-    borderColor: Colors.gray200,
+    borderWidth: 1,
+    borderColor: Colors.homeBorder,
     borderRadius: 12,
-    paddingHorizontal: 8,
-    paddingVertical: 10,
+    paddingHorizontal: 4,
+    paddingVertical: 4,
   },
   monthNavBtn: {
-    width: 28,
-    height: 28,
+    width: 44,
+    height: 44,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -590,17 +620,16 @@ const styles = StyleSheet.create({
   syncBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 5,
     backgroundColor: Colors.primary, borderRadius: 12,
-    paddingHorizontal: 16, justifyContent: 'center',
+    paddingHorizontal: 16, minHeight: 52, justifyContent: 'center',
   },
   syncBtnDisabled: { opacity: 0.6 },
   syncBtnText: { color: Colors.white, fontWeight: '700', fontSize: 14 },
 
   dayCard: {
-    backgroundColor: Colors.white, borderRadius: 14,
+    backgroundColor: Colors.white, borderRadius: 20,
     paddingVertical: 14, paddingHorizontal: 16, marginBottom: 8,
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05, shadowRadius: 4, elevation: 1,
+    borderWidth: 1, borderColor: Colors.homeBorder,
   },
   dayCardLeft: { gap: 3 },
   dayCardDate: { fontSize: 15, fontWeight: '700', color: Colors.black },
@@ -614,14 +643,14 @@ const styles = StyleSheet.create({
 
   // 캘린더
   calendarCard: {
-    backgroundColor: Colors.white, borderRadius: 16,
-    borderWidth: 0.5, borderColor: Colors.gray100,
+    backgroundColor: Colors.white, borderRadius: 24,
+    borderWidth: 0.5, borderColor: Colors.homeBorder,
     paddingHorizontal: 8, paddingVertical: 12, marginBottom: 12,
   },
   weekRow: { flexDirection: 'row', marginBottom: 4 },
   weekDay: { flex: 1, textAlign: 'center', fontSize: 12, fontWeight: '500', color: Colors.gray400, paddingVertical: 4 },
-  sundayText: { color: '#D94040' },
-  saturdayText: { color: '#3A7FD4' },
+  sundayText: { color: Colors.negative },
+  saturdayText: { color: Colors.primary },
   calendarRow: { flexDirection: 'row' },
   dayCell: { flex: 1, alignItems: 'center', paddingVertical: 4, gap: 3 },
   dayInner: { width: 34, height: 34, borderRadius: 17, justifyContent: 'center', alignItems: 'center' },
@@ -635,20 +664,20 @@ const styles = StyleSheet.create({
 
   // 선택된 날짜 요약
   selectedDayCard: {
-    backgroundColor: Colors.white, borderRadius: 14,
+    backgroundColor: Colors.white, borderRadius: 20,
     paddingVertical: 14, paddingHorizontal: 16,
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    borderWidth: 0.5, borderColor: Colors.gray100,
+    borderWidth: 0.5, borderColor: Colors.homeBorder,
   },
-  selectedDayInfo: { gap: 3 },
+  selectedDayInfo: { gap: 3, flexShrink: 1 },
   selectedDayDate: { fontSize: 15, fontWeight: '700', color: Colors.black },
   selectedDayCount: { fontSize: 12, color: Colors.gray500 },
-  selectedDayRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  selectedDayAmount: { fontSize: 16, fontWeight: '800', color: Colors.primary, letterSpacing: -0.3 },
+  selectedDayRight: { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 1 },
+  selectedDayAmount: { fontSize: 16, fontWeight: '700', color: Colors.primary, letterSpacing: -0.3, flexShrink: 1 },
   selectedDayEmpty: {
-    backgroundColor: Colors.white, borderRadius: 14,
+    backgroundColor: Colors.white, borderRadius: 20,
     paddingVertical: 18, alignItems: 'center',
-    borderWidth: 0.5, borderColor: Colors.gray100,
+    borderWidth: 0.5, borderColor: Colors.homeBorder,
   },
   selectedDayEmptyText: { fontSize: 14, color: Colors.gray400 },
 });

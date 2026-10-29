@@ -1,0 +1,40 @@
+import { act, render, screen, waitFor, fireEvent } from '@testing-library/react-native';
+import { PosScreen } from '../../app/pos';
+const mockFetch = jest.fn().mockResolvedValue(undefined);
+const mockToday = jest.fn().mockResolvedValue(undefined);
+const mockSync = jest.fn();
+const mockStore = { id: 'store', closing_time: '23:00' };
+let mockLoading = true;
+let mockRole = 'admin';
+jest.mock('expo-router', () => ({ router: { push: jest.fn() }, useFocusEffect: jest.fn() }));
+jest.mock('../../lib/contexts/AuthContext', () => ({ useAuth: () => ({ store: mockStore, currentRole: mockRole }) }));
+jest.mock('../../lib/contexts/TabPagerContext', () => ({ TabPagerContext: require('react').createContext(null) }));
+jest.mock('../../lib/hooks/useTossSync', () => ({ useTossSync: () => ({ lastSyncAt: null, todaySales: 500, todayOrderCount: 1, loadTodaySales: mockToday, syncByMonth: mockSync, autoSyncing: true, autoSyncRecent: mockSync }) }));
+jest.mock('../../lib/hooks/usePosAnalytics', () => ({ usePosAnalytics: () => ({ summaries: [{ date: '2026-10-01', totalAmount: 500, orderCount: 1 }], loadingSummaries: mockLoading, fetchSummariesByRange: mockFetch }) }));
+jest.mock('../../lib/hooks/useManualSales', () => ({ useManualSales: () => ({ sales: [], refetch: mockToday, total: 0 }) }));
+jest.mock('../../lib/services/stores', () => ({ getStoreDetails: jest.fn().mockResolvedValue({ toss_merchant_id: 'merchant', closing_time: '23:00' }) }));
+jest.mock('react-native-safe-area-context', () => ({ SafeAreaView: ({ children }: any) => children }));
+beforeEach(() => { jest.clearAllMocks(); mockLoading = true; mockRole = 'admin'; });
+it('POS 동기화가 끝나지 않아도 저장된 매출과 달력을 표시한다', async () => {
+  let finish!: () => void;
+  mockSync.mockImplementation(() => new Promise<void>(resolve => { finish = resolve; }));
+  render(<PosScreen />);
+  await waitFor(() => expect(mockSync).toHaveBeenCalled());
+  expect(mockFetch).toHaveBeenCalled();
+  expect(screen.getByText('오늘 매출')).toBeTruthy();
+  expect(screen.getAllByText('500원').length).toBeGreaterThan(0);
+  expect(screen.getByText('월')).toBeTruthy();
+  expect(screen.getByText('기존 매출을 보여드리고 있어요. 동기화가 끝나면 갱신돼요.')).toBeTruthy();
+  expect(screen.queryByText('이 달의 내역이 없어요')).toBeNull();
+  await act(async () => { finish(); });
+});
+
+it('직원은 POS 쓰기 동기화 없이 저장된 매출을 다시 조회할 수 있다', async () => {
+  mockRole = 'member'; mockSync.mockResolvedValue(undefined);
+  render(<PosScreen />);
+  await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(2));
+  const syncCalls = mockSync.mock.calls.length;
+  fireEvent.press(screen.getByText('조회'));
+  await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(3));
+  expect(mockSync).toHaveBeenCalledTimes(syncCalls);
+});

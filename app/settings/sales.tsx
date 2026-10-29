@@ -1,3 +1,4 @@
+import { SheetModal } from '../../lib/components/ui/SheetModal';
 import { useState, useEffect, useMemo } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
@@ -79,7 +80,7 @@ export default function SalesSettingsScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} accessibilityRole="button" accessibilityLabel="뒤로가기">
           <Ionicons name="chevron-back" size={24} color={Colors.black} />
         </TouchableOpacity>
         <Text style={styles.title}>매출 마감 시각</Text>
@@ -110,7 +111,7 @@ export default function SalesSettingsScreen() {
       </ScrollView>
 
       {/* 셀렉트 모달 */}
-      <Modal visible={picker !== null} transparent animationType="fade" onRequestClose={() => setPicker(null)}>
+      <SheetModal visible={picker !== null} onRequestClose={() => setPicker(null)}>
         <Pressable style={styles.modalOverlay} onPress={() => setPicker(null)}>
           <Pressable style={styles.modalSheet} onPress={() => {}}>
             <Text style={styles.modalTitle}>{picker === 'meridiem' ? '오전 / 오후' : '시간 선택'}</Text>
@@ -135,7 +136,7 @@ export default function SalesSettingsScreen() {
             </ScrollView>
           </Pressable>
         </Pressable>
-      </Modal>
+      </SheetModal>
     </SafeAreaView>
   );
 }
@@ -159,15 +160,15 @@ function SelectOption({ label, selected, onPress }: { label: string; selected: b
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.gray50 },
+  container: { flex: 1, backgroundColor: Colors.homeCanvas },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 12, paddingVertical: 10, backgroundColor: Colors.white,
-    borderBottomWidth: 0.5, borderBottomColor: Colors.gray100,
+    paddingHorizontal: 20, paddingVertical: 12, backgroundColor: Colors.homeCanvas,
+    borderBottomWidth: 0.5, borderBottomColor: Colors.homeBorder,
   },
-  backBtn: { width: 40, height: 40, justifyContent: 'center' },
-  title: { fontSize: 16, fontWeight: '700', color: Colors.black },
-  saveBtn: { backgroundColor: Colors.primary, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 10 },
+  backBtn: { width: 44, height: 44, justifyContent: 'center' },
+  title: { flexShrink: 1, fontSize: 22, fontWeight: '700', color: Colors.black },
+  saveBtn: { backgroundColor: Colors.primary, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 12, minHeight: 44, justifyContent: 'center' },
   saveBtnDisabled: { opacity: 0.4 },
   saveBtnText: { color: Colors.white, fontSize: 14, fontWeight: '700' },
 
@@ -188,15 +189,15 @@ const styles = StyleSheet.create({
   },
   selectValue: { fontSize: 16, color: Colors.black, fontWeight: '600' },
 
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
+  modalOverlay: { flex: 1, backgroundColor: Colors.overlay, justifyContent: 'flex-end' },
   modalSheet: {
-    backgroundColor: Colors.white, borderTopLeftRadius: 20, borderTopRightRadius: 20,
+    backgroundColor: Colors.white, borderTopLeftRadius: 24, borderTopRightRadius: 24,
     padding: 20, paddingBottom: 36,
   },
   modalTitle: { fontSize: 16, fontWeight: '700', color: Colors.black, marginBottom: 12 },
   optionItem: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingVertical: 14, borderBottomWidth: 0.5, borderBottomColor: Colors.gray100,
+    paddingVertical: 14, borderBottomWidth: 0.5, borderBottomColor: Colors.homeBorder,
   },
   optionItemText: { fontSize: 16, color: Colors.gray700 },
   optionItemTextActive: { color: Colors.primary, fontWeight: '700' },

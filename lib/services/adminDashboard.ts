@@ -1,7 +1,9 @@
+import { sumKnown } from '../utils/financialCoverage';
 import { Store } from '../../types';
-import { getProfitLossByMonth, getYearlyProfitLoss } from './profitLoss';
-import { listCleaningItems, listCleaningLogsByDate, isCleaningItemApplicableToday } from './cleaning';
-import { getStoreScheduleForDay } from './schedule';
+import { getFinancialSummaries } from './homeFinancialSummary';
+import { fetchFinancialSummary } from '../query/financial';
+import { listCleaningItems, listCleaningLogsByRange, isCleaningItemApplicableToday } from './cleaning';
+import { getStoreWeeklySchedule } from './schedule';
 
 function todayISO(): string {
   const d = new Date();
@@ -17,112 +19,83 @@ export interface StorePnl {
   storeId: string;
   storeName: string;
   revenue: number;
-  expense: number;
-  profit: number;
-  margin: number; // %
+  expense: number | null;
+  profit: number | null;
+  margin: number | null; // %
   purchaseCost: number;
-  laborCost: number;
+  laborCost: number | null;
   otherExpense: number; // 고정비+변동비(비용 탭)
 }
 
 function toStorePnl(
   store: Store,
   revenue: number,
-  profit: number,
+  profit: number | null,
   purchaseCost: number,
-  laborCost: number,
+  laborCost: number | null,
   otherExpense: number,
 ): StorePnl {
   return {
     storeId: store.id,
     storeName: store.name,
     revenue,
-    expense: revenue - profit,
+    expense: profit == null ? null : revenue - profit,
     profit,
-    margin: revenue > 0 ? (profit / revenue) * 100 : 0,
+    margin: profit == null ? null : revenue > 0 ? (profit / revenue) * 100 : 0,
     purchaseCost,
     laborCost,
     otherExpense,
   };
 }
 
+async function monthlyRows(stores: Store[], months: string[], scope?: string): Promise<StorePnl[][]> {
+  if (scope) return Promise.all(months.map(month => Promise.all(stores.map(async store => {
+    const row = await fetchFinancialSummary(scope, store.id, store.closing_time ?? '23:00', month, true);
+    return toStorePnl(store, row.revenue, row.operatingProfit, row.purchaseCost, row.laborCost, row.fixedExpense + row.variableExpense);
+  }))));
+  const rows = await getFinancialSummaries(stores.map(s => s.id), months, true);
+  return months.map(month => stores.map(store => {
+    const row = rows.find(r => r.storeId === store.id && r.yearMonth === month)!;
+    return toStorePnl(store, row.revenue, row.operatingProfit, row.purchaseCost, row.laborCost, row.fixedExpense + row.variableExpense);
+  }));
+}
+function yearMonths(year: number): string[] {
+  const now = new Date();
+  const count = year > now.getFullYear() ? 0 : year === now.getFullYear() ? now.getMonth() + 1 : 12;
+  return Array.from({ length: count }, (_, i) => `${year}-${String(i + 1).padStart(2, '0')}`);
+}
+function sumStoreMonths(stores: Store[], rows: StorePnl[][]): StorePnl[] {
+  return stores.map((store, i) => toStorePnl(store,
+    rows.reduce((sum, month) => sum + month[i].revenue, 0), sumKnown(rows.map(month => month[i].profit)),
+    rows.reduce((sum, month) => sum + month[i].purchaseCost, 0), sumKnown(rows.map(month => month[i].laborCost)),
+    rows.reduce((sum, month) => sum + month[i].otherExpense, 0)));
+}
 export async function getStorePnlForMonth(store: Store, yearMonth: string): Promise<StorePnl> {
-  const pnl = await getProfitLossByMonth(store.id, yearMonth, store.closing_time ?? '23:00');
-  return toStorePnl(
-    store, pnl.revenue, pnl.operatingProfit,
-    pnl.purchaseCost, pnl.laborCost, pnl.fixedExpense + pnl.variableExpense,
-  );
+  return (await monthlyRows([store], [yearMonth]))[0][0];
 }
-
 export async function getStorePnlForYear(store: Store, year: number): Promise<StorePnl> {
-  const rows = await getYearlyProfitLoss(store.id, year, store.closing_time ?? '23:00');
-  const revenue = rows.reduce((s, r) => s + r.data.revenue, 0);
-  const profit = rows.reduce((s, r) => s + r.data.operatingProfit, 0);
-  const purchaseCost = rows.reduce((s, r) => s + r.data.purchaseCost, 0);
-  const laborCost = rows.reduce((s, r) => s + r.data.laborCost, 0);
-  const otherExpense = rows.reduce((s, r) => s + r.data.fixedExpense + r.data.variableExpense, 0);
-  return toStorePnl(store, revenue, profit, purchaseCost, laborCost, otherExpense);
+  return sumStoreMonths([store], await monthlyRows([store], yearMonths(year)))[0];
 }
-
-/** 여러 매장의 이번 달/전월 손익을 한 번에 조회 (합산 카드 + 전월 대비용) */
-export async function getMultiStoreMonthlyPnl(
-  stores: Store[],
-  yearMonth: string,
-): Promise<{ current: StorePnl[]; previous: StorePnl[] }> {
-  const prev = prevYearMonth(yearMonth);
-  const [current, previous] = await Promise.all([
-    Promise.all(stores.map(s => getStorePnlForMonth(s, yearMonth))),
-    Promise.all(stores.map(s => getStorePnlForMonth(s, prev))),
-  ]);
+export async function getMultiStoreMonthlyPnl(stores: Store[], yearMonth: string, scope?: string) {
+  const [current, previous] = await monthlyRows(stores, [yearMonth, prevYearMonth(yearMonth)], scope);
   return { current, previous };
 }
-
-/** 여러 매장의 올해/작년 손익을 한 번에 조회 (전년 대비용) */
-export async function getMultiStoreYearlyPnl(
-  stores: Store[],
-  year: number,
-): Promise<{ current: StorePnl[]; previous: StorePnl[] }> {
-  const [current, previous] = await Promise.all([
-    Promise.all(stores.map(s => getStorePnlForYear(s, year))),
-    Promise.all(stores.map(s => getStorePnlForYear(s, year - 1))),
-  ]);
-  return { current, previous };
+export async function getMultiStoreYearlyPnl(stores: Store[], year: number, scope?: string) {
+  const currentMonths = yearMonths(year), previousMonths = yearMonths(year - 1);
+  const rows = await monthlyRows(stores, [...currentMonths, ...previousMonths], scope);
+  return { current: sumStoreMonths(stores, rows.slice(0, currentMonths.length)), previous: sumStoreMonths(stores, rows.slice(currentMonths.length)) };
 }
-
-/** 여러 매장의 최근 N개월(또는 N년) 합산 영업이익 트렌드 — 통합 대시보드 상단 바 차트용 */
-export async function getMultiStoreMonthlyTrend(
-  stores: Store[],
-  yearMonth: string,
-  months = 6,
-): Promise<{ label: string; value: number }[]> {
-  const [anchorYear, anchorMonth] = yearMonth.split('-').map(Number);
-  const targets: { year: number; month: number }[] = [];
-  for (let i = months - 1; i >= 0; i--) {
-    const total = anchorYear * 12 + (anchorMonth - 1) - i;
-    targets.push({ year: Math.floor(total / 12), month: (total % 12) + 1 });
-  }
-
-  const sums = await Promise.all(targets.map(async ({ year, month }) => {
-    const ym = `${year}-${String(month).padStart(2, '0')}`;
-    const rows = await Promise.all(stores.map(s => getStorePnlForMonth(s, ym)));
-    return rows.reduce((s, r) => s + r.profit, 0);
-  }));
-
-  return targets.map((t, i) => ({ label: `${t.month}월`, value: sums[i] }));
+export async function getMultiStoreMonthlyTrend(stores: Store[], yearMonth: string, months = 6, scope?: string) {
+  const [year, month] = yearMonth.split('-').map(Number);
+  const targets = Array.from({ length: months }, (_, i) => new Date(year, month - months + i, 1));
+  const rows = await monthlyRows(stores, targets.map(d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`), scope);
+  return targets.map((date, i) => ({ label: `${date.getMonth() + 1}월`, value: sumKnown(rows[i].map(row => row.profit)) }));
 }
-
-/** 여러 매장의 최근 N년 합산 영업이익 트렌드 — 연도별 탭 바 차트용 */
-export async function getMultiStoreYearlyTrend(
-  stores: Store[],
-  year: number,
-  years = 6,
-): Promise<{ label: string; value: number }[]> {
-  const targetYears = Array.from({ length: years }, (_, i) => year - (years - 1 - i));
-  const sums = await Promise.all(targetYears.map(async y => {
-    const rows = await Promise.all(stores.map(s => getStorePnlForYear(s, y)));
-    return rows.reduce((s, r) => s + r.profit, 0);
-  }));
-  return targetYears.map((y, i) => ({ label: `${y}년`, value: sums[i] }));
+export async function getMultiStoreYearlyTrend(stores: Store[], year: number, years = 6, scope?: string) {
+  const targets = Array.from({ length: years }, (_, i) => year - years + 1 + i);
+  const months = targets.flatMap(yearMonths);
+  const rows = await monthlyRows(stores, months, scope);
+  return targets.map(target => ({ label: `${target}년`, value: sumKnown(rows.filter((_, i) => months[i].startsWith(`${target}-`)).flatMap(month => month.map(row => row.profit))) }));
 }
 
 function timeToMinutes(hhmm: string): number {
@@ -153,20 +126,24 @@ export interface WeeklyCleaningDay {
 
 /** 이번 주(월~일) 청소 체크 진행 현황 — 통합 대시보드 "이번 주 청소 진행률"용 */
 export async function getWeeklyCleaningProgress(storeId: string): Promise<{ days: WeeklyCleaningDay[]; pct: number }> {
-  const items = await listCleaningItems(storeId);
   const monday = mondayOfThisWeek();
   const today = todayISO();
-
-  const days = await Promise.all(WEEK_ORDER.map(async (weekday, i) => {
+  const [items, logs] = await Promise.all([
+    listCleaningItems(storeId), listCleaningLogsByRange(storeId, toISODate(monday), today),
+  ]);
+  const checkedByDate = new Map<string, Set<string>>();
+  for (const log of logs) {
+    const checked = checkedByDate.get(log.date) ?? new Set<string>();
+    checked.add(log.item_id); checkedByDate.set(log.date, checked);
+  }
+  const days = WEEK_ORDER.map((weekday, i) => {
     const date = new Date(monday);
     date.setDate(monday.getDate() + i);
     const dateISO = toISODate(date);
     const applicable = items.filter(it => isCleaningItemApplicableToday(it, weekday));
-    if (dateISO > today) return { weekday, checked: 0, total: applicable.length };
-    const logs = await listCleaningLogsByDate(storeId, dateISO);
-    const checkedIds = new Set(logs.map(l => l.item_id));
-    return { weekday, checked: applicable.filter(it => checkedIds.has(it.id)).length, total: applicable.length };
-  }));
+    const checkedIds = dateISO <= today ? checkedByDate.get(dateISO) : undefined;
+    return { weekday, checked: applicable.filter(it => checkedIds?.has(it.id)).length, total: applicable.length };
+  });
 
   const totalChecked = days.reduce((s, d) => s + d.checked, 0);
   const totalTasks = days.reduce((s, d) => s + d.total, 0);
@@ -215,10 +192,10 @@ function computeOverlapSegments(shifts: { start: number; end: number }[]): { seg
 
 /** 이번 주(월~일) 요일별 실제 직원/파트타이머 근무 스케줄 — 통합 대시보드 "요일별 스케줄"용 (겹치는 시간일수록 진하게 표시) */
 export async function getWeeklyScheduleBreakdown(storeId: string): Promise<WeeklyScheduleDay[]> {
-  const rowsByWeekday = await Promise.all(WEEK_ORDER.map(w => getStoreScheduleForDay(storeId, w)));
+  const weeklyRows = await getStoreWeeklySchedule(storeId);
 
-  return WEEK_ORDER.map((weekday, i) => {
-    const rows = rowsByWeekday[i].filter(r => r.start_time && r.end_time);
+  return WEEK_ORDER.map(weekday => {
+    const rows = weeklyRows.filter(r => r.day_of_week === weekday && r.start_time && r.end_time);
     const shifts = rows.map(r => ({
       employeeName: r.employee_name,
       start: timeToMinutes(r.start_time!),

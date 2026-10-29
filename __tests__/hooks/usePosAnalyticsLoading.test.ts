@@ -1,0 +1,36 @@
+import { act, renderHook } from '@testing-library/react-native';
+import { usePosAnalytics } from '../../lib/hooks/usePosAnalytics';
+import { queryClient } from '../../lib/query';
+jest.mock('../../lib/query/legacyPosCache', () => ({ clearLegacyPosCache: jest.fn() }));
+let mockStore = { id: 'one', closing_time: '23:00' };
+jest.mock('../../lib/contexts/AuthContext', () => ({ useAuth: () => ({ store: mockStore }) }));
+jest.mock('../../lib/services/posAnalytics', () => ({ getDailySummaries: jest.fn(), getDailySummariesByRange: jest.fn(), getDailyItems: jest.fn() }));
+jest.mock('../../lib/query', () => ({ useQueryScope: () => 'user', queryKeys: { store: (...args: any[]) => args }, queryClient: { getQueryData: jest.fn(), fetchQuery: jest.fn() } }));
+const rows = [{ date: '2026-10-20', totalAmount: 100, orderCount: 1 }];
+beforeEach(() => { jest.clearAllMocks(); mockStore = { id: 'one', closing_time: '23:00' }; });
+it('동일 기간 재조회와 종료시각 변경 중 기존 매출을 유지하고 오류에도 보존한다', async () => {
+  (queryClient.fetchQuery as jest.Mock).mockResolvedValueOnce(rows);
+  const { result } = renderHook(() => usePosAnalytics());
+  const from = new Date('2026-10-01T14:00:00Z');
+  await act(async () => { await result.current.fetchSummariesByRange(from, new Date('2026-10-26T10:00:00Z')); });
+  let reject!: (error: Error) => void;
+  (queryClient.fetchQuery as jest.Mock).mockImplementationOnce(() => new Promise((_, r) => { reject = r; }));
+  let pending!: Promise<void>;
+  act(() => { pending = result.current.fetchSummariesByRange(from, new Date('2026-10-26T11:00:00Z')); });
+  expect(result.current.summaries).toEqual(rows);
+  expect(result.current.loadingSummaries).toBe(true);
+  await act(async () => { reject(new Error('offline')); await pending; });
+  expect(result.current.summaries).toEqual(rows);
+  expect(result.current.error).toBeTruthy();
+});
+it('다른 월로 이동하면 이전 월의 금액을 표시하지 않는다', async () => {
+  (queryClient.fetchQuery as jest.Mock).mockResolvedValueOnce(rows);
+  const { result } = renderHook(() => usePosAnalytics());
+  await act(async () => { await result.current.fetchSummariesByRange(new Date('2026-10-01'), new Date('2026-10-26')); });
+  let resolve!: (data: unknown[]) => void;
+  (queryClient.fetchQuery as jest.Mock).mockImplementationOnce(() => new Promise(r => { resolve = r; }));
+  let pending!: Promise<void>;
+  act(() => { pending = result.current.fetchSummariesByRange(new Date('2026-09-01'), new Date('2026-10-01')); });
+  expect(result.current.summaries).toEqual([]);
+  await act(async () => { resolve([]); await pending; });
+});

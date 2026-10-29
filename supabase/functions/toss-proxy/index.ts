@@ -17,6 +17,8 @@ serve(createTossProxyHandler({
     if (stores.error) throw new Error('Store lookup failed');
     for (const store of stores.data ?? []) {
       if (store.owner_id === user.id) return 200;
+      const access = await client.rpc('can_read_store_financials', { p_store_id: store.id });
+      if (access.error || access.data !== true) continue;
       const membership = await client.from('store_members').select('id')
         .eq('store_id', store.id).eq('user_id', user.id).eq('status', 'approved').limit(1);
       if (membership.error) throw new Error('Membership lookup failed');

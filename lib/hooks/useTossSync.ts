@@ -1,311 +1,128 @@
-import { UserFacingError, getErrorMessage } from '../utils/error';
-import { useState, useCallback } from 'react';
+import { isCancelledError } from '@tanstack/react-query';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { supabase } from '../supabase';
+import { UserFacingError, getErrorMessage } from '../utils/error';
 import { fetchTossOrders, fetchTossCatalog, saveCatalog } from '../services/tossplace';
-import { getAutoSyncRange, getBusinessDayRange } from '../services/posAnalytics';
-import { TossOrder, TossCatalogItem } from '../../types';
+import { getAutoSyncRange, getBusinessDayRange, getDailySummariesByRange } from '../services/posAnalytics';
+import { getTossMerchantId, hasPosOrders, savePosOrders } from '../services/tossSync';
+import { coordinatePosSync } from '../services/posSyncCoordinator';
+import { queryClient, queryKeys, useQueryScope } from '../query';
+import { TossOrder } from '../../types';
 
-interface TossSyncState {
-  loading: boolean;
-  error: string | null;
-  lastSyncAt: string | null;
-  todaySales: number;
-  todayOrderCount: number;
-}
-
-interface UseTossSyncResult extends TossSyncState {
-  syncOrders: (dateFrom: string, dateTo: string) => Promise<TossOrder[]>;
-  syncCatalog: () => Promise<TossCatalogItem[]>;
-  loadTodaySales: () => Promise<void>;
-  autoSync: () => Promise<void>;
-  autoSyncRecent: (closingTime: string, days?: number) => Promise<void>;
-  autoSyncOnForeground: () => Promise<void>;
-  syncByDate: (date: string) => Promise<void>;
-  syncByMonth: (year: number, month: number) => Promise<void>;
-  autoSyncing: boolean;
-}
-
-export function useTossSync(): UseTossSyncResult {
-  const { store } = useAuth();
+export function useTossSync() {
+  const { store, currentRole, canReadFinancials } = useAuth();
+  const scope = useQueryScope();
+  const identity = `${scope}:${store?.id ?? ''}:${store?.closing_time ?? ''}`;
+  const current = useRef(identity);
+  current.current = identity;
   const [loading, setLoading] = useState(false);
   const [autoSyncing, setAutoSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [todayError, setTodayError] = useState<string | null>(null);
+  const todayRequest = useRef(0);
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
   const [todaySales, setTodaySales] = useState(0);
   const [todayOrderCount, setTodayOrderCount] = useState(0);
-
-  async function getMerchantId(): Promise<string> {
-    if (!store) throw new UserFacingError('매장 정보가 없습니다');
-
-    const { data, error } = await supabase
-      .from('stores')
-      .select('toss_merchant_id')
-      .eq('id', store.id)
-      .single();
-
-    if (error) throw new Error(error.message);
-    if (!data.toss_merchant_id) throw new UserFacingError('Toss Place 연동이 설정되지 않았습니다');
-
-    return data.toss_merchant_id as string;
-  }
-
-  async function getClosingTime(): Promise<string> {
-    if (!store) return '23:00';
-    const { data } = await supabase
-      .from('stores')
-      .select('closing_time')
-      .eq('id', store.id)
-      .single();
-    return (data?.closing_time as string | null) ?? '23:00';
-  }
+  const storeId = store?.id;
+  const merchantId = store?.toss_merchant_id;
+  const closingTime = store?.closing_time ?? '23:00';
+  useEffect(() => {
+    setLoading(false); setAutoSyncing(false); setError(null); setLastSyncAt(null);
+    todayRequest.current += 1; setTodayError(null);
+    setTodaySales(0); setTodayOrderCount(0);
+  }, [identity]);
 
   const syncOrders = useCallback(async (dateFrom: string, dateTo: string): Promise<TossOrder[]> => {
-    if (!store) throw new UserFacingError('매장 정보가 없습니다');
-    setLoading(true);
-    setError(null);
+    if (!storeId || currentRole !== 'admin') throw new UserFacingError('관리자만 POS를 동기화할 수 있어요.');
+    setLoading(true); setError(null);
     try {
-      const merchantId = await getMerchantId();
-      const orders = await fetchTossOrders(merchantId, dateFrom, dateTo);
-
-      if (orders.length > 0) {
-        // RPC 함수를 사용해 트랜잭션 단위로 주문 + 상세항목 저장 (병렬 처리)
-        await Promise.all(orders.map(async (o) => {
-          const { error: rpcError } = await supabase.rpc('upsert_toss_order_with_items', {
-            p_store_id: store.id,
-            p_toss_order_id: o.orderId,
-            p_order_at: o.orderAt,
-            p_total_amount: o.totalAmount,
-            p_status: o.status,
-            p_items: o.items,
-          });
-          if (rpcError) throw new Error(rpcError.message);
-          // card/cash 금액 업데이트
-          await supabase
-            .from('toss_orders')
-            .update({ card_amount: o.cardAmount, cash_amount: o.cashAmount })
-            .eq('store_id', store.id)
-            .eq('toss_order_id', o.orderId);
-        }));
-      }
-
-      setLastSyncAt(new Date().toISOString());
+      const orders = await fetchTossOrders(await getTossMerchantId(storeId, merchantId), dateFrom, dateTo);
+      await savePosOrders(storeId, orders);
+      if (current.current === identity) setLastSyncAt(new Date().toISOString());
       return orders;
-    } catch (e: any) {
-      setError(getErrorMessage(e));
+    } catch (e) {
+      if (current.current === identity) setError(getErrorMessage(e));
       throw e;
-    } finally {
-      setLoading(false);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [store]);
+    } finally { if (current.current === identity) setLoading(false); }
+  }, [storeId, merchantId, identity, currentRole]);
 
-  const syncCatalog = useCallback(async (): Promise<TossCatalogItem[]> => {
-    if (!store) throw new UserFacingError('매장 정보가 없습니다');
-    setLoading(true);
-    setError(null);
+  const syncCatalog = useCallback(async () => {
+    if (!storeId || currentRole !== 'admin') throw new UserFacingError('관리자만 POS를 동기화할 수 있어요.');
+    setLoading(true); setError(null);
     try {
-      const merchantId = await getMerchantId();
-      const items = await fetchTossCatalog(merchantId);
-      if (items.length > 0) {
-        await saveCatalog(store.id, items);
-      }
+      const items = await fetchTossCatalog(await getTossMerchantId(storeId, merchantId));
+      if (items.length) await saveCatalog(storeId, items);
       return items;
-    } catch (e: any) {
-      setError(getErrorMessage(e));
+    } catch (e) {
+      if (current.current === identity) setError(getErrorMessage(e));
       throw e;
-    } finally {
-      setLoading(false);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [store]);
+    } finally { if (current.current === identity) setLoading(false); }
+  }, [storeId, merchantId, identity, currentRole]);
 
   const loadTodaySales = useCallback(async () => {
-    if (!store) return;
-    const closingTime = await getClosingTime();
+    if (!storeId || !canReadFinancials) return;
+    const request = ++todayRequest.current;
+    const valid = () => current.current === identity && request === todayRequest.current;
     const { from } = getAutoSyncRange(closingTime);
-
-    const { data } = await supabase
-      .from('toss_orders')
-      .select('total_amount, status')
-      .eq('store_id', store.id)
-      .eq('status', 'COMPLETED')
-      .gte('order_at', from);
-
-    const sales = data ?? [];
-    setTodaySales(sales.reduce((sum: number, s: { total_amount: number }) => sum + Number(s.total_amount), 0));
-    setTodayOrderCount(sales.length);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [store]);
-
-  /** 오늘 영업일 데이터 없으면 자동 동기화 */
-  const autoSync = useCallback(async (): Promise<void> => {
-    if (!store || autoSyncing) return;
+    // Stable minute boundary lets simultaneous hook instances share the same request.
+    const to = new Date(Math.ceil(Date.now() / 60_000) * 60_000).toISOString();
     try {
-      setAutoSyncing(true);
-      const closingTime = await getClosingTime();
+      const rows = await queryClient.fetchQuery({
+        queryKey: queryKeys.store(scope, storeId, 'pos', 'today', closingTime, from, to),
+        queryFn: () => getDailySummariesByRange(storeId, closingTime, new Date(from), new Date(to)),
+        staleTime: 30_000, gcTime: 900_000,
+      });
+      if (!valid()) return;
+      setTodayError(null);
+      setTodaySales(rows.reduce((sum, row) => sum + row.totalAmount, 0));
+      setTodayOrderCount(rows.reduce((sum, row) => sum + row.orderCount, 0));
+    } catch (e) { if (!isCancelledError(e) && valid()) setTodayError(getErrorMessage(e)); }
+  }, [storeId, closingTime, scope, identity, canReadFinancials]);
+
+  // Callbacks depend only on scope/configuration, never on loading or sync timestamps.
+  const autoSync = useCallback(async () => {
+    if (!storeId || currentRole !== 'admin') return;
+    setAutoSyncing(true);
+    try {
       const { from, to } = getAutoSyncRange(closingTime);
-
-      // 이미 데이터 있으면 스킵
-      const { count } = await supabase
-        .from('toss_orders')
-        .select('id', { count: 'exact', head: true })
-        .eq('store_id', store.id)
-        .gte('order_at', from)
-        .lte('order_at', to);
-
-      if ((count ?? 0) > 0) {
-        // 이미 데이터가 있으면 매출 상태만 최신화하고 종료 (카드 노출 판정 정합)
-        await loadTodaySales();
-        return;
-      }
-
-      const merchantId = await getMerchantId();
-      const orders = await fetchTossOrders(merchantId, from, to);
-
-      if (orders.length > 0) {
-        await Promise.all(orders.map(async (o) => {
-          await supabase.rpc('upsert_toss_order_with_items', {
-            p_store_id: store.id,
-            p_toss_order_id: o.orderId,
-            p_order_at: o.orderAt,
-            p_total_amount: o.totalAmount,
-            p_status: o.status,
-            p_items: o.items,
-          });
-          await supabase
-            .from('toss_orders')
-            .update({ card_amount: o.cardAmount, cash_amount: o.cashAmount })
-            .eq('store_id', store.id)
-            .eq('toss_order_id', o.orderId);
-        }));
-      }
-
-      setLastSyncAt(new Date().toISOString());
+      await coordinatePosSync(identity, `today:${from}`, 30 * 60_000, async () => {
+        if (!(await hasPosOrders(storeId, from, to))) await syncOrders(from, to);
+      });
       await loadTodaySales();
-    } catch {
-      // 자동 동기화 실패는 조용히 무시
-    } finally {
-      setAutoSyncing(false);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [store, autoSyncing]);
+    } catch (e) { if (!isCancelledError(e) && current.current === identity) setError(getErrorMessage(e)); }
+    finally { if (current.current === identity) setAutoSyncing(false); }
+  }, [storeId, closingTime, identity, syncOrders, loadTodaySales, currentRole]);
 
-  /** 최근 N일치 일괄 자동 동기화 (마감시간 기준, 30분 캐시) */
-  const autoSyncRecent = useCallback(async (closingTime: string, days: number = 14): Promise<void> => {
-    if (!store || autoSyncing) return;
-    // 30분 이내 동기화했으면 재동기화는 스킵하되, 매출 상태는 최신화 (카드 노출 판정 정합)
-    if (lastSyncAt && Date.now() - new Date(lastSyncAt).getTime() < 30 * 60 * 1000) {
-      await loadTodaySales();
-      return;
-    }
+  const autoSyncRecent = useCallback(async (close: string, days = 14) => {
+    if (!storeId || currentRole !== 'admin') return;
+    setAutoSyncing(true);
     try {
-      setAutoSyncing(true);
-      const [h, m] = closingTime.split(':').map(Number);
-
-      const to = new Date();
-      const from = new Date();
-      from.setDate(from.getDate() - days);
-      from.setHours(h, m, 0, 0);
-
-      const merchantId = await getMerchantId();
-      const orders = await fetchTossOrders(merchantId, from.toISOString(), to.toISOString());
-
-      if (orders.length > 0) {
-        await Promise.all(orders.map(async (o) => {
-          await supabase.rpc('upsert_toss_order_with_items', {
-            p_store_id: store.id,
-            p_toss_order_id: o.orderId,
-            p_order_at: o.orderAt,
-            p_total_amount: o.totalAmount,
-            p_status: o.status,
-            p_items: o.items,
-          });
-          await supabase
-            .from('toss_orders')
-            .update({ card_amount: o.cardAmount, cash_amount: o.cashAmount })
-            .eq('store_id', store.id)
-            .eq('toss_order_id', o.orderId);
-        }));
-      }
-
-      setLastSyncAt(new Date().toISOString());
+      await coordinatePosSync(identity, `recent:${close}:${days}`, 30 * 60_000, async () => {
+        const { from } = getAutoSyncRange(close);
+        const start = new Date(new Date(from).getTime() - days * 86_400_000);
+        await syncOrders(start.toISOString(), new Date().toISOString());
+      });
       await loadTodaySales();
-    } catch {
-      // 자동 동기화 실패는 조용히 무시
-    } finally {
-      setAutoSyncing(false);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [store, autoSyncing, lastSyncAt, loadTodaySales]);
+    } catch (e) { if (!isCancelledError(e) && current.current === identity) setError(getErrorMessage(e)); }
+    finally { if (current.current === identity) setAutoSyncing(false); }
+  }, [storeId, identity, syncOrders, loadTodaySales, currentRole]);
 
-  /** 특정 날짜 영업일 수동 동기화 */
-  const syncByDate = useCallback(async (date: string): Promise<void> => {
-    if (!store) throw new UserFacingError('매장 정보가 없습니다');
-    const closingTime = await getClosingTime();
+  const syncByDate = useCallback(async (date: string) => {
     const { from, to } = getBusinessDayRange(date, closingTime);
     await syncOrders(from, to);
-  }, [store, syncOrders]);
-
-  /** 특정 월 전체 동기화 (1일 영업일 시작 ~ 말일 영업일 종료) */
-  const syncByMonth = useCallback(async (year: number, month: number): Promise<void> => {
-    if (!store) throw new UserFacingError('매장 정보가 없습니다');
-    const closingTime = await getClosingTime();
+  }, [closingTime, syncOrders]);
+  const syncByMonth = useCallback(async (year: number, month: number) => {
+    const from = getBusinessDayRange(`${year}-${String(month).padStart(2, '0')}-01`, closingTime).from;
+    const next = new Date(Date.UTC(year, month, 1));
+    const end = getBusinessDayRange(next.toISOString().slice(0, 10), closingTime).from;
+    await syncOrders(from, new Date(Math.min(new Date(end).getTime(), Date.now())).toISOString());
+  }, [closingTime, syncOrders]);
+  const autoSyncOnForeground = useCallback(async () => {
+    const kst = new Date(Date.now() + 9 * 3600_000);
     const [h, m] = closingTime.split(':').map(Number);
-
-    // 토스 기준: 영업일 D = [D 마감, D+1 마감) → 월 범위 = [M/1 마감, (M+1)/1 마감)
-    const from = new Date(year, month - 1, 1);
-    from.setHours(h, m, 0, 0);
-
-    const to = new Date(year, month, 1);
-    to.setHours(h, m, 0, 0);
-    if (to > new Date()) to.setTime(Date.now());
-
-    await syncOrders(from.toISOString(), to.toISOString());
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [store, syncOrders]);
-
-  /**
-   * 앱 포그라운드 진입 시 자동 동기화.
-   * 마감시간이 지났으면 방금 마감된 영업일의 최종 매출까지 다시 받아오고,
-   * 아직 영업 중이면 오늘 영업일 데이터만 보충한다. (서버 크론 없이 클라이언트에서 보강)
-   */
-  const autoSyncOnForeground = useCallback(async (): Promise<void> => {
-    if (!store) return;
-    try {
-      const closingTime = await getClosingTime();
-      const [h, m] = closingTime.split(':').map(Number);
-      const now = new Date();
-      const todayClose = new Date();
-      todayClose.setHours(h, m, 0, 0);
-
-      if (now >= todayClose) {
-        // 마감 지남 → 최근 영업일 최종 동기화 (30분 캐시 게이트)
-        await autoSyncRecent(closingTime, 2);
-      } else {
-        // 영업 중 → 오늘 영업일 데이터 없으면 동기화
-        await autoSync();
-      }
-    } catch {
-      // 자동 동기화 실패는 조용히 무시
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [store, autoSync, autoSyncRecent]);
-
-  return {
-    loading,
-    error,
-    lastSyncAt,
-    todaySales,
-    todayOrderCount,
-    syncOrders,
-    syncCatalog,
-    loadTodaySales,
-    autoSync,
-    autoSyncRecent,
-    autoSyncOnForeground,
-    syncByDate,
-    syncByMonth,
-    autoSyncing,
-  };
+    if (kst.getUTCHours() * 60 + kst.getUTCMinutes() >= h * 60 + m) await autoSyncRecent(closingTime, 2);
+    else await autoSync();
+  }, [closingTime, autoSyncRecent, autoSync]);
+  return { loading, autoSyncing, error: error ?? todayError, lastSyncAt, todaySales, todayOrderCount,
+    syncOrders, syncCatalog, loadTodaySales, autoSync, autoSyncRecent, autoSyncOnForeground, syncByDate, syncByMonth };
 }

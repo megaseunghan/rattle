@@ -49,14 +49,14 @@ export default function PosDateScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} accessibilityRole="button" accessibilityLabel="뒤로가기">
           <Ionicons name="chevron-back" size={24} color={Colors.black} />
         </TouchableOpacity>
         <View style={styles.headerCenter}>
           <Text style={styles.headerDate}>{date}</Text>
           <Text style={styles.headerSub}>{totalQty}개 · {totalAmount.toLocaleString('ko-KR')}원</Text>
         </View>
-        <View style={{ width: 40 }} />
+        <View style={{ width: 44 }} />
       </View>
 
       {/* 카테고리 필터 */}
@@ -102,35 +102,34 @@ export default function PosDateScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.gray50 },
+  container: { flex: 1, backgroundColor: Colors.homeCanvas },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 16, paddingVertical: 12, backgroundColor: Colors.white,
-    borderBottomWidth: 1, borderBottomColor: Colors.gray100,
+    paddingHorizontal: 20, paddingVertical: 12, backgroundColor: Colors.homeCanvas,
   },
-  backBtn: { width: 40, height: 40, justifyContent: 'center' },
-  headerCenter: { alignItems: 'center' },
-  headerDate: { fontSize: 16, fontWeight: '800', color: Colors.black },
+  backBtn: { width: 44, height: 44, justifyContent: 'center' },
+  headerCenter: { flex: 1, alignItems: 'center' },
+  headerDate: { fontSize: 22, fontWeight: '700', color: Colors.black },
   headerSub: { fontSize: 12, color: Colors.gray500, marginTop: 2 },
-  filterBar: { backgroundColor: Colors.white, borderBottomWidth: 1, borderBottomColor: Colors.gray100 },
-  filterContent: { paddingHorizontal: 16, paddingVertical: 10, gap: 8, flexDirection: 'row' },
+  filterBar: { backgroundColor: Colors.homeCanvas },
+  filterContent: { paddingHorizontal: 20, paddingVertical: 10, gap: 8, flexDirection: 'row' },
   filterChip: {
-    paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20,
+    paddingHorizontal: 14, minHeight: 44, justifyContent: 'center', borderRadius: 20,
     borderWidth: 1, borderColor: Colors.gray200, backgroundColor: Colors.white,
   },
-  filterChipActive: { backgroundColor: Colors.dark, borderColor: Colors.dark },
+  filterChipActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
   filterChipText: { fontSize: 13, fontWeight: '600', color: Colors.gray500 },
   filterChipTextActive: { color: Colors.white },
   list: {
-    margin: 16, paddingHorizontal: 16,
-    backgroundColor: Colors.white, borderRadius: 14,
-    borderWidth: 0.5, borderColor: Colors.gray100,
+    margin: 20, paddingHorizontal: 16,
+    backgroundColor: Colors.white, borderRadius: 20,
+    borderWidth: 1, borderColor: Colors.homeBorder,
   },
   itemRow: {
     paddingVertical: 14,
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
   },
-  itemLeft: { flex: 1 },
+  itemLeft: { flex: 1, minWidth: 0, marginRight: 12 },
   itemName: { fontSize: 15, fontWeight: '600', color: Colors.black },
   itemCategory: { fontSize: 12, color: Colors.gray400, marginTop: 2 },
   itemRight: { alignItems: 'flex-end', gap: 2 },
