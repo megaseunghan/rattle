@@ -1,10 +1,10 @@
+import { GlassBackdrop } from '../../lib/components/GlassBackdrop';
 import { useCallback, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router, useFocusEffect } from 'expo-router';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../constants/colors';
-import { Spacing } from '../../constants/designTokens';
 import { useAuth } from '../../lib/contexts/AuthContext';
 import { resolveSelfEmployee } from '../../lib/utils/resolveSelfEmployee';
 import { useEmployees } from '../../lib/hooks/useEmployees';
@@ -28,7 +28,8 @@ export default function CleaningScreen() {
   const { user, devPreviewEmployeeId } = useAuth();
   const { employees, refetch: refetchEmployees } = useEmployees();
   const { items, logs, loading, checkingId, refetch, toggle } = useCleaningChecklist();
-  const [segment, setSegment] = useState<CleaningSegment>('open');
+  const params = useLocalSearchParams<{ segment?: string }>();
+  const [segment, setSegment] = useState<CleaningSegment>(params.segment === 'close' || params.segment === 'weekday' ? params.segment : 'open');
 
   useFocusEffect(useCallback(() => { refetch(); refetchEmployees(); }, [refetch, refetchEmployees]));
 
@@ -43,8 +44,9 @@ export default function CleaningScreen() {
   const logByItem = new Map(logs.map(l => [l.item_id, l]));
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container}><GlassBackdrop />
       <AppBar
+        transparent
         title="청소 체크리스트"
         onBack={() => router.back()}
         rightSlot={(
@@ -116,23 +118,23 @@ export default function CleaningScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.gray50 },
+  container: { flex: 1, backgroundColor: Colors.homeCanvas },
   segmentRow: {
     flexDirection: 'row', gap: 4, backgroundColor: Colors.gray100,
-    borderRadius: 12, padding: 3, marginHorizontal: Spacing.screenX, marginTop: 14,
+    borderRadius: 12, padding: 3, marginHorizontal: 20, marginTop: 14,
   },
-  segmentTab: { flex: 1, paddingVertical: 7, borderRadius: 10, alignItems: 'center' },
+  segmentTab: { flex: 1, minHeight: 44, paddingVertical: 7, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   segmentTabActive: { backgroundColor: Colors.white },
   segmentText: { fontSize: 14, fontWeight: '500', color: Colors.gray400 },
-  segmentTextActive: { color: Colors.black, fontWeight: '700' },
-  scroll: { padding: Spacing.screenX, paddingBottom: 40 },
+  segmentTextActive: { color: Colors.primary, fontWeight: '700' },
+  scroll: { padding: 20, paddingBottom: 40 },
   list: { gap: 8 },
   row: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
-    borderRadius: 14, padding: 14,
+    borderRadius: 20, padding: 16,
   },
-  rowChecked: { borderWidth: 1, borderColor: Colors.gray100, backgroundColor: Colors.white },
-  rowUnchecked: { borderWidth: 1, borderColor: Colors.gray200, backgroundColor: Colors.white },
+  rowChecked: { borderWidth: 1, borderColor: Colors.homeBorder, backgroundColor: Colors.white },
+  rowUnchecked: { borderWidth: 1, borderColor: Colors.homeBorder, backgroundColor: Colors.white },
   checkbox: {
     width: 22, height: 22, borderRadius: 7,
     borderWidth: 1.5, borderColor: Colors.gray300,

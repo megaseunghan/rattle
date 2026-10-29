@@ -1,3 +1,4 @@
+import { GlassBackdrop } from '../../lib/components/GlassBackdrop';
 import { getErrorMessage } from '../../lib/utils/error';
 import { useCallback, useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
@@ -6,7 +7,6 @@ import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import DraggableFlatList, { RenderItemParams, ScaleDecorator } from 'react-native-draggable-flatlist';
 import { Colors } from '../../constants/colors';
-import { Spacing } from '../../constants/designTokens';
 import { useCleaningChecklist } from '../../lib/hooks/useCleaningChecklist';
 import { AppBar, Field, Button } from '../../lib/components/ui';
 import { CleaningItem, CleaningSegment } from '../../types';
@@ -128,8 +128,8 @@ export default function CleaningEditScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      <AppBar title="체크리스트 편집" onBack={() => router.back()} />
+    <SafeAreaView style={styles.container}><GlassBackdrop />
+      <AppBar transparent title="체크리스트 편집" onBack={() => router.back()} />
 
       <View style={styles.segmentRow}>
         {SEGMENTS.map(s => (
@@ -193,28 +193,28 @@ export default function CleaningEditScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.gray50 },
+  container: { flex: 1, backgroundColor: Colors.homeCanvas },
   segmentRow: {
     flexDirection: 'row', gap: 4, backgroundColor: Colors.gray100,
-    borderRadius: 12, padding: 3, marginHorizontal: Spacing.screenX, marginTop: 14,
+    borderRadius: 12, padding: 3, marginHorizontal: 20, marginTop: 14,
   },
-  segmentTab: { flex: 1, paddingVertical: 7, borderRadius: 10, alignItems: 'center' },
+  segmentTab: { flex: 1, minHeight: 44, paddingVertical: 7, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   segmentTabActive: { backgroundColor: Colors.white },
   segmentText: { fontSize: 14, fontWeight: '500', color: Colors.gray400 },
-  segmentTextActive: { color: Colors.black, fontWeight: '700' },
-  scroll: { padding: Spacing.screenX, paddingBottom: 40, gap: 8 },
+  segmentTextActive: { color: Colors.primary, fontWeight: '700' },
+  scroll: { padding: 20, paddingBottom: 40, gap: 8 },
   hintRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 },
   hintText: { fontSize: 11, fontWeight: '500', color: Colors.gray400 },
   row: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
-    borderWidth: 1, borderColor: Colors.gray100, borderRadius: 14, padding: 14,
+    borderWidth: 1, borderColor: Colors.homeBorder, borderRadius: 20, padding: 16,
     backgroundColor: Colors.white, marginBottom: 8,
   },
   rowActive: { borderColor: Colors.primary, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 10, elevation: 6 },
   dragHandle: { marginRight: -4 },
   rowTitle: { flex: 1, fontSize: 14, fontWeight: '600', color: Colors.black },
   rowWeekday: { fontSize: 11, color: Colors.gray400 },
-  iconBtn: { padding: 4 },
+  iconBtn: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
   editRow: { flex: 1, flexDirection: 'row', alignItems: 'flex-end', gap: 10 },
   editInput: { flex: 1 },
   saveText: { fontSize: 13, fontWeight: '700', color: Colors.primary, paddingBottom: 13 },
@@ -222,10 +222,10 @@ const styles = StyleSheet.create({
   addSection: { gap: 14, marginTop: 16 },
   weekdayChipRow: { flexDirection: 'row', gap: 6 },
   weekdayChip: {
-    flex: 1, paddingVertical: 8, borderRadius: 10,
+    flex: 1, minHeight: 44, paddingVertical: 8, justifyContent: 'center', borderRadius: 10,
     borderWidth: 1, borderColor: Colors.gray200, alignItems: 'center',
   },
-  weekdayChipActive: { backgroundColor: Colors.black, borderColor: Colors.black },
+  weekdayChipActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
   weekdayChipText: { fontSize: 12, fontWeight: '500', color: Colors.gray600 },
   weekdayChipTextActive: { color: Colors.white, fontWeight: '600' },
   addButtonWrap: { marginTop: 4 },
