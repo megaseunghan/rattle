@@ -16,8 +16,9 @@ export const NOTIFICATION_SETTING_DEFS: NotificationSettingDef[] = [
   { key: 'sales_margin_drop', group: '매출·손익', label: '마진율 급락 알림', description: '전월 대비 마진율이 5%p 이상 떨어졌을 때', default: false },
 ];
 
-export async function getNotifications(storeId: string, category?: NotificationCategory): Promise<AppNotification[]> {
+export async function getNotifications(storeId: string, category?: NotificationCategory, allowFinancial = true): Promise<AppNotification[]> {
   let query = supabase.from('notifications').select('*').eq('store_id', storeId).neq('category', 'attendance').order('created_at', { ascending: false });
+  if (!allowFinancial) query = query.neq('category', 'sales').neq('category', 'profit');
   if (category) query = query.eq('category', category);
   const { data, error } = await query;
   if (error) throw new Error(error.message);

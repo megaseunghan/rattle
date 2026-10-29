@@ -10,6 +10,28 @@ export class UserFacingError extends Error {
 
 // DB의 업무 규칙 중 사용자가 해결할 수 있는 상황만 짧은 안내로 변환한다.
 const ACTION_MESSAGES: Readonly<Record<string, string>> = {
+  WAGE_HISTORY_REQUIRED: '급여 조건 이력이 없는 직원이 있어요. 인건비에서 적용일과 급여 조건을 확인해주세요.',
+  TAXONOMY_INVALID: '분류 이름을 다시 확인해주세요.',
+  TAXONOMY_CONFLICT: '같은 이름이 있어요. 목록을 새로고침해주세요.',
+  TAXONOMY_FORBIDDEN: '분류를 변경할 권한이 없어요.',
+  JOIN_PROFILE_INVALID: '근무 조건·입사일·계좌 정보를 다시 확인해주세요.',
+  JOIN_REVIEW_REQUIRED: '신청 정보를 먼저 확인한 뒤 승인해주세요.',
+  JOIN_REVIEW_CHANGED: '직원이 신청 정보를 수정했어요. 취소한 뒤 다시 열어 확인해주세요.',
+  HOME_SUMMARY_FORBIDDEN: '이 매장의 요약을 볼 권한이 없어요.',
+  MEMBER_ACTIVE_CONFLICT: '겹치는 재직 직원이 있어요. 직원 정보를 확인한 뒤 다시 승인해주세요.',
+  MEMBER_EXISTING_ACCOUNT: '신청 계정에 연결된 직원 기록이 있어요. 해당 기록으로 재입사 처리해주세요.',
+  MEMBER_OTHER_ACCOUNT: '다른 계정에 연결된 기록이에요. 직원 연결을 확인해주세요.',
+  MEMBER_CHOICE_CHANGED: '선택한 직원 정보가 변경됐어요. 취소한 뒤 다시 확인해주세요.',
+  FINANCE_ADMIN_REQUIRED: '관리자만 손익을 확인할 수 있어요.',
+  ACCOUNT_OWNS_STORES: '매장 소유권을 이전한 뒤 탈퇴해주세요.',
+  OWNERSHIP_OWNER_REQUIRED: '매장 소유자만 이전할 수 있어요.',
+  OWNERSHIP_APPROVED_MEMBER_REQUIRED: '승인된 멤버를 다시 선택해주세요.',
+  RECIPE_INGREDIENT_STORE_MISMATCH: '이 매장의 재료를 다시 선택해주세요.',
+  PURCHASE_INGREDIENT_STORE_MISMATCH: '이 매장의 재료를 다시 선택해주세요.',
+  PURCHASE_STORE_MISMATCH: '매입 내역을 새로고침해주세요.',
+  PURCHASE_INVALID_ITEMS: '품목·수량·단가를 확인해주세요.',
+  PURCHASE_INVALID_AMOUNT: '품목·수량·단가를 확인해주세요.',
+
   '로그인이 필요합니다': '다시 로그인해주세요.',
   '사업자번호 10자리를 입력해주세요': '사업자번호 10자리를 입력해주세요.',
   '이름을 100자 이내로 입력해주세요': '이름은 100자까지 입력해주세요.',

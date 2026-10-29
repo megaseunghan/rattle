@@ -1,6 +1,9 @@
+/* Hallmark · genre: modern-minimal · macrostructure: Workbench · design-system: DESIGN.md · designed-as-app */
+import { NumericText } from './NumericText';
 import { StyleSheet, Text, View } from 'react-native';
 import { Colors } from '../../../constants/colors';
-import { SummaryCardStyle, Type } from '../../../constants/designTokens';
+import { Type } from '../../../constants/designTokens';
+import { Fonts } from '../../../constants/fonts';
 
 interface SubMetric {
   label: string;
@@ -28,7 +31,7 @@ export function SummaryCard({ label, amount, changeLabel, isNegativeChange, subM
           </Text>
         )}
       </View>
-      <Text style={styles.amount}>{amount}</Text>
+      <NumericText style={styles.amount} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{amount}</NumericText>
 
       {subMetrics && subMetrics.length > 0 && (
         <>
@@ -37,7 +40,7 @@ export function SummaryCard({ label, amount, changeLabel, isNegativeChange, subM
             {subMetrics.map((metric) => (
               <View key={metric.label} style={styles.subMetric}>
                 <Text style={styles.subLabel}>{metric.label}</Text>
-                <Text style={styles.subValue}>{metric.value}</Text>
+                <NumericText style={styles.subValue}>{metric.value}</NumericText>
                 {metric.change && (
                   <Text style={[styles.subChange, metric.isNegativeChange ? styles.negative : styles.positive]}>
                     {metric.change}
@@ -54,12 +57,18 @@ export function SummaryCard({ label, amount, changeLabel, isNegativeChange, subM
 
 const styles = StyleSheet.create({
   card: {
-    ...SummaryCardStyle,
+    backgroundColor: Colors.white,
+    borderColor: Colors.homeBorder,
+    borderWidth: 1,
+    borderRadius: 24,
+    padding: 18,
   },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: 8,
   },
   label: {
     fontSize: Type.sm,
@@ -72,14 +81,15 @@ const styles = StyleSheet.create({
   },
   amount: {
     fontSize: 28,
+    fontFamily: Fonts.spaceGroteskBold,
     fontWeight: '700',
     color: Colors.black,
     letterSpacing: -0.5,
-    marginTop: 4,
+    marginTop: 10,
   },
   divider: {
     height: 0.5,
-    backgroundColor: 'rgba(49,130,246,.18)',
+    backgroundColor: Colors.homeBorder,
     marginVertical: 14,
   },
   subRow: {

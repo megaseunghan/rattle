@@ -8,7 +8,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Colors } from '../../constants/colors';
 import { useAuth } from '../contexts/AuthContext';
-import { supabase } from '../supabase';
+import { deleteAccount } from '../services/account';
+import { isAuthCancelled } from '../services/socialAuth';
 import { animateListChange } from '../utils/layoutAnimation';
 import { getErrorMessage } from '../utils/error';
 
@@ -113,7 +114,7 @@ export function MoreDrawer({ visible, onClose }: { visible: boolean; onClose: ()
   function handleDeleteAccount() {
     Alert.alert(
       '회원 탈퇴',
-      '정말로 탈퇴하시겠습니까? 매장 정보와 모든 데이터가 즉시 삭제되며 복구할 수 없습니다.',
+      '계정을 삭제할까요? 매장의 급여·매입 기록은 보존돼요.',
       [
         { text: '취소', style: 'cancel' },
         {
@@ -121,13 +122,13 @@ export function MoreDrawer({ visible, onClose }: { visible: boolean; onClose: ()
           style: 'destructive',
           onPress: async () => {
             try {
-              const { error } = await supabase.functions.invoke('delete-account');
-              if (error) throw error;
+              await deleteAccount();
               onClose();
               await signOut();
               router.replace('/(auth)/login');
-            } catch {
-              Alert.alert('탈퇴 실패', '탈퇴 처리에 실패했습니다. 고객센터에 문의해주세요.');
+            } catch (error) {
+              if (isAuthCancelled(error)) return;
+              Alert.alert('탈퇴 확인', getErrorMessage(error));
             }
           },
         },
@@ -144,7 +145,7 @@ export function MoreDrawer({ visible, onClose }: { visible: boolean; onClose: ()
       <Animated.View style={[styles.drawer, { width: DRAWER_WIDTH, paddingTop: insets.top + 12, paddingBottom: insets.bottom + 12, transform: [{ translateX }] }]}>
         <View style={styles.drawerHeader}>
           <Text style={styles.drawerTitle}>더보기</Text>
-          <TouchableOpacity onPress={onClose} hitSlop={8}>
+          <TouchableOpacity onPress={onClose} style={styles.closeButton} hitSlop={8} accessibilityRole="button" accessibilityLabel="더보기 닫기">
             <Ionicons name="close" size={22} color={Colors.gray500} />
           </TouchableOpacity>
         </View>
@@ -188,8 +189,10 @@ export function MoreDrawer({ visible, onClose }: { visible: boolean; onClose: ()
             })}
           </AccordionSection>
 
+          <SettingRow icon="add-circle-outline" label="매장 추가·참여" onPress={() => go('/(auth)/select-store')} />
           <AccordionSection title="설정">
             {isAdmin && <SettingRow icon="storefront-outline" label="매장 정보" onPress={() => go('/settings/store')} />}
+            {isAdmin && currentStore?.owner_id === user?.id && <SettingRow icon="pie-chart-outline" label="손익 공유" withBorder onPress={() => go('/settings/financial-sharing')} />}
             {isAdmin && <SettingRow icon="people-outline" label="멤버 관리" withBorder onPress={() => go('/settings/members')} />}
             {isAdmin && <SettingRow icon="card-outline" label="TossPos 연동" withBorder onPress={() => go('/settings/pos-sync')} />}
             {isAdmin && <SettingRow icon="notifications-outline" label="알림 설정" withBorder onPress={() => go('/notifications/settings')} />}
@@ -212,42 +215,43 @@ export function MoreDrawer({ visible, onClose }: { visible: boolean; onClose: ()
 }
 
 const styles = StyleSheet.create({
-  backdrop: { backgroundColor: 'rgba(0,0,0,0.4)' },
+  backdrop: { backgroundColor: Colors.overlay },
   drawer: {
     position: 'absolute', top: 0, bottom: 0, left: 0,
-    backgroundColor: Colors.white, paddingHorizontal: 20,
-    shadowColor: '#000', shadowOffset: { width: 4, height: 0 }, shadowOpacity: 0.15, shadowRadius: 16, elevation: 16,
+    backgroundColor: Colors.homeCanvas, paddingHorizontal: 20,
+    shadowColor: Colors.black, shadowOffset: { width: 4, height: 0 }, shadowOpacity: 0.15, shadowRadius: 16, elevation: 16,
   },
   drawerHeader: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingBottom: 14, marginBottom: 4,
   },
-  drawerTitle: { fontSize: 17, fontWeight: '700', color: Colors.black },
+  closeButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  drawerTitle: { fontSize: 22, fontWeight: '700', color: Colors.black },
 
   scroll: { paddingBottom: 40 },
   profileRow: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
-    paddingVertical: 16, marginBottom: 16,
-    borderBottomWidth: 1, borderBottomColor: Colors.gray100,
+    padding: 14, marginBottom: 16, backgroundColor: Colors.white,
+    borderRadius: 20, borderWidth: 1, borderColor: Colors.homeBorder,
   },
   profileAvatar: {
     width: 42, height: 42, borderRadius: 21,
     backgroundColor: Colors.tinted, justifyContent: 'center', alignItems: 'center',
   },
   profileName: { fontSize: 14, fontWeight: '700', color: Colors.black },
-  profileSub: { fontSize: 11, fontWeight: '500', color: Colors.gray400, marginTop: 2 },
+  profileSub: { fontSize: 12, fontWeight: '500', color: Colors.gray400, marginTop: 2 },
 
   accordion: { marginBottom: 16 },
-  accordionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 10 },
+  accordionHeader: { minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 10 },
 
   dangerTextRow: { alignItems: 'center', paddingVertical: 16 },
   dangerText: { fontSize: 14, fontWeight: '600', color: Colors.negative },
   sectionLabel: {
     fontSize: 13, fontWeight: '700', color: Colors.gray600,
   },
-  listBody: { borderBottomWidth: 1, borderBottomColor: Colors.gray100 },
+  listBody: { backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.homeBorder, borderRadius: 20, paddingHorizontal: 14, overflow: 'hidden' },
   listItem: { flexDirection: 'row', alignItems: 'center', minHeight: 50, paddingVertical: 10, gap: 14 },
-  listItemBorder: { borderTopWidth: 0.5, borderTopColor: Colors.gray100 },
+  listItemBorder: { borderTopWidth: 0.5, borderTopColor: Colors.homeBorder },
   rowIcon: { width: 22 },
   itemInfoFlex: { flex: 1 },
   itemName: { flex: 1, fontSize: 14, fontWeight: '500', color: Colors.black },

@@ -53,7 +53,7 @@ export function DevRoleSwitcher() {
           </View>
           {devPreviewMode !== 'self' && (
             candidates.length === 0 ? (
-              <Text style={styles.empty}>등록된 {devPreviewMode === 'part_time' ? '파트타이머' : '직원'}가 없어요</Text>
+              <Text style={styles.empty}>{devPreviewMode === 'part_time' ? '등록된 파트타이머가 없어요' : '등록된 직원이 없어요'}</Text>
             ) : (
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
                 {candidates.map(e => (

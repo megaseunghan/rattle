@@ -1,25 +1,38 @@
-/** design_handoff_rattle_ui/design-tokens.md — 본문 Pretendard, 숫자 강조 Space Grotesk */
+/** 승인된 서체: 한글·본문 Wanted Sans, 금액·숫자 Geist. iOS용 정적 굵기별 파일. */
+// 폰트와 함께 배포하는 라이선스 원문을 실제 JS 번들에도 포함한다.
+export const FONT_LICENSES: Record<string, string> = require('../assets/fonts/licenses.json');
+
 export const Fonts = {
-  pretendardRegular: 'Pretendard-Regular',
-  pretendardMedium: 'Pretendard-Medium',
-  pretendardSemiBold: 'Pretendard-SemiBold',
-  pretendardBold: 'Pretendard-Bold',
-  spaceGroteskRegular: 'SpaceGrotesk-Regular',
-  spaceGroteskMedium: 'SpaceGrotesk-Medium',
-  spaceGroteskBold: 'SpaceGrotesk-Bold',
+  wantedRegular: 'WantedSans-Regular',
+  wantedMedium: 'WantedSans-Medium',
+  wantedSemiBold: 'WantedSans-SemiBold',
+  wantedBold: 'WantedSans-Bold',
+  geistRegular: 'Geist-Regular',
+  geistMedium: 'Geist-Medium',
+  geistSemiBold: 'Geist-SemiBold',
+  geistBold: 'Geist-Bold',
+  // 기존 화면의 토큰 이름은 호환 별칭으로 보존한다.
+  pretendardRegular: 'WantedSans-Regular',
+  pretendardMedium: 'WantedSans-Medium',
+  pretendardSemiBold: 'WantedSans-SemiBold',
+  pretendardBold: 'WantedSans-Bold',
+  spaceGroteskRegular: 'Geist-Regular',
+  spaceGroteskMedium: 'Geist-Medium',
+  spaceGroteskBold: 'Geist-Bold',
 } as const;
 
 export const FONT_ASSETS = {
-  [Fonts.pretendardRegular]: require('../assets/fonts/Pretendard-Regular.otf'),
-  [Fonts.pretendardMedium]: require('../assets/fonts/Pretendard-Medium.otf'),
-  [Fonts.pretendardSemiBold]: require('../assets/fonts/Pretendard-SemiBold.otf'),
-  [Fonts.pretendardBold]: require('../assets/fonts/Pretendard-Bold.otf'),
-  [Fonts.spaceGroteskRegular]: require('../assets/fonts/SpaceGrotesk-Regular.ttf'),
-  [Fonts.spaceGroteskMedium]: require('../assets/fonts/SpaceGrotesk-Medium.ttf'),
-  [Fonts.spaceGroteskBold]: require('../assets/fonts/SpaceGrotesk-Bold.ttf'),
+  [Fonts.wantedRegular]: require('../assets/fonts/WantedSans-Regular.ttf'),
+  [Fonts.wantedMedium]: require('../assets/fonts/WantedSans-Medium.ttf'),
+  [Fonts.wantedSemiBold]: require('../assets/fonts/WantedSans-SemiBold.ttf'),
+  [Fonts.wantedBold]: require('../assets/fonts/WantedSans-Bold.ttf'),
+  [Fonts.geistRegular]: require('../assets/fonts/Geist-Regular.ttf'),
+  [Fonts.geistMedium]: require('../assets/fonts/Geist-Medium.ttf'),
+  [Fonts.geistSemiBold]: require('../assets/fonts/Geist-SemiBold.ttf'),
+  [Fonts.geistBold]: require('../assets/fonts/Geist-Bold.ttf'),
 };
 
-/** fontWeight 값을 로드된 Pretendard 정적 굵기 중 가장 가까운 것으로 매핑 (커스텀 폰트는 fontWeight만으로 굵기가 안 바뀌므로) */
+/** 기존 함수 호출도 Wanted Sans의 정확한 정적 굵기로 매핑한다. */
 export function pretendard(weight?: string | number): string {
   const w = weight ? Number(weight) : 400;
   if (w >= 700) return Fonts.pretendardBold;
@@ -31,6 +44,7 @@ export function pretendard(weight?: string | number): string {
 export function spaceGrotesk(weight?: string | number): string {
   const w = weight ? Number(weight) : 400;
   if (w >= 700) return Fonts.spaceGroteskBold;
+  if (w >= 600) return Fonts.geistSemiBold;
   if (w >= 500) return Fonts.spaceGroteskMedium;
   return Fonts.spaceGroteskRegular;
 }

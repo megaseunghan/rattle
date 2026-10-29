@@ -1,3 +1,4 @@
+/* Hallmark · genre: modern-minimal · macrostructure: Workbench · design-system: DESIGN.md · designed-as-app */
 import { ActivityIndicator, Pressable, StyleSheet, Text } from 'react-native';
 import { Colors } from '../../../constants/colors';
 import { Radius, Type } from '../../../constants/designTokens';
@@ -17,11 +18,14 @@ export function Button({ label, onPress, variant = 'primary', disabled = false, 
 
   return (
     <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ disabled: isDisabled, busy: loading }}
       onPress={isDisabled ? undefined : onPress}
       style={({ pressed }) => [
         styles.base,
         variantStyles[variant],
         isDisabled && variant === 'primary' && styles.primaryDisabled,
+        isDisabled && variant !== 'primary' && styles.disabled,
         pressed && !isDisabled && styles.pressed,
       ]}
     >
@@ -38,12 +42,14 @@ export function Button({ label, onPress, variant = 'primary', disabled = false, 
 
 const styles = StyleSheet.create({
   base: {
+    minHeight: 44,
     alignItems: 'center',
     justifyContent: 'center',
   },
   pressed: {
-    opacity: 0.85,
+    opacity: 0.95,
   },
+  disabled: { opacity: 0.5 },
   primaryDisabled: {
     backgroundColor: Colors.gray200,
   },
@@ -54,12 +60,13 @@ const styles = StyleSheet.create({
 
 const variantStyles = StyleSheet.create({
   primary: {
-    backgroundColor: Colors.primary,
+    backgroundColor: Colors.action,
     borderRadius: Radius.field,
     paddingVertical: 15,
     width: '100%',
   },
   secondary: {
+    backgroundColor: Colors.white,
     borderWidth: 1,
     borderColor: Colors.gray200,
     borderRadius: Radius.field,
@@ -67,6 +74,7 @@ const variantStyles = StyleSheet.create({
     width: '100%',
   },
   danger: {
+    backgroundColor: Colors.white,
     borderWidth: 1.5,
     borderColor: Colors.negative,
     borderRadius: Radius.field,
@@ -116,13 +124,13 @@ const textStyles = StyleSheet.create({
   text: {
     fontSize: Type.sm,
     fontWeight: '600',
-    color: Colors.gray500,
+    color: Colors.action,
     textAlign: 'center',
   },
   pill: {
     fontSize: Type.sm,
     fontWeight: '600',
-    color: Colors.primary,
+    color: Colors.action,
   },
 });
 
@@ -131,6 +139,6 @@ const loadingIndicatorColor: Record<ButtonVariant, string> = {
   secondary: Colors.primary,
   danger: Colors.negative,
   kakao: Colors.kakao.text,
-  text: Colors.gray500,
+  text: Colors.action,
   pill: Colors.primary,
 };

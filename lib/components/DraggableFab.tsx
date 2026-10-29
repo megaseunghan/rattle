@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+/* Hallmark · genre: modern-minimal · macrostructure: Workbench · design-system: DESIGN.md · designed-as-app */
+import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, useWindowDimensions } from 'react-native';
 import Animated, { cancelAnimation, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
@@ -37,29 +38,48 @@ interface DraggableFabProps {
   onPress: () => void;
   onDragEnd?: (x: number, y: number) => void;
   iconName: keyof typeof Ionicons.glyphMap;
+  /** 하단 고정 액션 위에 둘 여유 공간. 저장 위치 자체는 변경하지 않는다. */
+  bottomInset?: number;
+  /** 비용 목록은 하단 전용 공간에 정착해 행의 금액·삭제 버튼을 가리지 않는다. */
+  dockBottom?: boolean;
+  containerHeight?: number;
+  tabBarHeight?: number;
+  resetRequest?: number;
 }
 
 /** 화면 어디든 자유롭게 드래그해서 옮길 수 있는 FAB. 위치는 기기에 저장돼 다음에 열어도 유지된다. */
-export function DraggableFab({ visible, onPress, onDragEnd, iconName }: DraggableFabProps) {
+export function DraggableFab({ visible, onPress, onDragEnd, iconName, bottomInset, dockBottom, containerHeight, tabBarHeight, resetRequest }: DraggableFabProps) {
   if (!visible) return null;
-  return <DraggableFabInner onPress={onPress} onDragEnd={onDragEnd} iconName={iconName} />;
+  return <DraggableFabInner onPress={onPress} onDragEnd={onDragEnd} iconName={iconName} bottomInset={bottomInset} dockBottom={dockBottom} containerHeight={containerHeight} tabBarHeight={tabBarHeight} resetRequest={resetRequest} />;
 }
 
-function DraggableFabInner({ onPress, onDragEnd, iconName }: Omit<DraggableFabProps, 'visible'>) {
-  const { width, height } = useWindowDimensions();
+function DraggableFabInner({ onPress, onDragEnd, iconName, bottomInset = 0, dockBottom = false, containerHeight, tabBarHeight = TAB_BAR_HEIGHT, resetRequest = 0 }: Omit<DraggableFabProps, 'visible'>) {
+  const { width, height: windowHeight } = useWindowDimensions();
+  const height = containerHeight ?? windowHeight;
   const minX = 8;
   const maxX = width - FAB_SIZE - 8;
-  const minY = 40;
-  const maxY = height - FAB_SIZE - TAB_BAR_HEIGHT - 16;
+  const maxY = Math.max(40, height - FAB_SIZE - tabBarHeight - (dockBottom ? 8 : 16) - bottomInset);
+  const minY = dockBottom ? maxY : 40;
 
   const defaultX = width - FAB_SIZE - 20;
-  const defaultY = height - FAB_SIZE - TAB_BAR_HEIGHT - 16;
+  const defaultY = maxY;
 
   const x = useSharedValue(defaultX);
   const y = useSharedValue(defaultY);
   const startX = useSharedValue(defaultX);
   const startY = useSharedValue(defaultY);
   const [ready, setReady] = useState(false);
+  const freeY = useRef<number | null>(null);
+  const lastResetRequest = useRef(resetRequest);
+  useEffect(() => {
+    if (!ready) return;
+    const px = clamp(x.get(), minX, maxX);
+    if (dockBottom && freeY.current === null) freeY.current = y.get();
+    const py = clamp(!dockBottom && freeY.current !== null ? freeY.current : y.get(), minY, maxY);
+    if (!dockBottom) freeY.current = null;
+    x.set(px); y.set(py);
+    onDragEnd?.(px, py);
+  }, [ready, width, height, bottomInset, dockBottom, tabBarHeight]);
 
   useEffect(() => {
     AsyncStorage.getItem(STORAGE_KEY).then(raw => {
@@ -69,6 +89,7 @@ function DraggableFabInner({ onPress, onDragEnd, iconName }: Omit<DraggableFabPr
         try {
           const pos = JSON.parse(raw) as { x: number; y: number };
           if (!Number.isFinite(pos.x) || !Number.isFinite(pos.y)) throw new Error();
+          if (dockBottom) freeY.current = pos.y;
           restoredX = clamp(pos.x, minX, maxX);
           restoredY = clamp(pos.y, minY, maxY);
         } catch {
@@ -87,9 +108,18 @@ function DraggableFabInner({ onPress, onDragEnd, iconName }: Omit<DraggableFabPr
   }, []);
 
   function persistPosition(px: number, py: number) {
-    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({ x: px, y: py })).catch(() => {});
+    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({ x: px, y: dockBottom ? freeY.current ?? py : py })).catch(() => {});
     onDragEnd?.(px, py);
   }
+
+  useEffect(() => {
+    if (resetRequest === lastResetRequest.current) return;
+    lastResetRequest.current = resetRequest;
+    cancelAnimation(x); cancelAnimation(y);
+    if (dockBottom) freeY.current = Math.max(40, height - FAB_SIZE - tabBarHeight - 16);
+    x.set(defaultX); y.set(defaultY);
+    persistPosition(defaultX, defaultY);
+  }, [resetRequest]);
 
   const pan = Gesture.Pan()
     .minDistance(DRAG_TAP_THRESHOLD)

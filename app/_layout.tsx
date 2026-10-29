@@ -1,6 +1,6 @@
-import { SplashScreen, Stack, useRouter, useSegments } from 'expo-router';
+import { SplashScreen, Stack, useRouter, useSegments, usePathname } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { AppState, Alert } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useFonts } from 'expo-font';
@@ -14,7 +14,8 @@ import { useTossSync } from '../lib/hooks/useTossSync';
 import { Colors } from '../constants/colors';
 import { FONT_ASSETS } from '../constants/fonts';
 import { applyGlobalFont } from '../lib/utils/applyGlobalFont';
-import { supabase } from '../lib/supabase';
+import { isFinancialRoute } from '../lib/utils/financialSharing';
+import { RattleQueryProvider } from '../lib/query';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -22,47 +23,25 @@ SplashScreen.preventAutoHideAsync();
 
 applyGlobalFont();
 
-const PENDING_CHECK_INTERVAL = 30 * 60 * 1000; // 30분
-
 function RootNavigator() {
-  const { user, store, currentRole, loading } = useAuth();
+  const { user, store, loading, canReadFinancials, currentRole } = useAuth();
   const router = useRouter();
   const segments = useSegments();
+  const pathname = usePathname();
   const { autoSyncOnForeground } = useTossSync();
-  const lastCheckedAt = useRef<number>(0);
   const [showIntro, setShowIntro] = useState(true);
   const [introReady, setIntroReady] = useState(false);
   const finishIntro = useCallback(() => setShowIntro(false), []);
 
-  async function checkPendingMembers() {
-    if (!store || currentRole !== 'admin') return;
-    const now = Date.now();
-    if (now - lastCheckedAt.current < PENDING_CHECK_INTERVAL) return;
-    lastCheckedAt.current = now;
-
-    const { count } = await supabase
-      .from('store_members')
-      .select('*', { count: 'exact', head: true })
-      .eq('store_id', store.id)
-      .eq('status', 'pending');
-
-    if (count && count > 0) {
-      Alert.alert(
-        '멤버 승인 요청',
-        `${count}건의 매장 참여 요청이 있습니다.`,
-        [
-          { text: '나중에', style: 'cancel' },
-          { text: '확인하기', onPress: () => router.push('/settings/members') },
-        ],
-      );
-    }
-  }
+  useEffect(() => {
+    let mounted = true;
+    const start = () => { if (mounted) setIntroReady(true); };
+    SplashScreen.hideAsync().then(start).catch(start);
+    return () => { mounted = false; };
+  }, []);
 
   useEffect(() => {
     if (loading) return;
-
-    SplashScreen.hideAsync().then(() => setIntroReady(true)).catch(() => setIntroReady(true));
-
     const inAuth = segments[0] === '(auth)';
     const onLoginFlow = segments.includes('login');
 
@@ -76,24 +55,21 @@ function RootNavigator() {
     }
   }, [loading, user, store]);
 
-  // 로그인 + 매장 준비 완료 시 최초 1회 체크
   useEffect(() => {
-    if (!loading && user && store) {
-      checkPendingMembers();
-    }
-  }, [user?.id, store?.id]);
+    if (!loading && user && store && ((!canReadFinancials && isFinancialRoute(pathname)) ||
+      (currentRole !== 'admin' && (pathname.startsWith('/admin') || pathname.startsWith('/profit-loss') || pathname.startsWith('/settings/pos-sync'))))) router.replace('/(tabs)');
+  }, [loading, user?.id, store?.id, canReadFinancials, currentRole, pathname]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextState) => {
       if (nextState === 'active') {
         autoSyncOnForeground();
-        checkPendingMembers();
       }
     });
     return () => subscription.remove();
-  }, [autoSyncOnForeground, store, currentRole]);
+  }, [autoSyncOnForeground]);
 
-  // OAuth 콜백 딥링크 처리 (카카오 로그인)
+  // 브라우저 OAuth 콜백 딥링크 처리 (카카오·Google)
   useEffect(() => {
     const handleUrl = async ({ url }: { url: string }) => {
       try {
@@ -107,6 +83,9 @@ function RootNavigator() {
     Linking.getInitialURL().then(url => { if (url) void handleUrl({ url }); }).catch(() => {});
     return () => subscription.remove();
   }, []);
+
+  if (!loading && user && store && ((!canReadFinancials && isFinancialRoute(pathname)) ||
+    (currentRole !== 'admin' && (pathname.startsWith('/admin') || pathname.startsWith('/profit-loss') || pathname.startsWith('/settings/pos-sync'))))) return null;
 
   return (
     <>
@@ -137,8 +116,8 @@ function RootNavigator() {
       <Stack.Screen name="legal/terms" options={{ headerShown: false }} />
       <Stack.Screen name="legal/privacy" options={{ headerShown: false }} />
     </Stack>
-    {!loading && user && store && <DevRoleSwitcher />}
-    {showIntro && <SplashAnimation ready={introReady} onDone={finishIntro} />}
+    {__DEV__ && !loading && user && store && segments[0] !== '(auth)' && <DevRoleSwitcher />}
+    {showIntro && <SplashAnimation ready={introReady} canExit={!loading} onDone={finishIntro} />}
     </>
   );
 }
@@ -153,10 +132,10 @@ export default function RootLayout() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <AuthProvider>
+      <RattleQueryProvider><AuthProvider>
         <StatusBar style="dark" />
         <RootNavigator />
-      </AuthProvider>
+      </AuthProvider></RattleQueryProvider>
     </GestureHandlerRootView>
   );
 }

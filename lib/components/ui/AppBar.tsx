@@ -4,6 +4,8 @@ import { Colors } from '../../../constants/colors';
 import { Spacing, Type } from '../../../constants/designTokens';
 
 interface AppBarProps {
+  /** Let a parent GlassBackdrop continue behind this header. */
+  transparent?: boolean;
   title: string;
   /** 메인 탭 화면: 좌측 메뉴 아이콘 눌렀을 때 (뒤로가기와 동시 사용 불가) */
   onMenuPress?: () => void;
@@ -20,6 +22,7 @@ interface AppBarProps {
 
 export function AppBar({
   title,
+  transparent = false,
   onMenuPress,
   onBack,
   rightSlot,
@@ -30,14 +33,14 @@ export function AppBar({
   const isSubScreen = !!onBack;
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, transparent && { backgroundColor: 'transparent' }]}>
       {isSubScreen ? (
-        <Pressable onPress={onBack} hitSlop={8} style={styles.backButton}>
+        <Pressable accessibilityRole="button" accessibilityLabel="뒤로가기" onPress={onBack} hitSlop={8} style={styles.backButton}>
           <Ionicons name="chevron-back" size={20} color={Colors.gray700} />
         </Pressable>
       ) : (
         onMenuPress && (
-          <Pressable onPress={onMenuPress} hitSlop={8} style={styles.menuButton}>
+          <Pressable accessibilityRole="button" accessibilityLabel="더보기" onPress={onMenuPress} hitSlop={8} style={styles.menuButton}>
             <Ionicons name="menu" size={22} color={Colors.black} />
           </Pressable>
         )
@@ -51,7 +54,7 @@ export function AppBar({
       </View>
 
       {isSubScreen && rightActionLabel ? (
-        <Pressable onPress={onRightActionPress} hitSlop={8}>
+        <Pressable onPress={onRightActionPress} hitSlop={8} style={styles.actionButton} accessibilityRole="button">
           <Text style={styles.rightAction}>{rightActionLabel}</Text>
         </Pressable>
       ) : (
@@ -68,13 +71,17 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingTop: Spacing.sectionTop,
     paddingHorizontal: Spacing.screenX,
+    backgroundColor: Colors.homeCanvas,
   },
   menuButton: {
     marginRight: -2,
+    minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center',
   },
   backButton: {
     marginRight: -2,
+    minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center',
   },
+  actionButton: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 4 },
   titleWrap: {
     flex: 1,
   },
@@ -85,12 +92,12 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   mainTitle: {
-    fontSize: Type.xl,
+    fontSize: 22,
     fontWeight: '700',
     color: Colors.black,
   },
   subTitle: {
-    fontSize: Type.xl,
+    fontSize: 22,
     fontWeight: '700',
     color: Colors.black,
   },

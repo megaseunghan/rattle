@@ -25,7 +25,7 @@ export const Radius = {
 
 /** design_handoff_rattle_ui/design-tokens.md 기준 여백 스케일 */
 export const Spacing = {
-  screenX: 22,
+  screenX: 20,
   sectionTop: 20,
   sectionHeaderGap: 6,
   cardPadding: 14,
@@ -34,34 +34,44 @@ export const Spacing = {
   ctaPadding: 22,
 } as const;
 
+/** 상세 시트는 배경 페이드와 카드 이동을 분리하고, 닫힘은 열림보다 빠르게 한다. 단위 ms. */
+export const DetailSheetMotion = {
+  enter: 300,
+  exit: 200,
+  backdropEnter: 180,
+  backdropExit: 160,
+} as const;
+
 /** 앱 전반에서 가장 널리 쓰이는 '흰 카드' 패턴 (list/summary/employee/empty 카드 등의 기준값) */
 export const CardStyle: ViewStyle = {
   backgroundColor: Colors.white,
-  borderRadius: Radius.xl,
-  borderWidth: 0.5,
-  borderColor: Colors.gray100,
+  borderRadius: 20,
+  borderWidth: 1,
+  borderColor: Colors.homeBorder,
 };
 
-/** 하단 탭 화면 헤더의 타이틀 텍스트 기준값 (fontSize 17 / fontWeight 600) */
+/** 화면 제목 기준값. 따뜻한 홈 테마를 전체 작업 화면에서 공유한다. */
 export const ScreenTitle = {
-  fontSize: Type.lg,
-  fontWeight: '600' as const,
+  fontSize: 22,
+  fontWeight: '700' as const,
   color: Colors.black,
 };
 
-/** patterns.md 4번 — 요약 카드 (tinted 배경) */
+/** 주요 지표 요약 카드. 선택 상태는 별도의 파란 강조색으로 구분한다. */
 export const SummaryCardStyle: ViewStyle = {
-  backgroundColor: Colors.tinted,
-  borderRadius: Radius.xl,
-  padding: Spacing.cardPadding,
+  backgroundColor: Colors.white,
+  borderRadius: 24,
+  borderWidth: 1,
+  borderColor: Colors.homeBorder,
+  padding: 18,
 };
 
-/** patterns.md 5번 — 리스트 카드 (gray100 테두리) */
+/** 목록 카드. 밝은 바탕에서 따뜻한 경계로 구분한다. */
 export const ListCardStyle: ViewStyle = {
   backgroundColor: Colors.white,
   borderWidth: 1,
-  borderColor: Colors.gray100,
-  borderRadius: Radius.lg,
+  borderColor: Colors.homeBorder,
+  borderRadius: 20,
   padding: Spacing.cardPadding,
 };
 
