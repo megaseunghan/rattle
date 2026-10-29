@@ -12,6 +12,9 @@ import {
   WorkedMinutesInput,
 } from '../services/payroll';
 import { Employee, Payroll } from '../../types';
+import { getWageHistory } from '../services/wageHistory';
+import { buildRegularWageSnapshot, regularSnapshotGross, regularSnapshotNonTaxable } from '../utils/regularWages';
+import { probationFactor } from '../services/payroll';
 
 export function usePayroll(yearMonth: string) {
   const { store } = useAuth();
@@ -43,7 +46,10 @@ export function usePayroll(yearMonth: string) {
     if (!store) throw new UserFacingError('매장 정보가 없습니다');
     setCalculating(employee.id);
     try {
-      const result = await calculatePayroll(employee);
+      // Recalculation is explicit; the stored timeline never follows later employee edits.
+      const history = await getWageHistory(employee.id);
+      const snapshot = buildRegularWageSnapshot(employee, history, yearMonth, probationFactor(employee));
+      const result = { ...await calculatePayroll({ ...employee, non_taxable: regularSnapshotNonTaxable(snapshot) }, undefined, yearMonth, regularSnapshotGross(snapshot)), regular_wage_snapshot: snapshot };
       const saved = await upsertPayroll(store.id, employee.id, yearMonth, result);
       setPayrolls(prev => {
         const exists = prev.findIndex(p => p.employee_id === employee.id);

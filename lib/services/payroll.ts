@@ -1,3 +1,4 @@
+import { invalidateCachedStore } from './cacheInvalidation';
 import { UserFacingError } from '../utils/error';
 import { supabase } from '../supabase';
 import { Employee, Payroll, PayrollWorkHistory } from '../../types';
@@ -49,82 +50,40 @@ export function probationFactor(employee: Pick<Employee, 'is_resigned_during_pro
 }
 
 // ─── 소득세 간이세액표 조회 ───────────────────────────────
-async function lookupIncomeTax(taxableBase: number, dependents: number): Promise<number> {
+async function lookupIncomeTax(taxableBase: number, dependents: number, year: number): Promise<number> {
+  if (taxableBase === 0) return 0;
   const dep = Math.min(Math.max(dependents, 1), 11);
-  const colName = `dep_${dep}`;
-
-  // 동적 컬럼(dep_N)을 고정 별칭 amount로 받아 타입을 명확히 한다
-  const { data, error } = await supabase
-    .from('income_tax_table')
-    .select(`amount:${colName}`)
-    .eq('year', 2026)
-    .lte('salary_from', taxableBase)
-    .gt('salary_to', taxableBase)
-    .maybeSingle()
-    .overrideTypes<{ amount: number | null }>();
-
-  console.log('[급여계산] taxableBase:', taxableBase, 'dep:', dep, 'col:', colName);
-  console.log('[급여계산] income_tax 조회 결과:', data, 'error:', error);
-
-  if (data && data.amount != null) return Number(data.amount);
-
-  // 테이블에 해당 구간 없으면 코드로 근사값 계산
-  const approx = calcIncomeTaxApprox(taxableBase, dependents);
-  console.log('[급여계산] 간이세액표 조회 실패 → 근사값:', approx);
-  return approx;
-}
-
-/** 간이세액표 없을 때 연산 근사값 (국세청 2025년 세율 기준) */
-function calcIncomeTaxApprox(monthly: number, dependents: number): number {
-  const annual = monthly * 12;
-
-  // 근로소득공제
-  let deduction: number;
-  if (annual <= 5_000_000) deduction = annual * 0.7;
-  else if (annual <= 15_000_000) deduction = 3_500_000 + (annual - 5_000_000) * 0.4;
-  else if (annual <= 45_000_000) deduction = 7_500_000 + (annual - 15_000_000) * 0.15;
-  else if (annual <= 100_000_000) deduction = 12_000_000 + (annual - 45_000_000) * 0.05;
-  else deduction = 14_750_000 + (annual - 100_000_000) * 0.02;
-  deduction = Math.min(deduction, 20_000_000);
-
-  // 인적공제 (1인 150만)
-  const personalDeduction = 1_500_000 * dependents;
-  const taxBase = Math.max(0, annual - deduction - personalDeduction);
-  if (taxBase === 0) return 0;
-
-  // 누진세율
-  let tax: number;
-  if (taxBase <= 14_000_000) tax = taxBase * 0.06;
-  else if (taxBase <= 50_000_000) tax = 840_000 + (taxBase - 14_000_000) * 0.15;
-  else if (taxBase <= 88_000_000) tax = 6_240_000 + (taxBase - 50_000_000) * 0.24;
-  else if (taxBase <= 150_000_000) tax = 15_360_000 + (taxBase - 88_000_000) * 0.35;
-  else if (taxBase <= 300_000_000) tax = 37_060_000 + (taxBase - 150_000_000) * 0.38;
-  else if (taxBase <= 500_000_000) tax = 94_060_000 + (taxBase - 300_000_000) * 0.40;
-  else tax = 174_060_000 + (taxBase - 500_000_000) * 0.42;
-
-  // 근로소득세액공제
-  let credit: number;
-  if (tax <= 730_000) credit = tax * 0.55;
-  else credit = 401_500 + (tax - 730_000) * 0.30;
-  const creditLimit = annual <= 33_000_000 ? 740_000 : annual <= 70_000_000 ? 660_000 : 500_000;
-  credit = Math.min(credit, creditLimit);
-
-  return Math.max(0, Math.floor((tax - credit) / 12));
+  const { data, error } = await supabase.from('income_tax_table')
+    .select(`amount:dep_${dep}`).eq('year', year)
+    .lte('salary_from', taxableBase).gt('salary_to', taxableBase)
+    .maybeSingle().overrideTypes<{ amount: number | null }>();
+  if (error || data?.amount == null || !Number.isFinite(Number(data.amount)) || Number(data.amount) < 0) {
+    throw new UserFacingError('급여를 계산하지 못했어요. 잠시 후 다시 시도해주세요.');
+  }
+  return Number(data.amount);
 }
 
 // ─── 급여 계산 ────────────────────────────────────────────
-export async function calculatePayroll(employee: Employee, work?: { minutes: number; hourlyWage: number }): Promise<Omit<Payroll, 'id' | 'store_id' | 'employee_id' | 'year_month' | 'created_at' | 'is_settled' | 'settled_at'>> {
+export async function calculatePayroll(employee: Employee, work?: { minutes: number; hourlyWage: number }, yearMonth = new Date().toISOString().slice(0, 7), grossOverride?: number): Promise<Omit<Payroll, 'id' | 'store_id' | 'employee_id' | 'year_month' | 'created_at' | 'is_settled' | 'settled_at'>> {
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(yearMonth)) throw new UserFacingError('대상 월을 확인해주세요.');
+  const year = Number(yearMonth.slice(0, 4));
+  // 다른 연도의 보험 기준이 준비되기 전에는 기존 비율로 소급·미래 계산하지 않는다.
+  if (year !== 2026) throw new UserFacingError('해당 연도의 급여 계산 기준이 준비되지 않았어요.');
+  if (grossOverride !== undefined && (!Number.isSafeInteger(grossOverride) || grossOverride < 0)) {
+    throw new UserFacingError('세전 금액을 다시 확인해주세요.');
+  }
+  const calculation_version = '2026-v1';
   const useInsurance = isInsuranceApplicable(employee);
-  if (employee.employment_type === 'part_time' && !work) {
+  if (employee.employment_type === 'part_time' && !work && grossOverride === undefined) {
     throw new UserFacingError('파트타이머의 총 근무 분과 적용 시급을 먼저 입력해주세요.');
   }
   // 수습 기간 실지급 90%(중도퇴사 80%)를 gross에 직접 반영
-  const gross = employee.employment_type === 'part_time' && work
+  const gross = grossOverride ?? (employee.employment_type === 'part_time' && work
     ? calculateHourlyGross(work.minutes, work.hourlyWage)
-    : Math.floor(employee.base_salary * probationFactor(employee));
+    : Math.floor(employee.base_salary * probationFactor(employee)));
 
   if (gross === 0) {
-    return { gross: 0, taxable_base: 0, national_pension: 0, health_insurance: 0,
+    return { calculation_version, gross: 0, taxable_base: 0, national_pension: 0, health_insurance: 0,
       long_term_care: 0, employment_insurance: 0, income_tax: 0, local_income_tax: 0,
       withholding_tax: 0, net_pay: 0 };
   }
@@ -133,7 +92,7 @@ export async function calculatePayroll(employee: Employee, work?: { minutes: num
     // 3.3% 원천징수 (파트타임 주 15h 미만)
     const withholding = floorTo(Math.round(gross * 0.033), 10);
     return {
-      gross,
+      calculation_version, gross,
       taxable_base: 0,
       national_pension: 0,
       health_insurance: 0,
@@ -163,7 +122,7 @@ export async function calculatePayroll(employee: Employee, work?: { minutes: num
   const employmentInsurance = floorTo(Math.round(taxableBase * 0.009), 10);
 
   // 소득세 (간이세액표)
-  const incomeTax = await lookupIncomeTax(taxableBase, employee.dependents);
+  const incomeTax = await lookupIncomeTax(taxableBase, employee.dependents, year);
 
   // 지방소득세: 소득세 × 10% → 10원 미만 버림
   const localIncomeTax = floorTo(incomeTax * 0.1, 10);
@@ -172,7 +131,7 @@ export async function calculatePayroll(employee: Employee, work?: { minutes: num
     + employmentInsurance + incomeTax + localIncomeTax;
 
   return {
-    gross,
+    calculation_version, gross,
     taxable_base: taxableBase,
     national_pension: nationalPension,
     health_insurance: healthInsurance,
@@ -225,20 +184,20 @@ export async function upsertPayroll(
 ): Promise<Payroll> {
   const { data, error } = await supabase
     .from('payroll')
-    .upsert(
-      { store_id: storeId, employee_id: employeeId, year_month: yearMonth, ...calculated },
-      { onConflict: 'employee_id,year_month' },
-    )
+    .insert({ store_id: storeId, employee_id: employeeId, year_month: yearMonth, ...calculated })
     .select()
     .single();
 
+  if (error?.code === '23505') throw new UserFacingError('이미 작성된 월 급여가 있어요. 새로고침해 확인해주세요.');
   if (error) throw new Error(error.message);
+  await invalidateCachedStore(storeId);
   return data as Payroll;
 }
 
 export async function deletePayroll(id: string): Promise<void> {
   const { error } = await supabase.from('payroll').delete().eq('id', id);
   if (error) throw new Error(error.message);
+  await invalidateCachedStore();
 }
 
 export interface WorkedMinutesInput {
@@ -274,7 +233,7 @@ export async function saveWorkedMinutes(
       long_term_care: previous.long_term_care, employment_insurance: previous.employment_insurance,
       income_tax: previous.income_tax, local_income_tax: previous.local_income_tax,
       withholding_tax: previous.withholding_tax, net_pay: previous.net_pay }
-    : await calculatePayroll(employee, isPart ? { minutes, hourlyWage: hourlyWage! } : undefined);
+    : await calculatePayroll(employee, isPart ? { minutes, hourlyWage: hourlyWage! } : undefined, yearMonth);
   const payload = { ...calculated, worked_minutes: minutes, applied_hourly_wage: hourlyWage,
     work_submission_id: input.submissionId ?? null,
     work_note: note, work_source: 'manual', is_settled: false, settled_at: null };
@@ -289,6 +248,7 @@ export async function saveWorkedMinutes(
     throw new Error(error.message);
   }
   if (!data) throw new UserFacingError('다른 곳에서 내역이 변경됐어요. 새로고침 후 다시 확인해주세요.');
+  await invalidateCachedStore(storeId);
   return data as Payroll;
 }
 
@@ -329,6 +289,7 @@ export async function updatePayrollDeductions(
 
   if (error) throw new Error(error.message);
   if (!data) throw new UserFacingError('다른 곳에서 급여가 변경됐어요. 새로고침 후 공제액을 다시 확인해주세요.');
+  await invalidateCachedStore();
   return data as Payroll;
 }
 
@@ -340,4 +301,5 @@ export async function settlePayrolls(ids: string[]): Promise<void> {
     .update({ is_settled: true, settled_at: new Date().toISOString() })
     .in('id', ids);
   if (error) throw new Error(error.message);
+  await invalidateCachedStore();
 }

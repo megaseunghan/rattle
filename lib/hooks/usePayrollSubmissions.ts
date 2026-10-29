@@ -16,14 +16,16 @@ export function usePayrollSubmissions(yearMonth: string, employeeId?: string) {
   useEffect(() => () => { request.current += 1; }, []);
   const refetch = useCallback(async () => {
     const id = ++request.current;
-    if (!storeId) return;
+    if (!storeId) return false;
     setState({ scope, rows: [], loading: true, error: null });
     try {
       const rows = await getPayrollSubmissions(storeId, yearMonth, employeeId);
       if (id === request.current && scope === scopeRef.current) setState({ scope, rows, loading: false, error: null });
+      return id === request.current && scope === scopeRef.current;
     } catch {
       if (id === request.current && scope === scopeRef.current) setState({ scope, rows: [], loading: false,
         error: '근무시간 제출 내역을 불러오지 못했어요. 다시 시도해주세요.' });
+      return false;
     }
   }, [storeId, yearMonth, employeeId, scope]);
   const visible = state.scope === scope;

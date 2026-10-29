@@ -250,7 +250,7 @@ export default function ScheduleSettingsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.gray50 },
+  container: { flex: 1, backgroundColor: Colors.homeCanvas },
   scroll: { padding: Spacing.screenX, paddingBottom: 40, gap: 10 },
 
   pendingBanner: {
@@ -261,10 +261,10 @@ const styles = StyleSheet.create({
 
   dayRow: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
-    borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12,
+    borderRadius: 20, paddingHorizontal: 14, paddingVertical: 12,
   },
   dayRowActive: { borderWidth: 1, borderColor: Colors.primary, backgroundColor: Colors.tinted },
-  dayRowInactive: { borderWidth: 1, borderColor: Colors.gray100, backgroundColor: Colors.white },
+  dayRowInactive: { borderWidth: 1, borderColor: Colors.homeBorder, backgroundColor: Colors.white },
   dayLabel: { width: 24, fontSize: 14, fontWeight: '700', color: Colors.black },
   timeGroup: { flex: 1, flexDirection: 'row', alignItems: 'center' },
   timeText: { fontSize: 14, fontWeight: '600', color: Colors.black },
@@ -272,15 +272,15 @@ const styles = StyleSheet.create({
 
   infoBox: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
-    backgroundColor: Colors.gray50, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 11,
+    backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.homeBorder, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 11,
   },
   infoText: { flex: 1, fontSize: 12, fontWeight: '400', color: Colors.gray500 },
 
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   emptyText: { fontSize: 14, color: Colors.gray400 },
 
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', padding: 24 },
-  modalCard: { backgroundColor: Colors.white, borderRadius: 20, padding: 20, gap: 14 },
+  modalOverlay: { flex: 1, backgroundColor: Colors.overlay, justifyContent: 'center', padding: 24 },
+  modalCard: { backgroundColor: Colors.white, borderRadius: 24, padding: 20, gap: 14 },
   modalTitle: { fontSize: 16, fontWeight: '700', color: Colors.black },
   modalTimeRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   modalTimeBtn: {
@@ -293,14 +293,14 @@ const styles = StyleSheet.create({
 
   modalSectionLabel: { fontSize: 12, fontWeight: '700', color: Colors.gray600, marginTop: 4 },
   bulkChipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  bulkChip: { paddingVertical: 7, paddingHorizontal: 12, borderRadius: 16, borderWidth: 1, borderColor: Colors.gray200 },
-  bulkChipActive: { backgroundColor: Colors.black, borderColor: Colors.black },
+  bulkChip: { minHeight: 44, justifyContent: 'center', paddingVertical: 7, paddingHorizontal: 12, borderRadius: 16, borderWidth: 1, borderColor: Colors.gray200 },
+  bulkChipActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
   bulkChipText: { fontSize: 12, fontWeight: '600', color: Colors.gray600 },
   bulkChipTextActive: { color: Colors.white },
 
   modalBtnRow: { flexDirection: 'row', gap: 10, marginTop: 6 },
-  modalCancelBtn: { flex: 1, alignItems: 'center', paddingVertical: 12, borderRadius: 12, borderWidth: 1, borderColor: Colors.gray200 },
+  modalCancelBtn: { flex: 1, minHeight: 44, justifyContent: 'center', alignItems: 'center', paddingVertical: 12, borderRadius: 12, borderWidth: 1, borderColor: Colors.gray200 },
   modalCancelText: { fontSize: 14, fontWeight: '600', color: Colors.gray500 },
-  modalApplyBtn: { flex: 1, alignItems: 'center', paddingVertical: 12, borderRadius: 12, backgroundColor: Colors.primary },
+  modalApplyBtn: { flex: 1, minHeight: 44, justifyContent: 'center', alignItems: 'center', paddingVertical: 12, borderRadius: 12, backgroundColor: Colors.primary },
   modalApplyText: { fontSize: 14, fontWeight: '700', color: Colors.white },
 });

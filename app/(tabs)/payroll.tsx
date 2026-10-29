@@ -1,6 +1,9 @@
+import { GlassBackdrop } from '../../lib/components/GlassBackdrop';
+import { SheetModal } from '../../lib/components/ui/SheetModal';
+/* Hallmark · genre: modern-minimal · macrostructure: Workbench · design-system: DESIGN.md · designed-as-app */
 import { getErrorMessage } from '../../lib/utils/error';
-import { useState, useCallback, useEffect, useRef } from 'react';
-import { router } from 'expo-router';
+import { useState, useCallback, useEffect, useRef, useContext } from 'react';
+import { router, useFocusEffect } from 'expo-router';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, Pressable,
   Modal, TextInput, Alert, KeyboardAvoidingView, Platform,
@@ -10,7 +13,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../constants/colors';
 import { CardStyle } from '../../constants/designTokens';
+import { Fonts } from '../../constants/fonts';
 import { useAuth } from '../../lib/contexts/AuthContext';
+import { TabPagerContext } from '../../lib/contexts/TabPagerContext';
 import { useEmployees } from '../../lib/hooks/useEmployees';
 import { usePayroll } from '../../lib/hooks/usePayroll';
 import { Employee, EmploymentType } from '../../types';
@@ -22,8 +27,10 @@ import { ErrorMessage } from '../../lib/components/ErrorMessage';
 import { formatWorkedMinutes } from '../../lib/utils/workMinutes';
 import { getPayrollSettlementGaps, PayrollDeductions, probationFactor } from '../../lib/services/payroll';
 import {
-  getStoreWageHistory, addWageChange, regularGrossForMonth, todayISO,
+  getStoreWageHistory,
 } from '../../lib/services/wageHistory';
+import { isWageDate } from '../../lib/utils/wageCondition';
+import { accruedRegularPayroll, regularEmployeesForAccrual } from '../../lib/utils/regularWages';
 import { WageHistory } from '../../types';
 import { animateListChange } from '../../lib/utils/layoutAnimation';
 import { Badge, EmptyState, Field } from '../../lib/components/ui';
@@ -98,13 +105,14 @@ function EmployeeCard({
   isSavingDeductions,
   canEditDeductions,
   onEdit,
+  onWageCondition,
   canCalculate,
   onWorkMinutes,
   onRemovePayroll,
 }: {
   employee: Employee;
   payroll: ReturnType<typeof usePayroll>['payrolls'][0] | undefined;
-  accruedGross: number;
+  accruedGross: number | null;
   accrualLabel: string;
   onShowHistory: () => void;
   isCalculating: boolean;
@@ -113,7 +121,8 @@ function EmployeeCard({
   onSaveDeductions: (deductions: PayrollDeductions) => Promise<void>;
   isSavingDeductions: boolean;
   canEditDeductions: boolean;
-  onEdit: () => void;
+  onEdit?: () => void;
+  onWageCondition?: () => void;
   onWorkMinutes?: () => void;
   onRemovePayroll?: () => void;
 }) {
@@ -193,15 +202,16 @@ function EmployeeCard({
           {payroll?.work_source === 'legacy_attendance' && <Badge label="이전 내역 · 공제 확인" variant="neutral" />}
         </View>
         <View style={styles.headerActions}>
-          <TouchableOpacity onPress={onShowHistory} style={styles.histBtn} hitSlop={8}>
+          <TouchableOpacity onPress={onShowHistory} style={styles.histBtn} accessibilityRole="button" accessibilityLabel="급여 조건 이력">
             <Ionicons name="time-outline" size={16} color={Colors.gray400} />
           </TouchableOpacity>
-          <TouchableOpacity onPress={onEdit} style={styles.editBtn} activeOpacity={0.7} hitSlop={8}>
+          {onEdit && <TouchableOpacity onPress={onEdit} style={styles.editBtn} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel="직원 정보 수정">
             <Ionicons name="create-outline" size={16} color={Colors.gray500} />
-          </TouchableOpacity>
+          </TouchableOpacity>}
         </View>
       </View>
 
+      {onWageCondition && <TouchableOpacity onPress={onWageCondition} style={{ minHeight: 44, justifyContent: 'center', paddingHorizontal: 10, borderRadius: 10, backgroundColor: Colors.white }} accessibilityRole="button"><Text style={{ color: Colors.action, fontWeight: '600' }}>급여 변경 →</Text></TouchableOpacity>}
       <TouchableOpacity style={styles.salaryRow} onPress={toggleExpanded} activeOpacity={0.7}>
         <View>
           <Text style={styles.salaryLabel}>{baseLabel}</Text>
@@ -232,7 +242,7 @@ function EmployeeCard({
       <View style={styles.payrollDivider} />
       <View style={styles.payrollRow}>
         <Text style={styles.payrollLabel}>세전 누적액</Text>
-        <Text style={styles.payrollNetPay}>{(isPart ? (payroll?.gross ?? 0) : accruedGross).toLocaleString()}원</Text>
+        <Text style={styles.payrollNetPay}>{(isPart ? payroll?.gross : accruedGross) == null ? '확인 필요' : `${(isPart ? payroll!.gross : accruedGross!).toLocaleString()}원`}</Text>
       </View>
       <View style={styles.payrollRow}>
         <Text style={styles.payrollDeductLabel}>{isPart ? '근무시간 기준' : '일할 기준'}</Text>
@@ -332,11 +342,14 @@ const EMPTY_FORM = {
 
 export function PayrollScreen({ active = true }: { active?: boolean }) {
   const today = new Date();
-  const [year, setYear] = useState(today.getFullYear());
-  const [month, setMonth] = useState(today.getMonth() + 1);
-
-  const yearMonth = toYearMonth(year, month);
-  const { employees, loading: empLoading, refetch: refetchEmp, add, update, deactivate } = useEmployees();
+  const pager = useContext(TabPagerContext);
+  const [localMonth, setLocalMonth] = useState(toYearMonth(today.getFullYear(), today.getMonth() + 1));
+  const yearMonth = pager?.selectedMonth ?? localMonth;
+  const year = Number(yearMonth.slice(0, 4));
+  const month = Number(yearMonth.slice(5, 7));
+  const setYearMonth = pager?.setSelectedMonth ?? setLocalMonth;
+  const { employees: allEmployees, loading: empLoading, error: employeeError, refetch: refetchEmp, add, update, deactivate } = useEmployees(true);
+  const employees = allEmployees.filter(employee => employee.is_active !== false);
   const {
     payrolls,
     loading: payLoading,
@@ -364,34 +377,35 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
   const [workSubmission, setWorkSubmission] = useState<PayrollWorkSubmission | undefined>();
   useEffect(() => { setWorkTarget(null); setWorkSubmission(undefined); }, [workScope]);
   const [histMap, setHistMap] = useState<Record<string, WageHistory[]>>({});
+  const [histLoading, setHistLoading] = useState(true);
+  const [histError, setHistError] = useState(false);
+  const historyRequest = useRef(0);
 
-  // 급여 변경 확인 모달
-  const [wageChange, setWageChange] = useState<{
-    employee: Employee; isPart: boolean;
-    base_salary: number; hourly_wage: number | null; non_taxable: number;
-    effectiveDate: string; memo: string;
-  } | null>(null);
-  const [applyingWage, setApplyingWage] = useState(false);
   // 급여 이력 보기 모달
   const [histTarget, setHistTarget] = useState<Employee | null>(null);
+  useEffect(() => { setHistTarget(null); setModalVisible(false); }, [store?.id]);
 
-  const refetchHist = useCallback(() => {
-    if (!store) return;
-    getStoreWageHistory(store.id)
-      .then(rows => {
-        const map: Record<string, WageHistory[]> = {};
-        for (const w of rows) (map[w.employee_id] ??= []).push(w);
-        setHistMap(map);
-      })
-      .catch(() => setHistMap({}));
-  }, [store]);
+  const refetchHist = useCallback(async () => {
+    const request = ++historyRequest.current;
+    if (!store) { setHistMap({}); setHistLoading(false); return; }
+    setHistLoading(true); setHistError(false); setHistMap({});
+    try {
+      const rows = await getStoreWageHistory(store.id);
+      if (request !== historyRequest.current) return;
+      const map: Record<string, WageHistory[]> = {};
+      for (const row of rows) (map[row.employee_id] ??= []).push(row);
+      setHistMap(map);
+    } catch { if (request === historyRequest.current) setHistError(true); }
+    finally { if (request === historyRequest.current) setHistLoading(false); }
+  }, [store?.id]);
+  useEffect(() => () => { historyRequest.current += 1; }, []);
 
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
     if (!active) return;
-    refetchEmp();
-    refetchPay();
-    refetchHist();
-  }, [active, refetchEmp, refetchPay, refetchHist]);
+    void refetchEmp(true);
+    void refetchPay();
+    void refetchHist();
+  }, [active, refetchEmp, refetchPay, refetchHist]));
 
   const [refreshing, setRefreshing] = useState(false);
   async function onRefresh() {
@@ -400,25 +414,27 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
     finally { setRefreshing(false); }
   }
 
-  function prevMonth() {
-    if (month === 1) { setYear(y => y - 1); setMonth(12); }
-    else setMonth(m => m - 1);
-  }
-  function nextMonth() {
-    if (month === 12) { setYear(y => y + 1); setMonth(1); }
-    else setMonth(m => m + 1);
-  }
+  function prevMonth() { const date = new Date(year, month - 2, 1); setYearMonth(toYearMonth(date.getFullYear(), date.getMonth() + 1)); }
+  function nextMonth() { const date = new Date(year, month, 1); setYearMonth(toYearMonth(date.getFullYear(), date.getMonth() + 1)); }
 
   function openAdd() {
+    if (!isAdmin) return;
     setEditTarget(null);
     setForm(EMPTY_FORM);
     setModalVisible(true);
   }
 
+  useEffect(() => {
+    if (!active || !isAdmin || !pager?.employeeRegistration || pager.employeeRegistration.storeId !== store?.id) return;
+    setEditTarget(null);
+    setForm(EMPTY_FORM);
+    setModalVisible(true);
+    pager.consumeEmployeeRegistration?.();
+  }, [active, isAdmin, store?.id, pager?.employeeRegistration, pager?.consumeEmployeeRegistration]);
+
   function openEdit(employee: Employee) {
-    // 일반 멤버는 파트타이머만 수정 가능, 정규직은 관리자 전용
-    if (!isAdmin && employee.employment_type !== 'part_time') {
-      Alert.alert('수정 권한 없음', '정규직 직원의 인건비는 관리자만 수정할 수 있어요.');
+    if (!isAdmin) {
+      Alert.alert('수정 권한 없음', '직원 정보는 관리자만 수정할 수 있어요.');
       return;
     }
     setEditTarget(employee);
@@ -451,10 +467,12 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
     const nonTaxable = useInsuranceFields ? Number(form.non_taxable.replace(/,/g, '') || '0') : 0;
     const dep = useInsuranceFields ? Number(form.dependents || '1') : 1;
 
+    if (editTarget && form.employment_type !== editTarget.employment_type) { Alert.alert('고용 형태 확인', '이 화면에서는 고용 형태를 변경할 수 없어요. 기존 정보를 유지한 뒤 관리자에게 급여 조건 전환을 요청해 주세요.'); return; }
     if (!name) { Alert.alert('입력 오류', '이름을 입력해주세요.'); return; }
-    if (isPart) {
+    if ((!editTarget || form.joined_at.trim()) && !isWageDate(form.joined_at.trim())) { Alert.alert('입사일 확인', '최초 급여를 적용할 입사일을 YYYY-MM-DD 형식으로 입력해 주세요.'); return; }
+    if (!editTarget && isPart) {
       if (!hourly || hourly <= 0) { Alert.alert('입력 오류', '시급을 입력해주세요.'); return; }
-    } else {
+    } else if (!editTarget) {
       if (!salary || salary <= 0) { Alert.alert('입력 오류', '기본급을 입력해주세요.'); return; }
     }
 
@@ -476,29 +494,7 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
     setSaving(true);
     try {
       if (editTarget) {
-        // 급여(시급/월급/비과세) 변경 여부 판별
-        const wageChanged =
-          newBase !== editTarget.base_salary ||
-          (newHourly ?? null) !== (editTarget.hourly_wage ?? null) ||
-          nonTaxable !== editTarget.non_taxable;
-
         await update(editTarget.id, basePayload);
-
-        if (wageChanged) {
-          // 적용일 확인 팝업으로 이어짐 (이력 보존)
-          setModalVisible(false);
-          setSaving(false);
-          setWageChange({
-            employee: editTarget,
-            isPart,
-            base_salary: newBase,
-            hourly_wage: newHourly,
-            non_taxable: nonTaxable,
-            effectiveDate: todayISO(),
-            memo: '',
-          });
-          return;
-        }
         setModalVisible(false);
       } else {
         await add({ ...basePayload, base_salary: newBase, hourly_wage: newHourly, non_taxable: nonTaxable });
@@ -511,61 +507,46 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
     }
   }
 
-  async function confirmWageChange() {
-    if (!store || !wageChange) return;
-    const dateStr = wageChange.effectiveDate.trim();
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-      Alert.alert('입력 오류', '적용일을 YYYY-MM-DD 형식으로 입력해주세요.');
-      return;
-    }
-    setApplyingWage(true);
-    try {
-      await addWageChange({
-        storeId: store.id,
-        employeeId: wageChange.employee.id,
-        effectiveDate: dateStr,
-        baseSalary: wageChange.base_salary,
-        hourlyWage: wageChange.hourly_wage,
-        nonTaxable: wageChange.non_taxable,
-        memo: wageChange.memo.trim() || null,
-      });
-      setWageChange(null);
-      refetchEmp();
-      refetchHist();
-    } catch (e: any) {
-      Alert.alert('적용 실패', getErrorMessage(e));
-    } finally {
-      setApplyingWage(false);
-    }
-  }
-
   // 정규직은 기존 일할 계산, 파트타이머는 월별 작성 급여 기준
   const accrualNow = new Date();
   const monthPayrolls = payrolls.filter(p => p.year_month === yearMonth && p.store_id === store?.id);
-  const partTimePayrolls = monthPayrolls.filter(p => p.applied_hourly_wage != null || employees.some(e => e.id === p.employee_id && e.employment_type === 'part_time') || p.work_source === 'legacy_attendance');
+  const partTimePayrolls = monthPayrolls.filter(p => p.applied_hourly_wage != null || p.daily_work_snapshot != null || allEmployees.some(e => e.id === p.employee_id && e.employment_type === 'part_time') || p.work_source === 'legacy_attendance');
   const partTimeWageTotal = partTimePayrolls.reduce((s, p) => s + Number(p.gross), 0);
   const { missingPayroll, missingPartTimeMinutes } = getPayrollSettlementGaps(employees, monthPayrolls);
-  const regularEmps = employees.filter(e => e.employment_type !== 'part_time');
-  const regularAccruedGross = regularEmps.reduce(
-    (s, e) => s + regularGrossForMonth(histMap[e.id] ?? [], year, month, accrualNow, probationFactor(e)), 0);
-  const regularExpectedNet = monthPayrolls.reduce((s, p) => {
-    const emp = regularEmps.find(e => e.id === p.employee_id);
-    return emp ? s + p.net_pay : s;
-  }, 0);
+  const regularEmps = regularEmployeesForAccrual(employees, partTimePayrolls);
+  function accruedForEmployee(employee: Employee): number | null {
+    const payroll = monthPayrolls.find(row => row.employee_id === employee.id);
+    if (employee.employment_type === 'part_time' || partTimePayrolls.some(p => p.employee_id === employee.id)) return payroll ? Number(payroll.gross) : null;
+    if (histLoading || histError) return null;
+    try { return accruedRegularPayroll(employee, histMap[employee.id] ?? [], payroll, yearMonth, accrualNow, probationFactor(employee)); }
+    catch { return null; }
+  }
+  const savedRegularPayrolls = monthPayrolls.filter(row => !partTimePayrolls.includes(row));
+  const regularAccruals = [
+    ...regularEmps.map(accruedForEmployee),
+    ...savedRegularPayrolls.filter(row => !regularEmps.some(employee => employee.id === row.employee_id)).map(row => {
+      const employee = allEmployees.find(value => value.id === row.employee_id);
+      try { return accruedRegularPayroll(employee, employee ? histMap[employee.id] ?? [] : [], row, yearMonth, accrualNow, employee ? probationFactor(employee) : 1); }
+      catch { return null; }
+    }),
+  ];
+  const invalidWageData = regularAccruals.some(value => value == null || !Number.isFinite(value));
+  const regularAccruedGross = regularAccruals.reduce<number>((sum, value) => sum + (value ?? 0), 0);
+  const regularExpectedNet = savedRegularPayrolls.reduce((sum, row) => sum + Number(row.net_pay), 0);
   const totalLaborCost = regularAccruedGross + partTimeWageTotal;
   const totalExpectedPay = regularExpectedNet + partTimePayrolls.reduce((s, p) => s + Number(p.net_pay), 0);
   const monthLabel = `${year}년 ${month}월`;
 
-  const canSaveEmployee = form.name.trim().length > 0 && (
+  const canSaveEmployee = form.name.trim().length > 0 && (!!editTarget || (
     form.employment_type === 'part_time'
       ? Number(form.hourly_wage.replace(/,/g, '') || '0') > 0
       : Number(form.base_salary.replace(/,/g, '') || '0') > 0
-  );
+  ));
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['left', 'right']}><GlassBackdrop />
       <View style={styles.topBar}>
-        <Text style={styles.title}>직원관리</Text>
+        <Text style={styles.title}>{isAdmin ? '직원관리' : '내 급여'}</Text>
         <View style={styles.topBarRight}>
           {isAdmin && (
             <TouchableOpacity
@@ -585,7 +566,7 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
         key={`${store.id}:${workTarget.id}:${yearMonth}`}
         storeId={store.id} employee={workTarget} yearMonth={yearMonth}
         payroll={monthPayrolls.find(p => p.employee_id === workTarget.id)}
-        submission={workSubmission} onClose={() => { setWorkTarget(null); setWorkSubmission(undefined); }} onSave={(input, previous) => saveWork(workTarget, input, previous)}
+        submission={workSubmission} onDailyApplied={refetchPay} onClose={() => { setWorkTarget(null); setWorkSubmission(undefined); }} onSave={(input, previous) => saveWork(workTarget, input, previous)}
       />}
       <ScrollView
         contentContainerStyle={styles.scroll}
@@ -595,11 +576,11 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
 
         {/* 월 네비게이션 */}
         <View style={styles.monthNav}>
-          <TouchableOpacity onPress={prevMonth} style={styles.navBtn} activeOpacity={0.7}>
+          <TouchableOpacity onPress={prevMonth} style={styles.navBtn} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel="이전 달">
             <Ionicons name="chevron-back" size={20} color={Colors.gray600} />
           </TouchableOpacity>
           <Text style={styles.monthLabel}>{monthLabel}</Text>
-          <TouchableOpacity onPress={nextMonth} style={styles.navBtn} activeOpacity={0.7}>
+          <TouchableOpacity onPress={nextMonth} style={styles.navBtn} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel="다음 달">
             <Ionicons name="chevron-forward" size={20} color={Colors.gray600} />
           </TouchableOpacity>
         </View>
@@ -616,23 +597,31 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
         <View style={styles.summaryRow}>
           <View style={styles.summaryCard}>
             <Text style={styles.summaryLabel}>총 인건비</Text>
-            {payLoading
+            {(payLoading || empLoading || histLoading)
               ? <ActivityIndicator size="small" color={Colors.gray300} style={styles.summaryLoader} />
-              : <Text style={styles.summaryValue}>{totalLaborCost > 0 ? `${totalLaborCost.toLocaleString()}원` : '—'}</Text>
+              : <Text style={styles.summaryValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{histError || employeeError || payrollError ? '조회 실패' : invalidWageData ? '직원 정보 확인' : `${totalLaborCost.toLocaleString()}원`}</Text>
             }
-            <Text style={styles.summarySub}>세전 누적 (일할)</Text>
+            <Text style={styles.summarySub}>오늘까지 세전 누적 · 일할</Text>
           </View>
           <View style={styles.summaryCard}>
-            <Text style={styles.summaryLabel}>총 지급 예정액</Text>
+            <Text style={styles.summaryLabel}>작성된 급여 지급액</Text>
             {payLoading
               ? <ActivityIndicator size="small" color={Colors.gray300} style={styles.summaryLoader} />
-              : <Text style={styles.summaryValue}>{totalExpectedPay > 0 ? `${totalExpectedPay.toLocaleString()}원` : '—'}</Text>
+              : <Text style={styles.summaryValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{employeeError || payrollError ? '조회 실패' : `${totalExpectedPay.toLocaleString()}원`}</Text>
             }
             <Text style={styles.summarySub}>월 급여 · 입력 공제 기준</Text>
           </View>
         </View>
 
+        <Text style={styles.netPayNotice}>세후 금액은 요율로 계산한 예상액이며, 실제 지급액과 다를 수 있어요.</Text>
+
+        {employeeError && <ErrorMessage message={employeeError} onRetry={() => refetchEmp(true)} />}
+        {histError && <ErrorMessage message="급여 조건 이력을 불러오지 못했어요." onRetry={refetchHist} />}
         {payrollError && <ErrorMessage message={payrollError} onRetry={refetchPay} />}
+        {isAdmin && employees.some(employee => !employee.joined_at) && <View style={styles.workWarning}>
+          <Text style={styles.workWarningBody}>입사일이 없는 직원은 등록일부터 임시 계산돼요. 직원 정보에서 입사일을 입력해 주세요.</Text>
+          {employees.filter(employee => !employee.joined_at).map(employee => <TouchableOpacity key={employee.id} onPress={() => openEdit(employee)} style={{ minHeight: 44, justifyContent: 'center' }} accessibilityRole="button"><Text style={{ color: Colors.action }}>{employee.name} · 입사일 입력</Text></TouchableOpacity>)}
+        </View>}
         {isAdmin && <PayrollSubmissionReview key={`${store?.id}:${yearMonth}`} yearMonth={yearMonth} active={active}
           employees={employees} payrolls={monthPayrolls} onApply={async (employee, submission) => {
             await refetchPay();
@@ -644,7 +633,7 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
 
         {empLoading ? (
           <ActivityIndicator color={Colors.primary} />
-        ) : employees.length === 0 ? (
+        ) : employeeError ? null : employees.length === 0 ? (
           <EmptyState
             icon="people-outline"
             title="아직 직원이 없어요"
@@ -660,8 +649,8 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
               key={emp.id}
               employee={emp}
               payroll={monthPayrolls.find(p => p.employee_id === emp.id)}
-              accruedGross={regularGrossForMonth(histMap[emp.id] ?? [], year, month, accrualNow, probationFactor(emp))}
-              accrualLabel={`${month}월 ${elapsed}/${daysInMonth}일`}
+              accruedGross={accruedForEmployee(emp)}
+              accrualLabel={`${month}월 ${elapsed}/${daysInMonth}일 · ${monthPayrolls.find(p => p.employee_id === emp.id) ? '일할 누적' : '급여 이력 기준'}`}
               onShowHistory={() => setHistTarget(emp)}
               canCalculate={isAdmin}
               isCalculating={calculating === emp.id}
@@ -676,7 +665,8 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
               }}
               isSavingDeductions={savingDeductions === emp.id}
               canEditDeductions={isAdmin}
-              onEdit={() => openEdit(emp)}
+              onWageCondition={isAdmin ? () => router.push({ pathname: '/payroll/wage-condition', params: { storeId: store!.id, employeeId: emp.id, targetMonth: yearMonth, returnScope: pager?.returnScope ?? 'store' } }) : undefined}
+              onEdit={isAdmin ? () => openEdit(emp) : undefined}
               onRemovePayroll={isAdmin ? () => {
                 const p = payrolls.find(pr => pr.employee_id === emp.id);
                 if (!p) return;
@@ -702,7 +692,7 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
       </ScrollView>
 
       {/* 직원 추가/수정 모달 */}
-      <Modal visible={modalVisible} animationType="slide" transparent onRequestClose={() => setModalVisible(false)}>
+      <SheetModal visible={modalVisible} onRequestClose={() => setModalVisible(false)}>
         <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <ScrollView style={styles.modalSheet} showsVerticalScrollIndicator={false}>
             <View style={styles.modalHandle} />
@@ -742,6 +732,7 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
                 <TouchableOpacity
                   key={t}
                   style={[styles.chip, form.employment_type === t && styles.chipActive]}
+                  disabled={!!editTarget}
                   onPress={() => setForm(f => ({ ...f, employment_type: t }))}
                 >
                   <Text style={[styles.chipText, form.employment_type === t && styles.chipTextActive]}>
@@ -751,6 +742,7 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
               ))}
             </View>
 
+            {editTarget && <Text style={styles.fieldHint}>기존 직원의 고용 형태는 이 화면에서 변경하지 않아요. 전환이 필요하면 관리자에게 급여 조건 변경을 요청해 주세요.</Text>}
             <View style={styles.modalFieldGroup}>
               {form.employment_type === 'part_time' && (
                 <Field
@@ -762,14 +754,14 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
                 />
               )}
 
-              {form.employment_type === 'part_time' ? (
+              {!editTarget && (form.employment_type === 'part_time' ? (
                 <Field
                   label="시급"
                   value={form.hourly_wage}
                   onChangeText={v => setForm(f => ({ ...f, hourly_wage: v }))}
                   placeholder="13,000"
                   keyboardType="numeric"
-                  helpText="퇴근 시 실제 근무 시간(분) 기준으로 일일 급여가 계산됩니다."
+                  helpText="제출·확인한 월별 실근무 시간(분)으로 급여를 계산합니다."
                 />
               ) : (
                 <Field
@@ -779,18 +771,19 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
                   placeholder="2,000,000"
                   keyboardType="numeric"
                 />
-              )}
+              ))}
+              {editTarget && <Text style={styles.summarySub}>금액·비과세·적용일은 직원 목록의 ‘급여 변경’에서 변경해 주세요.</Text>}
 
               {/* 비과세·부양가족: 정규직 또는 주15h 이상 파트타이머만 */}
               {(form.employment_type === 'regular' || Number(form.weekly_hours || '0') >= 15) && (
                 <>
-                  <Field
+                  {!editTarget && <Field
                     label="비과세 (식대 등)"
                     value={form.non_taxable}
                     onChangeText={v => setForm(f => ({ ...f, non_taxable: v }))}
                     placeholder="200,000"
                     keyboardType="numeric"
-                  />
+                  />}
                   <Field
                     label="부양가족 수 (본인 포함)"
                     value={form.dependents}
@@ -802,7 +795,7 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
               )}
 
               <Field
-                label="입사일 (YYYY-MM-DD)"
+                label="입사일 (YYYY-MM-DD) *"
                 value={form.joined_at}
                 onChangeText={v => setForm(f => ({ ...f, joined_at: v }))}
                 placeholder="2026-06-01"
@@ -868,69 +861,13 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
             <View style={{ height: 40 }} />
           </ScrollView>
         </KeyboardAvoidingView>
-      </Modal>
+      </SheetModal>
 
       {/* 급여 변경 적용일 확인 모달 */}
-      <Modal visible={wageChange != null} animationType="fade" transparent onRequestClose={() => setWageChange(null)}>
-        <View style={styles.confirmOverlay}>
-          <View style={styles.confirmCard}>
-            {wageChange && (() => {
-              const label = wageChange.isPart ? '시급' : '기본급';
-              const oldVal = wageChange.isPart ? (wageChange.employee.hourly_wage ?? 0) : wageChange.employee.base_salary;
-              const newVal = wageChange.isPart ? (wageChange.hourly_wage ?? 0) : wageChange.base_salary;
-              const up = newVal >= oldVal;
-              return (
-                <>
-                  <View style={styles.sheetHeader}>
-                    <TouchableOpacity onPress={() => setWageChange(null)} disabled={applyingWage} hitSlop={8}>
-                      <Text style={styles.sheetCancelText}>취소</Text>
-                    </TouchableOpacity>
-                    <Text style={styles.sheetHeaderTitle}>{wageChange.employee.name} · {label} 변경</Text>
-                    <TouchableOpacity onPress={confirmWageChange} disabled={applyingWage} hitSlop={8}>
-                      {applyingWage
-                        ? <ActivityIndicator size="small" color={Colors.primary} />
-                        : <Text style={styles.sheetSaveText}>적용</Text>}
-                    </TouchableOpacity>
-                  </View>
-                  <View style={styles.confirmAmountRow}>
-                    <Text style={styles.confirmOld}>{oldVal.toLocaleString()}원</Text>
-                    <Ionicons name="arrow-forward" size={16} color={Colors.gray400} />
-                    <Text style={[styles.confirmNew, up ? styles.confirmUp : styles.confirmDown]}>{newVal.toLocaleString()}원</Text>
-                    <View style={[styles.confirmTag, up ? styles.confirmTagUp : styles.confirmTagDown]}>
-                      <Text style={[styles.confirmTagText, up ? styles.confirmUp : styles.confirmDown]}>{up ? '인상' : '인하'}</Text>
-                    </View>
-                  </View>
 
-                  <Text style={styles.fieldLabel}>적용 시작일</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={wageChange.effectiveDate}
-                    onChangeText={v => setWageChange(w => w ? { ...w, effectiveDate: v } : w)}
-                    placeholder="YYYY-MM-DD"
-                    placeholderTextColor={Colors.gray300}
-                  />
-                  <Text style={styles.fieldHint}>
-                    {wageChange.effectiveDate}부터 적용됩니다. 그 이전 급여·손익 내역은 그대로 보존돼요. (소급/인하는 과거 날짜로 지정)
-                  </Text>
-
-                  <Text style={styles.fieldLabel}>사유 (선택)</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={wageChange.memo}
-                    onChangeText={v => setWageChange(w => w ? { ...w, memo: v } : w)}
-                    placeholder="예: 연봉 인상 / 징계 감액"
-                    placeholderTextColor={Colors.gray300}
-                  />
-
-                </>
-              );
-            })()}
-          </View>
-        </View>
-      </Modal>
 
       {/* 급여 이력 모달 — 바깥 탭하면 닫힘 */}
-      <Modal visible={histTarget != null} animationType="slide" transparent onRequestClose={() => setHistTarget(null)}>
+      <SheetModal visible={histTarget != null} onRequestClose={() => setHistTarget(null)}>
         <Pressable style={styles.modalOverlay} onPress={() => setHistTarget(null)}>
           <Pressable style={styles.modalSheet} onPress={() => {}}>
             <View style={styles.modalHandle} />
@@ -938,7 +875,7 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
             <Text style={styles.fieldHint}>적용일 기준 변경 내역입니다. 과거 손익은 당시 급여로 계산됩니다.</Text>
             <ScrollView style={{ maxHeight: 360, marginTop: 8 }} showsVerticalScrollIndicator={false}>
               {(histTarget ? histMap[histTarget.id] ?? [] : []).length === 0 ? (
-                <Text style={styles.histEmpty}>이력이 없어요</Text>
+                <Text style={styles.histEmpty}>{histLoading ? '불러오는 중이에요' : histError ? '이력을 불러오지 못했어요. 목록에서 다시 불러와 주세요.' : '이력이 없어요'}</Text>
               ) : (
                 (histMap[histTarget!.id] ?? []).map((h, i) => {
                   const isPart = histTarget!.employment_type === 'part_time';
@@ -961,47 +898,48 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
             <View style={{ height: 24 }} />
           </Pressable>
         </Pressable>
-      </Modal>
+      </SheetModal>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.gray50 },
+  container: { flex: 1, backgroundColor: Colors.homeCanvas },
   topBar: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: 12,
     paddingHorizontal: 20, paddingTop: 16, paddingBottom: 14,
-    backgroundColor: Colors.white, borderBottomWidth: 0.5, borderBottomColor: Colors.gray100,
+    backgroundColor: 'transparent',
   },
-  title: { fontSize: 17, fontWeight: '600', color: Colors.black },
-  topBarRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  title: { fontSize: 22, fontWeight: '700', color: Colors.black, letterSpacing: -0.5 },
+  topBarRight: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8 },
   settlementBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
-    paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20,
+    paddingHorizontal: 12, minHeight: 44, borderRadius: 12,
     backgroundColor: Colors.tinted,
   },
-  settlementBtnText: { fontSize: 12, fontWeight: '700', color: Colors.primary },
+  settlementBtnText: { fontSize: 12, fontWeight: '700', color: Colors.action },
   monthPill: { fontSize: 12, color: Colors.gray500, backgroundColor: Colors.gray100, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
-  scroll: { padding: 16, gap: 14, paddingBottom: 48 },
+  scroll: { padding: 20, paddingTop: 8, gap: 18, paddingBottom: 112 },
   monthNav: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  navBtn: { width: 36, height: 36, justifyContent: 'center', alignItems: 'center', borderRadius: 10, backgroundColor: Colors.white, borderWidth: 0.5, borderColor: Colors.gray100 },
+  navBtn: { width: 44, height: 44, justifyContent: 'center', alignItems: 'center', borderRadius: 12, backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.homeBorder },
   monthLabel: { fontSize: 15, fontWeight: '600', color: Colors.black },
-  summaryRow: { flexDirection: 'row', gap: 10 },
-  summaryCard: { flex: 1, backgroundColor: Colors.white, borderRadius: 14, borderWidth: 0.5, borderColor: Colors.gray100, padding: 14 },
-  summaryLabel: { fontSize: 11, color: Colors.gray400, marginBottom: 4 },
-  summaryValue: { fontSize: 20, fontWeight: '600', color: Colors.black, marginBottom: 2 },
+  summaryRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  summaryCard: { flex: 1, minWidth: 140, backgroundColor: Colors.white, borderRadius: 24, borderWidth: 1, borderColor: Colors.homeBorder, padding: 16 },
+  summaryLabel: { fontSize: 13, fontWeight: '500', color: Colors.gray600, marginBottom: 10 },
+  summaryValue: { fontSize: 22, fontFamily: Fonts.spaceGroteskBold, fontWeight: '700', color: Colors.black, marginBottom: 6, letterSpacing: -0.5 },
   summaryLoader: { height: 24, marginBottom: 2 },
-  summarySub: { fontSize: 11, color: Colors.gray400 },
-  sectionLabel: { fontSize: 11, fontWeight: '500', color: Colors.gray400, textTransform: 'uppercase', letterSpacing: 0.5 },
-  employeeCard: { ...CardStyle, padding: 16 },
+  netPayNotice: { fontSize: 12, lineHeight: 18, color: Colors.gray600 },
+  summarySub: { fontSize: 11, lineHeight: 17, color: Colors.gray500 },
+  sectionLabel: { fontSize: 17, fontWeight: '700', color: Colors.black },
+  employeeCard: { ...CardStyle, borderRadius: 20, borderWidth: 1, borderColor: Colors.homeBorder, padding: 16 },
   cardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
-  cardNameRow: { flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 },
-  employeeName: { fontSize: 16, fontWeight: '700', color: Colors.black },
+  cardNameRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6, flex: 1, minWidth: 0 },
+  employeeName: { fontSize: 16, fontWeight: '700', color: Colors.black, flexShrink: 1 },
   probationBadge: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 8, backgroundColor: Colors.warning + '20' },
   probationBadgeText: { fontSize: 11, fontWeight: '500', color: Colors.warning },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  histBtn: { padding: 4 },
-  editBtn: { padding: 4 },
+  histBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  editBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
 
   confirmOverlay: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.4)', padding: 24 },
   confirmCard: { width: '100%', backgroundColor: Colors.white, borderRadius: 20, padding: 22 },
@@ -1009,7 +947,7 @@ const styles = StyleSheet.create({
   confirmAmountRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' },
   confirmOld: { fontSize: 15, color: Colors.gray400, textDecorationLine: 'line-through' },
   confirmNew: { fontSize: 17, fontWeight: '800' },
-  confirmUp: { color: Colors.primary },
+  confirmUp: { color: Colors.action },
   confirmDown: { color: '#DC2626' },
   confirmTag: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8 },
   confirmTagUp: { backgroundColor: Colors.tinted },
@@ -1021,18 +959,18 @@ const styles = StyleSheet.create({
   histLeft: { gap: 2 },
   histDate: { fontSize: 14, fontWeight: '600', color: Colors.black },
   histMemo: { fontSize: 12, color: Colors.gray400 },
-  histAmount: { fontSize: 14, fontWeight: '700', color: Colors.gray700 },
+  histAmount: { fontFamily: Fonts.geistBold, fontVariant: ['tabular-nums'], fontSize: 14, fontWeight: '700', color: Colors.gray700 },
   histEmpty: { fontSize: 13, color: Colors.gray400, textAlign: 'center', paddingVertical: 32 },
   salaryRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 2 },
   salaryLabel: { fontSize: 13, color: Colors.gray500 },
-  salaryValue: { fontSize: 13, fontWeight: '500', color: Colors.black },
+  salaryValue: { fontFamily: Fonts.geistBold, fontVariant: ['tabular-nums'], fontSize: 13, fontWeight: '500', color: Colors.black },
   summaryRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   summaryNetLabel: { fontSize: 11, color: Colors.gray400, textAlign: 'right' },
-  summaryNetValue: { fontSize: 14, fontWeight: '700', color: Colors.black, textAlign: 'right' },
-  workWarning: { backgroundColor: Colors.warningBg, borderRadius: 10, padding: 14, gap: 4 },
+  summaryNetValue: { fontFamily: Fonts.geistBold, fontVariant: ['tabular-nums'], fontSize: 14, fontWeight: '700', color: Colors.black, textAlign: 'right' },
+  workWarning: { backgroundColor: Colors.warningBg, borderRadius: 16, padding: 14, gap: 4 },
   workWarningTitle: { fontSize: 14, fontWeight: '700', color: Colors.black },
   workWarningBody: { fontSize: 12, color: Colors.gray700, lineHeight: 18 },
-  calcBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: Colors.black, borderRadius: 10, paddingVertical: 10, marginTop: 12 },
+  calcBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: Colors.primary, borderRadius: 12, minHeight: 44, paddingVertical: 10, marginTop: 12 },
   calcBtnText: { fontSize: 13, fontWeight: '600', color: Colors.white },
   payrollResult: { marginTop: 4 },
   payrollDivider: { height: 0.5, backgroundColor: Colors.gray100, marginVertical: 10 },
@@ -1059,52 +997,52 @@ const styles = StyleSheet.create({
   receiptTotalLine: { borderTopWidth: 2, borderTopColor: Colors.gray300, borderStyle: 'dashed', marginTop: 12 },
   receiptNetRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 10 },
   receiptNetLabel: { fontSize: 15, fontWeight: '800', color: Colors.black },
-  receiptNetValue: { fontSize: 19, fontWeight: '800', color: Colors.primary },
+  receiptNetValue: { fontFamily: Fonts.geistBold, fontVariant: ['tabular-nums'], fontSize: 19, fontWeight: '800', color: Colors.action },
   payrollRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },
   payrollLabel: { fontSize: 14, fontWeight: '600', color: Colors.black },
-  payrollNetPay: { fontSize: 14, fontWeight: '700', color: Colors.primary },
+  payrollNetPay: { fontSize: 14, fontWeight: '700', color: Colors.action },
   payrollDeductLabel: { fontSize: 12, color: Colors.gray400 },
   payrollDeduct: { fontSize: 12, color: Colors.gray500 },
   payrollActions: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 14 },
   recalcBtn: { flex: 1, paddingVertical: 10, alignItems: 'center' },
   recalcBtnText: { fontSize: 12, color: Colors.gray400 },
-  recalcBtnNeeded: { fontWeight: '700', color: Colors.primary },
-  saveDeductionBtn: { flex: 1.15, minHeight: 40, borderRadius: 10, backgroundColor: Colors.primary, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12 },
+  recalcBtnNeeded: { fontWeight: '700', color: Colors.action },
+  saveDeductionBtn: { flex: 1.15, minHeight: 44, borderRadius: 12, backgroundColor: Colors.primary, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12 },
   saveDeductionBtnDisabled: { opacity: 0.45 },
   saveDeductionBtnText: { fontSize: 13, fontWeight: '700', color: Colors.white },
   removePayrollRow: { flexDirection: 'row', justifyContent: 'flex-end' },
   removePayrollBtn: { paddingVertical: 8, paddingHorizontal: 4 },
   removePayrollBtnText: { fontSize: 12, color: '#D94040' },
-  addBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: Colors.white, borderRadius: 14, borderWidth: 0.5, borderColor: Colors.gray200, paddingVertical: 14 },
-  addBtnText: { fontSize: 14, color: Colors.gray700 },
-  modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.3)' },
-  modalSheet: { backgroundColor: Colors.white, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, maxHeight: '90%' },
+  addBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: Colors.white, borderRadius: 20, borderWidth: 1, borderColor: Colors.homeBorder, paddingVertical: 14 },
+  addBtnText: { fontSize: 14, fontWeight: '600', color: Colors.action },
+  modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: Colors.overlay },
+  modalSheet: { backgroundColor: Colors.homeCanvas, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, maxHeight: '90%' },
   modalHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: Colors.gray200, alignSelf: 'center', marginBottom: 20 },
-  modalTitle: { fontSize: 16, fontWeight: '700', color: Colors.black, marginBottom: 4 },
-  sheetHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: Colors.white, marginBottom: 12, paddingBottom: 12, borderBottomWidth: 0.5, borderBottomColor: Colors.gray100 },
-  sheetHeaderTitle: { fontSize: 16, fontWeight: '700', color: Colors.black },
-  sheetHeaderBtn: { paddingVertical: 6, paddingHorizontal: 4, borderRadius: 8 },
+  modalTitle: { fontSize: 18, fontWeight: '700', color: Colors.black, marginBottom: 4 },
+  sheetHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: Colors.homeCanvas, marginBottom: 12, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: Colors.homeBorder },
+  sheetHeaderTitle: { fontSize: 18, fontWeight: '700', color: Colors.black },
+  sheetHeaderBtn: { minWidth: 44, minHeight: 44, justifyContent: 'center', alignItems: 'center', paddingVertical: 6, paddingHorizontal: 4, borderRadius: 12 },
   sheetHeaderBtnPressed: { backgroundColor: Colors.gray100 },
   sheetCancelText: { fontSize: 15, fontWeight: '500', color: Colors.gray500 },
-  sheetSaveText: { fontSize: 15, fontWeight: '700', color: Colors.primary },
+  sheetSaveText: { fontSize: 15, fontWeight: '700', color: Colors.action },
   sheetSaveTextDisabled: { color: Colors.gray300 },
   fieldLabel: { fontSize: 13, fontWeight: '600', color: Colors.gray600, marginBottom: 6, marginTop: 14 },
-  fieldHint: { fontSize: 11, color: Colors.gray400, marginBottom: 8, lineHeight: 16 },
-  input: { borderWidth: 1, borderColor: Colors.gray200, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, color: Colors.black, backgroundColor: Colors.gray50 },
+  fieldHint: { fontSize: 13, color: Colors.gray500, marginBottom: 8, lineHeight: 19 },
+  input: { minHeight: 44, borderWidth: 1, borderColor: Colors.homeBorder, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, color: Colors.black, backgroundColor: Colors.white },
   modalFieldGroup: { gap: 14, marginTop: 14 },
-  chipRow: { flexDirection: 'row', gap: 8 },
-  chip: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, borderWidth: 1, borderColor: Colors.gray200, backgroundColor: Colors.gray50 },
-  chipActive: { backgroundColor: Colors.black, borderColor: Colors.black },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  chip: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 14, paddingVertical: 9, borderRadius: 14, borderWidth: 1, borderColor: Colors.homeBorder, backgroundColor: Colors.white },
+  chipActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
   chipText: { fontSize: 13, color: Colors.gray500 },
   chipTextActive: { color: Colors.white, fontWeight: '500' },
   switchRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 16 },
   switchLabel: { fontSize: 14, fontWeight: '600', color: Colors.black },
   modalBtns: { flexDirection: 'row', gap: 10, marginTop: 24 },
-  cancelBtn: { flex: 1, paddingVertical: 13, borderRadius: 12, backgroundColor: Colors.gray100, alignItems: 'center' },
+  cancelBtn: { flex: 1, minHeight: 44, paddingVertical: 13, borderRadius: 14, backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.homeBorder, alignItems: 'center', justifyContent: 'center' },
   cancelBtnText: { fontSize: 14, fontWeight: '600', color: Colors.gray600 },
-  saveBtn: { flex: 1, paddingVertical: 13, borderRadius: 12, backgroundColor: Colors.black, alignItems: 'center' },
+  saveBtn: { flex: 1, minHeight: 44, paddingVertical: 13, borderRadius: 14, backgroundColor: Colors.primary, alignItems: 'center', justifyContent: 'center' },
   saveBtnText: { fontSize: 14, fontWeight: '600', color: Colors.white },
-  deleteBtn: { marginTop: 12, paddingVertical: 13, alignItems: 'center' },
+  deleteBtn: { minHeight: 44, marginTop: 12, paddingVertical: 13, alignItems: 'center', justifyContent: 'center' },
   deleteBtnText: { fontSize: 14, color: '#D94040' },
 });
 

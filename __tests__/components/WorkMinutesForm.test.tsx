@@ -1,6 +1,7 @@
+jest.mock('../../lib/components/DailyWorkPanel', () => ({ DailyWorkPanel: () => null }));
 import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
-import { WorkMinutesForm } from '../../lib/components/WorkMinutesForm';
+import { LegacyWorkMinutesForm as WorkMinutesForm } from '../../lib/components/WorkMinutesForm';
 import { getPayrollWorkHistory } from '../../lib/services/payroll';
 import { Employee } from '../../types';
 

@@ -78,15 +78,15 @@ export default function RequestApprovalsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.gray50 },
+  container: { flex: 1, backgroundColor: Colors.homeCanvas },
   scroll: { padding: Spacing.screenX, paddingBottom: 40, gap: 20 },
 
   section: { gap: 10 },
   sectionTitle: { fontSize: 13, fontWeight: '700', color: Colors.gray600 },
 
   card: {
-    backgroundColor: Colors.white, borderRadius: 14, borderWidth: 0.5, borderColor: Colors.gray100,
-    padding: 14, gap: 6,
+    backgroundColor: Colors.white, borderRadius: 20, borderWidth: 1, borderColor: Colors.homeBorder,
+    padding: 16, gap: 6,
   },
   cardName: { fontSize: 14, fontWeight: '700', color: Colors.black },
   dayList: { gap: 2 },
@@ -94,8 +94,8 @@ const styles = StyleSheet.create({
   reasonText: { fontSize: 12, fontWeight: '400', color: Colors.gray400, lineHeight: 17 },
 
   actionRow: { flexDirection: 'row', gap: 8, marginTop: 6 },
-  rejectBtn: { flex: 1, alignItems: 'center', paddingVertical: 10, borderRadius: 10, borderWidth: 1, borderColor: Colors.gray200 },
+  rejectBtn: { flex: 1, minHeight: 44, justifyContent: 'center', alignItems: 'center', paddingVertical: 10, borderRadius: 10, borderWidth: 1, borderColor: Colors.gray200 },
   rejectBtnText: { fontSize: 13, fontWeight: '600', color: Colors.gray500 },
-  approveBtn: { flex: 1, alignItems: 'center', paddingVertical: 10, borderRadius: 10, backgroundColor: Colors.primary },
+  approveBtn: { flex: 1, minHeight: 44, justifyContent: 'center', alignItems: 'center', paddingVertical: 10, borderRadius: 10, backgroundColor: Colors.primary },
   approveBtnText: { fontSize: 13, fontWeight: '600', color: Colors.white },
 });

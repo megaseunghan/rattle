@@ -1,3 +1,5 @@
+import { DailyWorkPanel } from './DailyWorkPanel';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { getErrorMessage, UserFacingError } from '../utils/error';
 import { useEffect, useState } from 'react';
 import { Alert, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -9,7 +11,7 @@ import { Button, Field } from './ui';
 import { ErrorMessage } from './ErrorMessage';
 import { LoadingSpinner } from './LoadingSpinner';
 
-export function WorkMinutesForm({ storeId, employee, payroll: initialPayroll, yearMonth, onClose, onSave, submission }: {
+export function LegacyWorkMinutesForm({ storeId, employee, payroll: initialPayroll, yearMonth, onClose, onSave, submission }: {
   storeId: string; employee: Employee; payroll?: Payroll; yearMonth: string;
   onClose: () => void;
   onSave: (input: WorkedMinutesInput, previous?: Payroll) => Promise<unknown>;
@@ -113,11 +115,27 @@ export function WorkMinutesForm({ storeId, employee, payroll: initialPayroll, ye
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.white },
-  content: { padding: 24, paddingTop: 60, paddingBottom: 40, gap: 16 },
-  title: { fontSize: 18, fontWeight: '700', color: Colors.black },
-  hint: { fontSize: 12, lineHeight: 18, color: Colors.gray500 },
-  preview: { fontSize: 15, fontWeight: '600', color: Colors.primary },
-  historyRow: { gap: 4, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: Colors.gray100 },
+  container: { flex: 1, backgroundColor: Colors.homeCanvas},
+  content: { padding: 20, paddingTop: 60, paddingBottom: 40, gap: 16 },
+  title: { fontSize: 22, fontWeight: '700', color: Colors.black, flexShrink: 1 },
+  hint: { fontSize: 13, lineHeight: 20, color: Colors.gray500 },
+  preview: { fontSize: 15, fontWeight: '600', color: Colors.primary, borderRadius: 24, borderWidth: 1, borderColor: Colors.homeBorder, backgroundColor: Colors.white, padding: 20 },
+  historyRow: { gap: 4, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: Colors.homeBorder, borderRadius: 20, borderWidth: 1, borderColor: Colors.homeBorder, backgroundColor: Colors.white, padding: 16 },
   historyText: { fontSize: 13, color: Colors.black },
 });
+
+
+/** Old monthly submissions retain their original application path; new part-time entry is daily. */
+export function WorkMinutesForm(props: {
+  storeId: string; employee: Employee; payroll?: Payroll; yearMonth: string;
+  onClose: () => void; onSave: (input: WorkedMinutesInput, previous?: Payroll) => Promise<unknown>;
+  submission?: PayrollWorkSubmission; onDailyApplied?: () => Promise<unknown>;
+}) {
+  const [closeRequest, setCloseRequest] = useState(0);
+  if (props.employee.employment_type !== 'part_time' || props.submission) return <LegacyWorkMinutesForm {...props} />;
+  return <Modal visible animationType="slide" onRequestClose={() => setCloseRequest(value => value + 1)}>
+    <SafeAreaView style={styles.container}>
+      <DailyWorkPanel key={`${props.employee.id}:${props.yearMonth}`} employee={props.employee} yearMonth={props.yearMonth} payroll={props.payroll} isAdmin closeRequested={closeRequest} onApplied={props.onDailyApplied} onClose={props.onClose} />
+    </SafeAreaView>
+  </Modal>;
+}

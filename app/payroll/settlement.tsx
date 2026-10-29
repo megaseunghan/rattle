@@ -4,7 +4,8 @@ import { View, Text, StyleSheet, ScrollView, ActivityIndicator, Alert, Touchable
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Colors } from '../../constants/colors';
-import { Spacing, CardStyle } from '../../constants/designTokens';
+import { Fonts } from '../../constants/fonts';
+import { CardStyle } from '../../constants/designTokens';
 import { useAuth } from '../../lib/contexts/AuthContext';
 import { useEmployees } from '../../lib/hooks/useEmployees';
 import { getPayrollByMonth, getPayrollSettlementGaps, settlePayrolls } from '../../lib/services/payroll';
@@ -104,7 +105,7 @@ export default function PayrollSettlementScreen() {
           )}
           <View style={styles.summaryCard}>
             <Text style={styles.summaryLabel}>총 지급 예정액 · {rows.length}명</Text>
-            <Text style={styles.summaryValue}>{fmt(totalAmount)}</Text>
+            <Text style={styles.summaryValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{fmt(totalAmount)}</Text>
           </View>
 
           <View style={styles.listHeader}>
@@ -171,34 +172,37 @@ export default function PayrollSettlementScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.white },
-  scroll: { padding: Spacing.screenX, paddingBottom: 32, gap: 12 },
+  container: { flex: 1, backgroundColor: Colors.homeCanvas },
+  scroll: { padding: 20, paddingBottom: 32, gap: 18 },
 
   summaryCard: {
     ...CardStyle,
-    backgroundColor: Colors.tinted,
-    padding: 16,
+    backgroundColor: Colors.white,
+    borderColor: Colors.homeBorder,
+    borderWidth: 1,
+    borderRadius: 24,
+    padding: 18,
     gap: 6,
   },
-  workWarning: { padding: 16, borderRadius: 10, backgroundColor: Colors.warningBg, gap: 8 },
+  workWarning: { padding: 16, borderRadius: 16, backgroundColor: Colors.warningBg, gap: 8 },
   workWarningTitle: { fontSize: 14, fontWeight: '700', color: Colors.black },
   workWarningBody: { fontSize: 13, color: Colors.gray700, lineHeight: 20 },
   summaryLabel: { fontSize: 13, fontWeight: '600', color: Colors.gray500 },
-  summaryValue: { fontSize: 28, fontWeight: '800', color: Colors.black },
+  summaryValue: { fontSize: 34, fontFamily: Fonts.spaceGroteskBold, fontWeight: '700', color: Colors.black },
 
-  listHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 },
-  sectionLabel: { fontSize: 14, fontWeight: '700', color: Colors.black },
+  listHeader: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'space-between', alignItems: 'center', marginTop: 4 },
+  sectionLabel: { fontSize: 17, fontWeight: '700', color: Colors.black },
   progressLabel: { fontSize: 13, fontWeight: '700', color: Colors.primary },
 
-  row: { ...CardStyle, padding: 16, gap: 4 },
-  rowTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  row: { ...CardStyle, borderColor: Colors.homeBorder, borderWidth: 1, borderRadius: 20, padding: 16, gap: 4 },
+  rowTop: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'space-between', alignItems: 'center' },
   name: { fontSize: 16, fontWeight: '700', color: Colors.black },
   meta: { fontSize: 12, color: Colors.gray500 },
-  rowBottom: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: 10, marginTop: 6 },
+  rowBottom: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', alignItems: 'center', gap: 10, marginTop: 6 },
   deduction: { fontSize: 12, color: Colors.negative },
   netPay: { fontSize: 16, fontWeight: '800', color: Colors.black },
 
-  footer: { padding: Spacing.screenX, borderTopWidth: 0.5, borderTopColor: Colors.gray100 },
+  footer: { padding: 20, backgroundColor: Colors.homeCanvas, borderTopWidth: 1, borderTopColor: Colors.homeBorder },
   confirmBtnDisabled: { backgroundColor: Colors.gray200 },
   confirmBtnTextDisabled: { color: Colors.gray600 },
   confirmBtn: {
