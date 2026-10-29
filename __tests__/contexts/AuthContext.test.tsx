@@ -1,3 +1,5 @@
+import { useQuery } from '@tanstack/react-query';
+import { queryClient } from '../../lib/query/client';
 import { ReactNode } from 'react';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -29,6 +31,7 @@ async function login() {
   return hook;
 }
 beforeEach(() => {
+  queryClient.clear();
   jest.clearAllMocks();
   (AsyncStorage.getItem as jest.Mock).mockResolvedValue('a');
   (AsyncStorage.setItem as jest.Mock).mockResolvedValue(undefined);
@@ -108,4 +111,54 @@ it('로그아웃 뒤 늦게 끝나는 매장 조회로 로그인 자료를 복�
   await act(async () => { done({ data: stores, error: null }); await pending; });
   expect(result.current.store).toBeNull();
   expect(result.current.stores).toEqual([]);
+});
+
+
+it('계정 캐시 정리의 취소가 늦게 끝나도 새로 마운트된 조회를 지우지 않는다', async () => {
+  let cancelled!: () => void;
+  const cancellation = new Promise<void>(resolve => { cancelled = resolve; });
+  let complete!: (value: string) => void;
+  const response = new Promise<string>(resolve => { complete = resolve; });
+  const fetch = jest.fn(() => response);
+  const cancel = jest.spyOn(queryClient, 'cancelQueries').mockReturnValue(cancellation);
+  try {
+    const hook = renderHook(() => {
+      const auth = useAuth();
+      const summary = useQuery({ queryKey: ['identity-regression', auth.user?.id, auth.store?.id], queryFn: fetch, enabled: !!auth.store }, queryClient);
+      return { auth, summary };
+    }, { wrapper });
+    act(() => notify('INITIAL_SESSION', { user: { id: 'user' } }));
+    await waitFor(() => expect(hook.result.current.auth.store?.id).toBe('a'));
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
+    await act(async () => { cancelled(); await cancellation; });
+    await act(async () => { complete('fresh summary'); await response; });
+    await waitFor(() => expect(hook.result.current.summary.data).toBe('fresh summary'));
+    expect(queryClient.getQueryData(['identity-regression', 'user', 'a'])).toBe('fresh summary');
+    expect(fetch).toHaveBeenCalledTimes(1);
+  } finally { cancelled(); complete('cleanup'); cancel.mockRestore(); queryClient.clear(); }
+});
+
+it('생성한 매장은 새로 받은 목록에서 ID를 선택하고 마지막 매장으로 저장한다', async () => {
+  const { result } = await login();
+  queries({ data: [...stores, { id: 'new', name: '새 매장', owner_id: 'user' }], error: null });
+  await act(async () => { await result.current.refreshStore('new'); });
+  expect(result.current.store?.id).toBe('new');
+  expect(AsyncStorage.setItem).toHaveBeenCalledWith('LAST_STORE_ID', 'new');
+});
+it('생성 후 새 목록에서 찾지 못하면 기존 매장으로 성공 처리하지 않는다', async () => {
+  const { result } = await login();
+  await act(async () => { await expect(result.current.refreshStore('missing')).rejects.toThrow('만들어진 매장'); });
+  expect(result.current.store?.id).toBe('a');
+});
+it('생성 선택 요청이 일반 목록 갱신에 밀리면 성공 대신 재시도 오류를 반환한다', async () => {
+  const { result } = await login();
+  let release!: (value: unknown) => void;
+  queries(new Promise(resolve => { release = resolve; }));
+  let outcome!: Promise<unknown>;
+  act(() => { outcome = result.current.refreshStore('new').catch(error => error); });
+  queries({ data: stores, error: null });
+  await act(async () => { await result.current.refreshStore(); });
+  await act(async () => { release({ data: [...stores, { id: 'new', owner_id: 'user' }], error: null }); });
+  expect((await outcome as Error).message).toContain('같은 설정으로 다시 시도');
+  expect(result.current.store?.id).toBe('a');
 });

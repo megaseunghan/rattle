@@ -8,18 +8,21 @@ import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import { Colors } from '../../constants/colors';
 import { useAuth } from '../../lib/contexts/AuthContext';
-import { approveStoreMember, rejectStoreMember, removeStoreMember } from '../../lib/services/storeMembers';
+import { rejectStoreMember, removeStoreMember, transferStoreOwnership } from '../../lib/services/storeMembers';
+import { useMemberApproval } from '../../lib/hooks/useMemberApproval';
+import { MemberApprovalModal } from '../../lib/components/MemberApprovalModal';
 import { useStoreMembers } from '../../lib/hooks/useStoreMembers';
 import { ErrorMessage } from '../../lib/components/ErrorMessage';
-import { StoreMember } from '../../types';
+import { JoinOnboardingInput, MemberApprovalChoice, MemberApprovalResult, StoreMember } from '../../types';
 import { getErrorMessage } from '../../lib/utils/error';
 
 export default function MembersScreen() {
-  const { store } = useAuth();
+  const { store, user, refreshStore } = useAuth();
   const { members, loading, error, refetch: loadMembers } = useStoreMembers();
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
-  const scope = store?.id;
+  const approval = useMemberApproval();
+  const scope = `${user?.id}:${store?.id}`;
   const scopeRef = useRef(scope);
   scopeRef.current = scope;
   const mounted = useRef(true);
@@ -43,12 +46,32 @@ export default function MembersScreen() {
 
   function handleApprove(member: StoreMember) {
     void runAction(async () => {
-      const result = await approveStoreMember(member.id);
-      if (!mounted.current || scopeRef.current !== scope) return;
-      await loadMembers();
-      if (!mounted.current || scopeRef.current !== scope) return;
-      Alert.alert('승인 완료', `${result.employee_name} 님의 직원 정보에 계정을 연결했어요.\n처음 등록된 직원은 인건비에서 고용형태·시급·급여 정보를 확인해주세요.`);
+      await approval.prepare(member);
     });
+  }
+
+  async function finishApproval(result: MemberApprovalResult) {
+    if (!mounted.current || scopeRef.current !== scope) return;
+    await loadMembers();
+    if (!mounted.current || scopeRef.current !== scope) return;
+    Alert.alert('합류 완료', `${result.employee_name} 님의 직원 정보에 계정을 연결했어요.\n확정한 조건이 인건비에 반영됐어요. 급여 내역은 새로 생성하지 않았어요.`);
+  }
+
+  function handleChoice(choice: MemberApprovalChoice, review?: JoinOnboardingInput) {
+    const selection = approval.selection;
+    if (!selection || busy) return;
+    const candidate = choice.kind === 'rehire' ? selection.candidates.find(e => e.id === choice.employeeId) : null;
+    Alert.alert(
+      '최종 합류 확인',
+      `확인한 근무 조건과 계좌로 최종 합류 처리할까요?${candidate ? '\n선택한 기존 직원의 과거 급여 이력이 신청 계정에 연결돼요.' : ''}`,
+      [{ text: '취소', style: 'cancel' }, { text: '최종 합류', onPress: () => {
+        if (scopeRef.current !== scope || !mounted.current) return;
+        void runAction(async () => {
+          const result = await approval.confirm(choice, review);
+          if (result) await finishApproval(result);
+        });
+      } }],
+    );
   }
 
   function handleReject(member: StoreMember) {
@@ -77,6 +100,22 @@ export default function MembersScreen() {
     ]);
   }
 
+  function handleTransfer(member: StoreMember) {
+    Alert.alert('매장 소유권 이전', `${member.applicant_name ?? member.user_email ?? '선택한 멤버'} 님에게 소유권을 넘길까요? 상대방에게 매장 관리 권한이 부여돼요.`, [
+      { text: '취소', style: 'cancel' },
+      { text: '이전하기', style: 'destructive', onPress: () => {
+        if (scopeRef.current !== scope || !store) return;
+        void runAction(async () => {
+          await transferStoreOwnership(store.id, member.id);
+          if (mounted.current && scopeRef.current === scope) {
+            await refreshStore();
+            await loadMembers();
+          }
+        });
+      } },
+    ]);
+  }
+
   const pending = members.filter(m => m.status === 'pending');
   const approved = members.filter(m => m.status === 'approved');
   const rejected = members.filter(m => m.status === 'rejected');
@@ -84,11 +123,11 @@ export default function MembersScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} accessibilityRole="button" accessibilityLabel="뒤로가기">
           <Ionicons name="chevron-back" size={24} color={Colors.black} />
         </TouchableOpacity>
         <Text style={styles.title}>멤버 관리</Text>
-        <View style={{ width: 40 }} />
+        <View style={{ width: 44 }} />
       </View>
 
       {loading ? (
@@ -96,7 +135,7 @@ export default function MembersScreen() {
       ) : (
         <ScrollView contentContainerStyle={styles.scroll}>
           {error && <ErrorMessage message={error} onRetry={loadMembers} />}
-          <Text style={styles.emptyText}>승인하면 이름·휴대폰 번호가 같은 기존 직원에 계정이 연결돼요. 같은 직원이 없으면 새로 등록돼요.</Text>
+          <Text style={styles.emptyText}>신청 정보를 확인·수정한 뒤 최종 합류를 승인해주세요. 확정 전에는 인건비에 반영되지 않아요.</Text>
           {/* 승인 대기 */}
           {pending.length > 0 && (
             <>
@@ -118,7 +157,7 @@ export default function MembersScreen() {
                     </View>
                     <View style={styles.actionBtns}>
                       <TouchableOpacity style={styles.approveBtn} disabled={busy} onPress={() => handleApprove(m)}>
-                        <Text style={styles.approveBtnText}>승인</Text>
+                        <Text style={styles.approveBtnText}>신청 확인</Text>
                       </TouchableOpacity>
                       <TouchableOpacity style={styles.rejectBtn} disabled={busy} onPress={() => handleReject(m)}>
                         <Text style={styles.rejectBtnText}>거절</Text>
@@ -149,6 +188,11 @@ export default function MembersScreen() {
                       </View>
                     </View>
                   </View>
+                  {store?.owner_id === user?.id && m.user_id !== user?.id && (
+                    <TouchableOpacity disabled={busy} onPress={() => handleTransfer(m)} style={styles.rejectBtn}>
+                      <Text style={styles.rejectBtnText}>소유권 이전</Text>
+                    </TouchableOpacity>
+                  )}
                   {m.role !== 'admin' && (
                     <TouchableOpacity disabled={busy} onPress={() => handleRemove(m)} hitSlop={10}>
                       <Ionicons name="person-remove-outline" size={20} color={Colors.danger} />
@@ -184,19 +228,20 @@ export default function MembersScreen() {
           )}
         </ScrollView>
       )}
+      {approval.selection && <MemberApprovalModal key={`${approval.selection.member.id}:${approval.selection.profile?.revision ?? 0}`} profile={approval.selection.profile} member={approval.selection.member} candidates={approval.selection.candidates} busy={busy} onChoose={handleChoice} onClose={approval.dismiss} />}
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.gray50 },
+  container: { flex: 1, backgroundColor: Colors.homeCanvas },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 16, paddingVertical: 12, backgroundColor: Colors.white,
-    borderBottomWidth: 1, borderBottomColor: Colors.gray100,
+    paddingHorizontal: 20, paddingVertical: 12, backgroundColor: Colors.homeCanvas,
+    borderBottomWidth: 1, borderBottomColor: Colors.homeBorder,
   },
-  backBtn: { width: 40, height: 40, justifyContent: 'center' },
-  title: { fontSize: 17, fontWeight: '700', color: Colors.black },
+  backBtn: { width: 44, height: 44, justifyContent: 'center' },
+  title: { flexShrink: 1, fontSize: 22, fontWeight: '700', color: Colors.black },
   scroll: { padding: 20, paddingBottom: 48 },
   sectionTitle: {
     fontSize: 15, fontWeight: '700', color: Colors.black,
@@ -205,16 +250,16 @@ const styles = StyleSheet.create({
   badge: { fontSize: 15, fontWeight: '700', color: Colors.danger },
   emptyText: { fontSize: 14, color: Colors.gray400, marginBottom: 16 },
   card: {
-    backgroundColor: Colors.white, borderRadius: 14,
-    borderWidth: 1, borderColor: Colors.gray100, overflow: 'hidden',
+    backgroundColor: Colors.white, borderRadius: 20,
+    borderWidth: 1, borderColor: Colors.homeBorder, overflow: 'hidden',
     marginBottom: 16,
   },
   row: {
     flexDirection: 'row', alignItems: 'center',
-    justifyContent: 'space-between', padding: 14,
+    justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, padding: 16,
   },
-  rowBorder: { borderTopWidth: 1, borderTopColor: Colors.gray100 },
-  rowLeft: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
+  rowBorder: { borderTopWidth: 1, borderTopColor: Colors.homeBorder },
+  rowLeft: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1, minWidth: 150 },
   rowInfo: { flex: 1 },
   email: { fontSize: 14, fontWeight: '600', color: Colors.black, marginBottom: 2 },
   date: { fontSize: 12, color: Colors.gray400 },
@@ -228,12 +273,12 @@ const styles = StyleSheet.create({
   actionBtns: { flexDirection: 'row', gap: 8 },
   approveBtn: {
     backgroundColor: Colors.primary, paddingHorizontal: 14,
-    paddingVertical: 7, borderRadius: 8,
+    paddingVertical: 7, borderRadius: 12, minHeight: 44, justifyContent: 'center',
   },
   approveBtnText: { color: Colors.white, fontSize: 13, fontWeight: '700' },
   rejectBtn: {
     borderWidth: 1, borderColor: Colors.gray200,
-    paddingHorizontal: 14, paddingVertical: 7, borderRadius: 8,
+    paddingHorizontal: 14, paddingVertical: 7, borderRadius: 12, minHeight: 44, justifyContent: 'center',
   },
   rejectBtnText: { color: Colors.gray600, fontSize: 13, fontWeight: '600' },
 });

@@ -1,52 +1,44 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   Alert,
+  ActivityIndicator,
+  Image,
+  Pressable,
+  ScrollView,
 } from 'react-native';
-import * as WebBrowser from 'expo-web-browser';
-import * as Linking from 'expo-linking';
+import { AntDesign } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { completeAuthCallback } from '../../lib/services/authCallback';
-import { supabase } from '../../lib/supabase';
+import { signInWithSocialProvider, SocialProvider } from '../../lib/services/socialAuth';
 import { Colors } from '../../constants/colors';
+import { Type } from '../../constants/designTokens';
 import { Button } from '../../lib/components/ui';
 
 export default function LoginScreen() {
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState<SocialProvider | null>(null);
+  const busy = useRef(false);
 
-  async function handleKakaoLogin() {
-    setLoading(true);
+  async function handleLogin(provider: SocialProvider) {
+    if (busy.current) return;
+    busy.current = true;
+    setLoading(provider);
     try {
-      const redirectUrl = Linking.createURL('/');
-      const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: 'kakao',
-        options: {
-          redirectTo: redirectUrl,
-          skipBrowserRedirect: true,
-        },
-      });
-      if (error) throw error;
-      if (data.url) {
-        const result = await WebBrowser.openAuthSessionAsync(data.url, redirectUrl);
-        if (result.type === 'success') {
-          if (!await completeAuthCallback(result.url, redirectUrl)) {
-            throw new Error('인증 응답에 로그인 정보가 없습니다.');
-          }
-        }
-      }
+      await signInWithSocialProvider(provider);
       // AuthContext의 onAuthStateChange가 이후 라우팅을 처리함
     } catch {
-      Alert.alert('오류', '카카오 로그인에 실패했습니다.');
+      const name = { kakao: '카카오', google: 'Google', apple: 'Apple' }[provider];
+      Alert.alert('로그인 확인', `${name} 로그인을 완료하지 못했어요. 다시 시도해주세요.`);
     } finally {
-      setLoading(false);
+      busy.current = false;
+      setLoading(null);
     }
   }
 
   return (
     <View style={styles.container}>
-      <View style={styles.inner}>
+      <ScrollView contentContainerStyle={styles.inner} showsVerticalScrollIndicator={false}>
         {/* 로고 영역 */}
         <View style={styles.logoArea}>
           <Text style={styles.logoR}>R</Text>
@@ -59,11 +51,38 @@ export default function LoginScreen() {
 
         <View style={styles.buttonWrap}>
           <Button
-            label={loading ? '처리 중...' : '카카오로 시작하기'}
+            label="카카오로 시작하기"
             variant="kakao"
-            onPress={handleKakaoLogin}
-            loading={loading}
+            onPress={() => handleLogin('kakao')}
+            loading={loading === 'kakao'}
+            disabled={loading !== null}
           />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Google로 계속하기"
+            accessibilityState={{ disabled: loading !== null, busy: loading === 'google' }}
+            disabled={loading !== null}
+            onPress={() => handleLogin('google')}
+            style={({ pressed }) => [styles.googleButton, pressed && styles.pressed]}
+          >
+            {loading === 'google' ? <ActivityIndicator color={Colors.gray600} /> : <>
+              <Image source={require('../../assets/google-g.png')} style={styles.googleLogo} resizeMode="contain" />
+              <Text style={styles.googleLabel}>Google로 계속하기</Text>
+            </>}
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Apple로 계속하기"
+            accessibilityState={{ disabled: loading !== null, busy: loading === 'apple' }}
+            disabled={loading !== null}
+            onPress={() => handleLogin('apple')}
+            style={({ pressed }) => [styles.appleButton, pressed && styles.pressed]}
+          >
+            {loading === 'apple' ? <ActivityIndicator color={Colors.white} /> : <>
+              <AntDesign name="apple1" size={20} color={Colors.white} />
+              <Text style={styles.appleLabel}>Apple로 계속하기</Text>
+            </>}
+          </Pressable>
         </View>
 
         <Text style={styles.legal}>
@@ -72,7 +91,7 @@ export default function LoginScreen() {
           <Text style={styles.legalEmphasis} onPress={() => router.push('/legal/privacy')}>개인정보처리방침</Text>
           {'\n'}에 동의하게 됩니다
         </Text>
-      </View>
+      </ScrollView>
     </View>
   );
 }
@@ -83,10 +102,11 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.white,
   },
   inner: {
-    flex: 1,
+    flexGrow: 1,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 28,
+    paddingVertical: 48,
   },
   logoArea: {
     flexDirection: 'row',
@@ -131,7 +151,21 @@ const styles = StyleSheet.create({
   buttonWrap: {
     width: '100%',
     marginTop: 48,
+    gap: 12,
   },
+  googleButton: {
+    minHeight: 50, width: '100%', borderWidth: 1, borderColor: Colors.gray300,
+    borderRadius: 8, backgroundColor: Colors.white, flexDirection: 'row',
+    alignItems: 'center', justifyContent: 'center', gap: 12, paddingHorizontal: 12,
+  },
+  googleLogo: { width: 20, height: 20 },
+  googleLabel: { fontSize: Type.md, fontWeight: '500', color: Colors.gray700 },
+  appleButton: {
+    minHeight: 50, width: '100%', borderRadius: 8, backgroundColor: '#000',
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10,
+  },
+  appleLabel: { fontSize: Type.md, fontWeight: '600', color: Colors.white },
+  pressed: { opacity: 0.85 },
   legal: {
     fontSize: 12,
     fontWeight: '400',
