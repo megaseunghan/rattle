@@ -1,0 +1,130 @@
+[
+  {
+    "file": "raw-android/01-home.png",
+    "width": 1080,
+    "height": 2400,
+    "alphaChannel": true,
+    "bytes": 252544,
+    "sha256": "bec914ce3f3aa0e225e32039e79e174e38177d52463bd6bda0fdcdff7576d853"
+  },
+  {
+    "file": "raw-android/02-profit-loss.png",
+    "width": 1080,
+    "height": 2400,
+    "alphaChannel": true,
+    "bytes": 232365,
+    "sha256": "855e4a0ff03b84e6e7156252de8dc9c0456a5bb0ed0ec88df876832a10b9e191"
+  },
+  {
+    "file": "raw-android/03-stock.png",
+    "width": 1080,
+    "height": 2400,
+    "alphaChannel": true,
+    "bytes": 204617,
+    "sha256": "c226cedeb3c382e2c62c3054d239fe2a04fee505472bce3e2befbab03d89983d"
+  },
+  {
+    "file": "raw-android/04-recipes.png",
+    "width": 1080,
+    "height": 2400,
+    "alphaChannel": true,
+    "bytes": 190174,
+    "sha256": "33c7a101d460d16a46f44750adf764ee132d1cfbd0e9ad075502c7dbcc93f018"
+  },
+  {
+    "file": "raw-android/05-purchases.png",
+    "width": 1080,
+    "height": 2400,
+    "alphaChannel": true,
+    "bytes": 100174,
+    "sha256": "9d21c096fb4723750ba472928496e3dd1c9c813c73671478b1c91d5cf7d5a406"
+  },
+  {
+    "file": "raw-android/06-payroll.png",
+    "width": 1080,
+    "height": 2400,
+    "alphaChannel": true,
+    "bytes": 258201,
+    "sha256": "6d9b6c5c5636871488ee1bd1df76e74db795b8ac2fad93c7c88961a2359cf8fa"
+  },
+  {
+    "file": "raw-android/07-checklist.png",
+    "width": 1080,
+    "height": 2400,
+    "alphaChannel": true,
+    "bytes": 214037,
+    "sha256": "aadc869c886f63d4a0fe71a003898b3a5aabd7cb8faf600430aa5b9517e90945"
+  },
+  {
+    "file": "raw-android/09-expenses.png",
+    "width": 1080,
+    "height": 2400,
+    "alphaChannel": true,
+    "bytes": 269874,
+    "sha256": "5a0786f23e549f91352dc2cb95e65fb0b61644f4d12931b7f6944c355acdd0ea"
+  },
+  {
+    "file": "google-1080x1920/01-home.png",
+    "width": 1080,
+    "height": 1920,
+    "alphaChannel": false,
+    "bytes": 822329,
+    "sha256": "b677839c0b2628d0476358d0a78ad2161864a7ad5cd780f92f150b472ebbb386"
+  },
+  {
+    "file": "google-1080x1920/02-profit-loss.png",
+    "width": 1080,
+    "height": 1920,
+    "alphaChannel": false,
+    "bytes": 826003,
+    "sha256": "6f0065223bf778a3d4533ffdc42b903b3d7125b9b1c85809d2a2f5a68ec5e942"
+  },
+  {
+    "file": "google-1080x1920/03-stock.png",
+    "width": 1080,
+    "height": 1920,
+    "alphaChannel": false,
+    "bytes": 794652,
+    "sha256": "daf5553e73792087c1486d96b1e76c0bf960c03cbb36be6afd83622705b89a49"
+  },
+  {
+    "file": "google-1080x1920/04-recipes.png",
+    "width": 1080,
+    "height": 1920,
+    "alphaChannel": false,
+    "bytes": 792706,
+    "sha256": "0c7796c2ce039d804959dfc7a0fb69eb636f99981419fc83519287fd5411fe4a"
+  },
+  {
+    "file": "google-1080x1920/05-purchases.png",
+    "width": 1080,
+    "height": 1920,
+    "alphaChannel": false,
+    "bytes": 702934,
+    "sha256": "c824df2597268ed4cf93d1fc9539cd7a23cce30c9a2ea787abbc48c563d3982e"
+  },
+  {
+    "file": "google-1080x1920/06-payroll.png",
+    "width": 1080,
+    "height": 1920,
+    "alphaChannel": false,
+    "bytes": 851886,
+    "sha256": "1123879282e465eaf2ef4b13484f210a2e9ba3cf4fa2b8fcf07c9c2393346533"
+  },
+  {
+    "file": "google-1080x1920/07-checklist.png",
+    "width": 1080,
+    "height": 1920,
+    "alphaChannel": false,
+    "bytes": 820992,
+    "sha256": "8daea9a531651d3a81a819457ab2da3f43519ed8ff9ead4c497ce2def371a555"
+  },
+  {
+    "file": "google-1080x1920/09-expenses.png",
+    "width": 1080,
+    "height": 1920,
+    "alphaChannel": false,
+    "bytes": 852793,
+    "sha256": "8dc2e25ac6e5c98a9f3da3211ff39de6486977eeac81ff58c09c98fe278a86fd"
+  }
+]

@@ -10,9 +10,13 @@
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": true,
+      "usesAppleSignIn": true,
       "icon": "./assets/Rattle_ios_1024.png",
       "bundleIdentifier": "com.seunghan.rattle",
-      "buildNumber": "1"
+      "buildNumber": "2",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "icon": "./assets/Rattle_512x512.png",
@@ -22,7 +26,7 @@
       },
       "predictiveBackGestureEnabled": false,
       "package": "com.seunghan.rattle",
-      "versionCode": 1
+      "versionCode": 2
     },
     "web": {
       "favicon": "./assets/Rattle_192x192.png"
@@ -33,15 +37,13 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/Rattle_1024x1024.png",
-          "imageWidth": 144,
-          "resizeMode": "contain",
           "backgroundColor": "#ffffff"
         }
       ],
       "@react-native-community/datetimepicker",
       "expo-web-browser",
-      "expo-secure-store"
+      "expo-secure-store",
+      "expo-apple-authentication"
     ]
   }
 }

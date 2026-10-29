@@ -1,0 +1,56 @@
+[
+  {
+    "file": "01-home",
+    "category": "매장의 하루",
+    "title": "오픈부터 마감까지,\n할 일이 한눈에",
+    "subtitle": "오늘 필요한 업무를 순서대로 챙기세요."
+  },
+  {
+    "file": "02-profit-loss",
+    "category": "월별 손익",
+    "title": "얼마를 팔고,\n얼마가 남았는지",
+    "subtitle": "매출·매입·인건비·비용을 함께 확인하세요."
+  },
+  {
+    "file": "03-stock",
+    "category": "재고 관리",
+    "title": "지금 필요한 재료,\n바로 확인하세요",
+    "subtitle": "품목별 재고를 보고 수량을 관리하세요."
+  },
+  {
+    "file": "04-recipes",
+    "category": "레시피 원가",
+    "title": "메뉴마다 다른 원가,\n숫자로 확인하세요",
+    "subtitle": "재료별 원가와 메뉴 마진율을 함께 보세요."
+  },
+  {
+    "file": "05-purchases",
+    "category": "매입과 비용",
+    "title": "무엇에 썼는지,\n기록으로 선명하게",
+    "subtitle": "거래처·품목별 매입 내역을 모아보세요."
+  },
+  {
+    "file": "06-payroll",
+    "category": "직원과 급여",
+    "title": "직원별 급여를\n한곳에서 관리하세요",
+    "subtitle": "급여 조건과 작성된 지급액을 확인하세요."
+  },
+  {
+    "file": "07-checklist",
+    "category": "오픈 체크리스트",
+    "title": "놓치기 쉬운 준비도,\n하나씩 빠짐없이",
+    "subtitle": "완료한 항목과 확인한 사람을 함께 보세요."
+  },
+  {
+    "file": "08-sales",
+    "category": "매출 관리",
+    "title": "POS 연결 전에도,\n매출 기록은 차곡차곡",
+    "subtitle": "카드·현금 매출을 직접 입력해 관리하세요."
+  },
+  {
+    "file": "09-expenses",
+    "category": "매장 비용",
+    "title": "매달 나가는 비용,\n항목별로 한눈에",
+    "subtitle": "고정비와 운영 비용을 나눠 관리하세요."
+  }
+]
