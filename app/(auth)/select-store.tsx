@@ -130,7 +130,7 @@ export default function SelectStoreScreen() {
                 </View>
                 <View style={styles.optionTextWrap}>
                   <Text style={styles.optionTitle}>기존 매장 참여</Text>
-                  <Text style={styles.optionDesc}>직원이라면 사업자번호로 참여를 신청하세요</Text>
+                  <Text style={styles.optionDesc}>관리자에게 받은 참여코드로 신청하세요</Text>
                 </View>
               </View>
             </ListCard>
@@ -159,7 +159,7 @@ export default function SelectStoreScreen() {
                 </View>
                 <View style={styles.optionTextWrap}>
                   <Text style={styles.optionTitle}>기존 매장 참여</Text>
-                  <Text style={styles.optionDesc}>사업자번호로 참여를 신청합니다</Text>
+                  <Text style={styles.optionDesc}>참여코드로 참여를 신청합니다</Text>
                 </View>
               </View>
             </ListCard>

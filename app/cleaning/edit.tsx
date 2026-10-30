@@ -1,6 +1,7 @@
+import { entityKey } from '../../lib/utils/listKeys';
 import { GlassBackdrop } from '../../lib/components/GlassBackdrop';
 import { getErrorMessage } from '../../lib/utils/error';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useFocusEffect } from 'expo-router';
@@ -53,12 +54,12 @@ export default function CleaningEditScreen() {
     }
   }
 
-  function startEdit(id: string, title: string) {
+  const startEdit = useCallback((id: string, title: string) => {
     setEditingId(id);
     setEditingTitle(title);
-  }
+  }, []);
 
-  async function handleSaveEdit() {
+  const handleSaveEdit = useCallback(async () => {
     if (!editingId) return;
     const title = editingTitle.trim();
     if (!title) return;
@@ -68,14 +69,14 @@ export default function CleaningEditScreen() {
     } catch (e: any) {
       Alert.alert('수정 실패', getErrorMessage(e));
     }
-  }
+  }, [editingId, editingTitle, editItem]);
 
-  function confirmRemove(id: string, title: string) {
+  const confirmRemove = useCallback((id: string, title: string) => {
     Alert.alert('항목 삭제', `"${title}" 항목을 삭제할까요?`, [
       { text: '취소', style: 'cancel' },
       { text: '삭제', style: 'destructive', onPress: () => removeItem(id).catch(e => Alert.alert('삭제 실패', getErrorMessage(e))) },
     ]);
-  }
+  }, [removeItem]);
 
   async function handleDragEnd(data: CleaningItem[]) {
     setOrderedItems(data);
@@ -89,7 +90,8 @@ export default function CleaningEditScreen() {
     }
   }
 
-  function renderItem({ item, drag, isActive }: RenderItemParams<CleaningItem>) {
+  const listExtraData = useMemo(() => ({ editingId, editingTitle, segment }), [editingId, editingTitle, segment]);
+  const renderItem = useCallback(({ item, drag, isActive }: RenderItemParams<CleaningItem>) => {
     return (
       <ScaleDecorator>
         <View style={[styles.row, isActive && styles.rowActive]}>
@@ -125,7 +127,7 @@ export default function CleaningEditScreen() {
         </View>
       </ScaleDecorator>
     );
-  }
+  }, [editingId, editingTitle, segment, handleSaveEdit, startEdit, confirmRemove]);
 
   return (
     <SafeAreaView style={styles.container}><GlassBackdrop />
@@ -145,9 +147,13 @@ export default function CleaningEditScreen() {
       </View>
 
       <DraggableFlatList
+        initialNumToRender={5}
+        maxToRenderPerBatch={10}
+        windowSize={5}
         data={orderedItems}
-        keyExtractor={item => item.id}
+        keyExtractor={entityKey}
         onDragEnd={({ data }) => handleDragEnd(data)}
+        extraData={listExtraData}
         renderItem={renderItem}
         activationDistance={0}
         dragItemOverflow

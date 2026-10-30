@@ -34,3 +34,35 @@ it('다른 월로 이동하면 이전 월의 금액을 표시하지 않는다', 
   expect(result.current.summaries).toEqual([]);
   await act(async () => { resolve([]); await pending; });
 });
+
+
+it('로딩만 바뀌면 필터 결과를 재사용하고 분류 변경은 반영한다', async () => {
+  const items = [
+    { itemId: 'a', itemName: '국밥', categoryName: '식사', quantity: 1, totalAmount: 100 },
+    { itemId: 'b', itemName: '물', categoryName: '음료', quantity: 1, totalAmount: 10 },
+  ];
+  (queryClient.fetchQuery as jest.Mock).mockResolvedValueOnce(items);
+  const { result } = renderHook(() => usePosAnalytics());
+  await act(async () => { await result.current.fetchItems('2026-10-01', '2026-10-02'); });
+  act(() => result.current.setActiveCategory('식사'));
+  const filtered = result.current.items;
+  const categories = result.current.categories;
+  let resolve!: (rows: unknown[]) => void;
+  (queryClient.fetchQuery as jest.Mock).mockImplementationOnce(() => new Promise(done => { resolve = done; }));
+  let pending!: Promise<void>;
+  act(() => { pending = result.current.fetchSummariesByRange(new Date('2026-10-01'), new Date('2026-10-02')); });
+  expect(result.current.items).toBe(filtered);
+  expect(result.current.categories).toBe(categories);
+  await act(async () => { resolve([]); await pending; });
+  act(() => result.current.setActiveCategory('음료'));
+  expect(result.current.items).toEqual([items[1]]);
+});
+
+it('전체라는 원본 분류가 있어도 필터 키를 중복하지 않는다', async () => {
+  (queryClient.fetchQuery as jest.Mock).mockResolvedValueOnce([
+    { itemId: 'one', itemName: '메뉴', categoryName: '전체', quantity: 1, totalAmount: 100 },
+  ]);
+  const { result } = renderHook(() => usePosAnalytics());
+  await act(async () => { await result.current.fetchItems('2026-10-01', '2026-10-02'); });
+  expect(result.current.categories).toEqual(['전체']);
+});

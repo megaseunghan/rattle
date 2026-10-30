@@ -1,15 +1,16 @@
 import { supabase } from '../../lib/supabase';
 import { getProfitLossByMonth, getYearlyProfitLoss } from '../../lib/services/profitLoss';
 const mockManualTotals = jest.fn();
+const mockPurchases = jest.fn();
 const mockWageHistory = jest.fn();
 
 jest.mock('../../lib/supabase', () => ({ supabase: { from: jest.fn(), rpc: jest.fn().mockResolvedValue({ error: null }) } }));
-jest.mock('../../lib/services/purchases', () => ({ getPurchasesByMonth: async () => [], getPurchaseItemsForPurchases: async () => [] }));
+jest.mock('../../lib/services/purchases', () => ({ getPurchasesByMonth: (...args: unknown[]) => mockPurchases(...args), getPurchaseItemsForPurchases: async () => [] }));
 jest.mock('../../lib/services/expenses', () => ({ getExpensesByMonth: async () => [], getEffectiveFixedExpenses: async () => [] }));
 jest.mock('../../lib/services/manualSales', () => ({ getManualSalesTotals: (...args: unknown[]) => mockManualTotals(...args) }));
 jest.mock('../../lib/services/wageHistory', () => ({ getStoreWageHistory: (...args: unknown[]) => mockWageHistory(...args), regularGrossForMonth: () => 999 }));
 jest.mock('../../lib/services/payroll', () => ({ probationFactor: () => 1 }));
-beforeEach(() => { mockWageHistory.mockReset().mockResolvedValue([]); mockManualTotals.mockReset().mockResolvedValue({ total: 1000000, cardRevenue: 0, cashRevenue: 1000000 }); });
+beforeEach(() => { mockPurchases.mockReset().mockResolvedValue([]); mockWageHistory.mockReset().mockResolvedValue([]); mockManualTotals.mockReset().mockResolvedValue({ total: 1000000, cardRevenue: 0, cashRevenue: 1000000 }); });
 
 function setup(payrolls: unknown[], payrollError: unknown = null, employees: unknown[] = [], pageLimit = 500) {
   (supabase.from as jest.Mock).mockImplementation((table: string) => {
@@ -148,4 +149,13 @@ it('현재 월 스냅샷은 변경일별 금액으로 누적하고 지난 월은
     .resolves.toMatchObject({ regularGross: 2500000, laborCost: 2500000 });
   await expect(getProfitLossByMonth('store', '2026-10', '23:00', new Date('2026-11-01T03:00:00Z')))
     .resolves.toMatchObject({ regularGross: 4700000, laborCost: 4700000 });
+});
+
+it('거래처명이 객체 예약어여도 누락하거나 금액을 문자열로 만들지 않는다', async () => {
+  setup([]);
+  mockPurchases.mockResolvedValue([{ id: 'p1', category: '식자재', supplier: '__proto__', amount: 100 }, { id: 'p2', category: '비품', supplier: 'constructor', amount: 35 }]);
+  const result = await getProfitLossByMonth('store', '2026-09', '23:00');
+  expect(result.purchaseBySupplier?.['__proto__']).toBe(100);
+  expect(result.purchaseBySupplier?.constructor).toBe(35);
+  expect(Object.values(result.purchaseBySupplier!).reduce((sum, amount) => sum + amount, 0)).toBe(result.purchaseCost);
 });

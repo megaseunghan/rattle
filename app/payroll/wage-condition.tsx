@@ -42,8 +42,12 @@ export default function WageConditionScreen() {
   const fieldPositions = useRef<Record<string, number>>({});
   const focusedField = useRef<string | null>(null);
   const keyboardVisible = useRef(false);
+  const focusFrame = useRef<number | null>(null);
+  useEffect(() => () => { if (focusFrame.current !== null) cancelAnimationFrame(focusFrame.current); }, []);
   const revealFocusedField = useCallback(() => {
-    requestAnimationFrame(() => {
+    if (focusFrame.current !== null) cancelAnimationFrame(focusFrame.current);
+    focusFrame.current = requestAnimationFrame(() => {
+      focusFrame.current = null;
       const field = focusedField.current;
       if (!field || !keyboardVisible.current) return;
       const y = fieldPositions.current[field];
@@ -66,7 +70,8 @@ export default function WageConditionScreen() {
   useEffect(() => {
     focusedField.current = null;
     Keyboard.dismiss();
-    requestAnimationFrame(() => scrollRef.current?.scrollTo({ y: 0, animated: false }));
+    const frame = requestAnimationFrame(() => scrollRef.current?.scrollTo({ y: 0, animated: false }));
+    return () => cancelAnimationFrame(frame);
   }, [step]);
   const saveLock = useRef(false);
   const initialDraft = useRef({ date: '', amount: '', nonTax: '', memo: '' });

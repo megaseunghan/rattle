@@ -15,6 +15,7 @@ const ACTION_MESSAGES: Readonly<Record<string, string>> = {
   TAXONOMY_CONFLICT: '같은 이름이 있어요. 목록을 새로고침해주세요.',
   TAXONOMY_FORBIDDEN: '분류를 변경할 권한이 없어요.',
   JOIN_PROFILE_INVALID: '근무 조건·입사일·계좌 정보를 다시 확인해주세요.',
+  STORE_INVITE_INVALID: '참여코드가 만료되었거나 취소됐어요. 관리자에게 새 코드를 요청해주세요.',
   JOIN_REVIEW_REQUIRED: '신청 정보를 먼저 확인한 뒤 승인해주세요.',
   JOIN_REVIEW_CHANGED: '직원이 신청 정보를 수정했어요. 취소한 뒤 다시 열어 확인해주세요.',
   HOME_SUMMARY_FORBIDDEN: '이 매장의 요약을 볼 권한이 없어요.',

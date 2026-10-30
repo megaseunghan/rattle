@@ -55,17 +55,20 @@ export default function PosSyncScreen() {
     finally { if (request === loadRequest.current) inFlightStore.current = null; }
   }, [store, currentRole]);
 
-  useFocusEffect(useCallback(() => { load(); }, [load]));
+  useFocusEffect(useCallback(() => {
+    void load();
+    return () => { loadRequest.current += 1; inFlightStore.current = null; };
+  }, [load]));
 
   // 연동 대기중에는 자동 폴링 → 웹훅으로 자동매칭되면 '연동완료' 자동 전환
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
     if (status === 'waiting') {
       pollRef.current = setInterval(load, POLL_INTERVAL_MS);
     }
     return () => {
       if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
     };
-  }, [status, load]);
+  }, [status, load]));
 
   function copyServiceCode() {
     Clipboard.setString(SERVICE_CODE);

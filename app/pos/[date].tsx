@@ -1,4 +1,5 @@
-import { useCallback } from 'react';
+import { dailyItemKey, stringKey } from '../../lib/utils/listKeys';
+import { useCallback, memo, useMemo } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator,
 } from 'react-native';
@@ -10,7 +11,7 @@ import { usePosAnalytics } from '../../lib/hooks/usePosAnalytics';
 import { ErrorMessage } from '../../lib/components/ErrorMessage';
 import { DailyItem } from '../../types';
 
-function ItemRow({ item }: { item: DailyItem }) {
+const ItemRow = memo(function ItemRow({ item }: { item: DailyItem }) {
   return (
     <View style={styles.itemRow}>
       <View style={styles.itemLeft}>
@@ -25,7 +26,10 @@ function ItemRow({ item }: { item: DailyItem }) {
       </View>
     </View>
   );
-}
+});
+
+const renderSalesItem = ({ item }: { item: DailyItem }) => <ItemRow item={item} />;
+const ItemSeparator = () => <View style={styles.separator} />;
 
 export default function PosDateScreen() {
   const { date, from, to } = useLocalSearchParams<{ date: string; from: string; to: string }>();
@@ -41,8 +45,19 @@ export default function PosDateScreen() {
     }
   }, [from, to, fetchItems]));
 
-  const totalAmount = allItems.reduce((sum, i) => sum + i.totalAmount, 0);
-  const totalQty = allItems.reduce((sum, i) => sum + i.quantity, 0);
+  const totalAmount = useMemo(() => allItems.reduce((sum, i) => sum + i.totalAmount, 0), [allItems]);
+  const totalQty = useMemo(() => allItems.reduce((sum, i) => sum + i.quantity, 0), [allItems]);
+
+  const renderCategory = useCallback(({ item: cat }: { item: string }) => (
+    <TouchableOpacity
+      style={[styles.filterChip, activeCategory === cat && styles.filterChipActive]}
+      onPress={() => setActiveCategory(cat)}
+    >
+      <Text style={[styles.filterChipText, activeCategory === cat && styles.filterChipTextActive]}>
+        {cat || '미분류'}
+      </Text>
+    </TouchableOpacity>
+  ), [activeCategory, setActiveCategory]);
 
   if (error) return <ErrorMessage message={error} onRetry={() => fetchItems(String(from), String(to))} />;
 
@@ -63,21 +78,16 @@ export default function PosDateScreen() {
       {categories.length > 1 && (
         <View style={styles.filterBar}>
           <FlatList
+            initialNumToRender={5}
+            maxToRenderPerBatch={10}
+            windowSize={5}
             horizontal
             showsHorizontalScrollIndicator={false}
             data={categories}
-            keyExtractor={c => c}
+            keyExtractor={stringKey}
             contentContainerStyle={styles.filterContent}
-            renderItem={({ item: cat }) => (
-              <TouchableOpacity
-                style={[styles.filterChip, activeCategory === cat && styles.filterChipActive]}
-                onPress={() => setActiveCategory(cat)}
-              >
-                <Text style={[styles.filterChipText, activeCategory === cat && styles.filterChipTextActive]}>
-                  {cat || '미분류'}
-                </Text>
-              </TouchableOpacity>
-            )}
+            extraData={activeCategory}
+            renderItem={renderCategory}
           />
         </View>
       )}
@@ -86,14 +96,17 @@ export default function PosDateScreen() {
         ? <ActivityIndicator size="large" color={Colors.primary} style={{ flex: 1 }} />
         : (
           <FlatList
+            initialNumToRender={5}
+            maxToRenderPerBatch={10}
+            windowSize={5}
             data={items}
-            keyExtractor={i => i.itemId || i.itemName}
+            keyExtractor={dailyItemKey}
             contentContainerStyle={styles.list}
-            renderItem={({ item }) => <ItemRow item={item} />}
+            renderItem={renderSalesItem}
             ListEmptyComponent={
               <Text style={styles.emptyText}>판매 내역이 없습니다.</Text>
             }
-            ItemSeparatorComponent={() => <View style={styles.separator} />}
+            ItemSeparatorComponent={ItemSeparator}
           />
         )
       }

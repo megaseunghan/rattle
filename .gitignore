@@ -129,3 +129,6 @@ backups/
 
 # The public website has its own source repository and deployment.
 /website/
+
+# Local simulator QA credentials and broker configuration
+/.qa/

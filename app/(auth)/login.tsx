@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -10,15 +10,31 @@ import {
   ScrollView,
 } from 'react-native';
 import { AntDesign } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { signInWithSocialProvider, SocialProvider } from '../../lib/services/socialAuth';
 import { Colors } from '../../constants/colors';
 import { Type } from '../../constants/designTokens';
 import { Button } from '../../lib/components/ui';
+import { isQaLoginEnabled, signInForQa, getInitialQaRole, QaRole } from '../../lib/services/qaLogin';
+import { getErrorMessage } from '../../lib/utils/error';
 
 export default function LoginScreen() {
-  const [loading, setLoading] = useState<SocialProvider | null>(null);
+  const [loading, setLoading] = useState<SocialProvider | QaRole | null>(null);
   const busy = useRef(false);
+  const { qaRole } = useLocalSearchParams<{ qaRole?: string }>();
+  const autoQaAttempted = useRef(false);
+  useEffect(() => {
+    if (autoQaAttempted.current || !isQaLoginEnabled()) return;
+    autoQaAttempted.current = true;
+    let mounted = true;
+    void (async () => {
+      try {
+        const role = ['admin', 'regular', 'part_time'].includes(qaRole ?? '') ? qaRole as QaRole : await getInitialQaRole();
+        if (mounted && role) await handleQaLogin(role);
+      } catch { if (mounted) Alert.alert('테스트 로그인', '아래에서 역할을 선택해주세요.'); }
+    })();
+    return () => { mounted = false; };
+  }, [qaRole]);
 
   async function handleLogin(provider: SocialProvider) {
     if (busy.current) return;
@@ -34,6 +50,15 @@ export default function LoginScreen() {
       busy.current = false;
       setLoading(null);
     }
+  }
+
+  async function handleQaLogin(role: QaRole) {
+    if (busy.current) return;
+    busy.current = true;
+    setLoading(role);
+    try { await signInForQa(role); }
+    catch (error) { Alert.alert('테스트 로그인', getErrorMessage(error, '로컬 테스트 로그인 서버를 실행해주세요.')); }
+    finally { busy.current = false; setLoading(null); }
   }
 
   return (
@@ -85,6 +110,18 @@ export default function LoginScreen() {
           </Pressable>
         </View>
 
+        {isQaLoginEnabled() && <View style={styles.qaPanel}>
+          <Text style={styles.qaTitle}>래틀 테스트 로그인</Text>
+          <View style={styles.qaButtons}>
+            {([['admin', '관리자'], ['regular', '직원'], ['part_time', '파트타이머']] as const).map(([role, label]) =>
+              <Pressable key={role} accessibilityRole="button" accessibilityLabel={`${label} 테스트 로그인`}
+                accessibilityState={{ disabled: loading !== null, busy: loading === role }} disabled={loading !== null}
+                onPress={() => void handleQaLogin(role)} style={({ pressed }) => [styles.qaButton, pressed && styles.pressed]}>
+                <Text style={styles.qaLabel}>{loading === role ? '로그인 중…' : label}</Text>
+              </Pressable>)}
+          </View>
+        </View>}
+
         <Text style={styles.legal}>
           계속 진행 시{' '}
           <Text style={styles.legalEmphasis} onPress={() => router.push('/legal/terms')}>이용약관</Text> 및{' '}
@@ -97,6 +134,11 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
+  qaPanel: { width: '100%', marginTop: 24, padding: 16, borderRadius: 12, backgroundColor: Colors.gray50, gap: 12 },
+  qaTitle: { fontSize: 13, color: Colors.gray600, fontWeight: '600' },
+  qaButtons: { flexDirection: 'row', gap: 8 },
+  qaButton: { flex: 1, minHeight: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 8, backgroundColor: Colors.white },
+  qaLabel: { fontSize: 13, color: Colors.primary, fontWeight: '600' },
   container: {
     flex: 1,
     backgroundColor: Colors.white,

@@ -1,3 +1,4 @@
+import { memo } from 'react';
 /* design-system: DESIGN.md — a store day, from opening to closing */
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -14,7 +15,7 @@ import { HomeActionId, HomePhase } from '../../types';
 import { ErrorMessage } from './ErrorMessage';
 
 type Action = { label: string; icon: keyof typeof Ionicons.glyphMap; onPress: () => void };
-export function DailyOperationsHome({ active, refreshKey, canUseFinancialTabs, isPartTime, isAdmin }: {
+export const DailyOperationsHome = memo(function DailyOperationsHome({ active, refreshKey, canUseFinancialTabs, isPartTime, isAdmin }: {
   active: boolean; refreshKey: number; canUseFinancialTabs: boolean; isPartTime: boolean; isAdmin: boolean;
 }) {
   const { goToTab } = useTabPager();
@@ -94,7 +95,7 @@ export function DailyOperationsHome({ active, refreshKey, canUseFinancialTabs, i
       {isPartTime && <Pressable style={styles.action} accessibilityRole="button" onPress={() => router.push('/mypage/work-minutes')}><Text style={styles.actionText}>월 실근무 시간 제출</Text><Ionicons name="chevron-forward" size={16} color={Colors.gray600} /></Pressable>}
     </GlassCard>
   </View>;
-}
+});
 const styles = StyleSheet.create({
   root: { gap: 16 }, intro: { paddingTop: 8, paddingBottom: 12, gap: 8 },
   eyebrow: { color: Colors.action, fontFamily: Fonts.wantedSemiBold, fontSize: 13 },

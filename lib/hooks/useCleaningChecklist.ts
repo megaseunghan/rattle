@@ -59,15 +59,15 @@ export function useCleaningChecklist() {
     setItems(prev => [...prev, item]);
   }
 
-  async function editItem(id: string, title: string) {
+  const editItem = useCallback(async (id: string, title: string) => {
     await updateCleaningItem(id, title);
     setItems(prev => prev.map(i => (i.id === id ? { ...i, title } : i)));
-  }
+  }, []);
 
-  async function removeItem(id: string) {
+  const removeItem = useCallback(async (id: string) => {
     await removeCleaningItem(id);
     setItems(prev => prev.filter(i => i.id !== id));
-  }
+  }, []);
 
   async function reorder(segmentItems: CleaningItem[]) {
     const updates = segmentItems.map((item, idx) => ({ id: item.id, sort_order: idx }));

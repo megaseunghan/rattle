@@ -1,6 +1,6 @@
 import { GlassBackdrop } from '../../lib/components/GlassBackdrop';
 import { getErrorMessage } from '../../lib/utils/error';
-import { useState, useCallback, useRef, useEffect, useContext } from 'react';
+import { useState, useCallback, useRef, useEffect, useContext, useMemo } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   Alert, ActivityIndicator, TextInput,
@@ -52,6 +52,13 @@ export function PosScreen({ active = true, reserveFab = false }: { active?: bool
   const initialMonth = tabScope?.selectedMonth ?? `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
   const [queryYear, setQueryYear] = useState(Number(initialMonth.slice(0, 4)));
   const [queryMonth, setQueryMonth] = useState(Number(initialMonth.slice(5)));
+  const summaryByDay = useMemo(() => {
+    const grouped = new Map<string, DailySummary>();
+    summaries.forEach(summary => grouped.set(summary.date, summary));
+    return grouped;
+  }, [summaries]);
+  const calendarDays = useMemo(() => getCalendarDays(queryYear, queryMonth), [queryYear, queryMonth]);
+  const monthTotal = useMemo(() => summaries.reduce((sum, summary) => sum + summary.totalAmount, 0), [summaries]);
   const [syncing, setSyncing] = useState(false);
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
 
@@ -215,12 +222,8 @@ export function PosScreen({ active = true, reserveFab = false }: { active?: bool
         ? <View style={styles.scroll}><View style={styles.todayCard}><Text style={styles.todayLabel}>매출을 준비하고 있어요</Text><LoadingSpinner fullScreen={false} /><Text style={styles.todayOrderCount}>저장된 매출을 먼저 불러오고 있어요.</Text></View></View>
         : status === 'connected'
           ? (() => {
-              const summaryByDay = new Map<string, DailySummary>();
-              summaries.forEach(s => summaryByDay.set(s.date, s));
-              const calendarDays = getCalendarDays(queryYear, queryMonth);
               const selectedKey = selectedDay ? toDateKey(queryYear, queryMonth, selectedDay) : null;
               const selectedSummary = selectedKey ? summaryByDay.get(selectedKey) ?? null : null;
-              const monthTotal = summaries.reduce((sum, s) => sum + s.totalAmount, 0);
               const today = new Date();
               const isToday = (day: number) =>
                 queryYear === today.getFullYear() &&

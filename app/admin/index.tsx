@@ -2,8 +2,8 @@ import { GlassBackdrop } from '../../lib/components/GlassBackdrop';
 /* Hallmark · genre: modern-minimal · macrostructure: Workbench · design-system: DESIGN.md · designed-as-app */
 import { NumericText } from '../../lib/components/ui/NumericText';
 import { sumKnown } from '../../lib/utils/financialCoverage';
-import { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, Alert } from 'react-native';
+import { useState, useCallback } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, Alert, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -14,6 +14,11 @@ import { useTabPager } from '../../lib/contexts/TabPagerContext';
 import { useAdminDashboard } from '../../lib/hooks/useAdminDashboard';
 import { WeeklyCleaningDay, WeeklyScheduleDay } from '../../lib/services/adminDashboard';
 import { Badge } from '../../lib/components/ui';
+import { DashboardBreakdownCard } from '../../lib/components/DashboardBreakdownCard';
+import type { DashboardMetric } from '../../lib/services/dashboardBreakdown';
+import { DashboardProfitRing } from '../../lib/components/DashboardProfitRing';
+import { DashboardProfitTrend } from '../../lib/components/DashboardProfitTrend';
+import { DashboardSchedule } from '../../lib/components/DashboardSchedule';
 import { HomeAlertsPanel } from '../../lib/components/HomeAlertsPanel';
 import { getErrorMessage } from '../../lib/utils/error';
 
@@ -23,15 +28,6 @@ const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0]; // 0=일 ~ 6=토 (DB 값) → 월~일 
 function fmt(v: number | null): string {
   if (v == null) return '확인 필요';
   return `${Math.round(v).toLocaleString()}원`;
-}
-
-function compactAmount(value: number | null): string {
-  if (value == null) return '확인 필요';
-  const abs = Math.abs(value);
-  const prefix = value < 0 ? '-' : '';
-  if (abs >= 100000000) return `${prefix}${(abs / 100000000).toFixed(1)}억`;
-  if (abs >= 10000) return `${prefix}${(abs / 10000).toFixed(1)}만`;
-  return `${prefix}${Math.round(abs).toLocaleString()}`;
 }
 
 function trendPct(current: number | null, previous: number | null): number | null {
@@ -44,30 +40,6 @@ function TrendBadge({ pct, compareLabel }: { pct: number | null; compareLabel: s
   const isUp = pct >= 0;
   const label = `${compareLabel} 대비 ${isUp ? '+' : ''}${pct.toFixed(1)}%`;
   return <Badge label={label} variant={isUp ? 'positive' : 'negative'} />;
-}
-
-/** 최근 6개월/연도 합산 영업이익 미니 바 차트 — 마지막(현재) 막대만 강조 */
-function TrendBarChart({ data, onSelect }: { data: { label: string; value: number | null }[]; onSelect?: (index: number) => void }) {
-  if (data.length === 0) return null;
-  const maxAbs = Math.max(1, ...data.map(d => Math.abs(d.value ?? 0)));
-  return (
-    <View style={styles.trendChart}>
-      {data.map((d, i) => {
-        const isLast = i === data.length - 1;
-        const barHeight = Math.round((Math.abs(d.value ?? 0) / maxAbs) * 52);
-        return (
-          <TouchableOpacity key={`${d.label}-${i}`} disabled={!onSelect} onPress={() => onSelect?.(i)} style={styles.trendBarCol} accessibilityLabel={`${d.label} 영업이익 ${fmt(d.value)}`}>
-            <Text style={[styles.trendAmount, (d.value ?? 0) < 0 && styles.negativeText]} numberOfLines={1} adjustsFontSizeToFit>{compactAmount(d.value)}</Text>
-            <View style={styles.trendBarTrack}>
-              <View style={styles.trendZeroLine} />
-              {d.value != null && <View style={[styles.trendBarFill, { height: barHeight, ...((d.value ?? 0) < 0 ? { top: 56 } : { bottom: 56 }) }, (d.value ?? 0) < 0 ? styles.trendBarFillNegative : isLast ? styles.trendBarFillActive : styles.trendBarFillInactive]} />}
-            </View>
-            <Text style={[styles.trendBarLabel, isLast && styles.trendBarLabelActive]}>{d.label}</Text>
-          </TouchableOpacity>
-        );
-      })}
-    </View>
-  );
 }
 
 function CleaningWeekCard({ weekly, error }: { weekly: { days: WeeklyCleaningDay[]; pct: number } | undefined; error?: boolean }) {
@@ -111,63 +83,19 @@ function CleaningWeekCard({ weekly, error }: { weekly: { days: WeeklyCleaningDay
   );
 }
 
-/** 겹치는 인원 수에 비례해 진해지는 프라이머리 컬러 (0명 = 투명, 1명 이상부터 단계적으로 진해짐) */
-function overlapColor(overlap: number): string {
-  if (overlap <= 0) return 'transparent';
-  const opacity = Math.min(1, 0.3 + (overlap - 1) * 0.25);
-  return `${Colors.primary}${Math.round(opacity * 255).toString(16).padStart(2, '0')}`;
-}
-
-function ScheduleWeekCard({ days, error }: { days: WeeklyScheduleDay[] | undefined; error?: boolean }) {
-  const byWeekday = new Map((days ?? []).map(d => [d.weekday, d]));
-  return (
-    <View style={styles.opsCard}>
-      <View style={styles.sectionHeaderRow}>
-        <Text style={styles.sectionTitle}>요일별 스케줄</Text>
-        <TouchableOpacity onPress={() => router.push('/mypage/schedule')} hitSlop={8}>
-          <Text style={styles.linkText}>배정 ›</Text>
-        </TouchableOpacity>
-      </View>
-      {!days ? <Text style={styles.domainError}>{error ? '스케줄을 불러오지 못했어요' : '스케줄을 불러오는 중이에요'}</Text> : WEEK_ORDER.map((weekday, i) => {
-        const d = byWeekday.get(weekday);
-        const isOff = !d || d.headcount === 0;
-        return (
-          <View key={weekday} style={styles.scheduleDayBlock}>
-            <View style={styles.scheduleRow}>
-              <Text style={[styles.scheduleDayLabel, weekday === 0 && styles.negativeText, weekday === 6 && styles.primaryText]}>
-                {WEEKDAY_LABELS[i]}
-              </Text>
-              <View style={styles.scheduleBarTrack}>
-                {!isOff && d!.segments.map(seg => (
-                  <View
-                    key={seg.startMin}
-                    style={[styles.scheduleBarSeg, { flex: seg.endMin - seg.startMin, backgroundColor: overlapColor(seg.overlap) }]}
-                  />
-                ))}
-              </View>
-              <Text style={styles.scheduleMeta}>{isOff ? '휴무' : `${d!.headcount}명 ${d!.totalHours}h`}</Text>
-            </View>
-            {!isOff && (
-              <Text style={styles.scheduleShiftList} numberOfLines={2}>
-                {d!.shifts.map(s => `${s.employeeName} ${s.start}-${s.end}`).join('  ·  ')}
-              </Text>
-            )}
-          </View>
-        );
-      })}
-      {days && <Text style={styles.scheduleCaption}>겹치는 시간일수록 색이 진해져요</Text>}
-    </View>
-  );
-}
-
 /** 화면 00 — 통합 대시보드 (사장님 홈 탭 기본 화면) */
 export function AdminDashboardScreen() {
   const { realRole, switchStore } = useAuth();
   const { goToTab, openStorePicker, selectStoreScope, selectedMonth, setSelectedMonth } = useTabPager();
+  const [selectedMetric, setSelectedMetric] = useState<DashboardMetric | null>(null);
+  const resetMetric = useCallback(() => setSelectedMetric(null), []);
+  const selectMetric = useCallback((metric: DashboardMetric) => setSelectedMetric(current => current === metric ? null : metric), []);
+  const [scopeId, setScopeId] = useState<string | null>(null);
+  const [storeSearch, setStoreSearch] = useState('');
   const {
     ownedStores, period, setPeriod, anchorYear, anchorMonth, isCurrentMonth,
     pnl, trend, weeklyCleaning, weeklySchedule, errors, financialError, loading, refetch, goPrev, goNext,
-  } = useAdminDashboard(selectedMonth, setSelectedMonth);
+  } = useAdminDashboard(selectedMonth, setSelectedMonth, scopeId);
   const [alertRefreshKey, setAlertRefreshKey] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   async function onRefresh() {
@@ -178,15 +106,39 @@ export function AdminDashboardScreen() {
   const [trendExpanded, setTrendExpanded] = useState(false);
   const [operationsExpanded, setOperationsExpanded] = useState(false);
 
+  const showMonth = useCallback((index: number) => {
+    if (period !== 'month' || !trend) return;
+    const date = new Date(anchorYear, anchorMonth - trend.length + index, 1);
+    setSelectedMonth(`${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`);
+  }, [period, trend, anchorYear, anchorMonth, setSelectedMonth]);
+
   if (realRole !== 'admin') return <SafeAreaView style={styles.container}><GlassBackdrop /><View style={styles.empty}><Text style={styles.emptyText}>접근 권한이 없어요</Text></View></SafeAreaView>;
 
-  const sumRevenue = pnl?.current.reduce((sum, row) => sum + row.revenue, 0) ?? null;
-  const sumProfit = pnl ? sumKnown(pnl.current.map(row => row.profit)) : null;
-  const sumPurchases = pnl?.current.reduce((sum, row) => sum + row.purchaseCost, 0) ?? null;
-  const sumLabor = pnl ? sumKnown(pnl.current.map(row => row.laborCost)) : null;
-  const sumOther = pnl?.current.reduce((sum, row) => sum + row.otherExpense, 0) ?? null;
-  const previousProfit = pnl ? sumKnown(pnl.previous.map(row => row.profit)) : null;
-  const missingStores = pnl?.current.filter(row => row.laborCost == null) ?? [];
+  const selectedStore = ownedStores.find(store => store.id === scopeId);
+  const activeScope = selectedStore?.id ?? null;
+  const scopeLabel = selectedStore?.name ?? '전체 매장';
+  const current = pnl?.current.filter(row => !activeScope || row.storeId === activeScope);
+  const previous = pnl?.previous.filter(row => !activeScope || row.storeId === activeScope);
+  const sumRevenue = current?.reduce((sum, row) => sum + row.revenue, 0) ?? null;
+  const sumProfit = current ? sumKnown(current.map(row => row.profit)) : null;
+  const sumPurchases = current?.reduce((sum, row) => sum + row.purchaseCost, 0) ?? null;
+  const sumLabor = current ? sumKnown(current.map(row => row.laborCost)) : null;
+  const sumOther = current?.reduce((sum, row) => sum + row.otherExpense, 0) ?? null;
+  const previousProfit = previous ? sumKnown(previous.map(row => row.profit)) : null;
+  const missingStores = current?.filter(row => row.laborCost == null) ?? [];
+  const scopedStores = selectedStore ? [selectedStore] : ownedStores;
+  const scheduleStores = scopedStores.filter(store => weeklySchedule[store.id] && !errors.schedule[store.id]);
+  const scheduleDays: WeeklyScheduleDay[] | undefined = !scheduleStores.length ? undefined : WEEK_ORDER.map(weekday => {
+    const rows = scheduleStores.map(store => ({ store, day: weeklySchedule[store.id].find(day => day.weekday === weekday) }));
+    return { weekday, headcount: rows.reduce((n, row) => n + (row.day?.headcount ?? 0), 0), totalHours: rows.reduce((n, row) => n + (row.day?.totalHours ?? 0), 0),
+      shifts: rows.flatMap(row => (row.day?.shifts ?? []).map(shift => ({ ...shift, employeeName: activeScope ? shift.employeeName : `${row.store.name} · ${shift.employeeName}` }))), segments: [], maxOverlap: 0 };
+  });
+  const cleaningStores = scopedStores.filter(store => weeklyCleaning[store.id] && !errors.cleaning[store.id]);
+  const cleaningDays = WEEK_ORDER.map(weekday => ({ weekday,
+    checked: cleaningStores.reduce((n, store) => n + (weeklyCleaning[store.id].days.find(day => day.weekday === weekday)?.checked ?? 0), 0),
+    total: cleaningStores.reduce((n, store) => n + (weeklyCleaning[store.id].days.find(day => day.weekday === weekday)?.total ?? 0), 0) }));
+  const cleaningTotal = cleaningDays.reduce((n, day) => n + day.total, 0);
+  const scopedCleaning = cleaningStores.length ? { days: cleaningDays, pct: cleaningTotal ? Math.round(cleaningDays.reduce((n, day) => n + day.checked, 0) / cleaningTotal * 100) : 0 } : undefined;
   const periodLabel = period === 'month' ? `${anchorYear}년 ${anchorMonth}월` : `${anchorYear}년`;
   const yearMonth = `${anchorYear}-${String(anchorMonth).padStart(2, '0')}`;
 
@@ -196,17 +148,23 @@ export function AdminDashboardScreen() {
       router.push({ pathname: '/profit-loss', params: { yearMonth, period } });
     } catch (error) { Alert.alert('매장 전환', getErrorMessage(error, '매장을 바꾸지 못했어요. 다시 시도해 주세요.')); }
   }
-  function showMonth(index: number) {
-    if (period !== 'month' || !trend) return;
-    const date = new Date(anchorYear, anchorMonth - trend.length + index, 1);
-    setSelectedMonth(`${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`);
+  async function goToSchedule(storeId: string) {
+    try { await switchStore(storeId); router.push('/mypage/schedule'); }
+    catch (error) { Alert.alert('매장 전환', getErrorMessage(error, '매장을 바꾸지 못했어요. 다시 시도해 주세요.')); }
   }
-  const metrics = [{ label: '매출', value: sumRevenue }, { label: '매입', value: sumPurchases }, { label: '인건비', value: sumLabor }, { label: '비용', value: sumOther }];
+
+  const metricTotals: Record<DashboardMetric, number | null> = { revenue: sumRevenue, purchase: sumPurchases, expense: sumOther, labor: sumLabor };
   return <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}><GlassBackdrop />
     <View style={styles.header}>
       <TouchableOpacity style={styles.headerSideButton} onPress={() => goToTab('more')} accessibilityLabel="더보기" accessibilityRole="button"><Ionicons name="ellipsis-horizontal" size={22} color={Colors.black} /></TouchableOpacity>
       <TouchableOpacity style={styles.headerCenter} onPress={() => openStorePicker()} accessibilityLabel="전체 매장, 매장 선택" accessibilityRole="button"><View style={styles.headerStoreRow}><Text style={styles.headerStoreText}>전체 매장 {ownedStores.length}곳</Text><Ionicons name="chevron-down" size={14} color={Colors.gray500} /></View></TouchableOpacity>
       <TouchableOpacity style={styles.headerSideButton} onPress={() => router.push('/mypage')} accessibilityLabel="내 정보" accessibilityRole="button"><Ionicons name="person-circle-outline" size={24} color={Colors.gray600} /></TouchableOpacity>
+    </View>
+    <View style={styles.scopeBar}>
+      {ownedStores.length > 5 && <TextInput accessibilityLabel="대시보드 매장 검색" placeholder="매장 검색" value={storeSearch} onChangeText={setStoreSearch} style={styles.scopeSearch} />}
+      <View style={styles.scopeRow}><TouchableOpacity accessibilityRole="button" accessibilityLabel="전체 매장 영업이익" accessibilityState={{ selected: !activeScope }} onPress={() => setScopeId(null)} style={[styles.scopeChip, !activeScope && styles.scopeChipActive]}><Text style={[styles.scopeChipText, !activeScope && styles.scopeChipTextActive]}>전체 매장</Text></TouchableOpacity>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.scopeChips}>{ownedStores.filter(store => store.name.toLocaleLowerCase().includes(storeSearch.trim().toLocaleLowerCase())).map(store => <TouchableOpacity key={store.id} accessibilityRole="button" accessibilityLabel={`${store.name} 영업이익`} accessibilityState={{ selected: activeScope === store.id }} onPress={() => setScopeId(store.id)} style={[styles.scopeChip, activeScope === store.id && styles.scopeChipActive]}><Text numberOfLines={1} style={[styles.scopeChipText, activeScope === store.id && styles.scopeChipTextActive]}>{store.name}</Text></TouchableOpacity>)}</ScrollView>
+      </View>
     </View>
     <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />}>
       <View style={styles.periodControls}>
@@ -216,17 +174,25 @@ export function AdminDashboardScreen() {
         <View style={styles.navRow}><TouchableOpacity onPress={goPrev} style={styles.navButton} accessibilityRole="button" accessibilityLabel="이전 기간"><Ionicons name="chevron-back" size={18} color={Colors.gray600} /></TouchableOpacity><Text style={styles.navLabel}>{periodLabel}</Text><TouchableOpacity onPress={goNext} style={styles.navButton} accessibilityRole="button" accessibilityLabel="다음 기간" disabled={period === 'month' ? isCurrentMonth : anchorYear >= new Date().getFullYear()}><Ionicons name="chevron-forward" size={18} color={(period === 'month' ? isCurrentMonth : anchorYear >= new Date().getFullYear()) ? Colors.gray300 : Colors.gray600} /></TouchableOpacity></View>
       </View>
       <View style={styles.summaryCard}>
-        <View style={styles.summaryTop}><Text style={styles.summaryTitle}>{periodLabel} · 영업이익</Text><TrendBadge pct={pnl ? trendPct(sumProfit, previousProfit) : null} compareLabel={period === 'month' ? '전월' : '전년'} /></View>
-        <NumericText style={[styles.summaryValue, sumProfit == null && { color: Colors.gray600 }, sumProfit != null && sumProfit < 0 && styles.negativeText]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.65}>{pnl ? fmt(sumProfit) : errors.pnl ? '조회 실패' : '불러오는 중'}</NumericText>
+        <View style={styles.summaryTop}><Text style={styles.summaryTitle}>{scopeLabel} · 영업이익</Text><TrendBadge pct={pnl ? trendPct(sumProfit, previousProfit) : null} compareLabel={period === 'month' ? '전월' : '전년'} /></View>
+
+        {!pnl && !errors.pnl && <Text style={styles.summaryCaption}>손익을 불러오는 중이에요</Text>}
+        <DashboardProfitRing revenue={sumRevenue} profit={sumProfit} purchase={sumPurchases} expense={sumOther} labor={sumLabor} selected={selectedMetric} onReset={resetMetric} onSelect={selectMetric} />
+        {selectedMetric && <DashboardBreakdownCard key={`${activeScope ?? 'all'}:${period}:${yearMonth}:${selectedMetric}`} stores={scopedStores} period={period} yearMonth={yearMonth} metric={selectedMetric} expectedTotal={metricTotals[selectedMetric]} onClose={() => setSelectedMetric(null)} onRefresh={onRefresh} />}
+        {activeScope && <TouchableOpacity accessibilityRole="button" onPress={() => void goToDetail(activeScope)} style={styles.detailButton}><Text style={styles.linkText}>손익 상세 보기 ›</Text></TouchableOpacity>}
         {pnl && sumProfit == null && <Text style={styles.summaryReason}>급여 조건을 확인하면 인건비와 이익을 계산할 수 있어요.</Text>}
         {errors.pnl && <><Text style={styles.domainError}>{financialError ?? '손익을 불러오지 못했어요.'}</Text><TouchableOpacity onPress={() => void refetch()} style={styles.retryButton}><Text style={styles.linkText}>다시 불러오기</Text></TouchableOpacity></>}
         {loading && pnl && <Text style={styles.summaryCaption}>표시한 {periodLabel} 자료를 갱신 중이에요</Text>}
       </View>
-      {missingStores.length > 0 && <View style={styles.taskCard}><Text style={styles.sectionTitle}>확인할 일</Text>{missingStores.map(row => <TouchableOpacity key={row.storeId} style={styles.taskRow} accessibilityRole="button" onPress={() => { if (period === 'year') { Alert.alert('확인할 기간', '월별로 바꾼 뒤 확인할 월을 선택해 주세요.'); setPeriod('month'); } else void selectStoreScope(row.storeId, 'payroll').catch(() => Alert.alert('매장 전환', '매장을 바꾸지 못했어요. 다시 시도해 주세요.')); }}><View style={styles.rowBody}><Text style={styles.taskStore}>{row.storeName} · {periodLabel}</Text><Text style={styles.taskTitle}>직원 정보 확인 필요</Text><Text style={styles.taskHint}>확인할 직원 보기</Text></View><Ionicons name="chevron-forward" size={20} color={Colors.deeper} /></TouchableOpacity>)}</View>}
-      <View style={styles.metricGrid}>{metrics.map(metric => <View key={metric.label} style={[styles.metricCard, metric.label === '인건비' && pnl && metric.value == null && styles.metricPending]}><Text style={styles.summaryColLabel}>{metric.label}</Text><NumericText style={styles.metricAmount} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.65}>{pnl ? fmt(metric.value) : errors.pnl ? '조회 실패' : '불러오는 중'}</NumericText></View>)}</View>
-      <View style={styles.storeList}><Text style={styles.sectionTitle}>매장별 현황</Text>{ownedStores.length === 0 && <Text style={styles.domainError}>조회할 매장이 없어요</Text>}{ownedStores.map(store => { const row = pnl?.current.find(value => value.storeId === store.id); return <TouchableOpacity key={store.id} style={styles.storeRow} onPress={() => void goToDetail(store.id)} accessibilityRole="button" accessibilityLabel={`${store.name}, ${periodLabel} 손익 상세`}><View style={styles.rowBody}><Text style={styles.storeName}>{store.name}</Text><Text style={styles.storeMeta}>{periodLabel} · {row?.laborCost == null && row ? '직원 정보 확인 필요' : '영업이익'}</Text><NumericText style={[styles.storeAmount, row?.profit != null && row.profit < 0 && styles.negativeText]}>{row ? fmt(row.profit) : errors.pnl ? '조회 실패' : '불러오는 중'}</NumericText></View><Ionicons name="chevron-forward" size={20} color={Colors.gray500} /></TouchableOpacity>; })}</View>
-      <View style={styles.opsCard}><TouchableOpacity style={styles.expandRow} onPress={() => setTrendExpanded(value => !value)} accessibilityRole="button" accessibilityState={{ expanded: trendExpanded }}><Text style={styles.sectionTitle}>영업이익 추세</Text><Text style={styles.linkText}>{trendExpanded ? '접기' : '펼쳐보기'}</Text></TouchableOpacity>{trendExpanded && <>{trend ? <TrendBarChart data={trend} onSelect={period === 'month' ? showMonth : undefined} /> : <Text style={styles.domainError}>{errors.trend ? '추세를 불러오지 못했어요' : '추세를 불러오는 중이에요'}</Text>}{period === 'month' && <Text style={styles.summaryCaption}>월을 누르면 해당 월의 현황과 확인할 일을 볼 수 있어요.</Text>}</>}</View>
-      <View style={styles.opsCard}><TouchableOpacity style={styles.expandRow} onPress={() => setOperationsExpanded(value => !value)} accessibilityRole="button" accessibilityState={{ expanded: operationsExpanded }}><Text style={styles.sectionTitle}>매장 운영 현황</Text><Text style={styles.linkText}>{operationsExpanded ? '접기' : '펼쳐보기'}</Text></TouchableOpacity>{operationsExpanded && ownedStores.map(store => <View key={store.id} style={styles.operationsGroup}><Text style={styles.storeName}>{store.name} · 이번 주</Text><HomeAlertsPanel store={store} financial={false} refreshKey={alertRefreshKey} /><CleaningWeekCard weekly={weeklyCleaning[store.id]} error={errors.cleaning[store.id]} /><ScheduleWeekCard days={weeklySchedule[store.id]} error={errors.schedule[store.id]} /></View>)}</View>
+      {missingStores.length > 0 && <View style={styles.taskCard}><Text style={styles.sectionTitle}>확인할 일</Text>{missingStores.slice(0, 3).map(row => <TouchableOpacity key={row.storeId} style={styles.taskRow} accessibilityRole="button" onPress={() => { if (period === 'year') { Alert.alert('확인할 기간', '월별로 바꾼 뒤 확인할 월을 선택해 주세요.'); setPeriod('month'); } else void selectStoreScope(row.storeId, 'payroll').catch(() => Alert.alert('매장 전환', '매장을 바꾸지 못했어요. 다시 시도해 주세요.')); }}><View style={styles.rowBody}><Text style={styles.taskStore}>{row.storeName} · {periodLabel}</Text><Text style={styles.taskTitle}>직원 정보 확인 필요</Text><Text style={styles.taskHint}>확인할 직원 보기</Text></View><Ionicons name="chevron-forward" size={20} color={Colors.deeper} /></TouchableOpacity>)}{missingStores.length > 3 && <Text style={styles.summaryReason}>외 {missingStores.length - 3}곳 · 상단 매장 칩에서 확인해주세요</Text>}</View>}
+
+      {activeScope && <DashboardSchedule key={`${activeScope ?? 'all'}:${selectedMonth}`} days={scheduleDays} onManage={activeScope ? () => void goToSchedule(activeScope) : undefined} error={scopedStores.some(store => errors.schedule[store.id])} partial={scheduleStores.length > 0 && scheduleStores.length < scopedStores.length} />}
+      <View style={styles.opsCard}><TouchableOpacity style={styles.expandRow} onPress={() => setTrendExpanded(value => !value)} accessibilityRole="button" accessibilityState={{ expanded: trendExpanded }}><Text style={styles.sectionTitle}>영업이익 추세</Text><Text style={styles.linkText}>{trendExpanded ? '접기' : '펼쳐보기'}</Text></TouchableOpacity>{trendExpanded && <>{trend ? <DashboardProfitTrend data={trend} onSelect={period === 'month' ? showMonth : undefined} /> : <Text style={styles.domainError}>{errors.trend ? '추세를 불러오지 못했어요' : '추세를 불러오는 중이에요'}</Text>}{period === 'month' && <Text style={styles.summaryCaption}>월을 누르면 해당 월의 현황과 확인할 일을 볼 수 있어요.</Text>}</>}</View>
+      {activeScope && <View style={styles.opsCard}><TouchableOpacity style={styles.expandRow} onPress={() => setOperationsExpanded(value => !value)} accessibilityRole="button" accessibilityState={{ expanded: operationsExpanded }}><Text style={styles.sectionTitle}>{scopeLabel} · 운영 현황</Text><Text style={styles.linkText}>{operationsExpanded ? '접기' : '펼쳐보기'}</Text></TouchableOpacity>{operationsExpanded && <>
+        {selectedStore && <HomeAlertsPanel store={selectedStore} financial={false} refreshKey={alertRefreshKey} />}
+        {cleaningStores.length < scopedStores.length && cleaningStores.length > 0 && <Text style={styles.summaryReason}>조회된 매장의 체크리스트만 집계했어요</Text>}
+        <CleaningWeekCard weekly={scopedCleaning} error={scopedStores.some(store => errors.cleaning[store.id])} />
+      </>}</View>}
     </ScrollView>
   </SafeAreaView>;
 }
@@ -234,6 +200,11 @@ export function AdminDashboardScreen() {
 export default AdminDashboardScreen;
 
 const styles = StyleSheet.create({
+  scopeBar: { paddingHorizontal: 20, paddingVertical: 8, gap: 8 },
+  scopeRow: { flexDirection: 'row', gap: 8 }, scopeChips: { gap: 8, paddingRight: 12 },
+  scopeChip: { minHeight: 44, paddingHorizontal: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.homeBorder, borderRadius: 999 },
+  scopeChipActive: { backgroundColor: Colors.action, borderColor: Colors.action }, scopeChipText: { maxWidth: 180, fontSize: 13, fontWeight: '600', color: Colors.gray600 }, scopeChipTextActive: { color: Colors.white },
+  scopeSearch: { minHeight: 42, borderWidth: 1, borderColor: Colors.homeBorder, borderRadius: 12, paddingHorizontal: 12, color: Colors.black, backgroundColor: Colors.white }, detailButton: { minHeight: 44, alignItems: 'center', justifyContent: 'center' },
   container: { flex: 1, backgroundColor: Colors.homeCanvas },
   periodControls: { gap: 2 },
   summaryReason: { fontSize: 13, color: Colors.gray600, lineHeight: 20 },

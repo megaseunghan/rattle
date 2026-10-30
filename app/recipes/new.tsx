@@ -1,6 +1,7 @@
+import { entityKey } from '../../lib/utils/listKeys';
 import { SheetModal } from '../../lib/components/ui/SheetModal';
 import { getErrorMessage } from '../../lib/utils/error';
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback, memo } from 'react';
 import {
   View,
   Text,
@@ -38,6 +39,24 @@ interface RecipeIngredientForm {
 function itemsKey(items: RecipeIngredientForm[]): string {
   return JSON.stringify(items.map(i => ({ id: i.ingredient.id, quantity: i.quantity, unit: i.unit })));
 }
+
+const IngredientPickerRow = memo(function IngredientPickerRow({ item, already, onSelect }: {
+  item: Ingredient; already: boolean; onSelect: (item: Ingredient) => void;
+}) {
+  const handlePress = useCallback(() => onSelect(item), [onSelect, item]);
+  return (
+      <TouchableOpacity
+        style={[styles.pickerRow, already && styles.pickerRowAdded]}
+        onPress={handlePress}
+        disabled={already}
+      >
+        <Text style={[styles.pickerName, already && styles.pickerNameAdded]}>
+          {item.name}
+        </Text>
+        <Text style={styles.pickerUnit}>{item.unit}</Text>
+      </TouchableOpacity>
+  );
+});
 
 export default function NewRecipeScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
@@ -191,7 +210,7 @@ export default function NewRecipeScreen() {
     }
   }
 
-  function addIngredient(ingredient: Ingredient) {
+  const addIngredient = useCallback((ingredient: Ingredient) => {
     const alreadyAdded = items.some(i => i.ingredient.id === ingredient.id);
     if (!alreadyAdded) {
       setItems(prev => [...prev, { ingredient, quantity: '1', unit: ingredient.unit }]);
@@ -203,7 +222,7 @@ export default function NewRecipeScreen() {
       setVolInput('');
       setVolUnit('g');
     }
-  }
+  }, [items]);
 
   function removeItem(ingredientId: string) {
     setItems(prev => prev.filter(i => i.ingredient.id !== ingredientId));
@@ -258,6 +277,12 @@ export default function NewRecipeScreen() {
       setSubmitting(false);
     }
   }
+
+  const pickerExtraData = items;
+  const addedIngredientIds = useMemo(() => new Set(items.map(row => row.ingredient.id)), [items]);
+  const renderPickerItem = useCallback(({ item }: { item: Ingredient }) => (
+    <IngredientPickerRow item={item} already={addedIngredientIds.has(item.id)} onSelect={addIngredient} />
+  ), [addedIngredientIds, addIngredient]);
 
   if (loading) {
     return (
@@ -490,23 +515,13 @@ export default function NewRecipeScreen() {
               </View>
             ) : (
               <FlatList
+                initialNumToRender={5}
+                maxToRenderPerBatch={10}
+                windowSize={5}
                 data={ingredients}
-                keyExtractor={i => i.id}
-                renderItem={({ item }) => {
-                  const already = items.some(o => o.ingredient.id === item.id);
-                  return (
-                    <TouchableOpacity
-                      style={[styles.pickerRow, already && styles.pickerRowAdded]}
-                      onPress={() => addIngredient(item)}
-                      disabled={already}
-                    >
-                      <Text style={[styles.pickerName, already && styles.pickerNameAdded]}>
-                        {item.name}
-                      </Text>
-                      <Text style={styles.pickerUnit}>{item.unit}</Text>
-                    </TouchableOpacity>
-                  );
-                }}
+                keyExtractor={entityKey}
+                extraData={pickerExtraData}
+                renderItem={renderPickerItem}
               />
             )}
           </Pressable>

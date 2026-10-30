@@ -12,7 +12,7 @@ import {
 
 export type DashboardPeriod = 'month' | 'year';
 
-export function useAdminDashboard(sharedMonth?: string, onMonthChange?: (month: string) => void) {
+export function useAdminDashboard(sharedMonth?: string, onMonthChange?: (month: string) => void, focusedStoreId?: string | null) {
   const { user, stores, memberRoles } = useAuth();
   // 실제 owner_id 기준 오너 매장 + admin 역할로 참여 중인 매장까지 포함 (다매장 최고관리자 시나리오)
   const ownedStores = useMemo(() => stores.filter(s => s.owner_id === user?.id || memberRoles[s.id] === 'admin'), [stores, user?.id, memberRoles]);
@@ -33,6 +33,8 @@ export function useAdminDashboard(sharedMonth?: string, onMonthChange?: (month: 
   const isCurrentMonth = anchorYear === now.getFullYear() && anchorMonth === now.getMonth() + 1;
   const identity = useQueryScope();
   const storeScope = ownedStores.map(s => `${s.id}:${s.closing_time}`).sort().join(',');
+  const trendStores = focusedStoreId && ownedStores.some(store => store.id === focusedStoreId) ? ownedStores.filter(store => store.id === focusedStoreId) : ownedStores;
+  const trendScope = trendStores.map(store => `${store.id}:${store.closing_time}`).sort().join(',');
   const summaryMeta = { storeIds: ownedStores.map(s => s.id) };
   const enabled = !!user && ownedStores.length > 0;
   const pnlQuery = useQuery({
@@ -41,23 +43,24 @@ export function useAdminDashboard(sharedMonth?: string, onMonthChange?: (month: 
     meta: summaryMeta, enabled,
   }, queryClient);
   const trendQuery = useQuery({
-    queryKey: ['rattle', identity, 'integrated', 'financial', storeScope, period, yearMonth, 'trend'],
-    queryFn: () => period === 'month' ? getMultiStoreMonthlyTrend(ownedStores, yearMonth, 6, identity) : getMultiStoreYearlyTrend(ownedStores, anchorYear, 6, identity),
+    queryKey: ['rattle', identity, 'integrated', 'financial', trendScope, period, yearMonth, 'trend'],
+    queryFn: () => period === 'month' ? getMultiStoreMonthlyTrend(trendStores, yearMonth, 6, identity) : getMultiStoreYearlyTrend(trendStores, anchorYear, 6, identity),
     meta: summaryMeta, enabled,
   }, queryClient);
   const today = `${now.getFullYear()}-${now.getMonth() + 1}-${now.getDate()}`;
-  const cleaningQueries = useQueries({ queries: ownedStores.map(store => ({
+  const operationsStores = focusedStoreId === undefined ? ownedStores : ownedStores.filter(store => store.id === focusedStoreId);
+  const cleaningQueries = useQueries({ queries: operationsStores.map(store => ({
     queryKey: queryKeys.store(identity, store.id, 'cleaning', today),
     queryFn: () => getWeeklyCleaningProgress(store.id), enabled,
   })) }, queryClient);
-  const scheduleQueries = useQueries({ queries: ownedStores.map(store => ({
+  const scheduleQueries = useQueries({ queries: operationsStores.map(store => ({
     queryKey: queryKeys.store(identity, store.id, 'schedule', today),
     queryFn: () => getWeeklyScheduleBreakdown(store.id), enabled,
   })) }, queryClient);
   const weeklyCleaning: Record<string, { days: WeeklyCleaningDay[]; pct: number }> = {};
   const weeklySchedule: Record<string, WeeklyScheduleDay[]> = {};
   const errors = { pnl: pnlQuery.isError, trend: trendQuery.isError, cleaning: {} as Record<string, boolean>, schedule: {} as Record<string, boolean> };
-  ownedStores.forEach((store, i) => {
+  operationsStores.forEach((store, i) => {
     if (cleaningQueries[i].data) weeklyCleaning[store.id] = cleaningQueries[i].data!;
     if (scheduleQueries[i].data) weeklySchedule[store.id] = scheduleQueries[i].data!;
     if (cleaningQueries[i].isError) errors.cleaning[store.id] = true;
@@ -70,10 +73,10 @@ export function useAdminDashboard(sharedMonth?: string, onMonthChange?: (month: 
     await queryClient.cancelQueries(filters);
     await queryClient.invalidateQueries({ ...filters, refetchType: 'none' });
     await Promise.all([
-      queryClient.refetchQueries({ queryKey: ['rattle', identity, 'integrated', 'financial', storeScope, period, yearMonth] }),
-      ...ownedStores.flatMap(store => ['cleaning', 'schedule'].map(domain => queryClient.refetchQueries({ queryKey: queryKeys.store(identity, store.id, domain, today) }))),
+      queryClient.refetchQueries({ queryKey: ['rattle', identity, 'integrated', 'financial'], type: 'active' }),
+      ...operationsStores.flatMap(store => ['cleaning', 'schedule'].map(domain => queryClient.refetchQueries({ queryKey: queryKeys.store(identity, store.id, domain, today) }))),
     ]);
-  }, [identity, storeScope, period, yearMonth, today]);
+  }, [identity, storeScope, focusedStoreId, period, yearMonth, today]);
 
   function goPrev() {
     if (period === 'year') { setAnchor(anchorYear - 1, anchorMonth); return; }

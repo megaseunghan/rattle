@@ -1,5 +1,6 @@
+import { entityKey } from '../../lib/utils/listKeys';
 import { GlassBackdrop } from '../../lib/components/GlassBackdrop';
-import { useState, useEffect, useContext } from 'react';
+import { memo, useState, useEffect, useContext, useCallback, useMemo } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
   ScrollView, ActivityIndicator, RefreshControl,
@@ -14,6 +15,7 @@ import { useRecipes } from '../../lib/hooks/useRecipes';
 import { useCategories } from '../../lib/hooks/useCategories';
 import { Ingredient } from '../../types';
 import { formatStock } from '../../lib/utils/unit';
+import type { RecipeWithIngredients } from '../../lib/services/recipes';
 import { RecipeCard } from '../../lib/components/RecipeCard';
 import { CategoryManageButton } from '../../lib/components/CategoryManageButton';
 import { CategoryManageModal } from '../../lib/components/CategoryManageModal';
@@ -21,10 +23,12 @@ import { animateListChange } from '../../lib/utils/layoutAnimation';
 import { EmptyState } from '../../lib/components/ui';
 import { TabPagerContext } from '../../lib/contexts/TabPagerContext';
 
+const renderIngredient = ({ item }: { item: Ingredient }) => <IngredientRow item={item} />;
+
 type ContentTab = '재고현황' | '레시피';
 
 // ─── 재고 행 (프로그레스 바 포함) ───────────────────────────────
-function IngredientRow({ item }: { item: Ingredient }) {
+const IngredientRow = memo(function IngredientRow({ item }: { item: Ingredient }) {
   const ratio = item.min_stock > 0 ? item.current_stock / item.min_stock : 1;
   const capped = Math.min(ratio, 1);
   const isDanger = item.current_stock <= 0 || (item.min_stock > 0 && ratio <= 0.2);
@@ -62,7 +66,7 @@ function IngredientRow({ item }: { item: Ingredient }) {
       </View>
     </TouchableOpacity>
   );
-}
+});
 
 // ─── 메인 스크린 ──────────────────────────────────────────────
 export function StockScreen({ active = true }: { active?: boolean }) {
@@ -123,13 +127,22 @@ export function StockScreen({ active = true }: { active?: boolean }) {
   }
 
   const categories = ['전체', ...Array.from(new Set([...ingredientCategoriesBase.categories, ...ingredients.map(i => i.category), ...(activeCategory === '전체' ? [] : [activeCategory])])).sort()];
-  const filtered = (activeCategory === '전체' ? ingredients : ingredients.filter(i => i.category === activeCategory))
+  const filtered = useMemo(() => (activeCategory === '전체' ? ingredients : ingredients.filter(i => i.category === activeCategory))
     .slice()
     .sort((a, b) => {
       const aLow = a.current_stock <= a.min_stock ? 0 : 1;
       const bLow = b.current_stock <= b.min_stock ? 0 : 1;
       return aLow - bLow || a.name.localeCompare(b.name);
-    });
+    }), [ingredients, activeCategory]);
+
+  const handleDeleteRecipe = useCallback((id: string) => {
+    animateListChange();
+    void removeRecipe(id);
+  }, [removeRecipe]);
+
+  const renderRecipe = useCallback(({ item }: { item: RecipeWithIngredients }) => (
+    <RecipeCard recipe={item} onDelete={handleDeleteRecipe} isAdmin={canManageRecipes} />
+  ), [handleDeleteRecipe, canManageRecipes]);
 
   const lowStockCount = ingredients.filter(i => i.current_stock <= i.min_stock).length;
   const normalRatio = ingredients.length > 0
@@ -222,11 +235,14 @@ export function StockScreen({ active = true }: { active?: boolean }) {
         </View>
       ) : activeTab === '재고현황' ? (
         <FlatList
+          initialNumToRender={5}
+          maxToRenderPerBatch={10}
+          windowSize={5}
           data={filtered}
-          keyExtractor={item => item.id}
+          keyExtractor={entityKey}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
-          renderItem={({ item }) => <IngredientRow item={item} />}
+          renderItem={renderIngredient}
           onEndReached={hasMore ? loadMore : undefined}
           onEndReachedThreshold={0.5}
           ListEmptyComponent={
@@ -243,11 +259,15 @@ export function StockScreen({ active = true }: { active?: boolean }) {
         />
       ) : (
         <FlatList
+          initialNumToRender={5}
+          maxToRenderPerBatch={10}
+          windowSize={5}
           data={recipes}
-          keyExtractor={item => item.id}
+          keyExtractor={entityKey}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
-          renderItem={({ item }) => <RecipeCard recipe={item} onDelete={id => { animateListChange(); removeRecipe(id); }} isAdmin={canManageRecipes} />}
+          extraData={canManageRecipes}
+          renderItem={renderRecipe}
           ListEmptyComponent={
             <EmptyState
               icon="restaurant-outline"

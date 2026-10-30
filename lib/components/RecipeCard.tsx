@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { memo, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -10,7 +10,7 @@ import { recipeLineCost } from '../utils/unit';
  * 레시피 카드 — 재고의 last_price 기준으로 원가·마진율을 실시간 계산해 표시.
  * 재고 허브(레시피 세그먼트)와 레시피 단독 화면에서 공용으로 사용.
  */
-export function RecipeCard({
+export const RecipeCard = memo(function RecipeCard({
   recipe,
   onDelete,
   isAdmin = true,
@@ -94,7 +94,7 @@ export function RecipeCard({
       </View>}
     </TouchableOpacity>
   );
-}
+});
 
 const styles = StyleSheet.create({
   recipeCard: {

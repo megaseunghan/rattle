@@ -1,4 +1,6 @@
 import { StoreAppBar } from '../../lib/components/StoreAppBar';
+import Constants from 'expo-constants';
+import { isQaLoginEnabled } from '../../lib/services/qaLogin';
 import { useNotifications } from '../../lib/hooks/useNotifications';
 /* Hallmark · genre: modern-minimal · macrostructure: Workbench · design-system: DESIGN.md · designed-as-app */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -122,9 +124,9 @@ export default function TabsLayout() {
   const insets = useSafeAreaInsets();
   const [tabBarHeight, setTabBarHeight] = useState(66 + Math.max(insets.bottom, 8));
   const isOwnerAdminSelf = realRole === 'admin' && devPreviewMode === 'self';
-  const [homeMode, setHomeModeState] = useState<HomeMode>('store');
+  const [homeMode, setHomeModeState] = useState<HomeMode>(() => isQaLoginEnabled() && Constants.platform?.ios?.buildNumber === '900001' ? 'dashboard' : 'store');
   const effectiveHomeMode: HomeMode = isOwnerAdminSelf ? homeMode : 'store';
-  function setHomeMode(mode: HomeMode) { requestedPage.current = null; setHomeModeState(mode); if (mode === 'dashboard') { setActiveIndex(0); pagerRef.current?.setPageWithoutAnimation(0); } }
+  const setHomeMode = useCallback((mode: HomeMode) => { requestedPage.current = null; setHomeModeState(mode); if (mode === 'dashboard') { setActiveIndex(0); pagerRef.current?.setPageWithoutAnimation(0); } }, []);
 
   // 스와이프 가능한 탭 순서 — 더보기는 이제 페이지가 아니라 드로어라 여기 없음
   const tabs: TabName[] = useMemo(
@@ -132,6 +134,7 @@ export default function TabsLayout() {
     [isPartTime, canReadFinancials]
   );
 
+  const tabRouter = useRouter();
   const pagerRef = useRef<PagerView>(null);
   const requestedPage = useRef<number | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -157,10 +160,10 @@ export default function TabsLayout() {
     const date = new Date();
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
   });
-  function openStorePicker(targetTab?: TabName) {
+  const openStorePicker = useCallback((targetTab?: TabName) => {
     setPendingTab(targetTab); setPendingRoute(undefined); setPendingEmployee(false); setSwitchError(null); setPickerVisible(true);
-  }
-  async function selectStoreScope(storeId: string, targetTab?: TabName) {
+  }, []);
+  const selectStoreScope = useCallback(async (storeId: string, targetTab?: TabName) => {
     if (switching) return;
     setSwitching(true); setSwitchError(null);
     try {
@@ -181,7 +184,7 @@ export default function TabsLayout() {
       setSwitchError('매장을 바꾸지 못했어요. 다시 선택해 주세요.');
       throw error;
     } finally { setSwitching(false); }
-  }
+  }, [switching, switchStore, effectiveHomeMode, setHomeMode, pendingTab, tabs, pendingRoute, pendingEmployee, currentRole, tabRouter]);
   function openQuickRoute(route: string) {
     if (effectiveHomeMode === 'dashboard') {
       openStorePicker(); setPendingRoute(route);
@@ -198,7 +201,6 @@ export default function TabsLayout() {
   }
 
   const routeParams = useLocalSearchParams<{ targetTab?: string; homeScope?: string; month?: string }>();
-  const tabRouter = useRouter();
   useEffect(() => {
     if (!routeParams.targetTab) return;
     if (routeParams.month && /^\d{4}-(0[1-9]|1[0-2])$/.test(routeParams.month)) setSelectedMonth(routeParams.month);
@@ -224,7 +226,7 @@ export default function TabsLayout() {
     }
   }, [tabs.length, activeIndex]);
 
-  function goToTab(tab: TabName) {
+  const goToTab = useCallback((tab: TabName) => {
     if (tab === 'more') { setMoreOpen(true); return; }
     if (tab !== 'home' && effectiveHomeMode === 'dashboard') { openStorePicker(tab); return; }
     setReturnScope('store');
@@ -236,7 +238,7 @@ export default function TabsLayout() {
     setVisited(previous => previous.has(idx) ? previous : new Set(previous).add(idx));
     setQuickAddVisible(false);
     pagerRef.current?.setPageWithoutAnimation(idx);
-  }
+  }, [effectiveHomeMode, openStorePicker, tabs, activeIndex]);
 
   function handlePageSelected(idx: number) {
     if (requestedPage.current !== null) {
@@ -249,10 +251,12 @@ export default function TabsLayout() {
   }
 
   const activeTab = tabs[activeIndex] ?? 'home';
+  const consumeEmployeeRegistration = useCallback(() => setEmployeeRegistration(undefined), []);
+  const pagerValue = useMemo(() => ({ activeTab, goToTab, homeMode: effectiveHomeMode, setHomeMode, openStorePicker, selectStoreScope, selectedMonth, setSelectedMonth, returnScope, viewState, setViewState, employeeRegistration, consumeEmployeeRegistration }), [activeTab, goToTab, effectiveHomeMode, setHomeMode, openStorePicker, selectStoreScope, selectedMonth, returnScope, viewState, setViewState, employeeRegistration, consumeEmployeeRegistration]);
   const costShelf = activeTab === 'purchases' && viewState['purchase.section'] === '비용';
 
   return (
-    <TabPagerContext.Provider value={{ activeTab, goToTab, homeMode: effectiveHomeMode, setHomeMode, openStorePicker, selectStoreScope, selectedMonth, setSelectedMonth, returnScope, viewState, setViewState, employeeRegistration, consumeEmployeeRegistration: () => setEmployeeRegistration(undefined) }}>
+    <TabPagerContext.Provider value={pagerValue}>
       <View style={styles.flex} onLayout={event => setContainerHeight(event.nativeEvent.layout.height)}>
         <GlassBackdrop />
         <PagerView

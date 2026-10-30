@@ -1,7 +1,7 @@
 import { SheetModal } from './ui/SheetModal';
 /* Hallmark · genre: modern-minimal · macrostructure: Workbench · design-system: DESIGN.md · designed-as-app */
 import { NumericText } from './ui/NumericText';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   Modal, Alert, KeyboardAvoidingView, Platform,
@@ -70,7 +70,16 @@ export function ExpensesPanel({ selectedMonth, onMonthChange }: { selectedMonth?
     try { await refetch(); } finally { setRefreshing(false); }
   }
 
-  const totalAmount = expenses.reduce((s, e) => s + e.amount, 0);
+  const totalAmount = useMemo(() => expenses.reduce((s, e) => s + e.amount, 0), [expenses]);
+  const categoryItems = useMemo(() => {
+    const grouped = new Map<ExpenseCategory, Expense[]>();
+    for (const item of expenses) {
+      const rows = grouped.get(item.category) ?? [];
+      rows.push(item);
+      grouped.set(item.category, rows);
+    }
+    return grouped;
+  }, [expenses]);
 
   function prevMonth() {
     if (onMonthChange) { onMonthChange(toYearMonth(month === 1 ? year - 1 : year, month === 1 ? 12 : month - 1)); return; }
@@ -157,7 +166,7 @@ export function ExpensesPanel({ selectedMonth, onMonthChange }: { selectedMonth?
         <LedgerFilters label="비용 카테고리" options={['전체', ...CATEGORIES.map(cat => cat.key)]} selected={categoryFilter} onSelect={setCategoryFilter} />
 
         {CATEGORIES.filter(cat => categoryFilter === '전체' || cat.key === categoryFilter).map(cat => {
-          const catItems = expenses.filter(e => e.category === cat.key);
+          const catItems = categoryItems.get(cat.key) ?? [];
           const carriedItems = cat.key === '고정비' ? carriedFixedExpenses : [];
           const catTotal = catItems.length > 0
             ? catItems.reduce((s, e) => s + e.amount, 0)

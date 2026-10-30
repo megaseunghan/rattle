@@ -1,13 +1,15 @@
-import { fireEvent, render, waitFor } from '@testing-library/react-native';
+import { FlatList } from 'react-native';
+import { fireEvent, render, waitFor, within } from '@testing-library/react-native';
 import NewPurchaseScreen from '../../app/purchases/new';
 import { PurchaseWriteError } from '../../lib/services/purchases';
 const mockWrite = jest.fn();
 const mockIngredient = { id: 'rice', name: '쌀', category: '식자재', unit: 'kg', last_price: 0 };
+const mockIngredients = [mockIngredient];
 jest.mock('expo-router', () => ({ router: { back: jest.fn(), push: jest.fn() }, useLocalSearchParams: () => ({ date: '2026-10-01' }) }));
 jest.mock('@react-native-community/datetimepicker', () => 'DateTimePicker');
 jest.mock('../../lib/contexts/AuthContext', () => ({ useAuth: () => ({ store: { id: 'store', name: '검증 매장' }, currentRole: 'admin' }) }));
 jest.mock('../../lib/hooks/usePurchases', () => ({ usePurchases: () => ({ purchases: [], addWithItems: mockWrite, refetch: jest.fn() }) }));
-jest.mock('../../lib/hooks/useIngredients', () => ({ useIngredients: () => ({ data: [mockIngredient], create: jest.fn(), refetch: jest.fn(), loading: false }) }));
+jest.mock('../../lib/hooks/useIngredients', () => ({ useIngredients: () => ({ data: mockIngredients, create: jest.fn(), refetch: jest.fn(), loading: false }) }));
 jest.mock('../../lib/hooks/usePurchaseTypes', () => ({ usePurchaseTypes: () => ({ types: ['수기'], loading: false }) }));
 jest.mock('../../lib/hooks/useCategories', () => ({ useCategories: () => ({ categories: ['식자재'] }) }));
 jest.mock('../../lib/hooks/useConfirmLeave', () => ({ useConfirmLeave: () => jest.fn() }));
@@ -87,4 +89,20 @@ it('저장 후 재조회 실패는 등록 완료로 구분해 중복 등록하�
   await waitFor(() => expect(screen.getByText('등록은 완료됐어요. 목록에서 합계를 다시 불러와 주세요.')).toBeTruthy());
   expect(screen.queryByLabelText('매입 최종 등록')).toBeNull();
   expect(mockWrite).toHaveBeenCalledTimes(1);
+});
+
+it('같은 품목 data에서 선택·선택 취소와 추가 후 비활성을 반영한다', () => {
+  const screen = render(<NewPurchaseScreen />);
+  fireEvent.changeText(screen.getByLabelText('거래처명'), '검증 거래처');
+  fireEvent.press(screen.getByText('품목 입력으로'));
+  fireEvent.press(screen.getByText('+ 추가'));
+  fireEvent.press(screen.getByText('쌀'));
+  expect(screen.getByText('1개 추가')).toBeTruthy();
+  fireEvent.press(screen.getByText('쌀'));
+  expect(screen.queryByText('1개 추가')).toBeNull();
+  fireEvent.press(screen.getByText('쌀'));
+  fireEvent.press(screen.getByText('1개 추가'));
+  fireEvent.press(screen.getByText('+ 추가'));
+  fireEvent.press(within(screen.UNSAFE_getByType(FlatList)).getByText('쌀'));
+  expect(screen.queryByText('1개 추가')).toBeNull();
 });

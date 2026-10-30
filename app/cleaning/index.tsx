@@ -1,5 +1,5 @@
 import { GlassBackdrop } from '../../lib/components/GlassBackdrop';
-import { useCallback, useState } from 'react';
+import { useCallback, useState, useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
@@ -36,12 +36,12 @@ export default function CleaningScreen() {
   const myName = resolveSelfEmployee(employees, user?.id, devPreviewEmployeeId)?.name ?? user?.email ?? '나';
   const todayWeekday = new Date().getDay();
 
-  const segmentItems = items
+  const segmentItems = useMemo(() => items
     .filter(i => i.segment === segment)
     .filter(i => segment !== 'weekday' || i.weekday === todayWeekday)
-    .sort((a, b) => a.sort_order - b.sort_order);
+    .sort((a, b) => a.sort_order - b.sort_order), [items, segment, todayWeekday]);
 
-  const logByItem = new Map(logs.map(l => [l.item_id, l]));
+  const logByItem = useMemo(() => new Map(logs.map(l => [l.item_id, l])), [logs]);
 
   return (
     <SafeAreaView style={styles.container}><GlassBackdrop />

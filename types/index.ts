@@ -426,6 +426,7 @@ export interface ProfitLoss {
   revenue: number;
   // 2. 매입 (카테고리별)
   purchaseByCategory: Partial<Record<PurchaseCategory, number>>;
+  purchaseBySupplier?: Record<string, number>;
   purchaseCost: number;
   grossProfit: number;
   // 3. 인건비

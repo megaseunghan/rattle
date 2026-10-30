@@ -49,9 +49,9 @@ function RootNavigator() {
       // 로그인 화면이 아니면 로그인으로 (select-store에서 로그아웃 시 빈 화면 방지)
       if (!onLoginFlow) router.replace('/(auth)/login');
     } else if (!store) {
-      if (!segments.includes('select-store')) router.replace('/(auth)/select-store');
+      if (!segments.includes('select-store') && !segments.includes('join-store')) router.replace('/(auth)/select-store');
     } else {
-      if (inAuth && !segments.includes('select-store')) router.replace('/(tabs)');
+      if (inAuth && !segments.includes('select-store') && !segments.includes('join-store')) router.replace('/(tabs)');
     }
   }, [loading, user, store]);
 
@@ -71,17 +71,19 @@ function RootNavigator() {
 
   // 브라우저 OAuth 콜백 딥링크 처리 (카카오·Google)
   useEffect(() => {
+    let active = true;
     const handleUrl = async ({ url }: { url: string }) => {
+      if (!active) return;
       try {
         await completeAuthCallback(url, Linking.createURL('/'));
       } catch {
-        Alert.alert('로그인 오류', '인증을 완료하지 못했습니다. 다시 로그인해주세요.');
+        if (active) Alert.alert('로그인 오류', '인증을 완료하지 못했습니다. 다시 로그인해주세요.');
       }
     };
 
     const subscription = Linking.addEventListener('url', handleUrl);
     Linking.getInitialURL().then(url => { if (url) void handleUrl({ url }); }).catch(() => {});
-    return () => subscription.remove();
+    return () => { active = false; subscription.remove(); };
   }, []);
 
   if (!loading && user && store && ((!canReadFinancials && isFinancialRoute(pathname)) ||
@@ -92,6 +94,7 @@ function RootNavigator() {
     <Stack
       screenOptions={{
         headerShown: false,
+        freezeOnBlur: true,
         contentStyle: { backgroundColor: Colors.white },
       }}
     >

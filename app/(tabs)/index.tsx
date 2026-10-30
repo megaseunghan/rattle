@@ -1,3 +1,4 @@
+import { scheduleIdleTask } from '../../lib/utils/scheduleIdleTask';
 import { StoreAppBar } from '../../lib/components/StoreAppBar';
 /* Hallmark · genre: modern-minimal · macrostructure: Workbench · design-system: DESIGN.md · designed-as-app */
 import { useEffect, useState } from 'react';
@@ -280,7 +281,7 @@ export function HomeScreen({ active = true }: { active?: boolean }) {
 
   useEffect(() => {
     if (!active) return;
-    loadAll();
+    return scheduleIdleTask(() => { void loadAll(); });
   }, [active, refetch, refetchEmp, refetchNotifications, loadTodaySales, fetchTrend, currentRole]);
 
   useEffect(() => {

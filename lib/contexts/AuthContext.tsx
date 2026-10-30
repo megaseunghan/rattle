@@ -193,8 +193,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       : financialAccess[store.id] === true));
 
   useEffect(() => {
+    let deferredLoad: ReturnType<typeof setTimeout> | null = null;
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
+        if (deferredLoad !== null) clearTimeout(deferredLoad);
         const eventRequestId = ++authRequestId.current;
         storeRequestId.current += 1;
         setLoading(true);
@@ -205,7 +207,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setUser(user);
           // onAuthStateChange 콜백 안에서 Supabase 쿼리를 직접 호출하면
           // 내부 잠금으로 인해 데드락이 발생하므로 setTimeout으로 defer
-          setTimeout(async () => {
+          deferredLoad = setTimeout(async () => {
+            deferredLoad = null;
             if (eventRequestId !== authRequestId.current) return;
             try {
               await loadStores(user.id);
@@ -232,6 +235,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       storeRequestId.current += 1;
       authRequestId.current += 1;
+      if (deferredLoad !== null) clearTimeout(deferredLoad);
       subscription.unsubscribe();
     };
   }, []);

@@ -1,3 +1,4 @@
+import { entityKey } from '../../lib/utils/listKeys';
 import { GlassBackdrop } from '../../lib/components/GlassBackdrop';
 import { SheetModal } from '../../lib/components/ui/SheetModal';
 import { getErrorMessage } from '../../lib/utils/error';
@@ -156,17 +157,16 @@ export default function RecipesScreen() {
   const displayed = useMemo(() => {
     return data
       .filter(r => activeCategory === '전체' || r.category === activeCategory)
-      .map(r => {
-        const cost = r.cost;
-        const marginRate = r.margin_rate;
-        return { ...r, calculatedCost: cost, calculatedMarginRate: marginRate };
-      })
       .sort((a, b) => {
-        if (sortBy === 'margin_desc') return b.calculatedMarginRate - a.calculatedMarginRate;
-        if (sortBy === 'cost_asc') return a.calculatedCost - b.calculatedCost;
+        if (sortBy === 'margin_desc') return b.margin_rate - a.margin_rate;
+        if (sortBy === 'cost_asc') return a.cost - b.cost;
         return a.name.localeCompare(b.name);
       });
   }, [data, activeCategory, sortBy]);
+
+  const renderRecipe = useCallback(({ item }: { item: RecipeWithIngredients }) => (
+    <RecipeCard recipe={item} onDelete={remove} isAdmin={canManageRecipes} />
+  ), [remove, canManageRecipes]);
 
   if (loading) return <LoadingSpinner />;
   if (error) return <ErrorMessage message={error} onRetry={refetch} />;
@@ -356,11 +356,15 @@ export default function RecipesScreen() {
           </SheetModal>
 
           <FlatList
+            initialNumToRender={5}
+            maxToRenderPerBatch={10}
+            windowSize={5}
             data={displayed}
-            keyExtractor={item => item.id}
+            keyExtractor={entityKey}
             contentContainerStyle={styles.listContent}
             showsVerticalScrollIndicator={false}
-            renderItem={({ item }) => <RecipeCard recipe={item} onDelete={remove} isAdmin={canManageRecipes} />}
+            extraData={canManageRecipes}
+            renderItem={renderRecipe}
             onEndReached={hasMore ? loadMore : undefined}
             onEndReachedThreshold={0.5}
             ListFooterComponent={loadingMore ? <ActivityIndicator style={{ padding: 16 }} color={Colors.primary} /> : null}

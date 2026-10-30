@@ -1,7 +1,7 @@
 /* Hallmark · genre: modern-minimal · macrostructure: Workbench · design-system: DESIGN.md · designed-as-app */
 import { NumericText } from '../../lib/components/ui/NumericText';
 import { getErrorMessage } from '../../lib/utils/error';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   Alert, ActivityIndicator, RefreshControl,
@@ -99,16 +99,19 @@ function PurchasesView({ active }: { active: boolean }) {
       setActiveTab('전체'); setFilterNotice(true);
     }
   }, [loaded, loading, error, purchaseTabs.join('|'), activeTab]);
-  const days = getCalendarDays(year, month);
+  const days = useMemo(() => getCalendarDays(year, month), [year, month]);
   const availableCategories = [...new Set([...categoryOptions, ...purchases.map(p => p.category)])];
   useEffect(() => { if (!category.loading && !category.error && loaded && !loading && !error && !availableCategories.includes(activeCategory)) setActiveCategory('전체'); }, [category.loading, category.error, loaded, loading, error, availableCategories.join('|'), activeCategory]);
-  const filtered = purchases.filter(p => (activeTab === '전체' || p.supplier === activeTab) && (activeCategory === '전체' || p.category === activeCategory));
-  const purchaseByDay = new Map<string, typeof filtered>();
-  filtered.forEach(p => {
-    const list = purchaseByDay.get(p.date) ?? [];
-    list.push(p);
-    purchaseByDay.set(p.date, list);
-  });
+  const filtered = useMemo(() => purchases.filter(p => (activeTab === '전체' || p.supplier === activeTab) && (activeCategory === '전체' || p.category === activeCategory)), [purchases, activeTab, activeCategory]);
+  const purchaseByDay = useMemo(() => {
+    const grouped = new Map<string, typeof filtered>();
+    filtered.forEach(p => {
+      const list = grouped.get(p.date) ?? [];
+      list.push(p);
+      grouped.set(p.date, list);
+    });
+    return grouped;
+  }, [filtered]);
   const selectedKey = selectedDay ? toDateKey(year, month, selectedDay) : null;
   const selectedPurchases = selectedKey ? (purchaseByDay.get(selectedKey) ?? []) : filtered;
   const monthTotal = filtered.reduce((s, p) => s + p.amount, 0);

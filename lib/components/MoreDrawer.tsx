@@ -1,7 +1,9 @@
+import Animated, { cancelAnimation, ReduceMotion, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import { scheduleOnRN } from 'react-native-worklets';
 import { useEffect, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert,
-  Animated, Pressable, Dimensions,
+  Pressable, Dimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -54,24 +56,24 @@ export function MoreDrawer({ visible, onClose }: { visible: boolean; onClose: ()
   const { stores, store: currentStore, switchStore, currentRole, user, signOut } = useAuth();
   const [switching, setSwitching] = useState<string | null>(null);
   const [mounted, setMounted] = useState(visible);
-  const translateX = useRef(new Animated.Value(-DRAWER_WIDTH)).current;
-  const backdropOpacity = useRef(new Animated.Value(0)).current;
-
+  const translateX = useSharedValue(-DRAWER_WIDTH);
+  const backdropOpacity = useSharedValue(0);
+  const generation = useRef(0);
+  const visibleRef = useRef(visible);
+  visibleRef.current = visible;
+  const finishClose = (version: number) => { if (!visibleRef.current && version === generation.current) setMounted(false); };
+  const drawerMotion = useAnimatedStyle(() => ({ transform: [{ translateX: translateX.value }] }));
+  const backdropMotion = useAnimatedStyle(() => ({ opacity: backdropOpacity.value }));
   useEffect(() => {
-    if (visible) {
-      setMounted(true);
-      Animated.parallel([
-        Animated.timing(translateX, { toValue: 0, duration: 220, useNativeDriver: true }),
-        Animated.timing(backdropOpacity, { toValue: 1, duration: 220, useNativeDriver: true }),
-      ]).start();
-    } else if (mounted) {
-      Animated.parallel([
-        Animated.timing(translateX, { toValue: -DRAWER_WIDTH, duration: 200, useNativeDriver: true }),
-        Animated.timing(backdropOpacity, { toValue: 0, duration: 200, useNativeDriver: true }),
-      ]).start(() => setMounted(false));
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible]);
+    const version = ++generation.current;
+    if (visible) setMounted(true);
+    const duration = visible ? 220 : 200;
+    backdropOpacity.value = withTiming(visible ? 1 : 0, { duration, reduceMotion: ReduceMotion.System });
+    translateX.value = withTiming(visible ? 0 : -DRAWER_WIDTH, { duration, reduceMotion: ReduceMotion.System }, finished => {
+      if (finished && !visible) scheduleOnRN(finishClose, version);
+    });
+    return () => { generation.current += 1; cancelAnimation(translateX); cancelAnimation(backdropOpacity); };
+  }, [visible, translateX, backdropOpacity]);
 
   if (!mounted) return null;
 
@@ -138,11 +140,11 @@ export function MoreDrawer({ visible, onClose }: { visible: boolean; onClose: ()
 
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
-      <Animated.View style={[StyleSheet.absoluteFill, styles.backdrop, { opacity: backdropOpacity }]}>
+      <Animated.View style={[StyleSheet.absoluteFill, styles.backdrop, backdropMotion]}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
       </Animated.View>
 
-      <Animated.View style={[styles.drawer, { width: DRAWER_WIDTH, paddingTop: insets.top + 12, paddingBottom: insets.bottom + 12, transform: [{ translateX }] }]}>
+      <Animated.View style={[styles.drawer, { width: DRAWER_WIDTH, paddingTop: insets.top + 12, paddingBottom: insets.bottom + 12 }, drawerMotion]}>
         <View style={styles.drawerHeader}>
           <Text style={styles.drawerTitle}>더보기</Text>
           <TouchableOpacity onPress={onClose} style={styles.closeButton} hitSlop={8} accessibilityRole="button" accessibilityLabel="더보기 닫기">

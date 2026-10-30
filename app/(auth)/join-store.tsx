@@ -7,7 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { submitJoinOnboarding } from '../../lib/services/storeMembers';
+import { getStoreInviteCode, submitJoinOnboarding } from '../../lib/services/storeMembers';
 import { useAuth } from '../../lib/contexts/AuthContext';
 import { Colors } from '../../constants/colors';
 import { Radius, Spacing, Type } from '../../constants/designTokens';
@@ -29,7 +29,6 @@ interface Question {
 const QUESTIONS: Record<JoinQuestion, Question> = {
   name: { title: '이름을 알려주세요', label: '이름', help: '매장 관리자가 알아볼 수 있는 본인 이름을 입력해주세요.', placeholder: '이름', maxLength: 100 },
   phone: { title: '연락받을 번호는 무엇인가요?', label: '휴대폰 번호', help: '직원 정보에 연결할 본인 휴대폰 번호예요.', placeholder: '010-0000-0000', keyboard: 'phone-pad', maxLength: 15 },
-  businessNumber: { title: '어느 매장에 합류하나요?', label: '사업자번호', help: '매장 관리자에게 받은 사업자등록번호 10자리를 입력해주세요.', placeholder: '1234567890', keyboard: 'number-pad', maxLength: 10 },
   employmentType: { title: '어떤 형태로 근무하나요?', label: '근무 형태', help: '선택한 근무 형태에 맞춰 급여 정보를 물어볼게요.' },
   hourlyWage: { title: '약속한 시급은 얼마인가요?', label: '시급', help: '세전 시급을 원 단위로 입력해주세요.', placeholder: '예: 13,000', keyboard: 'number-pad', maxLength: 12 },
   weeklyHours: { title: '일주일에 몇 시간 근무하나요?', label: '주 근무시간', help: '예정된 주 근무시간을 정수로 입력해주세요. 아직 정해지지 않았다면 관리자에게 확인해주세요.', placeholder: '예: 20', keyboard: 'number-pad', maxLength: 3 },
@@ -55,7 +54,10 @@ function money(value: string) {
 }
 
 export default function JoinStoreScreen() {
-  const [identity, setIdentity] = useState<JoinIdentity>({ name: '', phone: '', businessNumber: '' });
+  const [inviteInput, setInviteInput] = useState('');
+  const [inviteCode, setInviteCode] = useState<string | null>(null);
+  const [inviteStore, setInviteStore] = useState<string | null>(null);
+  const [identity, setIdentity] = useState<JoinIdentity>({ name: '', phone: '' });
   const [draft, setDraft] = useState<OnboardingDraft>({ employmentType: 'regular', hourlyWage: '', weeklyHours: '', baseSalary: '', nonTaxable: '0', joinedAt: '', bankName: '', accountNumber: '' });
   const [employment, setEmployment] = useState<EmploymentType | null>(null);
   const [step, setStep] = useState<JoinStep>('name');
@@ -66,6 +68,7 @@ export default function JoinStoreScreen() {
   const [loading, setLoading] = useState(false);
   const [completedStore, setCompletedStore] = useState<string | null>(null);
   const busy = useRef(false);
+  const inviteRequest = useRef(0);
   const mounted = useRef(true);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const { user } = useAuth();
@@ -77,6 +80,19 @@ export default function JoinStoreScreen() {
   const isDirty = !completedStore && (!!employment || Object.values(identity).some(Boolean) ||
     Object.entries(draft).some(([key, value]) => !['employmentType', 'nonTaxable'].includes(key) && !!value) || draft.nonTaxable !== '0');
   const bypassLeaveGuard = useConfirmLeave(isDirty, { message: '지금 나가면 입력한 답변이 저장되지 않아요.' });
+
+  async function checkInvite(value: string) {
+    const code = value.replace(/[ -]/g, '').toUpperCase();
+    if (!/^[0-9A-F]{16}$/.test(code)) { setError('16자리 참여코드를 확인해주세요.'); return; }
+    const request = ++inviteRequest.current;
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await getStoreInviteCode(code);
+      if (mounted.current && request === inviteRequest.current) { setInviteCode(code); setInviteStore(result.store_name); }
+    } catch (e) { if (mounted.current && request === inviteRequest.current) setError(getErrorMessage(e)); }
+    finally { if (mounted.current && request === inviteRequest.current) setLoading(false); }
+  }
 
   function go(target: JoinStep) {
     Keyboard.dismiss();
@@ -131,7 +147,8 @@ export default function JoinStoreScreen() {
       busy.current = true;
       setLoading(true);
       setError(null);
-      const result = await submitJoinOnboarding(identity.businessNumber.replace(/[^0-9]/g, ''), identity.name, identity.phone, profile);
+      if (!inviteCode) throw new Error('참여코드를 확인해주세요.');
+      const result = await submitJoinOnboarding(inviteCode, identity.name, identity.phone, profile);
       if (mounted.current && scope.current === userId) {
         Keyboard.dismiss();
         bypassLeaveGuard();
@@ -169,6 +186,17 @@ export default function JoinStoreScreen() {
     <View style={styles.footer}><Button label="확인" onPress={() => router.back()} /></View>
   </SafeAreaView>;
 
+  if (!inviteCode) return <SafeAreaView style={styles.container}>
+    <AppBar title="매장 참여" onBack={() => router.back()} />
+    <View style={styles.content}>
+      <Text accessibilityRole="header" style={styles.title}>초대받은 매장에 참여하기</Text>
+      <Text style={styles.description}>관리자에게 받은 참여코드를 입력해주세요. 신청 후 관리자가 확인하면 매장에 참여할 수 있어요.</Text>
+      <Field label="참여코드" accessibilityLabel="참여코드" value={inviteInput} onChangeText={value => setInviteInput(value.toUpperCase())} autoCorrect={false} autoCapitalize="characters" editable={!loading} placeholder="예: 1234-ABCD-5678-EF90" maxLength={19} />
+      {error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
+    </View>
+    <View style={styles.footer}><Button label="매장 확인" onPress={() => void checkInvite(inviteInput)} loading={loading} /></View>
+  </SafeAreaView>;
+
   const question = review ? null : QUESTIONS[step];
   const pickerDate = /^\d{4}-\d{2}-\d{2}$/.test(draft.joinedAt) ? new Date(`${draft.joinedAt}T12:00:00`) : new Date();
   return <SafeAreaView style={styles.container}>
@@ -181,8 +209,9 @@ export default function JoinStoreScreen() {
     </View>
     <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView key={step} style={styles.flex} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
+        <Text style={styles.inviteStore} accessibilityLabel={`신청 매장 ${inviteStore}`}>{inviteStore}에 참여 신청해요</Text>
         <Text accessibilityRole="header" style={styles.title}>{review ? '입력한 내용을 확인해주세요' : question?.title}</Text>
-        <Text style={styles.description}>{review ? '아직 인건비에는 반영되지 않아요. 관리자에게 제출하기 전에 틀린 항목이 없는지 확인해주세요.' : question?.help}</Text>
+        <Text style={styles.description}>{review ? `${inviteStore}에 신청해요. 아직 인건비에는 반영되지 않아요. 제출 전에 틀린 항목이 없는지 확인해주세요.` : question?.help}</Text>
         {review ? <View style={styles.reviewCard}>
           {steps.filter((id): id is JoinQuestion => id !== 'review').map(id => <Pressable
             key={id} onPress={() => edit(id)} disabled={loading} accessibilityRole="button" accessibilityLabel={`${QUESTIONS[id].label}, ${answer(id)}, 수정`}
@@ -243,6 +272,7 @@ const styles = StyleSheet.create({
   progress: { height: '100%', backgroundColor: Colors.primary },
   content: { padding: Spacing.screenX, paddingTop: 28, paddingBottom: 24, flexGrow: 1 },
   title: { fontSize: Type.xl, fontWeight: '700', color: Colors.black, lineHeight: 30 },
+  inviteStore: { fontSize: Type.sm, fontWeight: '600', color: Colors.primary, marginBottom: 12 },
   description: { fontSize: Type.base, color: Colors.gray500, lineHeight: 22, marginTop: 10, marginBottom: 28 },
   footer: { padding: Spacing.ctaPadding, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: Colors.gray100, backgroundColor: Colors.white },
   footerHelp: { fontSize: Type.sm, color: Colors.gray500, lineHeight: 20, marginBottom: 12 },

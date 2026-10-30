@@ -135,3 +135,18 @@ it('공유한 선택 월을 사용하고 연도 경계 이동을 같은 범위�
   act(() => result.current.goNext());
   expect(onMonthChange).toHaveBeenLastCalledWith('2026-01');
 });
+
+it('매장 칩 변경은 원본 전체 집계를 유지하고 추세 조회 범위만 선택한 매장으로 바꾼다', async () => {
+  const { result, rerender } = renderHook(({ selected }: { selected: string | null }) => useAdminDashboard('2026-10', undefined, selected), { initialProps: { selected: null as string | null } });
+  await waitFor(() => expect(result.current.trend).not.toBeNull());
+  rerender({ selected: 'b' });
+  await waitFor(() => expect(mockTrend.mock.lastCall[0].map((row: Store) => row.id)).toEqual(['b']));
+  expect(mockPnl.mock.lastCall[0].map((row: Store) => row.id)).toEqual(['a', 'b']);
+});
+
+it('전체 매장 범위에서는 청소와 스케줄을 조회하지 않는다', async () => {
+  const { result } = renderHook(() => useAdminDashboard('2026-10', undefined, null));
+  await waitFor(() => expect(result.current.pnl).not.toBeNull());
+  expect(mockCleaning).not.toHaveBeenCalled();
+  expect(mockSchedule).not.toHaveBeenCalled();
+});

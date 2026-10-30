@@ -84,8 +84,8 @@
     "source": "app/admin/index.tsx",
     "name": "전체매장 대시보드",
     "access": "realRole 관리자, 루트 currentRole 가드",
-    "input": "월/연도·매장·운영 펼침",
-    "behavior": "매장별 합산, 누락은 확인 필요; 매장 전환 후 상세",
+    "input": "월/연도·고정 매장 칩·개별 매장 운영 펼침",
+    "behavior": "범위별 합산·도넛/세부 카드·꺾은선 추세; 전체는 재무만, 개별은 요일 스케줄·청소; 누락 확인 필요; 매장 전환 후 상세",
     "effect": "조회; 홈 알림 읽음 가능",
     "family": "HOME"
   },

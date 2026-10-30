@@ -1,3 +1,4 @@
+jest.mock('../../lib/services/qaLogin', () => ({ isQaLoginEnabled: () => false }));
 jest.mock('../../lib/hooks/useNotifications', () => ({ useNotifications: () => ({ unreadCount: 0 }) }));
 import React from 'react';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
@@ -19,13 +20,15 @@ function renderTabs() {
 const mockSwitchStore = jest.fn();
 const mockPush = jest.fn();
 const mockSetParams = jest.fn();
+const mockRouter = { push: mockPush, setParams: mockSetParams };
+let mockPagerContext: unknown;
 const mockRefetch = jest.fn();
 const mockPager = { setPage: jest.fn(), setPageWithoutAnimation: jest.fn() };
 let mockRouteParams: Record<string, string | undefined> = {};
 const mockStores = [{ id: 'a', name: '가매장' }, { id: 'b', name: '나매장' }];
 jest.mock('../../lib/contexts/AuthContext', () => ({ useAuth: () => ({ user: { id: 'owner' }, store: mockStores[0], stores: mockStores, switchStore: mockSwitchStore, currentRole: 'admin', realRole: 'admin', canReadFinancials: true, devPreviewMode: 'self' }) }));
 jest.mock('../../lib/hooks/useEmployees', () => ({ useEmployees: () => ({ employees: [], refetch: mockRefetch }) }));
-jest.mock('expo-router', () => ({ useLocalSearchParams: () => mockRouteParams, useRouter: () => ({ push: mockPush, setParams: mockSetParams }) }));
+jest.mock('expo-router', () => ({ useLocalSearchParams: () => mockRouteParams, useRouter: () => mockRouter }));
 jest.mock('react-native-pager-view', () => {
   const React = require('react');
   const { View } = require('react-native');
@@ -39,7 +42,10 @@ jest.mock('../../lib/components/DraggableFab', () => ({ DraggableFab: ({ onPress
   return React.createElement(Pressable, { onPress, accessibilityLabel: '빠른 등록 열기', accessibilityRole: 'button' });
 } }));
 jest.mock('../../lib/components/MoreDrawer', () => ({ MoreDrawer: () => null }));
-jest.mock('../../app/(tabs)/index', () => ({ HomeScreen: () => null }));
+jest.mock('../../app/(tabs)/index', () => ({ HomeScreen: () => {
+  mockPagerContext = require('../../lib/contexts/TabPagerContext').useTabPager();
+  return null;
+} }));
 jest.mock('../../app/(tabs)/stock', () => ({ StockScreen: () => null }));
 jest.mock('../../app/(tabs)/purchases', () => ({ PurchasesScreen: () => null }));
 jest.mock('../../app/(tabs)/payroll', () => ({ PayrollScreen: () => {
@@ -176,4 +182,15 @@ it('재고 탭에서도 홈과 같은 상단바로 알림·마이페이지·매�
   expect(mockPush).toHaveBeenCalledWith('/mypage');
   fireEvent.press(view.getByLabelText('매장 전환'));
   expect(view.getByLabelText('매장 선택 닫기')).toBeTruthy();
+});
+
+
+it('빠른 등록을 열어도 업무 범위가 같으면 컨텍스트 참조를 유지한다', () => {
+  mockRouteParams = {};
+  const view = renderTabs();
+  const previous = mockPagerContext;
+  fireEvent.press(view.getByLabelText('빠른 등록 열기'));
+  expect(mockPagerContext).toBe(previous);
+  fireEvent.press(view.getByRole('tab', { name: '재고' }));
+  expect(mockPagerContext).not.toBe(previous);
 });

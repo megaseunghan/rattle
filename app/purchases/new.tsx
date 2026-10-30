@@ -1,7 +1,8 @@
+import { entityKey } from '../../lib/utils/listKeys';
 import { SheetModal } from '../../lib/components/ui/SheetModal';
 /* Hallmark · genre: modern-minimal · macrostructure: Workbench · design-system: DESIGN.md · designed-as-app */
 import { getErrorMessage } from '../../lib/utils/error';
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useMemo, useCallback, memo } from 'react';
 import {
   View,
   Text,
@@ -58,6 +59,28 @@ function parseInitialDate(value?: string): Date {
   }
   return new Date();
 }
+
+const IngredientPickerRow = memo(function IngredientPickerRow({ item, already, checked, onSelect }: {
+  item: Ingredient; already: boolean; checked: boolean; onSelect: (item: Ingredient) => void;
+}) {
+  const handlePress = useCallback(() => onSelect(item), [onSelect, item]);
+  return (
+      <TouchableOpacity
+        style={[styles.pickerRow, already && styles.pickerRowAdded]}
+        onPress={handlePress}
+        disabled={already}
+      >
+        <View style={styles.pickerRowLeft}>
+          <Text style={[styles.pickerName, already && styles.pickerNameAdded]}>{item.name}</Text>
+          <Text style={styles.pickerCategory}>{item.category}</Text>
+        </View>
+        <View style={styles.pickerRowRight}>
+          <Text style={styles.pickerUnit}>{item.unit}</Text>
+          {checked && !already && <Ionicons name="checkmark" size={16} color={Colors.primary} />}
+        </View>
+      </TouchableOpacity>
+  );
+});
 
 export default function NewPurchaseScreen() {
   const { store, currentRole } = useAuth();
@@ -128,7 +151,7 @@ export default function NewPurchaseScreen() {
   const [quickUnit, setQuickUnit] = useState('g');
   const [quickAdding, setQuickAdding] = useState(false);
 
-  const existingSuppliers = [...new Set(purchases.map(p => p.supplier).filter(Boolean))];
+  const existingSuppliers = useMemo(() => [...new Set(purchases.map(p => p.supplier).filter(Boolean))], [purchases]);
 
   function closePicker() {
     setShowPicker(false);
@@ -152,14 +175,14 @@ export default function NewPurchaseScreen() {
     );
   }
 
-  function toggleIngredient(ingredient: Ingredient) {
+  const toggleIngredient = useCallback((ingredient: Ingredient) => {
     if (items.some(i => i.ingredient.id === ingredient.id)) return;
     setSelectedIngredients(prev => {
       const next = new Set(prev);
       next.has(ingredient.id) ? next.delete(ingredient.id) : next.add(ingredient.id);
       return next;
     });
-  }
+  }, [items]);
 
   function handleBulkAdd() {
     ingredients
@@ -209,6 +232,9 @@ export default function NewPurchaseScreen() {
     }
   }
 
+  const focusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (focusTimer.current !== null) clearTimeout(focusTimer.current); }, []);
+
   function validate(stage: number) {
     const next: Record<string, string> = {};
     if (stage === 0) {
@@ -226,10 +252,11 @@ export default function NewPurchaseScreen() {
       if (items.length && (!Number.isFinite(sum) || !Number.isSafeInteger(Math.round(sum)))) next.items = '매입 합계 범위를 확인해주세요.';
     }
     setErrors(next);
+    if (focusTimer.current !== null) clearTimeout(focusTimer.current);
     const first = Object.keys(next)[0];
     if (first) {
       scrollRef.current?.scrollTo({ y: Math.max(0, (fieldY.current[first] ?? 0) - 20), animated: true });
-      setTimeout(() => inputRefs.current[first]?.focus(), 100);
+      focusTimer.current = setTimeout(() => { focusTimer.current = null; inputRefs.current[first]?.focus(); }, 100);
     }
     return !first;
   }
@@ -289,11 +316,17 @@ export default function NewPurchaseScreen() {
     else router.replace({ pathname: '/(tabs)', params: { targetTab: 'purchases', month: formatDate(date).slice(0, 7), homeScope: 'store' } });
   }
 
-  const filteredIngredients = ingredients.filter(item => {
+  const filteredIngredients = useMemo(() => ingredients.filter(item => {
     const matchSearch = !searchQuery || item.name.toLowerCase().startsWith(searchQuery.toLowerCase());
     const matchCategory = activeCategory === '전체' || item.category === activeCategory;
     return matchSearch && matchCategory;
-  });
+  }), [ingredients, searchQuery, activeCategory]);
+
+  const pickerExtraData = useMemo(() => ({ items, selectedIngredients }), [items, selectedIngredients]);
+  const addedIngredientIds = useMemo(() => new Set(items.map(row => row.ingredient.id)), [items]);
+  const renderPickerItem = useCallback(({ item }: { item: Ingredient }) => (
+    <IngredientPickerRow item={item} already={addedIngredientIds.has(item.id)} checked={selectedIngredients.has(item.id)} onSelect={toggleIngredient} />
+  ), [addedIngredientIds, selectedIngredients, toggleIngredient]);
 
   const totalAmount = items.reduce((sum, item) => sum + (Number(item.quantity) || 0) * (Number(item.unit_price) || 0), 0);
   const saved = writeState === 'saved' || writeState === 'saved-refresh';
@@ -621,30 +654,15 @@ export default function NewPurchaseScreen() {
                   </View>
                 ) : (
                   <FlatList
+                    initialNumToRender={5}
+                    maxToRenderPerBatch={10}
+                    windowSize={5}
                     data={filteredIngredients}
                     onEndReached={() => { if (hasMore && !loadingMore) void loadMore(); }}
                     ListFooterComponent={hasMore ? <TouchableOpacity style={styles.actionButton} onPress={() => void loadMore()}><Text style={styles.modalClose}>{loadingMore ? '불러오는 중' : '품목 더 불러오기'}</Text></TouchableOpacity> : null}
-                    keyExtractor={i => i.id}
-                    renderItem={({ item }) => {
-                      const already = items.some(o => o.ingredient.id === item.id);
-                      const checked = selectedIngredients.has(item.id);
-                      return (
-                        <TouchableOpacity
-                          style={[styles.pickerRow, already && styles.pickerRowAdded]}
-                          onPress={() => toggleIngredient(item)}
-                          disabled={already}
-                        >
-                          <View style={styles.pickerRowLeft}>
-                            <Text style={[styles.pickerName, already && styles.pickerNameAdded]}>{item.name}</Text>
-                            <Text style={styles.pickerCategory}>{item.category}</Text>
-                          </View>
-                          <View style={styles.pickerRowRight}>
-                            <Text style={styles.pickerUnit}>{item.unit}</Text>
-                            {checked && !already && <Ionicons name="checkmark" size={16} color={Colors.primary} />}
-                          </View>
-                        </TouchableOpacity>
-                      );
-                    }}
+                    keyExtractor={entityKey}
+                    extraData={pickerExtraData}
+                    renderItem={renderPickerItem}
                   />
                 )}
 

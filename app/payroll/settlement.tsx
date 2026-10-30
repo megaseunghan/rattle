@@ -1,5 +1,5 @@
 import { getErrorMessage } from '../../lib/utils/error';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator, Alert, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -48,9 +48,9 @@ export default function PayrollSettlementScreen() {
   useEffect(() => { load(); }, [load]);
   useEffect(() => { refetchEmployees(); }, [refetchEmployees]);
 
-  const rows = employees
+  const rows = useMemo(() => employees
     .map(emp => ({ employee: emp, payroll: payrolls.find(p => p.employee_id === emp.id) }))
-    .filter((r): r is { employee: Employee; payroll: Payroll } => !!r.payroll);
+    .filter((r): r is { employee: Employee; payroll: Payroll } => !!r.payroll), [employees, payrolls]);
 
   const totalAmount = rows.reduce((s, r) => s + r.payroll.net_pay, 0);
   const settledCount = rows.filter(r => r.payroll.is_settled).length;

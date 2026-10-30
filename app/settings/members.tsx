@@ -1,14 +1,14 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, Alert,
-  ScrollView, ActivityIndicator,
+  ScrollView, ActivityIndicator, Share,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import { Colors } from '../../constants/colors';
 import { useAuth } from '../../lib/contexts/AuthContext';
-import { rejectStoreMember, removeStoreMember, transferStoreOwnership } from '../../lib/services/storeMembers';
+import { createStoreInviteCode, rejectStoreMember, removeStoreMember, transferStoreOwnership } from '../../lib/services/storeMembers';
 import { useMemberApproval } from '../../lib/hooks/useMemberApproval';
 import { MemberApprovalModal } from '../../lib/components/MemberApprovalModal';
 import { useStoreMembers } from '../../lib/hooks/useStoreMembers';
@@ -116,9 +116,20 @@ export default function MembersScreen() {
     ]);
   }
 
-  const pending = members.filter(m => m.status === 'pending');
-  const approved = members.filter(m => m.status === 'approved');
-  const rejected = members.filter(m => m.status === 'rejected');
+  const pending = useMemo(() => members.filter(m => m.status === 'pending'), [members]);
+  const approved = useMemo(() => members.filter(m => m.status === 'approved'), [members]);
+  const rejected = useMemo(() => members.filter(m => m.status === 'rejected'), [members]);
+
+  function handleInvite() {
+    if (!store) return;
+    void runAction(async () => {
+      const code = await createStoreInviteCode(store.id);
+      if (mounted.current && scopeRef.current === scope) {
+        const formatted = code.match(/.{1,4}/g)?.join('-') ?? code;
+        await Share.share({ message: `${store.name} 직원 참여코드: ${formatted}\n래틀 앱 → 기존 매장 참여에서 입력해주세요. 코드는 발급일부터 7일간 사용할 수 있어요.` });
+      }
+    });
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -136,6 +147,9 @@ export default function MembersScreen() {
         <ScrollView contentContainerStyle={styles.scroll}>
           {error && <ErrorMessage message={error} onRetry={loadMembers} />}
           <Text style={styles.emptyText}>신청 정보를 확인·수정한 뒤 최종 합류를 승인해주세요. 확정 전에는 인건비에 반영되지 않아요.</Text>
+          <TouchableOpacity accessibilityRole="button" accessibilityLabel="직원 참여코드 공유" disabled={busy} onPress={handleInvite} style={styles.approveBtn}>
+            <Text style={styles.approveBtnText}>직원 참여코드 공유</Text>
+          </TouchableOpacity>
           {/* 승인 대기 */}
           {pending.length > 0 && (
             <>

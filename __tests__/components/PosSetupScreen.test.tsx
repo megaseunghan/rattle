@@ -42,3 +42,16 @@ it('5초보다 느린 응답도 중복 폴링 없이 반영한다', async () => 
   view.unmount();
   jest.useRealTimers();
 });
+
+it('화면을 언마운트하면 대기 폴링을 해제한다', async () => {
+  jest.useFakeTimers();
+  try {
+    (getStoreDetails as jest.Mock).mockResolvedValue({ toss_merchant_id: null });
+    const view = render(<PosSyncScreen />);
+    await act(async () => {});
+    const before = (getStoreDetails as jest.Mock).mock.calls.length;
+    view.unmount();
+    act(() => { jest.advanceTimersByTime(30000); });
+    expect(getStoreDetails).toHaveBeenCalledTimes(before);
+  } finally { jest.useRealTimers(); }
+});

@@ -206,6 +206,11 @@ export async function getProfitLossByMonth(
     cashRevenue,
     revenue,
     purchaseByCategory,
+    purchaseBySupplier: purchases.reduce<Record<string, number>>((groups, purchase) => {
+      const supplier = purchase.supplier?.trim() || '거래처 미분류';
+      groups[supplier] = (groups[supplier] ?? 0) + Number(purchase.amount);
+      return groups;
+    }, Object.create(null)),
     purchaseCost,
     grossProfit,
     regularGross: missingWageEmployeeIds.length ? null : regularGross,

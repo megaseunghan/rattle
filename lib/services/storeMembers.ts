@@ -12,9 +12,23 @@ export async function requestStoreMembership(businessNumber: string, name: strin
   return data[0] as StoreJoinResult;
 }
 
-export async function submitJoinOnboarding(businessNumber: string, name: string, phone: string, profile: JoinOnboardingInput): Promise<StoreJoinResult> {
-  const { data, error } = await supabase.rpc('submit_join_onboarding', {
-    p_business_number: businessNumber, p_name: name.trim(), p_phone: phone, p_profile: profile,
+export async function createStoreInviteCode(storeId: string): Promise<string> {
+  const { data, error } = await supabase.rpc('get_or_create_store_invite_code', { p_store_id: storeId });
+  if (error) throw error;
+  if (!data) throw new UserFacingError('초대코드를 만들지 못했어요.');
+  return data as string;
+}
+
+export async function getStoreInviteCode(code: string): Promise<StoreJoinResult> {
+  const { data, error } = await supabase.rpc('get_store_invite_code', { p_code: code });
+  if (error) throw error;
+  if (!data?.[0]) throw new UserFacingError('초대코드를 확인하지 못했어요.');
+  return data[0] as StoreJoinResult;
+}
+
+export async function submitJoinOnboarding(code: string, name: string, phone: string, profile: JoinOnboardingInput): Promise<StoreJoinResult> {
+  const { data, error } = await supabase.rpc('submit_join_onboarding_code', {
+    p_code: code, p_name: name.trim(), p_phone: phone, p_profile: profile,
   });
   if (error) throw error;
   if (!data?.[0]) throw new UserFacingError('신청 결과를 확인하지 못했어요. 다시 확인해주세요.');

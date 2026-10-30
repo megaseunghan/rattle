@@ -1,6 +1,6 @@
 import { isCancelledError } from '@tanstack/react-query';
 import { getErrorMessage } from '../utils/error';
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { getDailySummaries, getDailySummariesByRange, getDailyItems } from '../services/posAnalytics';
 import { queryClient, queryKeys, useQueryScope } from '../query';
@@ -117,11 +117,11 @@ export function usePosAnalytics() {
     finally { if (valid()) setLoadingItems(false); }
   }, [store, scope, identity]);
 
-  const categories = ['전체', ...Array.from(new Set(items.map(i => i.categoryName).filter(Boolean))).sort()];
+  const categories = useMemo(() => ['전체', ...Array.from(new Set(items.map(i => i.categoryName).filter(category => !!category && category !== '전체'))).sort()], [items]);
 
-  const filteredItems = activeCategory === '전체'
+  const filteredItems = useMemo(() => activeCategory === '전체'
     ? items
-    : items.filter(i => i.categoryName === activeCategory);
+    : items.filter(i => i.categoryName === activeCategory), [items, activeCategory]);
 
   return {
     summaries,

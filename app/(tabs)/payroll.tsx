@@ -2,7 +2,7 @@ import { GlassBackdrop } from '../../lib/components/GlassBackdrop';
 import { SheetModal } from '../../lib/components/ui/SheetModal';
 /* Hallmark · genre: modern-minimal · macrostructure: Workbench · design-system: DESIGN.md · designed-as-app */
 import { getErrorMessage } from '../../lib/utils/error';
-import { useState, useCallback, useEffect, useRef, useContext } from 'react';
+import { useState, useCallback, useEffect, useRef, useContext, useMemo } from 'react';
 import { router, useFocusEffect } from 'expo-router';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, Pressable,
@@ -349,7 +349,7 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
   const month = Number(yearMonth.slice(5, 7));
   const setYearMonth = pager?.setSelectedMonth ?? setLocalMonth;
   const { employees: allEmployees, loading: empLoading, error: employeeError, refetch: refetchEmp, add, update, deactivate } = useEmployees(true);
-  const employees = allEmployees.filter(employee => employee.is_active !== false);
+  const employees = useMemo(() => allEmployees.filter(employee => employee.is_active !== false), [allEmployees]);
   const {
     payrolls,
     loading: payLoading,
@@ -509,7 +509,7 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
 
   // 정규직은 기존 일할 계산, 파트타이머는 월별 작성 급여 기준
   const accrualNow = new Date();
-  const monthPayrolls = payrolls.filter(p => p.year_month === yearMonth && p.store_id === store?.id);
+  const monthPayrolls = useMemo(() => payrolls.filter(p => p.year_month === yearMonth && p.store_id === store?.id), [payrolls, yearMonth, store?.id]);
   const partTimePayrolls = monthPayrolls.filter(p => p.applied_hourly_wage != null || p.daily_work_snapshot != null || allEmployees.some(e => e.id === p.employee_id && e.employment_type === 'part_time') || p.work_source === 'legacy_attendance');
   const partTimeWageTotal = partTimePayrolls.reduce((s, p) => s + Number(p.gross), 0);
   const { missingPayroll, missingPartTimeMinutes } = getPayrollSettlementGaps(employees, monthPayrolls);
@@ -829,7 +829,7 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
               <>
                 <Text style={styles.fieldLabel}>직원 계정</Text>
                 <Text style={styles.fieldHint}>
-                  {form.user_id ? '참여 계정이 연결되어 있어요.' : '직원이 사업자번호로 참여 신청하면 승인 시 이름·연락처로 자동 연결돼요.'}
+                  {form.user_id ? '참여 계정이 연결되어 있어요.' : '직원이 참여코드로 참여 신청하면 승인 시 이름·연락처로 연결돼요.'}
                   {'\n'}신청 정보와 같은 이름·휴대폰 번호를 저장해주세요.
                 </Text>
               </>

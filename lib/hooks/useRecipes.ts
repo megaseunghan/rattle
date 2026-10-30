@@ -87,7 +87,8 @@ export function useRecipes(): UseRecipesResult {
     if (active.current === identity) setMutationError(null);
   }
 
-  async function remove(id: string) {
+  const remove = useCallback(async (id: string) => {
+    const key = queryKeys.store(scope, storeId ?? '', 'recipes', 'pages', PAGE_SIZE);
     const cancelling = queryClient.cancelQueries({ queryKey: key });
     const previous = queryClient.getQueryData<InfiniteData<RecipeWithIngredients[], number>>(key);
     const optimistic = previous ? { ...previous, pages: previous.pages.map(page => page.filter(item => item.id !== id)) } : undefined;
@@ -101,7 +102,7 @@ export function useRecipes(): UseRecipesResult {
       if (queryClient.getQueryData(key) === optimisticVersion) queryClient.setQueryData(key, previous);
       if (active.current === identity) setMutationError({ identity, message: getErrorMessage(e) });
     }
-  }
+  }, [scope, storeId, identity]);
 
   async function bulkUpdateCategory(ids: string[], category: string) {
     if (!storeId) return;
