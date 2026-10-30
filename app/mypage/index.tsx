@@ -1,5 +1,6 @@
-import { useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { GlassBackdrop } from '../../lib/components/GlassBackdrop';
+import { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -9,7 +10,7 @@ import { useAuth } from '../../lib/contexts/AuthContext';
 import { useEmployees } from '../../lib/hooks/useEmployees';
 import { useSchedule } from '../../lib/hooks/useSchedule';
 import { resolveSelfEmployee } from '../../lib/utils/resolveSelfEmployee';
-import { AppBar } from '../../lib/components/ui';
+import { AppBar, Button } from '../../lib/components/ui';
 
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
 
@@ -23,9 +24,7 @@ function MenuRow({ icon, label, onPress, withBorder }: {
 }) {
   return (
     <TouchableOpacity style={[styles.menuRow, withBorder && styles.menuRowBorder]} onPress={onPress} activeOpacity={0.7}>
-      <View style={styles.menuIconWrap}>
-        <Ionicons name={icon} size={17} color={Colors.gray600} />
-      </View>
+      <Ionicons name={icon} size={19} color={Colors.gray600} style={styles.menuIcon} />
       <Text style={styles.menuLabel}>{label}</Text>
       <Ionicons name="chevron-forward" size={16} color={Colors.gray300} />
     </TouchableOpacity>
@@ -33,7 +32,25 @@ function MenuRow({ icon, label, onPress, withBorder }: {
 }
 
 export default function MyPageScreen() {
-  const { user, store, currentRole, realRole, devPreviewMode, devPreviewEmployeeId } = useAuth();
+  const { user, store, currentRole, realRole, devPreviewMode, devPreviewEmployeeId, signOut } = useAuth();
+  const [signingOut, setSigningOut] = useState(false);
+
+  function handleSignOut() {
+    Alert.alert('로그아웃', '로그아웃할까요?', [
+      { text: '취소', style: 'cancel' },
+      { text: '로그아웃', onPress: async () => {
+        setSigningOut(true);
+        try {
+          await signOut();
+          router.replace('/(auth)/login');
+        } catch {
+          Alert.alert('로그아웃', '로그아웃하지 못했어요. 다시 시도해주세요.');
+        } finally {
+          setSigningOut(false);
+        }
+      } },
+    ]);
+  }
   const { employees, refetch: refetchEmployees } = useEmployees();
   const isPreviewing = realRole === 'admin' && devPreviewMode !== 'self';
   const myEmployee = resolveSelfEmployee(employees, user?.id, devPreviewEmployeeId);
@@ -49,10 +66,11 @@ export default function MyPageScreen() {
   const roleLabel = !isPreviewing && currentRole === 'admin'
     ? '사장님'
     : myEmployee?.employment_type === 'part_time' ? '파트타이머' : '직원';
+  const todayDay = new Date().getDay();
 
   return (
-    <SafeAreaView style={styles.container}>
-      <AppBar title="마이페이지" onBack={() => router.back()} />
+    <SafeAreaView style={styles.container}><GlassBackdrop />
+      <AppBar transparent title="마이페이지" onBack={() => router.back()} />
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         {isPreviewing && (
           <View style={styles.previewBanner}>
@@ -67,27 +85,31 @@ export default function MyPageScreen() {
           <View style={styles.avatar}>
             <Text style={styles.avatarText}>{initial}</Text>
           </View>
-          <View>
+          <View style={styles.profileInfo}>
             <Text style={styles.profileName}>{displayName}</Text>
             <Text style={styles.profileRole}>{roleLabel}{store?.name ? ` · ${store.name}` : ''}</Text>
           </View>
         </View>
 
         {myEmployee && (
-          <View style={styles.weekGrid}>
+          <View style={styles.scheduleSection}>
+            <Text style={styles.scheduleTitle}>기본 스케줄</Text>
             {WEEKDAYS.map((label, i) => {
               const row = schedule.find(s => s.day_of_week === i);
-              const working = row?.is_working;
+              const scheduleText = !row
+                ? '미설정'
+                : !row.is_working
+                  ? '휴무'
+                  : row.start_time && row.end_time
+                    ? `${fmtHHmm(row.start_time)} – ${row.end_time < row.start_time ? '익일 ' : ''}${fmtHHmm(row.end_time)}`
+                    : '시간 미설정';
               return (
-                <View key={label} style={styles.weekCol}>
-                  <Text style={styles.weekDayLabel}>{label}</Text>
-                  {working ? (
-                    <View style={styles.weekChip}>
-                      <Text style={styles.weekChipText}>{fmtHHmm(row?.start_time ?? null)}-{fmtHHmm(row?.end_time ?? null)}</Text>
-                    </View>
-                  ) : (
-                    <View style={styles.weekChipOff} />
-                  )}
+                <View key={label} style={[styles.scheduleRow, i > 0 && styles.scheduleRowBorder]}>
+                  <Text style={[styles.scheduleDay, i === todayDay && styles.scheduleDayToday]}>{label}요일</Text>
+                  {i === todayDay && <Text style={styles.todayLabel}>오늘</Text>}
+                  <Text style={[styles.scheduleTime, (!row || !row.is_working) && styles.scheduleTimeMuted]}>
+                    {scheduleText}
+                  </Text>
                 </View>
               );
             })}
@@ -95,14 +117,11 @@ export default function MyPageScreen() {
         )}
 
         <View style={styles.menuCard}>
-          {myEmployee && (
-            <MenuRow icon="calendar-outline" label="스케줄 설정" onPress={() => router.push('/mypage/schedule')} />
+          {myEmployee?.employment_type === 'part_time' && (
+            <MenuRow icon="time-outline" label="근무시간 제출" onPress={() => router.push('/mypage/work-minutes')} />
           )}
           {myEmployee && (
-            <MenuRow
-              icon="time-outline" label="근태 기록" withBorder
-              onPress={() => router.push(`/attendance/${myEmployee.id}?name=${encodeURIComponent(myEmployee.name)}`)}
-            />
+            <MenuRow icon="calendar-outline" label="스케줄 설정" onPress={() => router.push('/mypage/schedule')} />
           )}
           {myEmployee && (
             <MenuRow icon="document-text-outline" label="급여 명세서" withBorder onPress={() => router.push('/mypage/payslip')} />
@@ -111,16 +130,17 @@ export default function MyPageScreen() {
             <MenuRow icon="person-outline" label="개인정보 수정" withBorder={!!myEmployee} onPress={() => router.push('/settings/account')} />
           )}
           {realRole === 'admin' && (
-            <MenuRow icon="checkmark-done-outline" label="요청함 (스케줄·근태 정정)" withBorder onPress={() => router.push('/attendance/requests')} />
+            <MenuRow icon="checkmark-done-outline" label="요청함 (스케줄)" withBorder onPress={() => router.push('/mypage/requests')} />
           )}
         </View>
+        <Button label="로그아웃" variant="secondary" onPress={handleSignOut} loading={signingOut} disabled={signingOut} />
       </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.gray50 },
+  container: { flex: 1, backgroundColor: Colors.homeCanvas },
   scroll: { padding: Spacing.screenX, paddingBottom: 40, gap: 16 },
 
   previewBanner: {
@@ -129,7 +149,8 @@ const styles = StyleSheet.create({
   },
   previewBannerText: { flex: 1, fontSize: 12, fontWeight: '500', color: Colors.warningStroke },
 
-  profileCard: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  profileCard: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 18, backgroundColor: Colors.white, borderRadius: 24, borderWidth: 1, borderColor: Colors.homeBorder },
+  profileInfo: { flex: 1, minWidth: 0 },
   avatar: {
     width: 44, height: 44, borderRadius: 22,
     backgroundColor: Colors.tinted, alignItems: 'center', justifyContent: 'center',
@@ -138,16 +159,23 @@ const styles = StyleSheet.create({
   profileName: { fontSize: 16, fontWeight: '700', color: Colors.black },
   profileRole: { fontSize: 12, fontWeight: '500', color: Colors.gray400, marginTop: 2 },
 
-  weekGrid: { flexDirection: 'row', justifyContent: 'space-between' },
-  weekCol: { alignItems: 'center', gap: 6, flex: 1 },
-  weekDayLabel: { fontSize: 11, fontWeight: '600', color: Colors.gray400 },
-  weekChip: { backgroundColor: Colors.tinted, borderRadius: 8, paddingHorizontal: 4, paddingVertical: 4 },
-  weekChipText: { fontSize: 9, fontWeight: '600', color: Colors.primary },
-  weekChipOff: { width: 6, height: 6, borderRadius: 3, backgroundColor: Colors.gray200, marginTop: 8 },
+  scheduleSection: {
+    backgroundColor: Colors.white, borderRadius: 20,
+    borderWidth: 1, borderColor: Colors.homeBorder,
+    paddingHorizontal: 16, paddingTop: 16, paddingBottom: 4,
+  },
+  scheduleTitle: { fontSize: 15, fontWeight: '700', color: Colors.black, marginBottom: 8 },
+  scheduleRow: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  scheduleRowBorder: { borderTopWidth: 0.5, borderTopColor: Colors.homeBorder },
+  scheduleDay: { width: 48, fontSize: 14, fontWeight: '600', color: Colors.gray600 },
+  scheduleDayToday: { color: Colors.primary },
+  todayLabel: { fontSize: 12, fontWeight: '600', color: Colors.primary },
+  scheduleTime: { flex: 1, textAlign: 'right', fontSize: 14, fontWeight: '600', color: Colors.black },
+  scheduleTimeMuted: { fontWeight: '500', color: Colors.gray400 },
 
-  menuCard: { backgroundColor: Colors.white, borderRadius: 16, borderWidth: 0.5, borderColor: Colors.gray100, overflow: 'hidden' },
-  menuRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 14, paddingVertical: 13 },
-  menuRowBorder: { borderTopWidth: 0.5, borderTopColor: Colors.gray100 },
-  menuIconWrap: { width: 32, height: 32, borderRadius: 10, backgroundColor: Colors.gray50, alignItems: 'center', justifyContent: 'center' },
+  menuCard: { backgroundColor: Colors.white, borderRadius: 20, borderWidth: 1, borderColor: Colors.homeBorder, overflow: 'hidden' },
+  menuRow: { minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 14, paddingVertical: 13 },
+  menuRowBorder: { borderTopWidth: 0.5, borderTopColor: Colors.homeBorder },
+  menuIcon: { width: 22 },
   menuLabel: { flex: 1, fontSize: 14, fontWeight: '500', color: Colors.black },
 });

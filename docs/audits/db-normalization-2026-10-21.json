@@ -1,0 +1,342 @@
+{
+  "captured_at": "2026-10-21T12:38:27.421441+00:00",
+  "employee_current_wage_mismatch": 0,
+  "employee_missing_wage_history": 3,
+  "foreign_keys": [
+    {
+      "conname": "orders_store_id_fkey",
+      "definition": "FOREIGN KEY (store_id) REFERENCES stores(id) ON DELETE CASCADE",
+      "relname": "orders"
+    },
+    {
+      "conname": "order_items_ingredient_id_fkey",
+      "definition": "FOREIGN KEY (ingredient_id) REFERENCES ingredients(id) ON DELETE SET NULL",
+      "relname": "order_items"
+    },
+    {
+      "conname": "order_items_order_id_fkey",
+      "definition": "FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE",
+      "relname": "order_items"
+    },
+    {
+      "conname": "recipes_store_id_fkey",
+      "definition": "FOREIGN KEY (store_id) REFERENCES stores(id) ON DELETE CASCADE",
+      "relname": "recipes"
+    },
+    {
+      "conname": "recipe_ingredients_ingredient_id_fkey",
+      "definition": "FOREIGN KEY (ingredient_id) REFERENCES ingredients(id) ON DELETE SET NULL",
+      "relname": "recipe_ingredients"
+    },
+    {
+      "conname": "recipe_ingredients_recipe_id_fkey",
+      "definition": "FOREIGN KEY (recipe_id) REFERENCES recipes(id) ON DELETE CASCADE",
+      "relname": "recipe_ingredients"
+    },
+    {
+      "conname": "ocr_results_store_id_fkey",
+      "definition": "FOREIGN KEY (store_id) REFERENCES stores(id) ON DELETE CASCADE",
+      "relname": "ocr_results"
+    },
+    {
+      "conname": "toss_sales_store_id_fkey",
+      "definition": "FOREIGN KEY (store_id) REFERENCES stores(id) ON DELETE CASCADE",
+      "relname": "toss_orders"
+    },
+    {
+      "conname": "toss_order_items_order_id_fkey",
+      "definition": "FOREIGN KEY (order_id) REFERENCES toss_orders(id) ON DELETE CASCADE",
+      "relname": "toss_order_items"
+    },
+    {
+      "conname": "toss_order_items_store_id_fkey",
+      "definition": "FOREIGN KEY (store_id) REFERENCES stores(id) ON DELETE CASCADE",
+      "relname": "toss_order_items"
+    },
+    {
+      "conname": "ingredients_store_id_fkey",
+      "definition": "FOREIGN KEY (store_id) REFERENCES stores(id) ON DELETE CASCADE",
+      "relname": "ingredients"
+    },
+    {
+      "conname": "stores_owner_id_fkey",
+      "definition": "FOREIGN KEY (owner_id) REFERENCES auth.users(id) ON DELETE CASCADE",
+      "relname": "stores"
+    },
+    {
+      "conname": "toss_catalog_store_id_fkey",
+      "definition": "FOREIGN KEY (store_id) REFERENCES stores(id) ON DELETE CASCADE",
+      "relname": "toss_catalog"
+    },
+    {
+      "conname": "purchases_store_id_fkey",
+      "definition": "FOREIGN KEY (store_id) REFERENCES stores(id) ON DELETE CASCADE",
+      "relname": "purchases"
+    },
+    {
+      "conname": "store_members_store_id_fkey",
+      "definition": "FOREIGN KEY (store_id) REFERENCES stores(id) ON DELETE CASCADE",
+      "relname": "store_members"
+    },
+    {
+      "conname": "store_members_user_id_fkey",
+      "definition": "FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE",
+      "relname": "store_members"
+    },
+    {
+      "conname": "expenses_store_id_fkey",
+      "definition": "FOREIGN KEY (store_id) REFERENCES stores(id) ON DELETE CASCADE",
+      "relname": "expenses"
+    },
+    {
+      "conname": "employees_store_id_fkey",
+      "definition": "FOREIGN KEY (store_id) REFERENCES stores(id) ON DELETE CASCADE",
+      "relname": "employees"
+    },
+    {
+      "conname": "employees_user_id_fkey",
+      "definition": "FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE SET NULL",
+      "relname": "employees"
+    },
+    {
+      "conname": "employee_wage_history_created_by_fkey",
+      "definition": "FOREIGN KEY (created_by) REFERENCES auth.users(id) ON DELETE SET NULL",
+      "relname": "employee_wage_history"
+    },
+    {
+      "conname": "employee_wage_history_employee_id_fkey",
+      "definition": "FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE",
+      "relname": "employee_wage_history"
+    },
+    {
+      "conname": "employee_wage_history_store_id_fkey",
+      "definition": "FOREIGN KEY (store_id) REFERENCES stores(id) ON DELETE CASCADE",
+      "relname": "employee_wage_history"
+    },
+    {
+      "conname": "attendance_employee_id_fkey",
+      "definition": "FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE",
+      "relname": "attendance"
+    },
+    {
+      "conname": "attendance_store_id_fkey",
+      "definition": "FOREIGN KEY (store_id) REFERENCES stores(id) ON DELETE CASCADE",
+      "relname": "attendance"
+    },
+    {
+      "conname": "purchase_items_ingredient_id_fkey",
+      "definition": "FOREIGN KEY (ingredient_id) REFERENCES ingredients(id) ON DELETE SET NULL",
+      "relname": "purchase_items"
+    },
+    {
+      "conname": "purchase_items_purchase_id_fkey",
+      "definition": "FOREIGN KEY (purchase_id) REFERENCES purchases(id) ON DELETE CASCADE",
+      "relname": "purchase_items"
+    },
+    {
+      "conname": "purchase_items_store_id_fkey",
+      "definition": "FOREIGN KEY (store_id) REFERENCES stores(id) ON DELETE CASCADE",
+      "relname": "purchase_items"
+    },
+    {
+      "conname": "cleaning_items_store_id_fkey",
+      "definition": "FOREIGN KEY (store_id) REFERENCES stores(id) ON DELETE CASCADE",
+      "relname": "cleaning_items"
+    },
+    {
+      "conname": "cleaning_logs_checked_by_fkey",
+      "definition": "FOREIGN KEY (checked_by) REFERENCES auth.users(id) ON DELETE SET NULL",
+      "relname": "cleaning_logs"
+    },
+    {
+      "conname": "cleaning_logs_item_id_fkey",
+      "definition": "FOREIGN KEY (item_id) REFERENCES cleaning_items(id) ON DELETE CASCADE",
+      "relname": "cleaning_logs"
+    },
+    {
+      "conname": "cleaning_logs_store_id_fkey",
+      "definition": "FOREIGN KEY (store_id) REFERENCES stores(id) ON DELETE CASCADE",
+      "relname": "cleaning_logs"
+    },
+    {
+      "conname": "toss_pending_installations_matched_store_id_fkey",
+      "definition": "FOREIGN KEY (matched_store_id) REFERENCES stores(id) ON DELETE SET NULL",
+      "relname": "toss_pending_installations"
+    },
+    {
+      "conname": "employee_schedules_employee_id_fkey",
+      "definition": "FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE",
+      "relname": "employee_schedules"
+    },
+    {
+      "conname": "employee_schedules_store_id_fkey",
+      "definition": "FOREIGN KEY (store_id) REFERENCES stores(id) ON DELETE CASCADE",
+      "relname": "employee_schedules"
+    },
+    {
+      "conname": "schedule_requests_employee_id_fkey",
+      "definition": "FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE",
+      "relname": "schedule_requests"
+    },
+    {
+      "conname": "schedule_requests_reviewed_by_fkey",
+      "definition": "FOREIGN KEY (reviewed_by) REFERENCES auth.users(id) ON DELETE SET NULL",
+      "relname": "schedule_requests"
+    },
+    {
+      "conname": "schedule_requests_store_id_fkey",
+      "definition": "FOREIGN KEY (store_id) REFERENCES stores(id) ON DELETE CASCADE",
+      "relname": "schedule_requests"
+    },
+    {
+      "conname": "attendance_corrections_employee_id_fkey",
+      "definition": "FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE",
+      "relname": "attendance_corrections"
+    },
+    {
+      "conname": "attendance_corrections_reviewed_by_fkey",
+      "definition": "FOREIGN KEY (reviewed_by) REFERENCES auth.users(id) ON DELETE SET NULL",
+      "relname": "attendance_corrections"
+    },
+    {
+      "conname": "attendance_corrections_store_id_fkey",
+      "definition": "FOREIGN KEY (store_id) REFERENCES stores(id) ON DELETE CASCADE",
+      "relname": "attendance_corrections"
+    },
+    {
+      "conname": "manual_sales_created_by_fkey",
+      "definition": "FOREIGN KEY (created_by) REFERENCES auth.users(id) ON DELETE SET NULL",
+      "relname": "manual_sales"
+    },
+    {
+      "conname": "manual_sales_store_id_fkey",
+      "definition": "FOREIGN KEY (store_id) REFERENCES stores(id) ON DELETE CASCADE",
+      "relname": "manual_sales"
+    },
+    {
+      "conname": "notification_settings_store_id_fkey",
+      "definition": "FOREIGN KEY (store_id) REFERENCES stores(id) ON DELETE CASCADE",
+      "relname": "notification_settings"
+    },
+    {
+      "conname": "notifications_store_id_fkey",
+      "definition": "FOREIGN KEY (store_id) REFERENCES stores(id) ON DELETE CASCADE",
+      "relname": "notifications"
+    },
+    {
+      "conname": "payroll_employee_id_fkey",
+      "definition": "FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE SET NULL",
+      "relname": "payroll"
+    },
+    {
+      "conname": "payroll_store_id_fkey",
+      "definition": "FOREIGN KEY (store_id) REFERENCES stores(id) ON DELETE CASCADE",
+      "relname": "payroll"
+    },
+    {
+      "conname": "payroll_work_submission_id_fkey",
+      "definition": "FOREIGN KEY (work_submission_id) REFERENCES payroll_work_submissions(id) ON DELETE RESTRICT",
+      "relname": "payroll"
+    },
+    {
+      "conname": "payroll_work_history_store_id_fkey",
+      "definition": "FOREIGN KEY (store_id) REFERENCES stores(id) ON DELETE CASCADE",
+      "relname": "payroll_work_history"
+    },
+    {
+      "conname": "home_alert_reads_store_id_fkey",
+      "definition": "FOREIGN KEY (store_id) REFERENCES stores(id) ON DELETE CASCADE",
+      "relname": "home_alert_reads"
+    },
+    {
+      "conname": "home_alert_reads_user_id_fkey",
+      "definition": "FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE",
+      "relname": "home_alert_reads"
+    },
+    {
+      "conname": "payroll_work_submissions_employee_id_fkey",
+      "definition": "FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE RESTRICT",
+      "relname": "payroll_work_submissions"
+    },
+    {
+      "conname": "payroll_work_submissions_reviewed_by_fkey",
+      "definition": "FOREIGN KEY (reviewed_by) REFERENCES auth.users(id) ON DELETE SET NULL",
+      "relname": "payroll_work_submissions"
+    },
+    {
+      "conname": "payroll_work_submissions_store_id_fkey",
+      "definition": "FOREIGN KEY (store_id) REFERENCES stores(id) ON DELETE CASCADE",
+      "relname": "payroll_work_submissions"
+    },
+    {
+      "conname": "payroll_work_submissions_submitted_by_fkey",
+      "definition": "FOREIGN KEY (submitted_by) REFERENCES auth.users(id) ON DELETE SET NULL",
+      "relname": "payroll_work_submissions"
+    },
+    {
+      "conname": "store_join_profiles_applicant_user_id_fkey",
+      "definition": "FOREIGN KEY (applicant_user_id) REFERENCES auth.users(id) ON DELETE CASCADE",
+      "relname": "store_join_profiles"
+    },
+    {
+      "conname": "store_join_profiles_created_employee_id_fkey",
+      "definition": "FOREIGN KEY (created_employee_id) REFERENCES employees(id) ON DELETE SET NULL",
+      "relname": "store_join_profiles"
+    },
+    {
+      "conname": "store_join_profiles_member_id_fkey",
+      "definition": "FOREIGN KEY (member_id) REFERENCES store_members(id) ON DELETE CASCADE",
+      "relname": "store_join_profiles"
+    },
+    {
+      "conname": "store_join_profiles_reviewed_by_fkey",
+      "definition": "FOREIGN KEY (reviewed_by) REFERENCES auth.users(id) ON DELETE SET NULL",
+      "relname": "store_join_profiles"
+    },
+    {
+      "conname": "store_join_profiles_store_id_fkey",
+      "definition": "FOREIGN KEY (store_id) REFERENCES stores(id) ON DELETE CASCADE",
+      "relname": "store_join_profiles"
+    },
+    {
+      "conname": "store_join_profiles_submitted_by_fkey",
+      "definition": "FOREIGN KEY (submitted_by) REFERENCES auth.users(id) ON DELETE SET NULL",
+      "relname": "store_join_profiles"
+    }
+  ],
+  "parent_store_mismatch": {
+    "employee_schedules": 0,
+    "join_profiles": 0,
+    "payroll": 0,
+    "pos_items": 0,
+    "purchase_items": 0,
+    "recipe_ingredients": 0,
+    "wage_history": 0
+  },
+  "pos_legacy_items": {
+    "nonempty_rows": 0,
+    "storage_bytes": 40610
+  },
+  "purchase_line_subtotal_mismatch": 0,
+  "purchase_total_mismatch": 0,
+  "purchase_type_unlisted": 0,
+  "views": [],
+  "additional": {
+    "captured_at": "2026-10-21T12:38:58.922291+00:00",
+    "itemized_purchases": 5,
+    "legacy_purchases_without_items": 0,
+    "missing_wage_history_by_type": [
+      {
+        "employee_count": 1,
+        "employment_type": "part_time",
+        "is_active": true
+      },
+      {
+        "employee_count": 2,
+        "employment_type": "regular",
+        "is_active": true
+      }
+    ],
+    "recipe_rows": 148
+  }
+}

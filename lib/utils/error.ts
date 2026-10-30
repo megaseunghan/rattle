@@ -1,8 +1,84 @@
-export function getErrorMessage(error: unknown, fallback = '오류가 발생했습니다.'): string {
-  if (error instanceof Error) return error.message;
+const DEFAULT_ERROR_MESSAGE = '처리하지 못했어요. 다시 시도해주세요.';
+
+/** 입력 검증 등 앱에서 사용자에게 전달하기로 정한 오류. */
+export class UserFacingError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'UserFacingError';
+  }
+}
+
+// DB의 업무 규칙 중 사용자가 해결할 수 있는 상황만 짧은 안내로 변환한다.
+const ACTION_MESSAGES: Readonly<Record<string, string>> = {
+  WAGE_HISTORY_REQUIRED: '급여 조건 이력이 없는 직원이 있어요. 인건비에서 적용일과 급여 조건을 확인해주세요.',
+  TAXONOMY_INVALID: '분류 이름을 다시 확인해주세요.',
+  TAXONOMY_CONFLICT: '같은 이름이 있어요. 목록을 새로고침해주세요.',
+  TAXONOMY_FORBIDDEN: '분류를 변경할 권한이 없어요.',
+  JOIN_PROFILE_INVALID: '근무 조건·입사일·계좌 정보를 다시 확인해주세요.',
+  STORE_INVITE_INVALID: '참여코드가 만료되었거나 취소됐어요. 관리자에게 새 코드를 요청해주세요.',
+  JOIN_REVIEW_REQUIRED: '신청 정보를 먼저 확인한 뒤 승인해주세요.',
+  JOIN_REVIEW_CHANGED: '직원이 신청 정보를 수정했어요. 취소한 뒤 다시 열어 확인해주세요.',
+  HOME_SUMMARY_FORBIDDEN: '이 매장의 요약을 볼 권한이 없어요.',
+  MEMBER_ACTIVE_CONFLICT: '겹치는 재직 직원이 있어요. 직원 정보를 확인한 뒤 다시 승인해주세요.',
+  MEMBER_EXISTING_ACCOUNT: '신청 계정에 연결된 직원 기록이 있어요. 해당 기록으로 재입사 처리해주세요.',
+  MEMBER_OTHER_ACCOUNT: '다른 계정에 연결된 기록이에요. 직원 연결을 확인해주세요.',
+  MEMBER_CHOICE_CHANGED: '선택한 직원 정보가 변경됐어요. 취소한 뒤 다시 확인해주세요.',
+  FINANCE_ADMIN_REQUIRED: '관리자만 손익을 확인할 수 있어요.',
+  ACCOUNT_OWNS_STORES: '매장 소유권을 이전한 뒤 탈퇴해주세요.',
+  OWNERSHIP_OWNER_REQUIRED: '매장 소유자만 이전할 수 있어요.',
+  OWNERSHIP_APPROVED_MEMBER_REQUIRED: '승인된 멤버를 다시 선택해주세요.',
+  RECIPE_INGREDIENT_STORE_MISMATCH: '이 매장의 재료를 다시 선택해주세요.',
+  PURCHASE_INGREDIENT_STORE_MISMATCH: '이 매장의 재료를 다시 선택해주세요.',
+  PURCHASE_STORE_MISMATCH: '매입 내역을 새로고침해주세요.',
+  PURCHASE_INVALID_ITEMS: '품목·수량·단가를 확인해주세요.',
+  PURCHASE_INVALID_AMOUNT: '품목·수량·단가를 확인해주세요.',
+
+  '로그인이 필요합니다': '다시 로그인해주세요.',
+  '사업자번호 10자리를 입력해주세요': '사업자번호 10자리를 입력해주세요.',
+  '이름을 100자 이내로 입력해주세요': '이름은 100자까지 입력해주세요.',
+  '휴대폰 번호를 확인해주세요': '휴대폰 번호를 확인해주세요.',
+  '해당 사업자번호의 매장을 찾을 수 없습니다': '사업자번호에 해당하는 매장이 없어요.',
+  '같은 사업자번호의 매장이 여러 곳입니다. 관리자에게 매장 정보를 확인해주세요': '사업자번호가 중복돼요. 관리자에게 확인해주세요.',
+  '이미 신청했어요. 관리자의 승인을 기다려주세요': '이미 신청했어요. 관리자 승인 대기 중이에요.',
+  '이미 해당 매장에 참여하고 있어요': '이미 참여 중인 매장이에요.',
+  '참여가 거절된 상태입니다. 관리자에게 문의해주세요': '참여가 거절됐어요. 관리자에게 문의해주세요.',
+  '참여 신청의 매장과 계정은 변경할 수 없습니다': '신청한 매장·계정은 변경할 수 없어요.',
+  '관리자만 참여를 승인할 수 있습니다': '관리자만 승인할 수 있어요.',
+  '신청자의 이름·휴대폰 번호를 확인해주세요. 기존 신청은 삭제 후 다시 신청할 수 있습니다': '이름·휴대폰 번호를 확인한 뒤 다시 신청해주세요.',
+  '이름·연락처가 같은 직원이 여러 명입니다. 인건비에서 중복 정보를 정리한 뒤 다시 승인해주세요': '중복된 직원 정보를 정리한 뒤 다시 승인해주세요.',
+  '일치하는 직원이 퇴사 상태이거나 다른 계정에 연결되어 있습니다. 직원 정보를 확인해주세요': '퇴사 여부와 연결된 계정을 확인해주세요.',
+  '이름 또는 연락처가 겹치는 직원이 있습니다. 인건비의 직원 정보와 신청 정보를 맞춘 뒤 다시 승인해주세요': '직원 이름·연락처를 확인한 뒤 다시 승인해주세요.',
+  '승인할 권한이 없습니다': '승인 권한이 없어요.',
+  '이미 처리된 신청입니다. 목록을 다시 확인해주세요': '이미 처리됐어요. 목록을 새로고침해주세요.',
+  '연결된 본인 파트타이머 계정으로만 제출할 수 있습니다': '본인 파트타이머 계정으로 제출해주세요.',
+  '대상 월을 확인해주세요': '대상 월을 확인해주세요.',
+  '총 근무 분을 확인해주세요': '총 근무 분을 확인해주세요.',
+  '입력 근거를 1~1000자로 작성해주세요': '입력 근거를 1~1,000자로 작성해주세요.',
+  '제출 내역이 변경됐습니다. 새로고침해주세요': '내역이 변경됐어요. 새로고침해주세요.',
+  '관리자만 확인할 수 있습니다': '관리자만 확인할 수 있어요.',
+  '최신 제출 내역을 새로고침해주세요': '최신 제출 내역을 새로고침해주세요.',
+  '확인 상태를 선택해주세요': '확인 상태를 선택해주세요.',
+  '반려 사유를 1~1000자로 작성해주세요': '반려 사유를 1~1,000자로 작성해주세요.',
+  '제출된 근무시간을 먼저 확인해주세요': '제출된 근무시간을 먼저 확인해주세요.',
+  '승인된 최신 근무시간과 급여 입력을 다시 확인해주세요': '확인된 근무시간과 급여 입력을 다시 확인해주세요.',
+  '직원 계정 연결은 관리자만 변경할 수 있습니다': '관리자만 직원 계정을 연결할 수 있어요.',
+  '직원의 매장은 변경할 수 없습니다': '직원의 매장은 변경할 수 없어요.',
+  '매입 유형은 관리자만 변경할 수 있습니다': '관리자만 매입 유형을 변경할 수 있어요.',
+  '유형은 1~40자로 입력해주세요': '유형은 1~40자로 입력해주세요.',
+  '매장을 찾을 수 없습니다': '매장을 찾을 수 없어요.',
+  '이미 등록된 유형입니다': '이미 등록된 유형이에요.',
+  '유형이 변경됐습니다. 새로고침해주세요': '유형이 변경됐어요. 새로고침해주세요.',
+  '매입 유형이 변경됐습니다. 새로고침 후 다시 선택해주세요': '유형이 변경됐어요. 새로고침 후 선택해주세요.',
+};
+
+/** 알 수 없는 원문은 화면에 내보내지 않는다. */
+export function getErrorMessage(error: unknown, fallback = DEFAULT_ERROR_MESSAGE): string {
+  if (error instanceof UserFacingError) return error.message;
   if (typeof error === 'object' && error !== null && 'message' in error) {
     const message = (error as { message: unknown }).message;
-    if (typeof message === 'string' && message) return message;
+    if (typeof message === 'string' && Object.prototype.hasOwnProperty.call(ACTION_MESSAGES, message)) {
+      return ACTION_MESSAGES[message];
+    }
   }
   return fallback;
 }

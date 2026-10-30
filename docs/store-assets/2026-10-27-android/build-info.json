@@ -1,0 +1,17 @@
+{
+  "package": "com.seunghan.rattle",
+  "device": "emulator-5554 / Medium_Phone / Android API 37",
+  "resolution": "1080x2400",
+  "sourceHead": "679c07593f8f8acd41528d94883a01202bcb7677",
+  "sourceDirty": true,
+  "apkSha256": "2fd262d93372d0acd33d52d007940d4fc2528a2c4e263dcf68a7d7be699adba1",
+  "latestBuild": "BUILD SUCCESSFUL in 11s, 20 tasks executed and 701 up-to-date",
+  "installed": true,
+  "launched": true,
+  "screenState": "사용자가 직접 로그인한 데모 매장 래틀에서 촬영 완료",
+  "rawScreenshots": 8,
+  "promoImages": 8,
+  "captureDate": "2026-10-27",
+  "financialLabor": 9236903,
+  "operatingProfit": 10305597
+}

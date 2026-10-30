@@ -43,11 +43,11 @@ export default function AccountScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} accessibilityRole="button" accessibilityLabel="뒤로가기">
           <Ionicons name="chevron-back" size={24} color={Colors.black} />
         </TouchableOpacity>
         <Text style={styles.title}>내 정보</Text>
-        <View style={{ width: 40 }} />
+        <View style={{ width: 44 }} />
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll}>
@@ -61,7 +61,7 @@ export default function AccountScreen() {
           style={styles.input}
           value={fullName}
           onChangeText={setFullName}
-          placeholder="실명 (출퇴근·급여에 사용)"
+          placeholder="실명 (급여·직원 관리에 사용)"
           placeholderTextColor={Colors.gray400}
         />
         <Text style={styles.label}>연락처</Text>
@@ -88,17 +88,17 @@ export default function AccountScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.gray50 },
+  container: { flex: 1, backgroundColor: Colors.homeCanvas },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 16, paddingVertical: 12, backgroundColor: Colors.white,
+    paddingHorizontal: 20, paddingVertical: 12, backgroundColor: Colors.homeCanvas,
   },
-  backBtn: { width: 40, height: 40, justifyContent: 'center' },
-  title: { fontSize: 17, fontWeight: '700', color: Colors.black },
+  backBtn: { width: 44, height: 44, justifyContent: 'center' },
+  title: { flexShrink: 1, fontSize: 22, fontWeight: '700', color: Colors.black },
   scroll: { padding: 20 },
   accountRow: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    backgroundColor: Colors.white, borderRadius: 12, borderWidth: 1, borderColor: Colors.gray100,
+    backgroundColor: Colors.white, borderRadius: 20, borderWidth: 1, borderColor: Colors.homeBorder,
     paddingHorizontal: 16, paddingVertical: 14, marginBottom: 24,
   },
   accountLabel: { fontSize: 13, color: Colors.gray500, fontWeight: '500' },
@@ -106,7 +106,7 @@ const styles = StyleSheet.create({
   label: { fontSize: 13, fontWeight: '600', color: Colors.gray600, marginBottom: 8, marginTop: 6 },
   input: {
     backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.gray200,
-    borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12, fontSize: 15, color: Colors.black,
+    minHeight: 48, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12, fontSize: 15, color: Colors.black,
   },
   saveBtn: {
     backgroundColor: Colors.primary, borderRadius: 12, paddingVertical: 14,

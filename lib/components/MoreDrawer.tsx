@@ -1,16 +1,19 @@
+import Animated, { cancelAnimation, ReduceMotion, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import { scheduleOnRN } from 'react-native-worklets';
 import { useEffect, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert,
-  Animated, Pressable, Dimensions,
+  Pressable, Dimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Colors } from '../../constants/colors';
-import { CardStyle } from '../../constants/designTokens';
 import { useAuth } from '../contexts/AuthContext';
-import { supabase } from '../supabase';
+import { deleteAccount } from '../services/account';
+import { isAuthCancelled } from '../services/socialAuth';
 import { animateListChange } from '../utils/layoutAnimation';
+import { getErrorMessage } from '../utils/error';
 
 const DRAWER_WIDTH = Math.min(320, Dimensions.get('window').width * 0.82);
 
@@ -21,16 +24,14 @@ function SettingRow({
 }) {
   return (
     <TouchableOpacity style={[styles.listItem, withBorder && styles.listItemBorder]} onPress={onPress} activeOpacity={0.7}>
-      <View style={[styles.iconWrap, { backgroundColor: danger ? Colors.negativeBg : Colors.gray100 }]}>
-        <Ionicons name={icon} size={17} color={danger ? Colors.negative : Colors.gray500} />
-      </View>
+      <Ionicons name={icon} size={19} color={danger ? Colors.negative : Colors.gray600} style={styles.rowIcon} />
       <Text style={[styles.itemName, danger && { color: Colors.negative }]}>{label}</Text>
       <Ionicons name="chevron-forward" size={15} color={Colors.gray300} />
     </TouchableOpacity>
   );
 }
 
-/** 아코디언처럼 열고 닫히는 섹션 — 헤더 탭하면 카드 리스트가 접히고 펼쳐짐 */
+/** 아코디언처럼 열고 닫히는 섹션 */
 function AccordionSection({ title, defaultOpen = true, children }: { title: string; defaultOpen?: boolean; children: React.ReactNode }) {
   const [open, setOpen] = useState(defaultOpen);
 
@@ -45,7 +46,7 @@ function AccordionSection({ title, defaultOpen = true, children }: { title: stri
         <Text style={styles.sectionLabel}>{title}</Text>
         <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={16} color={Colors.gray400} />
       </TouchableOpacity>
-      {open && <View style={styles.card}>{children}</View>}
+      {open && <View style={styles.listBody}>{children}</View>}
     </View>
   );
 }
@@ -55,24 +56,24 @@ export function MoreDrawer({ visible, onClose }: { visible: boolean; onClose: ()
   const { stores, store: currentStore, switchStore, currentRole, user, signOut } = useAuth();
   const [switching, setSwitching] = useState<string | null>(null);
   const [mounted, setMounted] = useState(visible);
-  const translateX = useRef(new Animated.Value(-DRAWER_WIDTH)).current;
-  const backdropOpacity = useRef(new Animated.Value(0)).current;
-
+  const translateX = useSharedValue(-DRAWER_WIDTH);
+  const backdropOpacity = useSharedValue(0);
+  const generation = useRef(0);
+  const visibleRef = useRef(visible);
+  visibleRef.current = visible;
+  const finishClose = (version: number) => { if (!visibleRef.current && version === generation.current) setMounted(false); };
+  const drawerMotion = useAnimatedStyle(() => ({ transform: [{ translateX: translateX.value }] }));
+  const backdropMotion = useAnimatedStyle(() => ({ opacity: backdropOpacity.value }));
   useEffect(() => {
-    if (visible) {
-      setMounted(true);
-      Animated.parallel([
-        Animated.timing(translateX, { toValue: 0, duration: 220, useNativeDriver: true }),
-        Animated.timing(backdropOpacity, { toValue: 1, duration: 220, useNativeDriver: true }),
-      ]).start();
-    } else if (mounted) {
-      Animated.parallel([
-        Animated.timing(translateX, { toValue: -DRAWER_WIDTH, duration: 200, useNativeDriver: true }),
-        Animated.timing(backdropOpacity, { toValue: 0, duration: 200, useNativeDriver: true }),
-      ]).start(() => setMounted(false));
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible]);
+    const version = ++generation.current;
+    if (visible) setMounted(true);
+    const duration = visible ? 220 : 200;
+    backdropOpacity.value = withTiming(visible ? 1 : 0, { duration, reduceMotion: ReduceMotion.System });
+    translateX.value = withTiming(visible ? 0 : -DRAWER_WIDTH, { duration, reduceMotion: ReduceMotion.System }, finished => {
+      if (finished && !visible) scheduleOnRN(finishClose, version);
+    });
+    return () => { generation.current += 1; cancelAnimation(translateX); cancelAnimation(backdropOpacity); };
+  }, [visible, translateX, backdropOpacity]);
 
   if (!mounted) return null;
 
@@ -83,9 +84,14 @@ export function MoreDrawer({ visible, onClose }: { visible: boolean; onClose: ()
   async function handleSwitchStore(storeId: string) {
     if (storeId === currentStore?.id) return;
     setSwitching(storeId);
-    await switchStore(storeId);
-    setSwitching(null);
-    onClose();
+    try {
+      await switchStore(storeId);
+      onClose();
+    } catch (e) {
+      Alert.alert('매장 전환', getErrorMessage(e, '매장을 바꾸지 못했어요. 다시 시도해주세요.'));
+    } finally {
+      setSwitching(null);
+    }
   }
 
   function go(path: string) {
@@ -110,7 +116,7 @@ export function MoreDrawer({ visible, onClose }: { visible: boolean; onClose: ()
   function handleDeleteAccount() {
     Alert.alert(
       '회원 탈퇴',
-      '정말로 탈퇴하시겠습니까? 매장 정보와 모든 데이터가 즉시 삭제되며 복구할 수 없습니다.',
+      '계정을 삭제할까요? 매장의 급여·매입 기록은 보존돼요.',
       [
         { text: '취소', style: 'cancel' },
         {
@@ -118,13 +124,13 @@ export function MoreDrawer({ visible, onClose }: { visible: boolean; onClose: ()
           style: 'destructive',
           onPress: async () => {
             try {
-              const { error } = await supabase.functions.invoke('delete-account');
-              if (error) throw error;
+              await deleteAccount();
               onClose();
               await signOut();
               router.replace('/(auth)/login');
-            } catch {
-              Alert.alert('탈퇴 실패', '탈퇴 처리에 실패했습니다. 고객센터에 문의해주세요.');
+            } catch (error) {
+              if (isAuthCancelled(error)) return;
+              Alert.alert('탈퇴 확인', getErrorMessage(error));
             }
           },
         },
@@ -134,14 +140,14 @@ export function MoreDrawer({ visible, onClose }: { visible: boolean; onClose: ()
 
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
-      <Animated.View style={[StyleSheet.absoluteFill, styles.backdrop, { opacity: backdropOpacity }]}>
+      <Animated.View style={[StyleSheet.absoluteFill, styles.backdrop, backdropMotion]}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
       </Animated.View>
 
-      <Animated.View style={[styles.drawer, { width: DRAWER_WIDTH, paddingTop: insets.top + 12, paddingBottom: insets.bottom + 12, transform: [{ translateX }] }]}>
+      <Animated.View style={[styles.drawer, { width: DRAWER_WIDTH, paddingTop: insets.top + 12, paddingBottom: insets.bottom + 12 }, drawerMotion]}>
         <View style={styles.drawerHeader}>
           <Text style={styles.drawerTitle}>더보기</Text>
-          <TouchableOpacity onPress={onClose} hitSlop={8}>
+          <TouchableOpacity onPress={onClose} style={styles.closeButton} hitSlop={8} accessibilityRole="button" accessibilityLabel="더보기 닫기">
             <Ionicons name="close" size={22} color={Colors.gray500} />
           </TouchableOpacity>
         </View>
@@ -168,9 +174,7 @@ export function MoreDrawer({ visible, onClose }: { visible: boolean; onClose: ()
                   onPress={() => handleSwitchStore(s.id)}
                   activeOpacity={0.7}
                 >
-                  <View style={[styles.iconWrap, { backgroundColor: Colors.gray100 }]}>
-                    <Ionicons name="business-outline" size={17} color={Colors.gray500} />
-                  </View>
+                  <Ionicons name="business-outline" size={19} color={Colors.gray600} style={styles.rowIcon} />
                   <View style={styles.itemInfoFlex}>
                     <Text style={styles.itemName} numberOfLines={1}>{s.name}</Text>
                     {isActive && <Text style={[styles.itemSub, { color: Colors.primary }]}>현재 선택됨</Text>}
@@ -187,13 +191,14 @@ export function MoreDrawer({ visible, onClose }: { visible: boolean; onClose: ()
             })}
           </AccordionSection>
 
+          <SettingRow icon="add-circle-outline" label="매장 추가·참여" onPress={() => go('/(auth)/select-store')} />
           <AccordionSection title="설정">
             {isAdmin && <SettingRow icon="storefront-outline" label="매장 정보" onPress={() => go('/settings/store')} />}
+            {isAdmin && currentStore?.owner_id === user?.id && <SettingRow icon="pie-chart-outline" label="손익 공유" withBorder onPress={() => go('/settings/financial-sharing')} />}
             {isAdmin && <SettingRow icon="people-outline" label="멤버 관리" withBorder onPress={() => go('/settings/members')} />}
             {isAdmin && <SettingRow icon="card-outline" label="TossPos 연동" withBorder onPress={() => go('/settings/pos-sync')} />}
             {isAdmin && <SettingRow icon="notifications-outline" label="알림 설정" withBorder onPress={() => go('/notifications/settings')} />}
-            <SettingRow icon="time-outline" label="출퇴근 기록" withBorder={isAdmin} onPress={() => go('/attendance')} />
-            <SettingRow icon="checkmark-done-outline" label="청소 체크리스트" withBorder onPress={() => go('/cleaning')} />
+            <SettingRow icon="checkmark-done-outline" label="청소 체크리스트" withBorder={isAdmin} onPress={() => go('/cleaning')} />
             {isEmailUser && (
               <SettingRow icon="lock-closed-outline" label="비밀번호 변경" withBorder onPress={() => go('/settings/password')} />
             )}
@@ -212,45 +217,44 @@ export function MoreDrawer({ visible, onClose }: { visible: boolean; onClose: ()
 }
 
 const styles = StyleSheet.create({
-  backdrop: { backgroundColor: 'rgba(0,0,0,0.4)' },
+  backdrop: { backgroundColor: Colors.overlay },
   drawer: {
     position: 'absolute', top: 0, bottom: 0, left: 0,
-    backgroundColor: Colors.gray50, paddingHorizontal: 16,
-    shadowColor: '#000', shadowOffset: { width: 4, height: 0 }, shadowOpacity: 0.15, shadowRadius: 16, elevation: 16,
+    backgroundColor: Colors.homeCanvas, paddingHorizontal: 20,
+    shadowColor: Colors.black, shadowOffset: { width: 4, height: 0 }, shadowOpacity: 0.15, shadowRadius: 16, elevation: 16,
   },
   drawerHeader: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingBottom: 14, marginBottom: 4,
   },
-  drawerTitle: { fontSize: 17, fontWeight: '700', color: Colors.black },
+  closeButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  drawerTitle: { fontSize: 22, fontWeight: '700', color: Colors.black },
 
   scroll: { paddingBottom: 40 },
   profileRow: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
-    backgroundColor: Colors.white, borderRadius: 16,
-    borderWidth: 0.5, borderColor: Colors.gray100,
-    padding: 14, marginBottom: 18,
+    padding: 14, marginBottom: 16, backgroundColor: Colors.white,
+    borderRadius: 20, borderWidth: 1, borderColor: Colors.homeBorder,
   },
   profileAvatar: {
     width: 42, height: 42, borderRadius: 21,
     backgroundColor: Colors.tinted, justifyContent: 'center', alignItems: 'center',
   },
   profileName: { fontSize: 14, fontWeight: '700', color: Colors.black },
-  profileSub: { fontSize: 11, fontWeight: '500', color: Colors.gray400, marginTop: 2 },
+  profileSub: { fontSize: 12, fontWeight: '500', color: Colors.gray400, marginTop: 2 },
 
   accordion: { marginBottom: 16 },
-  accordionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 8 },
+  accordionHeader: { minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 10 },
 
   dangerTextRow: { alignItems: 'center', paddingVertical: 16 },
   dangerText: { fontSize: 14, fontWeight: '600', color: Colors.negative },
   sectionLabel: {
-    fontSize: 11, fontWeight: '500', color: Colors.gray400,
-    textTransform: 'uppercase', letterSpacing: 0.5,
+    fontSize: 13, fontWeight: '700', color: Colors.gray600,
   },
-  card: { ...CardStyle, overflow: 'hidden' },
-  listItem: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 13, gap: 12 },
-  listItemBorder: { borderTopWidth: 0.5, borderTopColor: Colors.gray100 },
-  iconWrap: { width: 34, height: 34, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
+  listBody: { backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.homeBorder, borderRadius: 20, paddingHorizontal: 14, overflow: 'hidden' },
+  listItem: { flexDirection: 'row', alignItems: 'center', minHeight: 50, paddingVertical: 10, gap: 14 },
+  listItemBorder: { borderTopWidth: 0.5, borderTopColor: Colors.homeBorder },
+  rowIcon: { width: 22 },
   itemInfoFlex: { flex: 1 },
   itemName: { flex: 1, fontSize: 14, fontWeight: '500', color: Colors.black },
   itemSub: { fontSize: 12, marginTop: 1 },

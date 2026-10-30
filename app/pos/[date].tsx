@@ -1,4 +1,5 @@
-import { useCallback } from 'react';
+import { dailyItemKey, stringKey } from '../../lib/utils/listKeys';
+import { useCallback, memo, useMemo } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator,
 } from 'react-native';
@@ -10,7 +11,7 @@ import { usePosAnalytics } from '../../lib/hooks/usePosAnalytics';
 import { ErrorMessage } from '../../lib/components/ErrorMessage';
 import { DailyItem } from '../../types';
 
-function ItemRow({ item }: { item: DailyItem }) {
+const ItemRow = memo(function ItemRow({ item }: { item: DailyItem }) {
   return (
     <View style={styles.itemRow}>
       <View style={styles.itemLeft}>
@@ -25,7 +26,10 @@ function ItemRow({ item }: { item: DailyItem }) {
       </View>
     </View>
   );
-}
+});
+
+const renderSalesItem = ({ item }: { item: DailyItem }) => <ItemRow item={item} />;
+const ItemSeparator = () => <View style={styles.separator} />;
 
 export default function PosDateScreen() {
   const { date, from, to } = useLocalSearchParams<{ date: string; from: string; to: string }>();
@@ -41,43 +45,49 @@ export default function PosDateScreen() {
     }
   }, [from, to, fetchItems]));
 
-  const totalAmount = allItems.reduce((sum, i) => sum + i.totalAmount, 0);
-  const totalQty = allItems.reduce((sum, i) => sum + i.quantity, 0);
+  const totalAmount = useMemo(() => allItems.reduce((sum, i) => sum + i.totalAmount, 0), [allItems]);
+  const totalQty = useMemo(() => allItems.reduce((sum, i) => sum + i.quantity, 0), [allItems]);
+
+  const renderCategory = useCallback(({ item: cat }: { item: string }) => (
+    <TouchableOpacity
+      style={[styles.filterChip, activeCategory === cat && styles.filterChipActive]}
+      onPress={() => setActiveCategory(cat)}
+    >
+      <Text style={[styles.filterChipText, activeCategory === cat && styles.filterChipTextActive]}>
+        {cat || '미분류'}
+      </Text>
+    </TouchableOpacity>
+  ), [activeCategory, setActiveCategory]);
 
   if (error) return <ErrorMessage message={error} onRetry={() => fetchItems(String(from), String(to))} />;
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} accessibilityRole="button" accessibilityLabel="뒤로가기">
           <Ionicons name="chevron-back" size={24} color={Colors.black} />
         </TouchableOpacity>
         <View style={styles.headerCenter}>
           <Text style={styles.headerDate}>{date}</Text>
           <Text style={styles.headerSub}>{totalQty}개 · {totalAmount.toLocaleString('ko-KR')}원</Text>
         </View>
-        <View style={{ width: 40 }} />
+        <View style={{ width: 44 }} />
       </View>
 
       {/* 카테고리 필터 */}
       {categories.length > 1 && (
         <View style={styles.filterBar}>
           <FlatList
+            initialNumToRender={5}
+            maxToRenderPerBatch={10}
+            windowSize={5}
             horizontal
             showsHorizontalScrollIndicator={false}
             data={categories}
-            keyExtractor={c => c}
+            keyExtractor={stringKey}
             contentContainerStyle={styles.filterContent}
-            renderItem={({ item: cat }) => (
-              <TouchableOpacity
-                style={[styles.filterChip, activeCategory === cat && styles.filterChipActive]}
-                onPress={() => setActiveCategory(cat)}
-              >
-                <Text style={[styles.filterChipText, activeCategory === cat && styles.filterChipTextActive]}>
-                  {cat || '미분류'}
-                </Text>
-              </TouchableOpacity>
-            )}
+            extraData={activeCategory}
+            renderItem={renderCategory}
           />
         </View>
       )}
@@ -86,14 +96,17 @@ export default function PosDateScreen() {
         ? <ActivityIndicator size="large" color={Colors.primary} style={{ flex: 1 }} />
         : (
           <FlatList
+            initialNumToRender={5}
+            maxToRenderPerBatch={10}
+            windowSize={5}
             data={items}
-            keyExtractor={i => i.itemId || i.itemName}
+            keyExtractor={dailyItemKey}
             contentContainerStyle={styles.list}
-            renderItem={({ item }) => <ItemRow item={item} />}
+            renderItem={renderSalesItem}
             ListEmptyComponent={
               <Text style={styles.emptyText}>판매 내역이 없습니다.</Text>
             }
-            ItemSeparatorComponent={() => <View style={styles.separator} />}
+            ItemSeparatorComponent={ItemSeparator}
           />
         )
       }
@@ -102,36 +115,39 @@ export default function PosDateScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.gray50 },
+  container: { flex: 1, backgroundColor: Colors.homeCanvas },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 16, paddingVertical: 12, backgroundColor: Colors.white,
-    borderBottomWidth: 1, borderBottomColor: Colors.gray100,
+    paddingHorizontal: 20, paddingVertical: 12, backgroundColor: Colors.homeCanvas,
   },
-  backBtn: { width: 40, height: 40, justifyContent: 'center' },
-  headerCenter: { alignItems: 'center' },
-  headerDate: { fontSize: 16, fontWeight: '800', color: Colors.black },
+  backBtn: { width: 44, height: 44, justifyContent: 'center' },
+  headerCenter: { flex: 1, alignItems: 'center' },
+  headerDate: { fontSize: 22, fontWeight: '700', color: Colors.black },
   headerSub: { fontSize: 12, color: Colors.gray500, marginTop: 2 },
-  filterBar: { backgroundColor: Colors.white, borderBottomWidth: 1, borderBottomColor: Colors.gray100 },
-  filterContent: { paddingHorizontal: 16, paddingVertical: 10, gap: 8, flexDirection: 'row' },
+  filterBar: { backgroundColor: Colors.homeCanvas },
+  filterContent: { paddingHorizontal: 20, paddingVertical: 10, gap: 8, flexDirection: 'row' },
   filterChip: {
-    paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20,
+    paddingHorizontal: 14, minHeight: 44, justifyContent: 'center', borderRadius: 20,
     borderWidth: 1, borderColor: Colors.gray200, backgroundColor: Colors.white,
   },
-  filterChipActive: { backgroundColor: Colors.dark, borderColor: Colors.dark },
+  filterChipActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
   filterChipText: { fontSize: 13, fontWeight: '600', color: Colors.gray500 },
   filterChipTextActive: { color: Colors.white },
-  list: { paddingHorizontal: 16, paddingVertical: 12 },
+  list: {
+    margin: 20, paddingHorizontal: 16,
+    backgroundColor: Colors.white, borderRadius: 20,
+    borderWidth: 1, borderColor: Colors.homeBorder,
+  },
   itemRow: {
-    backgroundColor: Colors.white, borderRadius: 12, padding: 16,
+    paddingVertical: 14,
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
   },
-  itemLeft: { flex: 1 },
+  itemLeft: { flex: 1, minWidth: 0, marginRight: 12 },
   itemName: { fontSize: 15, fontWeight: '600', color: Colors.black },
   itemCategory: { fontSize: 12, color: Colors.gray400, marginTop: 2 },
   itemRight: { alignItems: 'flex-end', gap: 2 },
   itemQty: { fontSize: 13, color: Colors.gray500 },
-  itemAmount: { fontSize: 15, fontWeight: '700', color: Colors.primary },
-  separator: { height: 8 },
+  itemAmount: { fontSize: 15, fontWeight: '700', color: Colors.black },
+  separator: { height: 0.5, backgroundColor: Colors.gray100 },
   emptyText: { textAlign: 'center', color: Colors.gray400, paddingVertical: 40 },
 });

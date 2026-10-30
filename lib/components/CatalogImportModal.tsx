@@ -153,62 +153,56 @@ export function CatalogImportModal({ visible, items, onConfirm, onClose }: Catal
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.gray50 },
+  container: { flex: 1, backgroundColor: Colors.homeCanvas},
 
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
     paddingVertical: 14,
-    backgroundColor: Colors.white,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.gray100,
+    backgroundColor: Colors.homeCanvas,
+    borderBottomWidth: 0,
+    borderBottomColor: Colors.homeBorder,
   },
   closeBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 10,
+    width: 44,
+    height: 44,
+    borderRadius: 14,
     backgroundColor: Colors.gray100,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  headerCenter: { alignItems: 'center', gap: 2 },
-  title: { fontSize: 16, fontWeight: '700', color: Colors.black },
-  headerCount: { fontSize: 12, color: Colors.gray400 },
+  headerCenter: { alignItems: 'center', gap: 2, flex: 1, minWidth: 0, paddingHorizontal: 8 },
+  title: { fontSize: 18, fontWeight: '700', color: Colors.black, textAlign: 'center' },
+  headerCount: { fontSize: 13, color: Colors.gray500},
   selectAllBtn: {
     paddingHorizontal: 10,
     paddingVertical: 6,
-    borderRadius: 8,
-    backgroundColor: Colors.tinted,
-  },
+    borderRadius: 14,
+    backgroundColor: Colors.tinted, minHeight: 44, justifyContent: 'center' },
   selectAllText: { fontSize: 13, color: Colors.primary, fontWeight: '700' },
 
-  list: { paddingHorizontal: 16, paddingBottom: 24 },
+  list: { paddingHorizontal: 20, paddingBottom: 24 },
 
   categoryHeader: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '700',
     color: Colors.gray500,
     marginTop: 20,
     marginBottom: 8,
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
+
   },
   itemRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
     backgroundColor: Colors.white,
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 6,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 3,
-    elevation: 1,
-  },
+    borderRadius: 20,
+    padding: 16,
+    marginBottom: 8,
+
+     borderWidth: 1, borderColor: Colors.homeBorder },
   itemRowChecked: {
     backgroundColor: Colors.tinted,
   },
@@ -232,11 +226,11 @@ const styles = StyleSheet.create({
   itemPrice: { fontSize: 14, color: Colors.gray500, marginLeft: 8, fontWeight: '500' },
 
   footer: {
-    padding: 16,
+    padding: 20,
     paddingBottom: 24,
     backgroundColor: Colors.white,
     borderTopWidth: 1,
-    borderTopColor: Colors.gray100,
+    borderTopColor: Colors.homeBorder,
   },
   confirmBtn: {
     flexDirection: 'row',
@@ -245,8 +239,7 @@ const styles = StyleSheet.create({
     gap: 8,
     backgroundColor: Colors.primary,
     borderRadius: 14,
-    paddingVertical: 16,
-  },
+    paddingVertical: 16, minHeight: 48 },
   confirmBtnDisabled: { opacity: 0.5 },
   confirmBtnText: { color: Colors.white, fontSize: 16, fontWeight: '700' },
 
@@ -260,5 +253,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 14,
   },
-  emptyText: { fontSize: 15, color: Colors.gray400, fontWeight: '500' },
+  emptyText: { fontSize: 15, color: Colors.gray500, fontWeight: '500' },
 });

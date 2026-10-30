@@ -1,0 +1,3324 @@
+{
+  "project": "galrnwpiaedtahoupbgo",
+  "schemaCapturedAt": "2026-10-21T12:22:10.531342+00:00",
+  "finalCheckAt": "2026-10-21T12:26:04.700556+00:00",
+  "scope": "Read-only public schema metadata; selected read query plans; no production data/schema changes",
+  "counts": {
+    "tables": 34,
+    "columns": 345,
+    "indexes": 81,
+    "policies": 82,
+    "functions": 50,
+    "constraints": 139,
+    "triggers": 12
+  },
+  "actualRowCounts": {
+    "items": 36000,
+    "members": 3,
+    "orders": 8122,
+    "stores": 4
+  },
+  "database": {
+    "blks_hit": 61371204,
+    "blks_read": 4378,
+    "deadlocks": 0,
+    "numbackends": 18,
+    "stats_reset": null,
+    "temp_bytes": 258269184,
+    "temp_files": 31,
+    "xact_commit": 1530078,
+    "xact_rollback": 440
+  },
+  "statementStatsReset": "2026-10-18T10:04:23.570919+00:00",
+  "rollup": {
+    "blocking_sessions": 0,
+    "db_bytes": 29117587,
+    "index_invalid": 0,
+    "month_order_count": 442
+  },
+  "tables": [
+    {
+      "relforcerowsecurity": false,
+      "relname": "account_unlink_jobs",
+      "relrowsecurity": true,
+      "indexCount": 3,
+      "policyCount": 0,
+      "totalBytes": 32768
+    },
+    {
+      "relforcerowsecurity": false,
+      "relname": "attendance",
+      "relrowsecurity": true,
+      "indexCount": 4,
+      "policyCount": 3,
+      "totalBytes": 81920
+    },
+    {
+      "relforcerowsecurity": false,
+      "relname": "attendance_corrections",
+      "relrowsecurity": true,
+      "indexCount": 2,
+      "policyCount": 3,
+      "totalBytes": 24576
+    },
+    {
+      "relforcerowsecurity": false,
+      "relname": "cleaning_items",
+      "relrowsecurity": true,
+      "indexCount": 2,
+      "policyCount": 1,
+      "totalBytes": 49152
+    },
+    {
+      "relforcerowsecurity": false,
+      "relname": "cleaning_logs",
+      "relrowsecurity": true,
+      "indexCount": 3,
+      "policyCount": 1,
+      "totalBytes": 65536
+    },
+    {
+      "relforcerowsecurity": false,
+      "relname": "employee_schedules",
+      "relrowsecurity": true,
+      "indexCount": 2,
+      "policyCount": 2,
+      "totalBytes": 40960
+    },
+    {
+      "relforcerowsecurity": false,
+      "relname": "employee_wage_history",
+      "relrowsecurity": true,
+      "indexCount": 2,
+      "policyCount": 2,
+      "totalBytes": 49152
+    },
+    {
+      "relforcerowsecurity": false,
+      "relname": "employees",
+      "relrowsecurity": true,
+      "indexCount": 3,
+      "policyCount": 4,
+      "totalBytes": 65536
+    },
+    {
+      "relforcerowsecurity": false,
+      "relname": "expenses",
+      "relrowsecurity": true,
+      "indexCount": 2,
+      "policyCount": 4,
+      "totalBytes": 49152
+    },
+    {
+      "relforcerowsecurity": false,
+      "relname": "home_alert_reads",
+      "relrowsecurity": true,
+      "indexCount": 1,
+      "policyCount": 2,
+      "totalBytes": 32768
+    },
+    {
+      "relforcerowsecurity": false,
+      "relname": "income_tax_table",
+      "relrowsecurity": true,
+      "indexCount": 1,
+      "policyCount": 1,
+      "totalBytes": 237568
+    },
+    {
+      "relforcerowsecurity": false,
+      "relname": "ingredients",
+      "relrowsecurity": true,
+      "indexCount": 3,
+      "policyCount": 4,
+      "totalBytes": 65536
+    },
+    {
+      "relforcerowsecurity": false,
+      "relname": "manual_sales",
+      "relrowsecurity": true,
+      "indexCount": 3,
+      "policyCount": 1,
+      "totalBytes": 32768
+    },
+    {
+      "relforcerowsecurity": false,
+      "relname": "notification_settings",
+      "relrowsecurity": true,
+      "indexCount": 2,
+      "policyCount": 2,
+      "totalBytes": 49152
+    },
+    {
+      "relforcerowsecurity": false,
+      "relname": "notifications",
+      "relrowsecurity": true,
+      "indexCount": 3,
+      "policyCount": 2,
+      "totalBytes": 65536
+    },
+    {
+      "relforcerowsecurity": false,
+      "relname": "ocr_results",
+      "relrowsecurity": true,
+      "indexCount": 2,
+      "policyCount": 1,
+      "totalBytes": 24576
+    },
+    {
+      "relforcerowsecurity": false,
+      "relname": "order_items",
+      "relrowsecurity": true,
+      "indexCount": 2,
+      "policyCount": 1,
+      "totalBytes": 49152
+    },
+    {
+      "relforcerowsecurity": false,
+      "relname": "orders",
+      "relrowsecurity": true,
+      "indexCount": 2,
+      "policyCount": 4,
+      "totalBytes": 49152
+    },
+    {
+      "relforcerowsecurity": false,
+      "relname": "payroll",
+      "relrowsecurity": true,
+      "indexCount": 4,
+      "policyCount": 2,
+      "totalBytes": 81920
+    },
+    {
+      "relforcerowsecurity": false,
+      "relname": "payroll_work_history",
+      "relrowsecurity": true,
+      "indexCount": 2,
+      "policyCount": 1,
+      "totalBytes": 49152
+    },
+    {
+      "relforcerowsecurity": false,
+      "relname": "payroll_work_submissions",
+      "relrowsecurity": true,
+      "indexCount": 3,
+      "policyCount": 1,
+      "totalBytes": 32768
+    },
+    {
+      "relforcerowsecurity": false,
+      "relname": "purchase_items",
+      "relrowsecurity": true,
+      "indexCount": 3,
+      "policyCount": 1,
+      "totalBytes": 65536
+    },
+    {
+      "relforcerowsecurity": false,
+      "relname": "purchases",
+      "relrowsecurity": true,
+      "indexCount": 2,
+      "policyCount": 1,
+      "totalBytes": 49152
+    },
+    {
+      "relforcerowsecurity": false,
+      "relname": "recipe_ingredients",
+      "relrowsecurity": true,
+      "indexCount": 2,
+      "policyCount": 5,
+      "totalBytes": 49152
+    },
+    {
+      "relforcerowsecurity": false,
+      "relname": "recipes",
+      "relrowsecurity": true,
+      "indexCount": 2,
+      "policyCount": 8,
+      "totalBytes": 90112
+    },
+    {
+      "relforcerowsecurity": false,
+      "relname": "schedule_requests",
+      "relrowsecurity": true,
+      "indexCount": 2,
+      "policyCount": 3,
+      "totalBytes": 49152
+    },
+    {
+      "relforcerowsecurity": false,
+      "relname": "store_join_profiles",
+      "relrowsecurity": true,
+      "indexCount": 1,
+      "policyCount": 1,
+      "totalBytes": 32768
+    },
+    {
+      "relforcerowsecurity": false,
+      "relname": "store_members",
+      "relrowsecurity": true,
+      "indexCount": 2,
+      "policyCount": 4,
+      "totalBytes": 49152
+    },
+    {
+      "relforcerowsecurity": false,
+      "relname": "stores",
+      "relrowsecurity": true,
+      "indexCount": 3,
+      "policyCount": 6,
+      "totalBytes": 98304
+    },
+    {
+      "relforcerowsecurity": false,
+      "relname": "toss_catalog",
+      "relrowsecurity": true,
+      "indexCount": 2,
+      "policyCount": 4,
+      "totalBytes": 172032
+    },
+    {
+      "relforcerowsecurity": false,
+      "relname": "toss_order_items",
+      "relrowsecurity": true,
+      "indexCount": 3,
+      "policyCount": 3,
+      "totalBytes": 10739712
+    },
+    {
+      "relforcerowsecurity": false,
+      "relname": "toss_orders",
+      "relrowsecurity": true,
+      "indexCount": 4,
+      "policyCount": 4,
+      "totalBytes": 2842624
+    },
+    {
+      "relforcerowsecurity": false,
+      "relname": "toss_pending_installations",
+      "relrowsecurity": true,
+      "indexCount": 3,
+      "policyCount": 0,
+      "totalBytes": 65536
+    },
+    {
+      "relforcerowsecurity": false,
+      "relname": "toss_webhook_events",
+      "relrowsecurity": true,
+      "indexCount": 1,
+      "policyCount": 0,
+      "totalBytes": 32768
+    }
+  ],
+  "indexes": [
+    {
+      "bytes": 8192,
+      "idx_scan": 0,
+      "indexdef": "CREATE UNIQUE INDEX account_unlink_jobs_pkey ON public.account_unlink_jobs USING btree (id)",
+      "indexname": "account_unlink_jobs_pkey",
+      "tablename": "account_unlink_jobs"
+    },
+    {
+      "bytes": 8192,
+      "idx_scan": 0,
+      "indexdef": "CREATE UNIQUE INDEX account_unlink_jobs_user_id_provider_key ON public.account_unlink_jobs USING btree (user_id, provider)",
+      "indexname": "account_unlink_jobs_user_id_provider_key",
+      "tablename": "account_unlink_jobs"
+    },
+    {
+      "bytes": 8192,
+      "idx_scan": 1,
+      "indexdef": "CREATE INDEX account_unlink_retry ON public.account_unlink_jobs USING btree (next_attempt_at) WHERE (attempts < 8)",
+      "indexname": "account_unlink_retry",
+      "tablename": "account_unlink_jobs"
+    },
+    {
+      "bytes": 16384,
+      "idx_scan": 0,
+      "indexdef": "CREATE UNIQUE INDEX attendance_pkey ON public.attendance USING btree (id)",
+      "indexname": "attendance_pkey",
+      "tablename": "attendance"
+    },
+    {
+      "bytes": 16384,
+      "idx_scan": 8,
+      "indexdef": "CREATE INDEX idx_attendance_clockout_wage ON public.attendance USING btree (store_id, \"timestamp\") WHERE (type = 'clock_out'::text)",
+      "indexname": "idx_attendance_clockout_wage",
+      "tablename": "attendance"
+    },
+    {
+      "bytes": 16384,
+      "idx_scan": 0,
+      "indexdef": "CREATE INDEX idx_attendance_store_date ON public.attendance USING btree (store_id, \"timestamp\" DESC)",
+      "indexname": "idx_attendance_store_date",
+      "tablename": "attendance"
+    },
+    {
+      "bytes": 16384,
+      "idx_scan": 0,
+      "indexdef": "CREATE INDEX idx_attendance_store_emp ON public.attendance USING btree (store_id, employee_id, \"timestamp\" DESC)",
+      "indexname": "idx_attendance_store_emp",
+      "tablename": "attendance"
+    },
+    {
+      "bytes": 8192,
+      "idx_scan": 1,
+      "indexdef": "CREATE UNIQUE INDEX attendance_corrections_pkey ON public.attendance_corrections USING btree (id)",
+      "indexname": "attendance_corrections_pkey",
+      "tablename": "attendance_corrections"
+    },
+    {
+      "bytes": 8192,
+      "idx_scan": 0,
+      "indexdef": "CREATE INDEX idx_attendance_corrections_store_status ON public.attendance_corrections USING btree (store_id, status)",
+      "indexname": "idx_attendance_corrections_store_status",
+      "tablename": "attendance_corrections"
+    },
+    {
+      "bytes": 16384,
+      "idx_scan": 1,
+      "indexdef": "CREATE UNIQUE INDEX cleaning_items_pkey ON public.cleaning_items USING btree (id)",
+      "indexname": "cleaning_items_pkey",
+      "tablename": "cleaning_items"
+    },
+    {
+      "bytes": 16384,
+      "idx_scan": 394,
+      "indexdef": "CREATE INDEX cleaning_items_store_segment_idx ON public.cleaning_items USING btree (store_id, segment, sort_order)",
+      "indexname": "cleaning_items_store_segment_idx",
+      "tablename": "cleaning_items"
+    },
+    {
+      "bytes": 16384,
+      "idx_scan": 0,
+      "indexdef": "CREATE UNIQUE INDEX cleaning_logs_item_id_date_key ON public.cleaning_logs USING btree (item_id, date)",
+      "indexname": "cleaning_logs_item_id_date_key",
+      "tablename": "cleaning_logs"
+    },
+    {
+      "bytes": 16384,
+      "idx_scan": 2,
+      "indexdef": "CREATE UNIQUE INDEX cleaning_logs_pkey ON public.cleaning_logs USING btree (id)",
+      "indexname": "cleaning_logs_pkey",
+      "tablename": "cleaning_logs"
+    },
+    {
+      "bytes": 16384,
+      "idx_scan": 1039,
+      "indexdef": "CREATE INDEX cleaning_logs_store_date_idx ON public.cleaning_logs USING btree (store_id, date)",
+      "indexname": "cleaning_logs_store_date_idx",
+      "tablename": "cleaning_logs"
+    },
+    {
+      "bytes": 16384,
+      "idx_scan": 2759,
+      "indexdef": "CREATE UNIQUE INDEX employee_schedules_employee_id_day_of_week_key ON public.employee_schedules USING btree (employee_id, day_of_week)",
+      "indexname": "employee_schedules_employee_id_day_of_week_key",
+      "tablename": "employee_schedules"
+    },
+    {
+      "bytes": 16384,
+      "idx_scan": 1,
+      "indexdef": "CREATE UNIQUE INDEX employee_schedules_pkey ON public.employee_schedules USING btree (id)",
+      "indexname": "employee_schedules_pkey",
+      "tablename": "employee_schedules"
+    },
+    {
+      "bytes": 16384,
+      "idx_scan": 0,
+      "indexdef": "CREATE UNIQUE INDEX employee_wage_history_pkey ON public.employee_wage_history USING btree (id)",
+      "indexname": "employee_wage_history_pkey",
+      "tablename": "employee_wage_history"
+    },
+    {
+      "bytes": 16384,
+      "idx_scan": 12528,
+      "indexdef": "CREATE INDEX idx_wage_history_emp ON public.employee_wage_history USING btree (employee_id, effective_date)",
+      "indexname": "idx_wage_history_emp",
+      "tablename": "employee_wage_history"
+    },
+    {
+      "bytes": 16384,
+      "idx_scan": 120,
+      "indexdef": "CREATE UNIQUE INDEX employees_pkey ON public.employees USING btree (id)",
+      "indexname": "employees_pkey",
+      "tablename": "employees"
+    },
+    {
+      "bytes": 16384,
+      "idx_scan": 0,
+      "indexdef": "CREATE INDEX idx_employees_store ON public.employees USING btree (store_id, is_active)",
+      "indexname": "idx_employees_store",
+      "tablename": "employees"
+    },
+    {
+      "bytes": 16384,
+      "idx_scan": 0,
+      "indexdef": "CREATE UNIQUE INDEX uq_employees_store_user ON public.employees USING btree (store_id, user_id) WHERE (user_id IS NOT NULL)",
+      "indexname": "uq_employees_store_user",
+      "tablename": "employees"
+    },
+    {
+      "bytes": 16384,
+      "idx_scan": 1,
+      "indexdef": "CREATE UNIQUE INDEX expenses_pkey ON public.expenses USING btree (id)",
+      "indexname": "expenses_pkey",
+      "tablename": "expenses"
+    },
+    {
+      "bytes": 16384,
+      "idx_scan": 12190,
+      "indexdef": "CREATE INDEX idx_expenses_store_month ON public.expenses USING btree (store_id, year_month)",
+      "indexname": "idx_expenses_store_month",
+      "tablename": "expenses"
+    },
+    {
+      "bytes": 16384,
+      "idx_scan": 42,
+      "indexdef": "CREATE UNIQUE INDEX home_alert_reads_pkey ON public.home_alert_reads USING btree (store_id, user_id, alert_key)",
+      "indexname": "home_alert_reads_pkey",
+      "tablename": "home_alert_reads"
+    },
+    {
+      "bytes": 81920,
+      "idx_scan": 0,
+      "indexdef": "CREATE UNIQUE INDEX income_tax_table_pkey ON public.income_tax_table USING btree (year, salary_from)",
+      "indexname": "income_tax_table_pkey",
+      "tablename": "income_tax_table"
+    },
+    {
+      "bytes": 16384,
+      "idx_scan": 0,
+      "indexdef": "CREATE INDEX idx_ingredients_low_stock ON public.ingredients USING btree (store_id, is_low_stock) WHERE (is_low_stock = true)",
+      "indexname": "idx_ingredients_low_stock",
+      "tablename": "ingredients"
+    },
+    {
+      "bytes": 16384,
+      "idx_scan": 161,
+      "indexdef": "CREATE INDEX idx_ingredients_store ON public.ingredients USING btree (store_id)",
+      "indexname": "idx_ingredients_store",
+      "tablename": "ingredients"
+    },
+    {
+      "bytes": 16384,
+      "idx_scan": 85,
+      "indexdef": "CREATE UNIQUE INDEX ingredients_pkey ON public.ingredients USING btree (id)",
+      "indexname": "ingredients_pkey",
+      "tablename": "ingredients"
+    },
+    {
+      "bytes": 8192,
+      "idx_scan": 0,
+      "indexdef": "CREATE INDEX idx_manual_sales_store_date ON public.manual_sales USING btree (store_id, date DESC)",
+      "indexname": "idx_manual_sales_store_date",
+      "tablename": "manual_sales"
+    },
+    {
+      "bytes": 8192,
+      "idx_scan": 1,
+      "indexdef": "CREATE UNIQUE INDEX manual_sales_pkey ON public.manual_sales USING btree (id)",
+      "indexname": "manual_sales_pkey",
+      "tablename": "manual_sales"
+    },
+    {
+      "bytes": 8192,
+      "idx_scan": 4258,
+      "indexdef": "CREATE UNIQUE INDEX manual_sales_store_date_unique ON public.manual_sales USING btree (store_id, date)",
+      "indexname": "manual_sales_store_date_unique",
+      "tablename": "manual_sales"
+    },
+    {
+      "bytes": 16384,
+      "idx_scan": 1,
+      "indexdef": "CREATE UNIQUE INDEX notification_settings_pkey ON public.notification_settings USING btree (id)",
+      "indexname": "notification_settings_pkey",
+      "tablename": "notification_settings"
+    },
+    {
+      "bytes": 16384,
+      "idx_scan": 2,
+      "indexdef": "CREATE UNIQUE INDEX notification_settings_store_id_setting_key_key ON public.notification_settings USING btree (store_id, setting_key)",
+      "indexname": "notification_settings_store_id_setting_key_key",
+      "tablename": "notification_settings"
+    },
+    {
+      "bytes": 16384,
+      "idx_scan": 1116,
+      "indexdef": "CREATE INDEX idx_notifications_store_created ON public.notifications USING btree (store_id, created_at DESC)",
+      "indexname": "idx_notifications_store_created",
+      "tablename": "notifications"
+    },
+    {
+      "bytes": 16384,
+      "idx_scan": 3,
+      "indexdef": "CREATE UNIQUE INDEX notifications_pkey ON public.notifications USING btree (id)",
+      "indexname": "notifications_pkey",
+      "tablename": "notifications"
+    },
+    {
+      "bytes": 16384,
+      "idx_scan": 7,
+      "indexdef": "CREATE UNIQUE INDEX notifications_store_id_dedupe_key_key ON public.notifications USING btree (store_id, dedupe_key)",
+      "indexname": "notifications_store_id_dedupe_key_key",
+      "tablename": "notifications"
+    },
+    {
+      "bytes": 8192,
+      "idx_scan": 0,
+      "indexdef": "CREATE INDEX idx_ocr_results_store ON public.ocr_results USING btree (store_id)",
+      "indexname": "idx_ocr_results_store",
+      "tablename": "ocr_results"
+    },
+    {
+      "bytes": 8192,
+      "idx_scan": 2,
+      "indexdef": "CREATE UNIQUE INDEX ocr_results_pkey ON public.ocr_results USING btree (id)",
+      "indexname": "ocr_results_pkey",
+      "tablename": "ocr_results"
+    },
+    {
+      "bytes": 16384,
+      "idx_scan": 0,
+      "indexdef": "CREATE INDEX idx_order_items_order ON public.order_items USING btree (order_id)",
+      "indexname": "idx_order_items_order",
+      "tablename": "order_items"
+    },
+    {
+      "bytes": 16384,
+      "idx_scan": 0,
+      "indexdef": "CREATE UNIQUE INDEX order_items_pkey ON public.order_items USING btree (id)",
+      "indexname": "order_items_pkey",
+      "tablename": "order_items"
+    },
+    {
+      "bytes": 16384,
+      "idx_scan": 0,
+      "indexdef": "CREATE INDEX idx_orders_store ON public.orders USING btree (store_id)",
+      "indexname": "idx_orders_store",
+      "tablename": "orders"
+    },
+    {
+      "bytes": 16384,
+      "idx_scan": 1,
+      "indexdef": "CREATE UNIQUE INDEX orders_pkey ON public.orders USING btree (id)",
+      "indexname": "orders_pkey",
+      "tablename": "orders"
+    },
+    {
+      "bytes": 16384,
+      "idx_scan": 1,
+      "indexdef": "CREATE INDEX idx_payroll_employee ON public.payroll USING btree (employee_id, year_month)",
+      "indexname": "idx_payroll_employee",
+      "tablename": "payroll"
+    },
+    {
+      "bytes": 16384,
+      "idx_scan": 3881,
+      "indexdef": "CREATE INDEX idx_payroll_store_month ON public.payroll USING btree (store_id, year_month)",
+      "indexname": "idx_payroll_store_month",
+      "tablename": "payroll"
+    },
+    {
+      "bytes": 16384,
+      "idx_scan": 2,
+      "indexdef": "CREATE UNIQUE INDEX payroll_employee_id_year_month_key ON public.payroll USING btree (employee_id, year_month)",
+      "indexname": "payroll_employee_id_year_month_key",
+      "tablename": "payroll"
+    },
+    {
+      "bytes": 16384,
+      "idx_scan": 1,
+      "indexdef": "CREATE UNIQUE INDEX payroll_pkey ON public.payroll USING btree (id)",
+      "indexname": "payroll_pkey",
+      "tablename": "payroll"
+    },
+    {
+      "bytes": 16384,
+      "idx_scan": 0,
+      "indexdef": "CREATE INDEX payroll_work_history_lookup ON public.payroll_work_history USING btree (store_id, employee_id, year_month, changed_at DESC)",
+      "indexname": "payroll_work_history_lookup",
+      "tablename": "payroll_work_history"
+    },
+    {
+      "bytes": 16384,
+      "idx_scan": 1,
+      "indexdef": "CREATE UNIQUE INDEX payroll_work_history_pkey ON public.payroll_work_history USING btree (id)",
+      "indexname": "payroll_work_history_pkey",
+      "tablename": "payroll_work_history"
+    },
+    {
+      "bytes": 8192,
+      "idx_scan": 25,
+      "indexdef": "CREATE INDEX payroll_submissions_store_month ON public.payroll_work_submissions USING btree (store_id, year_month, employee_id, version DESC)",
+      "indexname": "payroll_submissions_store_month",
+      "tablename": "payroll_work_submissions"
+    },
+    {
+      "bytes": 8192,
+      "idx_scan": 0,
+      "indexdef": "CREATE UNIQUE INDEX payroll_work_submissions_employee_id_year_month_version_key ON public.payroll_work_submissions USING btree (employee_id, year_month, version)",
+      "indexname": "payroll_work_submissions_employee_id_year_month_version_key",
+      "tablename": "payroll_work_submissions"
+    },
+    {
+      "bytes": 8192,
+      "idx_scan": 1,
+      "indexdef": "CREATE UNIQUE INDEX payroll_work_submissions_pkey ON public.payroll_work_submissions USING btree (id)",
+      "indexname": "payroll_work_submissions_pkey",
+      "tablename": "payroll_work_submissions"
+    },
+    {
+      "bytes": 16384,
+      "idx_scan": 206,
+      "indexdef": "CREATE INDEX idx_purchase_items_purchase ON public.purchase_items USING btree (purchase_id)",
+      "indexname": "idx_purchase_items_purchase",
+      "tablename": "purchase_items"
+    },
+    {
+      "bytes": 16384,
+      "idx_scan": 0,
+      "indexdef": "CREATE INDEX idx_purchase_items_store ON public.purchase_items USING btree (store_id)",
+      "indexname": "idx_purchase_items_store",
+      "tablename": "purchase_items"
+    },
+    {
+      "bytes": 16384,
+      "idx_scan": 1,
+      "indexdef": "CREATE UNIQUE INDEX purchase_items_pkey ON public.purchase_items USING btree (id)",
+      "indexname": "purchase_items_pkey",
+      "tablename": "purchase_items"
+    },
+    {
+      "bytes": 16384,
+      "idx_scan": 4283,
+      "indexdef": "CREATE INDEX idx_purchases_store_date ON public.purchases USING btree (store_id, date)",
+      "indexname": "idx_purchases_store_date",
+      "tablename": "purchases"
+    },
+    {
+      "bytes": 16384,
+      "idx_scan": 1,
+      "indexdef": "CREATE UNIQUE INDEX purchases_pkey ON public.purchases USING btree (id)",
+      "indexname": "purchases_pkey",
+      "tablename": "purchases"
+    },
+    {
+      "bytes": 16384,
+      "idx_scan": 5625,
+      "indexdef": "CREATE INDEX idx_recipe_ingredients_recipe ON public.recipe_ingredients USING btree (recipe_id)",
+      "indexname": "idx_recipe_ingredients_recipe",
+      "tablename": "recipe_ingredients"
+    },
+    {
+      "bytes": 16384,
+      "idx_scan": 0,
+      "indexdef": "CREATE UNIQUE INDEX recipe_ingredients_pkey ON public.recipe_ingredients USING btree (id)",
+      "indexname": "recipe_ingredients_pkey",
+      "tablename": "recipe_ingredients"
+    },
+    {
+      "bytes": 16384,
+      "idx_scan": 6,
+      "indexdef": "CREATE INDEX idx_recipes_store ON public.recipes USING btree (store_id)",
+      "indexname": "idx_recipes_store",
+      "tablename": "recipes"
+    },
+    {
+      "bytes": 16384,
+      "idx_scan": 2,
+      "indexdef": "CREATE UNIQUE INDEX recipes_pkey ON public.recipes USING btree (id)",
+      "indexname": "recipes_pkey",
+      "tablename": "recipes"
+    },
+    {
+      "bytes": 16384,
+      "idx_scan": 9,
+      "indexdef": "CREATE INDEX idx_schedule_requests_store_status ON public.schedule_requests USING btree (store_id, status)",
+      "indexname": "idx_schedule_requests_store_status",
+      "tablename": "schedule_requests"
+    },
+    {
+      "bytes": 16384,
+      "idx_scan": 1,
+      "indexdef": "CREATE UNIQUE INDEX schedule_requests_pkey ON public.schedule_requests USING btree (id)",
+      "indexname": "schedule_requests_pkey",
+      "tablename": "schedule_requests"
+    },
+    {
+      "bytes": 16384,
+      "idx_scan": 12,
+      "indexdef": "CREATE UNIQUE INDEX store_join_profiles_pkey ON public.store_join_profiles USING btree (member_id)",
+      "indexname": "store_join_profiles_pkey",
+      "tablename": "store_join_profiles"
+    },
+    {
+      "bytes": 16384,
+      "idx_scan": 25,
+      "indexdef": "CREATE UNIQUE INDEX store_members_pkey ON public.store_members USING btree (id)",
+      "indexname": "store_members_pkey",
+      "tablename": "store_members"
+    },
+    {
+      "bytes": 16384,
+      "idx_scan": 9463816,
+      "indexdef": "CREATE UNIQUE INDEX store_members_store_id_user_id_key ON public.store_members USING btree (store_id, user_id)",
+      "indexname": "store_members_store_id_user_id_key",
+      "tablename": "store_members"
+    },
+    {
+      "bytes": 16384,
+      "idx_scan": 0,
+      "indexdef": "CREATE INDEX idx_stores_biznum ON public.stores USING btree (normalize_biz_number(business_number))",
+      "indexname": "idx_stores_biznum",
+      "tablename": "stores"
+    },
+    {
+      "bytes": 16384,
+      "idx_scan": 184,
+      "indexdef": "CREATE INDEX idx_stores_owner ON public.stores USING btree (owner_id)",
+      "indexname": "idx_stores_owner",
+      "tablename": "stores"
+    },
+    {
+      "bytes": 16384,
+      "idx_scan": 842987,
+      "indexdef": "CREATE UNIQUE INDEX stores_pkey ON public.stores USING btree (id)",
+      "indexname": "stores_pkey",
+      "tablename": "stores"
+    },
+    {
+      "bytes": 40960,
+      "idx_scan": 2,
+      "indexdef": "CREATE UNIQUE INDEX toss_catalog_pkey ON public.toss_catalog USING btree (id)",
+      "indexname": "toss_catalog_pkey",
+      "tablename": "toss_catalog"
+    },
+    {
+      "bytes": 49152,
+      "idx_scan": 1,
+      "indexdef": "CREATE UNIQUE INDEX toss_catalog_store_id_item_id_key ON public.toss_catalog USING btree (store_id, item_id)",
+      "indexname": "toss_catalog_store_id_item_id_key",
+      "tablename": "toss_catalog"
+    },
+    {
+      "bytes": 729088,
+      "idx_scan": 11416,
+      "indexdef": "CREATE INDEX idx_toss_order_items_order ON public.toss_order_items USING btree (order_id)",
+      "indexname": "idx_toss_order_items_order",
+      "tablename": "toss_order_items"
+    },
+    {
+      "bytes": 704512,
+      "idx_scan": 0,
+      "indexdef": "CREATE INDEX idx_toss_order_items_store ON public.toss_order_items USING btree (store_id)",
+      "indexname": "idx_toss_order_items_store",
+      "tablename": "toss_order_items"
+    },
+    {
+      "bytes": 1875968,
+      "idx_scan": 1,
+      "indexdef": "CREATE UNIQUE INDEX toss_order_items_pkey ON public.toss_order_items USING btree (id)",
+      "indexname": "toss_order_items_pkey",
+      "tablename": "toss_order_items"
+    },
+    {
+      "bytes": 516096,
+      "idx_scan": 634898,
+      "indexdef": "CREATE INDEX idx_toss_sales_order_at ON public.toss_orders USING btree (store_id, order_at DESC)",
+      "indexname": "idx_toss_sales_order_at",
+      "tablename": "toss_orders"
+    },
+    {
+      "bytes": 106496,
+      "idx_scan": 509,
+      "indexdef": "CREATE INDEX idx_toss_sales_store ON public.toss_orders USING btree (store_id)",
+      "indexname": "idx_toss_sales_store",
+      "tablename": "toss_orders"
+    },
+    {
+      "bytes": 327680,
+      "idx_scan": 49276,
+      "indexdef": "CREATE UNIQUE INDEX toss_sales_pkey ON public.toss_orders USING btree (id)",
+      "indexname": "toss_sales_pkey",
+      "tablename": "toss_orders"
+    },
+    {
+      "bytes": 507904,
+      "idx_scan": 22581,
+      "indexdef": "CREATE UNIQUE INDEX toss_sales_toss_order_id_key ON public.toss_orders USING btree (toss_order_id)",
+      "indexname": "toss_sales_toss_order_id_key",
+      "tablename": "toss_orders"
+    },
+    {
+      "bytes": 16384,
+      "idx_scan": 0,
+      "indexdef": "CREATE INDEX idx_toss_pending_biznum ON public.toss_pending_installations USING btree (normalize_biz_number(business_number))",
+      "indexname": "idx_toss_pending_biznum",
+      "tablename": "toss_pending_installations"
+    },
+    {
+      "bytes": 16384,
+      "idx_scan": 0,
+      "indexdef": "CREATE UNIQUE INDEX toss_pending_installations_pkey ON public.toss_pending_installations USING btree (id)",
+      "indexname": "toss_pending_installations_pkey",
+      "tablename": "toss_pending_installations"
+    },
+    {
+      "bytes": 16384,
+      "idx_scan": 0,
+      "indexdef": "CREATE UNIQUE INDEX toss_pending_installations_toss_merchant_id_key ON public.toss_pending_installations USING btree (toss_merchant_id)",
+      "indexname": "toss_pending_installations_toss_merchant_id_key",
+      "tablename": "toss_pending_installations"
+    },
+    {
+      "bytes": 16384,
+      "idx_scan": 0,
+      "indexdef": "CREATE UNIQUE INDEX toss_webhook_events_pkey ON public.toss_webhook_events USING btree (event_id)",
+      "indexname": "toss_webhook_events_pkey",
+      "tablename": "toss_webhook_events"
+    }
+  ],
+  "policies": [
+    {
+      "cmd": "INSERT",
+      "permissive": "PERMISSIVE",
+      "policyname": "attendance_insert_self",
+      "qual": null,
+      "roles": [
+        "public"
+      ],
+      "schemaname": "public",
+      "tablename": "attendance",
+      "with_check": "(employee_id IN ( SELECT employees.id\n   FROM employees\n  WHERE (employees.user_id = auth.uid())))"
+    },
+    {
+      "cmd": "DELETE",
+      "permissive": "PERMISSIVE",
+      "policyname": "attendance_modify_admin",
+      "qual": "(store_id IN ( SELECT stores.id\n   FROM stores\n  WHERE (stores.owner_id = auth.uid())\nUNION\n SELECT store_members.store_id\n   FROM store_members\n  WHERE ((store_members.user_id = auth.uid()) AND (store_members.role = 'admin'::text) AND (store_members.status = 'approved'::text))))",
+      "roles": [
+        "public"
+      ],
+      "schemaname": "public",
+      "tablename": "attendance",
+      "with_check": null
+    },
+    {
+      "cmd": "SELECT",
+      "permissive": "PERMISSIVE",
+      "policyname": "attendance_select_store_member",
+      "qual": "(store_id IN ( SELECT stores.id\n   FROM stores\n  WHERE (stores.owner_id = auth.uid())\nUNION\n SELECT store_members.store_id\n   FROM store_members\n  WHERE ((store_members.user_id = auth.uid()) AND (store_members.status = 'approved'::text))))",
+      "roles": [
+        "public"
+      ],
+      "schemaname": "public",
+      "tablename": "attendance",
+      "with_check": null
+    },
+    {
+      "cmd": "INSERT",
+      "permissive": "PERMISSIVE",
+      "policyname": "attendance_corrections_insert",
+      "qual": null,
+      "roles": [
+        "public"
+      ],
+      "schemaname": "public",
+      "tablename": "attendance_corrections",
+      "with_check": "is_own_employee(employee_id)"
+    },
+    {
+      "cmd": "SELECT",
+      "permissive": "PERMISSIVE",
+      "policyname": "attendance_corrections_select",
+      "qual": "is_store_member(store_id)",
+      "roles": [
+        "public"
+      ],
+      "schemaname": "public",
+      "tablename": "attendance_corrections",
+      "with_check": null
+    },
+    {
+      "cmd": "UPDATE",
+      "permissive": "PERMISSIVE",
+      "policyname": "attendance_corrections_update",
+      "qual": "is_store_admin(store_id)",
+      "roles": [
+        "public"
+      ],
+      "schemaname": "public",
+      "tablename": "attendance_corrections",
+      "with_check": "is_store_admin(store_id)"
+    },
+    {
+      "cmd": "ALL",
+      "permissive": "PERMISSIVE",
+      "policyname": "cleaning_items_member_all",
+      "qual": "is_store_member(store_id)",
+      "roles": [
+        "public"
+      ],
+      "schemaname": "public",
+      "tablename": "cleaning_items",
+      "with_check": "is_store_member(store_id)"
+    },
+    {
+      "cmd": "ALL",
+      "permissive": "PERMISSIVE",
+      "policyname": "cleaning_logs_member_all",
+      "qual": "is_store_member(store_id)",
+      "roles": [
+        "public"
+      ],
+      "schemaname": "public",
+      "tablename": "cleaning_logs",
+      "with_check": "is_store_member(store_id)"
+    },
+    {
+      "cmd": "SELECT",
+      "permissive": "PERMISSIVE",
+      "policyname": "employee_schedules_select",
+      "qual": "is_store_member(store_id)",
+      "roles": [
+        "public"
+      ],
+      "schemaname": "public",
+      "tablename": "employee_schedules",
+      "with_check": null
+    },
+    {
+      "cmd": "ALL",
+      "permissive": "PERMISSIVE",
+      "policyname": "employee_schedules_write",
+      "qual": "is_store_admin(store_id)",
+      "roles": [
+        "public"
+      ],
+      "schemaname": "public",
+      "tablename": "employee_schedules",
+      "with_check": "is_store_admin(store_id)"
+    },
+    {
+      "cmd": "SELECT",
+      "permissive": "PERMISSIVE",
+      "policyname": "wage_history_select",
+      "qual": "can_read_employee(store_id, employee_id)",
+      "roles": [
+        "authenticated"
+      ],
+      "schemaname": "public",
+      "tablename": "employee_wage_history",
+      "with_check": null
+    },
+    {
+      "cmd": "ALL",
+      "permissive": "PERMISSIVE",
+      "policyname": "wage_history_write",
+      "qual": "is_store_admin(store_id)",
+      "roles": [
+        "authenticated"
+      ],
+      "schemaname": "public",
+      "tablename": "employee_wage_history",
+      "with_check": "(is_store_admin(store_id) AND (EXISTS ( SELECT 1\n   FROM employees e\n  WHERE ((e.id = employee_wage_history.employee_id) AND (e.store_id = employee_wage_history.store_id)))))"
+    },
+    {
+      "cmd": "DELETE",
+      "permissive": "PERMISSIVE",
+      "policyname": "employees_delete",
+      "qual": "is_store_admin(store_id)",
+      "roles": [
+        "authenticated"
+      ],
+      "schemaname": "public",
+      "tablename": "employees",
+      "with_check": null
+    },
+    {
+      "cmd": "INSERT",
+      "permissive": "PERMISSIVE",
+      "policyname": "employees_insert",
+      "qual": null,
+      "roles": [
+        "authenticated"
+      ],
+      "schemaname": "public",
+      "tablename": "employees",
+      "with_check": "is_store_admin(store_id)"
+    },
+    {
+      "cmd": "SELECT",
+      "permissive": "PERMISSIVE",
+      "policyname": "employees_select",
+      "qual": "can_read_employee(store_id, id)",
+      "roles": [
+        "authenticated"
+      ],
+      "schemaname": "public",
+      "tablename": "employees",
+      "with_check": null
+    },
+    {
+      "cmd": "UPDATE",
+      "permissive": "PERMISSIVE",
+      "policyname": "employees_update",
+      "qual": "is_store_admin(store_id)",
+      "roles": [
+        "authenticated"
+      ],
+      "schemaname": "public",
+      "tablename": "employees",
+      "with_check": "is_store_admin(store_id)"
+    },
+    {
+      "cmd": "DELETE",
+      "permissive": "PERMISSIVE",
+      "policyname": "expenses_delete",
+      "qual": "(is_store_member(store_id) AND ((category <> '고정비'::text) OR is_store_admin(store_id)))",
+      "roles": [
+        "public"
+      ],
+      "schemaname": "public",
+      "tablename": "expenses",
+      "with_check": null
+    },
+    {
+      "cmd": "INSERT",
+      "permissive": "PERMISSIVE",
+      "policyname": "expenses_insert",
+      "qual": null,
+      "roles": [
+        "public"
+      ],
+      "schemaname": "public",
+      "tablename": "expenses",
+      "with_check": "(is_store_member(store_id) AND ((category <> '고정비'::text) OR is_store_admin(store_id)))"
+    },
+    {
+      "cmd": "SELECT",
+      "permissive": "PERMISSIVE",
+      "policyname": "expenses_select",
+      "qual": "is_store_member(store_id)",
+      "roles": [
+        "public"
+      ],
+      "schemaname": "public",
+      "tablename": "expenses",
+      "with_check": null
+    },
+    {
+      "cmd": "UPDATE",
+      "permissive": "PERMISSIVE",
+      "policyname": "expenses_update",
+      "qual": "(is_store_member(store_id) AND ((category <> '고정비'::text) OR is_store_admin(store_id)))",
+      "roles": [
+        "public"
+      ],
+      "schemaname": "public",
+      "tablename": "expenses",
+      "with_check": "(is_store_member(store_id) AND ((category <> '고정비'::text) OR is_store_admin(store_id)))"
+    },
+    {
+      "cmd": "INSERT",
+      "permissive": "PERMISSIVE",
+      "policyname": "home_alert_reads_self_insert",
+      "qual": null,
+      "roles": [
+        "authenticated"
+      ],
+      "schemaname": "public",
+      "tablename": "home_alert_reads",
+      "with_check": "((user_id = auth.uid()) AND is_store_member(store_id))"
+    },
+    {
+      "cmd": "SELECT",
+      "permissive": "PERMISSIVE",
+      "policyname": "home_alert_reads_self_select",
+      "qual": "((user_id = auth.uid()) AND is_store_member(store_id))",
+      "roles": [
+        "authenticated"
+      ],
+      "schemaname": "public",
+      "tablename": "home_alert_reads",
+      "with_check": null
+    },
+    {
+      "cmd": "SELECT",
+      "permissive": "PERMISSIVE",
+      "policyname": "income_tax_read_all",
+      "qual": "true",
+      "roles": [
+        "authenticated"
+      ],
+      "schemaname": "public",
+      "tablename": "income_tax_table",
+      "with_check": null
+    },
+    {
+      "cmd": "ALL",
+      "permissive": "PERMISSIVE",
+      "policyname": "ingredients_member_all",
+      "qual": "is_store_member(store_id)",
+      "roles": [
+        "public"
+      ],
+      "schemaname": "public",
+      "tablename": "ingredients",
+      "with_check": "is_store_member(store_id)"
+    },
+    {
+      "cmd": "INSERT",
+      "permissive": "PERMISSIVE",
+      "policyname": "ingredients_member_insert",
+      "qual": null,
+      "roles": [
+        "public"
+      ],
+      "schemaname": "public",
+      "tablename": "ingredients",
+      "with_check": "user_has_store_access(store_id)"
+    },
+    {
+      "cmd": "SELECT",
+      "permissive": "PERMISSIVE",
+      "policyname": "ingredients_member_select",
+      "qual": "user_has_store_access(store_id)",
+      "roles": [
+        "public"
+      ],
+      "schemaname": "public",
+      "tablename": "ingredients",
+      "with_check": null
+    },
+    {
+      "cmd": "UPDATE",
+      "permissive": "PERMISSIVE",
+      "policyname": "ingredients_member_update",
+      "qual": "user_has_store_access(store_id)",
+      "roles": [
+        "public"
+      ],
+      "schemaname": "public",
+      "tablename": "ingredients",
+      "with_check": null
+    },
+    {
+      "cmd": "ALL",
+      "permissive": "PERMISSIVE",
+      "policyname": "manual_sales_store_member",
+      "qual": "is_store_member(store_id)",
+      "roles": [
+        "public"
+      ],
+      "schemaname": "public",
+      "tablename": "manual_sales",
+      "with_check": "is_store_member(store_id)"
+    },
+    {
+      "cmd": "SELECT",
+      "permissive": "PERMISSIVE",
+      "policyname": "notification_settings_select",
+      "qual": "is_store_member(store_id)",
+      "roles": [
+        "public"
+      ],
+      "schemaname": "public",
+      "tablename": "notification_settings",
+      "with_check": null
+    },
+    {
+      "cmd": "ALL",
+      "permissive": "PERMISSIVE",
+      "policyname": "notification_settings_write",
+      "qual": "is_store_admin(store_id)",
+      "roles": [
+        "public"
+      ],
+      "schemaname": "public",
+      "tablename": "notification_settings",
+      "with_check": "is_store_admin(store_id)"
+    },
+    {
+      "cmd": "ALL",
+      "permissive": "RESTRICTIVE",
+      "policyname": "notifications_members_admin_only",
+      "qual": "((category <> 'members'::text) OR is_store_admin(store_id))",
+      "roles": [
+        "public"
+      ],
+      "schemaname": "public",
+      "tablename": "notifications",
+      "with_check": "((category <> 'members'::text) OR is_store_admin(store_id))"
+    },
+    {
+      "cmd": "ALL",
+      "permissive": "PERMISSIVE",
+      "policyname": "notifications_store_member",
+      "qual": "(is_store_member(store_id) AND ((category <> 'members'::text) OR is_store_admin(store_id)))",
+      "roles": [
+        "public"
+      ],
+      "schemaname": "public",
+      "tablename": "notifications",
+      "with_check": "(is_store_member(store_id) AND ((category <> 'members'::text) OR is_store_admin(store_id)))"
+    },
+    {
+      "cmd": "ALL",
+      "permissive": "PERMISSIVE",
+      "policyname": "Users can manage own ocr results",
+      "qual": "(store_id IN ( SELECT stores.id\n   FROM stores\n  WHERE (stores.owner_id = auth.uid())))",
+      "roles": [
+        "public"
+      ],
+      "schemaname": "public",
+      "tablename": "ocr_results",
+      "with_check": null
+    },
+    {
+      "cmd": "ALL",
+      "permissive": "PERMISSIVE",
+      "policyname": "order_items_member_all",
+      "qual": "(order_id IN ( SELECT orders.id\n   FROM orders\n  WHERE is_store_member(orders.store_id)))",
+      "roles": [
+        "public"
+      ],
+      "schemaname": "public",
+      "tablename": "order_items",
+      "with_check": "(order_id IN ( SELECT orders.id\n   FROM orders\n  WHERE is_store_member(orders.store_id)))"
+    },
+    {
+      "cmd": "ALL",
+      "permissive": "PERMISSIVE",
+      "policyname": "orders_member_all",
+      "qual": "is_store_member(store_id)",
+      "roles": [
+        "public"
+      ],
+      "schemaname": "public",
+      "tablename": "orders",
+      "with_check": "is_store_member(store_id)"
+    },
+    {
+      "cmd": "INSERT",
+      "permissive": "PERMISSIVE",
+      "policyname": "orders_member_insert",
+      "qual": null,
+      "roles": [
+        "public"
+      ],
+      "schemaname": "public",
+      "tablename": "orders",
+      "with_check": "user_has_store_access(store_id)"
+    },
+    {
+      "cmd": "SELECT",
+      "permissive": "PERMISSIVE",
+      "policyname": "orders_member_select",
+      "qual": "user_has_store_access(store_id)",
+      "roles": [
+        "public"
+      ],
+      "schemaname": "public",
+      "tablename": "orders",
+      "with_check": null
+    },
+    {
+      "cmd": "UPDATE",
+      "permissive": "PERMISSIVE",
+      "policyname": "orders_member_update",
+      "qual": "user_has_store_access(store_id)",
+      "roles": [
+        "public"
+      ],
+      "schemaname": "public",
+      "tablename": "orders",
+      "with_check": null
+    },
+    {
+      "cmd": "SELECT",
+      "permissive": "PERMISSIVE",
+      "policyname": "payroll_read",
+      "qual": "can_read_employee(store_id, employee_id)",
+      "roles": [
+        "authenticated"
+      ],
+      "schemaname": "public",
+      "tablename": "payroll",
+      "with_check": null
+    },
+    {
+      "cmd": "ALL",
+      "permissive": "PERMISSIVE",
+      "policyname": "payroll_write",
+      "qual": "is_store_admin(store_id)",
+      "roles": [
+        "authenticated"
+      ],
+      "schemaname": "public",
+      "tablename": "payroll",
+      "with_check": "is_store_admin(store_id)"
+    },
+    {
+      "cmd": "SELECT",
+      "permissive": "PERMISSIVE",
+      "policyname": "payroll_work_history_read",
+      "qual": "can_read_employee(store_id, employee_id)",
+      "roles": [
+        "authenticated"
+      ],
+      "schemaname": "public",
+      "tablename": "payroll_work_history",
+      "with_check": null
+    },
+    {
+      "cmd": "SELECT",
+      "permissive": "PERMISSIVE",
+      "policyname": "payroll_submissions_read",
+      "qual": "(is_store_member(store_id) AND (is_store_admin(store_id) OR (EXISTS ( SELECT 1\n   FROM employees e\n  WHERE ((e.id = payroll_work_submissions.employee_id) AND (e.store_id = payroll_work_submissions.store_id) AND (e.user_id = auth.uid()))))))",
+      "roles": [
+        "authenticated"
+      ],
+      "schemaname": "public",
+      "tablename": "payroll_work_submissions",
+      "with_check": null
+    },
+    {
+      "cmd": "ALL",
+      "permissive": "PERMISSIVE",
+      "policyname": "purchase_items_member",
+      "qual": "is_store_member(store_id)",
+      "roles": [
+        "public"
+      ],
+      "schemaname": "public",
+      "tablename": "purchase_items",
+      "with_check": "is_store_member(store_id)"
+    },
+    {
+      "cmd": "ALL",
+      "permissive": "PERMISSIVE",
+      "policyname": "purchases_store_member",
+      "qual": "(store_id IN ( SELECT stores.id\n   FROM stores\n  WHERE (stores.owner_id = auth.uid())\nUNION\n SELECT store_members.store_id\n   FROM store_members\n  WHERE ((store_members.user_id = auth.uid()) AND (store_members.status = 'approved'::text))))",
+      "roles": [
+        "public"
+      ],
+      "schemaname": "public",
+      "tablename": "purchases",
+      "with_check": null
+    },
+    {
+      "cmd": "DELETE",
+      "permissive": "PERMISSIVE",
+      "policyname": "recipe_ingredients_delete",
+      "qual": "(recipe_id IN ( SELECT recipes.id\n   FROM recipes\n  WHERE is_store_admin(recipes.store_id)))",
+      "roles": [
+        "public"
+      ],
+      "schemaname": "public",
+      "tablename": "recipe_ingredients",
+      "with_check": null
+    },
+    {
+      "cmd": "INSERT",
+      "permissive": "PERMISSIVE",
+      "policyname": "recipe_ingredients_insert",
+      "qual": null,
+      "roles": [
+        "public"
+      ],
+      "schemaname": "public",
+      "tablename": "recipe_ingredients",
+      "with_check": "(recipe_id IN ( SELECT recipes.id\n   FROM recipes\n  WHERE is_store_admin(recipes.store_id)))"
+    },
+    {
+      "cmd": "ALL",
+      "permissive": "PERMISSIVE",
+      "policyname": "recipe_ingredients_manage",
+      "qual": "(recipe_id IN ( SELECT recipes.id\n   FROM recipes\n  WHERE can_manage_recipes(recipes.store_id)))",
+      "roles": [
+        "public"
+      ],
+      "schemaname": "public",
+      "tablename": "recipe_ingredients",
+      "with_check": "(recipe_id IN ( SELECT recipes.id\n   FROM recipes\n  WHERE can_manage_recipes(recipes.store_id)))"
+    },
+    {
+      "cmd": "SELECT",
+      "permissive": "PERMISSIVE",
+      "policyname": "recipe_ingredients_select",
+      "qual": "(recipe_id IN ( SELECT recipes.id\n   FROM recipes\n  WHERE is_store_member(recipes.store_id)))",
+      "roles": [
+        "public"
+      ],
+      "schemaname": "public",
+      "tablename": "recipe_ingredients",
+      "with_check": null
+    },
+    {
+      "cmd": "UPDATE",
+      "permissive": "PERMISSIVE",
+      "policyname": "recipe_ingredients_update",
+      "qual": "(recipe_id IN ( SELECT recipes.id\n   FROM recipes\n  WHERE is_store_admin(recipes.store_id)))",
+      "roles": [
+        "public"
+      ],
+      "schemaname": "public",
+      "tablename": "recipe_ingredients",
+      "with_check": "(recipe_id IN ( SELECT recipes.id\n   FROM recipes\n  WHERE is_store_admin(recipes.store_id)))"
+    },
+    {
+      "cmd": "DELETE",
+      "permissive": "PERMISSIVE",
+      "policyname": "recipes_delete",
+      "qual": "is_store_admin(store_id)",
+      "roles": [
+        "public"
+      ],
+      "schemaname": "public",
+      "tablename": "recipes",
+      "with_check": null
+    },
+    {
+      "cmd": "INSERT",
+      "permissive": "PERMISSIVE",
+      "policyname": "recipes_insert",
+      "qual": null,
+      "roles": [
+        "public"
+      ],
+      "schemaname": "public",
+      "tablename": "recipes",
+      "with_check": "is_store_admin(store_id)"
+    },
+    {
+      "cmd": "ALL",
+      "permissive": "PERMISSIVE",
+      "policyname": "recipes_manage",
+      "qual": "can_manage_recipes(store_id)",
+      "roles": [
+        "public"
+      ],
+      "schemaname": "public",
+      "tablename": "recipes",
+      "with_check": "can_manage_recipes(store_id)"
+    },
+    {
+      "cmd": "INSERT",
+      "permissive": "PERMISSIVE",
+      "policyname": "recipes_member_insert",
+      "qual": null,
+      "roles": [
+        "public"
+      ],
+      "schemaname": "public",
+      "tablename": "recipes",
+      "with_check": "user_has_store_access(store_id)"
+    },
+    {
+      "cmd": "SELECT",
+      "permissive": "PERMISSIVE",
+      "policyname": "recipes_member_select",
+      "qual": "user_has_store_access(store_id)",
+      "roles": [
+        "public"
+      ],
+      "schemaname": "public",
+      "tablename": "recipes",
+      "with_check": null
+    },
+    {
+      "cmd": "UPDATE",
+      "permissive": "PERMISSIVE",
+      "policyname": "recipes_member_update",
+      "qual": "user_has_store_access(store_id)",
+      "roles": [
+        "public"
+      ],
+      "schemaname": "public",
+      "tablename": "recipes",
+      "with_check": null
+    },
+    {
+      "cmd": "SELECT",
+      "permissive": "PERMISSIVE",
+      "policyname": "recipes_select",
+      "qual": "is_store_member(store_id)",
+      "roles": [
+        "public"
+      ],
+      "schemaname": "public",
+      "tablename": "recipes",
+      "with_check": null
+    },
+    {
+      "cmd": "UPDATE",
+      "permissive": "PERMISSIVE",
+      "policyname": "recipes_update",
+      "qual": "is_store_admin(store_id)",
+      "roles": [
+        "public"
+      ],
+      "schemaname": "public",
+      "tablename": "recipes",
+      "with_check": "is_store_admin(store_id)"
+    },
+    {
+      "cmd": "INSERT",
+      "permissive": "PERMISSIVE",
+      "policyname": "schedule_requests_insert",
+      "qual": null,
+      "roles": [
+        "public"
+      ],
+      "schemaname": "public",
+      "tablename": "schedule_requests",
+      "with_check": "is_own_employee(employee_id)"
+    },
+    {
+      "cmd": "SELECT",
+      "permissive": "PERMISSIVE",
+      "policyname": "schedule_requests_select",
+      "qual": "is_store_member(store_id)",
+      "roles": [
+        "public"
+      ],
+      "schemaname": "public",
+      "tablename": "schedule_requests",
+      "with_check": null
+    },
+    {
+      "cmd": "UPDATE",
+      "permissive": "PERMISSIVE",
+      "policyname": "schedule_requests_update",
+      "qual": "is_store_admin(store_id)",
+      "roles": [
+        "public"
+      ],
+      "schemaname": "public",
+      "tablename": "schedule_requests",
+      "with_check": "is_store_admin(store_id)"
+    },
+    {
+      "cmd": "SELECT",
+      "permissive": "PERMISSIVE",
+      "policyname": "join_profile_read",
+      "qual": "((applicant_user_id = auth.uid()) OR is_store_admin(store_id))",
+      "roles": [
+        "authenticated"
+      ],
+      "schemaname": "public",
+      "tablename": "store_join_profiles",
+      "with_check": null
+    },
+    {
+      "cmd": "DELETE",
+      "permissive": "PERMISSIVE",
+      "policyname": "store_members_delete",
+      "qual": "((user_id = auth.uid()) OR (store_id IN ( SELECT stores.id\n   FROM stores\n  WHERE (stores.owner_id = auth.uid()))) OR (store_id IN ( SELECT sm2.store_id\n   FROM store_members sm2\n  WHERE ((sm2.user_id = auth.uid()) AND (sm2.role = 'admin'::text) AND (sm2.status = 'approved'::text)))))",
+      "roles": [
+        "public"
+      ],
+      "schemaname": "public",
+      "tablename": "store_members",
+      "with_check": null
+    },
+    {
+      "cmd": "INSERT",
+      "permissive": "PERMISSIVE",
+      "policyname": "store_members_insert",
+      "qual": null,
+      "roles": [
+        "authenticated"
+      ],
+      "schemaname": "public",
+      "tablename": "store_members",
+      "with_check": "((user_id = auth.uid()) AND (status = 'pending'::text) AND (role = 'member'::text))"
+    },
+    {
+      "cmd": "SELECT",
+      "permissive": "PERMISSIVE",
+      "policyname": "store_members_select",
+      "qual": "((user_id = auth.uid()) OR (store_id IN ( SELECT stores.id\n   FROM stores\n  WHERE (stores.owner_id = auth.uid()))) OR is_store_admin(store_id))",
+      "roles": [
+        "public"
+      ],
+      "schemaname": "public",
+      "tablename": "store_members",
+      "with_check": null
+    },
+    {
+      "cmd": "UPDATE",
+      "permissive": "PERMISSIVE",
+      "policyname": "store_members_update",
+      "qual": "((store_id IN ( SELECT stores.id\n   FROM stores\n  WHERE (stores.owner_id = auth.uid()))) OR is_store_admin(store_id))",
+      "roles": [
+        "public"
+      ],
+      "schemaname": "public",
+      "tablename": "store_members",
+      "with_check": null
+    },
+    {
+      "cmd": "INSERT",
+      "permissive": "PERMISSIVE",
+      "policyname": "Users can create stores",
+      "qual": null,
+      "roles": [
+        "public"
+      ],
+      "schemaname": "public",
+      "tablename": "stores",
+      "with_check": "(owner_id = auth.uid())"
+    },
+    {
+      "cmd": "UPDATE",
+      "permissive": "PERMISSIVE",
+      "policyname": "Users can update own stores",
+      "qual": "(owner_id = auth.uid())",
+      "roles": [
+        "public"
+      ],
+      "schemaname": "public",
+      "tablename": "stores",
+      "with_check": null
+    },
+    {
+      "cmd": "SELECT",
+      "permissive": "PERMISSIVE",
+      "policyname": "Users can view own stores",
+      "qual": "(owner_id = auth.uid())",
+      "roles": [
+        "public"
+      ],
+      "schemaname": "public",
+      "tablename": "stores",
+      "with_check": null
+    },
+    {
+      "cmd": "DELETE",
+      "permissive": "PERMISSIVE",
+      "policyname": "Users cannot delete stores",
+      "qual": "false",
+      "roles": [
+        "public"
+      ],
+      "schemaname": "public",
+      "tablename": "stores",
+      "with_check": null
+    },
+    {
+      "cmd": "SELECT",
+      "permissive": "PERMISSIVE",
+      "policyname": "stores_select_member",
+      "qual": "((owner_id = auth.uid()) OR is_store_member(id))",
+      "roles": [
+        "public"
+      ],
+      "schemaname": "public",
+      "tablename": "stores",
+      "with_check": null
+    },
+    {
+      "cmd": "UPDATE",
+      "permissive": "PERMISSIVE",
+      "policyname": "stores_update_owner_or_admin",
+      "qual": "((owner_id = auth.uid()) OR (id IN ( SELECT store_members.store_id\n   FROM store_members\n  WHERE ((store_members.user_id = auth.uid()) AND (store_members.role = 'admin'::text) AND (store_members.status = 'approved'::text)))))",
+      "roles": [
+        "public"
+      ],
+      "schemaname": "public",
+      "tablename": "stores",
+      "with_check": "((owner_id = auth.uid()) OR (id IN ( SELECT store_members.store_id\n   FROM store_members\n  WHERE ((store_members.user_id = auth.uid()) AND (store_members.role = 'admin'::text) AND (store_members.status = 'approved'::text)))))"
+    },
+    {
+      "cmd": "ALL",
+      "permissive": "PERMISSIVE",
+      "policyname": "toss_catalog: store owner only",
+      "qual": "(store_id IN ( SELECT stores.id\n   FROM stores\n  WHERE (stores.owner_id = auth.uid())))",
+      "roles": [
+        "public"
+      ],
+      "schemaname": "public",
+      "tablename": "toss_catalog",
+      "with_check": null
+    },
+    {
+      "cmd": "INSERT",
+      "permissive": "PERMISSIVE",
+      "policyname": "toss_catalog_member_insert",
+      "qual": null,
+      "roles": [
+        "public"
+      ],
+      "schemaname": "public",
+      "tablename": "toss_catalog",
+      "with_check": "user_has_store_access(store_id)"
+    },
+    {
+      "cmd": "SELECT",
+      "permissive": "PERMISSIVE",
+      "policyname": "toss_catalog_member_select",
+      "qual": "user_has_store_access(store_id)",
+      "roles": [
+        "public"
+      ],
+      "schemaname": "public",
+      "tablename": "toss_catalog",
+      "with_check": null
+    },
+    {
+      "cmd": "UPDATE",
+      "permissive": "PERMISSIVE",
+      "policyname": "toss_catalog_member_update",
+      "qual": "user_has_store_access(store_id)",
+      "roles": [
+        "public"
+      ],
+      "schemaname": "public",
+      "tablename": "toss_catalog",
+      "with_check": null
+    },
+    {
+      "cmd": "ALL",
+      "permissive": "PERMISSIVE",
+      "policyname": "Users can manage own toss order items",
+      "qual": "(store_id IN ( SELECT stores.id\n   FROM stores\n  WHERE (stores.owner_id = auth.uid())))",
+      "roles": [
+        "public"
+      ],
+      "schemaname": "public",
+      "tablename": "toss_order_items",
+      "with_check": null
+    },
+    {
+      "cmd": "INSERT",
+      "permissive": "PERMISSIVE",
+      "policyname": "toss_order_items_member_insert",
+      "qual": null,
+      "roles": [
+        "public"
+      ],
+      "schemaname": "public",
+      "tablename": "toss_order_items",
+      "with_check": "user_has_store_access(store_id)"
+    },
+    {
+      "cmd": "SELECT",
+      "permissive": "PERMISSIVE",
+      "policyname": "toss_order_items_member_select",
+      "qual": "user_has_store_access(store_id)",
+      "roles": [
+        "public"
+      ],
+      "schemaname": "public",
+      "tablename": "toss_order_items",
+      "with_check": null
+    },
+    {
+      "cmd": "ALL",
+      "permissive": "PERMISSIVE",
+      "policyname": "Users can manage own toss sales",
+      "qual": "(store_id IN ( SELECT stores.id\n   FROM stores\n  WHERE (stores.owner_id = auth.uid())))",
+      "roles": [
+        "public"
+      ],
+      "schemaname": "public",
+      "tablename": "toss_orders",
+      "with_check": null
+    },
+    {
+      "cmd": "INSERT",
+      "permissive": "PERMISSIVE",
+      "policyname": "toss_orders_member_insert",
+      "qual": null,
+      "roles": [
+        "public"
+      ],
+      "schemaname": "public",
+      "tablename": "toss_orders",
+      "with_check": "user_has_store_access(store_id)"
+    },
+    {
+      "cmd": "SELECT",
+      "permissive": "PERMISSIVE",
+      "policyname": "toss_orders_member_select",
+      "qual": "user_has_store_access(store_id)",
+      "roles": [
+        "public"
+      ],
+      "schemaname": "public",
+      "tablename": "toss_orders",
+      "with_check": null
+    },
+    {
+      "cmd": "UPDATE",
+      "permissive": "PERMISSIVE",
+      "policyname": "toss_orders_member_update",
+      "qual": "user_has_store_access(store_id)",
+      "roles": [
+        "public"
+      ],
+      "schemaname": "public",
+      "tablename": "toss_orders",
+      "with_check": null
+    }
+  ],
+  "functionComparison": [
+    {
+      "function": "approve_join_onboarding",
+      "matching_repository_files": [
+        "20261022_employee_join_onboarding.sql"
+      ],
+      "local_definition_found": true,
+      "search_path": [
+        "search_path=public"
+      ]
+    },
+    {
+      "function": "approve_store_member",
+      "matching_repository_files": [
+        "20261019_member_employee_auto_link.sql"
+      ],
+      "local_definition_found": true,
+      "search_path": [
+        "search_path=public"
+      ]
+    },
+    {
+      "function": "assert_account_deletable",
+      "matching_repository_files": [
+        "20261020_02_account_deletion.sql"
+      ],
+      "local_definition_found": true,
+      "search_path": [
+        "search_path=public"
+      ]
+    },
+    {
+      "function": "assert_store_finance_access",
+      "matching_repository_files": [
+        "20261020_01_access_and_purchase_integrity.sql"
+      ],
+      "local_definition_found": true,
+      "search_path": [
+        "search_path=public"
+      ]
+    },
+    {
+      "function": "audit_payroll_work",
+      "matching_repository_files": [
+        "20261016_manual_work_minutes.sql"
+      ],
+      "local_definition_found": true,
+      "search_path": [
+        "search_path=public"
+      ]
+    },
+    {
+      "function": "can_manage_recipes",
+      "matching_repository_files": [
+        "20260609_stock_member_access.sql"
+      ],
+      "local_definition_found": true,
+      "search_path": [
+        "search_path=public"
+      ]
+    },
+    {
+      "function": "can_read_employee",
+      "matching_repository_files": [
+        "20261020_01_access_and_purchase_integrity.sql"
+      ],
+      "local_definition_found": true,
+      "search_path": [
+        "search_path=public"
+      ]
+    },
+    {
+      "function": "change_purchase_type",
+      "matching_repository_files": [
+        "20261019_purchase_types.sql"
+      ],
+      "local_definition_found": true,
+      "search_path": [
+        "search_path=public"
+      ]
+    },
+    {
+      "function": "claim_account_unlinks",
+      "matching_repository_files": [
+        "20261020_02_account_deletion.sql"
+      ],
+      "local_definition_found": true,
+      "search_path": [
+        "search_path=public"
+      ]
+    },
+    {
+      "function": "confirm_toss_installation",
+      "matching_repository_files": [],
+      "local_definition_found": false,
+      "search_path": [
+        "search_path=public"
+      ]
+    },
+    {
+      "function": "create_employee_from_join",
+      "matching_repository_files": [
+        "20261022_employee_join_onboarding.sql"
+      ],
+      "local_definition_found": true,
+      "search_path": [
+        "search_path=public"
+      ]
+    },
+    {
+      "function": "create_employee_on_member_approve",
+      "matching_repository_files": [
+        "20261022_employee_join_onboarding.sql"
+      ],
+      "local_definition_found": true,
+      "search_path": [
+        "search_path=public"
+      ]
+    },
+    {
+      "function": "create_order_with_items",
+      "matching_repository_files": [
+        "20260609_stock_member_access.sql"
+      ],
+      "local_definition_found": true,
+      "search_path": [
+        "search_path=public"
+      ]
+    },
+    {
+      "function": "create_purchase_with_items",
+      "matching_repository_files": [
+        "20261020_01_access_and_purchase_integrity.sql"
+      ],
+      "local_definition_found": true,
+      "search_path": [
+        "search_path=public"
+      ]
+    },
+    {
+      "function": "create_recipe_with_ingredients",
+      "matching_repository_files": [
+        "20260609_stock_member_access.sql"
+      ],
+      "local_definition_found": true,
+      "search_path": [
+        "search_path=public"
+      ]
+    },
+    {
+      "function": "delete_user_data",
+      "matching_repository_files": [
+        "20261020_02_account_deletion.sql"
+      ],
+      "local_definition_found": true,
+      "search_path": [
+        "search_path=public"
+      ]
+    },
+    {
+      "function": "deliver_order",
+      "matching_repository_files": [
+        "20260609_ingredient_drop_container.sql"
+      ],
+      "local_definition_found": true,
+      "search_path": [
+        "search_path=public"
+      ]
+    },
+    {
+      "function": "find_store_by_biznum",
+      "matching_repository_files": [
+        "20260811_toss_webhook_matching.sql"
+      ],
+      "local_definition_found": true,
+      "search_path": [
+        "search_path=public"
+      ]
+    },
+    {
+      "function": "find_store_by_business_number",
+      "matching_repository_files": [],
+      "local_definition_found": false,
+      "search_path": [
+        "search_path=public"
+      ]
+    },
+    {
+      "function": "get_home_financial_summary",
+      "matching_repository_files": [
+        "20261021_home_financial_summary.sql"
+      ],
+      "local_definition_found": true,
+      "search_path": [
+        "search_path=public"
+      ]
+    },
+    {
+      "function": "get_member_approval_candidates",
+      "matching_repository_files": [
+        "20261021_member_approval_choice.sql"
+      ],
+      "local_definition_found": true,
+      "search_path": [
+        "search_path=public"
+      ]
+    },
+    {
+      "function": "guard_employee_account_link",
+      "matching_repository_files": [
+        "20261019_payroll_submissions.sql"
+      ],
+      "local_definition_found": true,
+      "search_path": [
+        "search_path=public"
+      ]
+    },
+    {
+      "function": "guard_join_profile_review",
+      "matching_repository_files": [
+        "20261022_employee_join_onboarding.sql"
+      ],
+      "local_definition_found": true,
+      "search_path": [
+        "search_path=public"
+      ]
+    },
+    {
+      "function": "guard_store_member_identity",
+      "matching_repository_files": [
+        "20261019_member_employee_auto_link.sql"
+      ],
+      "local_definition_found": true,
+      "search_path": [
+        "search_path=public"
+      ]
+    },
+    {
+      "function": "is_own_employee",
+      "matching_repository_files": [
+        "20260910_schedule_and_corrections.sql"
+      ],
+      "local_definition_found": true,
+      "search_path": [
+        "search_path=public"
+      ]
+    },
+    {
+      "function": "is_store_admin",
+      "matching_repository_files": [
+        "20260608_role_based_rls.sql"
+      ],
+      "local_definition_found": true,
+      "search_path": [
+        "search_path=public"
+      ]
+    },
+    {
+      "function": "is_store_member",
+      "matching_repository_files": [
+        "20260608_role_based_rls.sql"
+      ],
+      "local_definition_found": true,
+      "search_path": [
+        "search_path=public"
+      ]
+    },
+    {
+      "function": "is_store_part_timer",
+      "matching_repository_files": [
+        "20260609_stock_member_access.sql"
+      ],
+      "local_definition_found": true,
+      "search_path": [
+        "search_path=public"
+      ]
+    },
+    {
+      "function": "list_pending_toss_installations",
+      "matching_repository_files": [],
+      "local_definition_found": false,
+      "search_path": [
+        "search_path=public"
+      ]
+    },
+    {
+      "function": "map_purchase_category",
+      "matching_repository_files": [
+        "20260914_unify_bipum_category.sql"
+      ],
+      "local_definition_found": true,
+      "search_path": null
+    },
+    {
+      "function": "normalize_biz_number",
+      "matching_repository_files": [
+        "20260811_toss_webhook_matching.sql"
+      ],
+      "local_definition_found": true,
+      "search_path": null
+    },
+    {
+      "function": "notify_store_membership_request",
+      "matching_repository_files": [
+        "20261021_member_request_notifications.sql"
+      ],
+      "local_definition_found": true,
+      "search_path": [
+        "search_path=public"
+      ]
+    },
+    {
+      "function": "prepare_auth_account_deletion",
+      "matching_repository_files": [
+        "20261020_02_account_deletion.sql"
+      ],
+      "local_definition_found": true,
+      "search_path": [
+        "search_path=public, auth"
+      ]
+    },
+    {
+      "function": "prepare_payroll_work",
+      "matching_repository_files": [
+        "20261016_manual_work_minutes.sql",
+        "20261018_part_time_minutes_settlement.sql"
+      ],
+      "local_definition_found": true,
+      "search_path": [
+        "search_path=public"
+      ]
+    },
+    {
+      "function": "process_toss_webhook",
+      "matching_repository_files": [
+        "20261020_03_webhook_transaction.sql"
+      ],
+      "local_definition_found": true,
+      "search_path": [
+        "search_path=public"
+      ]
+    },
+    {
+      "function": "request_store_membership",
+      "matching_repository_files": [
+        "20261019_member_employee_auto_link.sql"
+      ],
+      "local_definition_found": true,
+      "search_path": [
+        "search_path=public"
+      ]
+    },
+    {
+      "function": "resolve_store_member_approval",
+      "matching_repository_files": [
+        "20261022_employee_join_onboarding.sql"
+      ],
+      "local_definition_found": true,
+      "search_path": [
+        "search_path=public"
+      ]
+    },
+    {
+      "function": "review_work_minutes",
+      "matching_repository_files": [
+        "20261019_payroll_submissions.sql"
+      ],
+      "local_definition_found": true,
+      "search_path": [
+        "search_path=public"
+      ]
+    },
+    {
+      "function": "submit_join_onboarding",
+      "matching_repository_files": [
+        "20261022_employee_join_onboarding.sql"
+      ],
+      "local_definition_found": true,
+      "search_path": [
+        "search_path=public"
+      ]
+    },
+    {
+      "function": "submit_work_minutes",
+      "matching_repository_files": [
+        "20261019_payroll_submissions.sql"
+      ],
+      "local_definition_found": true,
+      "search_path": [
+        "search_path=public"
+      ]
+    },
+    {
+      "function": "transfer_store_ownership",
+      "matching_repository_files": [
+        "20261020_02_account_deletion.sql"
+      ],
+      "local_definition_found": true,
+      "search_path": [
+        "search_path=public"
+      ]
+    },
+    {
+      "function": "update_purchase_item",
+      "matching_repository_files": [
+        "20261020_01_access_and_purchase_integrity.sql"
+      ],
+      "local_definition_found": true,
+      "search_path": [
+        "search_path=public"
+      ]
+    },
+    {
+      "function": "update_recipe_full",
+      "matching_repository_files": [
+        "20260609_stock_member_access.sql"
+      ],
+      "local_definition_found": true,
+      "search_path": [
+        "search_path=public"
+      ]
+    },
+    {
+      "function": "upsert_toss_order_with_items",
+      "matching_repository_files": [
+        "20260409_toss_order_items_category_options.sql"
+      ],
+      "local_definition_found": true,
+      "search_path": [
+        "search_path=public"
+      ]
+    },
+    {
+      "function": "user_has_store_access",
+      "matching_repository_files": [
+        "20260414_store_members.sql"
+      ],
+      "local_definition_found": true,
+      "search_path": null
+    },
+    {
+      "function": "validate_join_profile",
+      "matching_repository_files": [
+        "20261022_employee_join_onboarding.sql"
+      ],
+      "local_definition_found": true,
+      "search_path": [
+        "search_path=public"
+      ]
+    },
+    {
+      "function": "validate_payroll_submission",
+      "matching_repository_files": [
+        "20261019_payroll_submissions.sql"
+      ],
+      "local_definition_found": true,
+      "search_path": [
+        "search_path=public"
+      ]
+    },
+    {
+      "function": "validate_purchase_item_store",
+      "matching_repository_files": [
+        "20261020_01_access_and_purchase_integrity.sql"
+      ],
+      "local_definition_found": true,
+      "search_path": [
+        "search_path=public"
+      ]
+    },
+    {
+      "function": "validate_purchase_type",
+      "matching_repository_files": [
+        "20261019_purchase_types.sql"
+      ],
+      "local_definition_found": true,
+      "search_path": [
+        "search_path=public"
+      ]
+    },
+    {
+      "function": "validate_recipe_ingredient_store",
+      "matching_repository_files": [
+        "20261020_01_access_and_purchase_integrity.sql"
+      ],
+      "local_definition_found": true,
+      "search_path": [
+        "search_path=public"
+      ]
+    }
+  ],
+  "triggers": [
+    {
+      "definition": "CREATE TRIGGER prepare_payroll_work BEFORE INSERT OR UPDATE ON public.payroll FOR EACH ROW EXECUTE FUNCTION prepare_payroll_work()",
+      "relname": "payroll",
+      "tgname": "prepare_payroll_work"
+    },
+    {
+      "definition": "CREATE TRIGGER audit_payroll_work AFTER INSERT OR DELETE OR UPDATE ON public.payroll FOR EACH ROW EXECUTE FUNCTION audit_payroll_work()",
+      "relname": "payroll",
+      "tgname": "audit_payroll_work"
+    },
+    {
+      "definition": "CREATE TRIGGER validate_purchase_type BEFORE INSERT OR UPDATE OF type, store_id ON public.purchases FOR EACH ROW EXECUTE FUNCTION validate_purchase_type()",
+      "relname": "purchases",
+      "tgname": "validate_purchase_type"
+    },
+    {
+      "definition": "CREATE TRIGGER validate_payroll_submission BEFORE INSERT OR UPDATE ON public.payroll FOR EACH ROW EXECUTE FUNCTION validate_payroll_submission()",
+      "relname": "payroll",
+      "tgname": "validate_payroll_submission"
+    },
+    {
+      "definition": "CREATE TRIGGER guard_employee_account_link BEFORE INSERT OR UPDATE ON public.employees FOR EACH ROW EXECUTE FUNCTION guard_employee_account_link()",
+      "relname": "employees",
+      "tgname": "guard_employee_account_link"
+    },
+    {
+      "definition": "CREATE TRIGGER guard_store_member_identity BEFORE UPDATE ON public.store_members FOR EACH ROW EXECUTE FUNCTION guard_store_member_identity()",
+      "relname": "store_members",
+      "tgname": "guard_store_member_identity"
+    },
+    {
+      "definition": "CREATE TRIGGER trg_member_approve_employee AFTER UPDATE ON public.store_members FOR EACH ROW EXECUTE FUNCTION create_employee_on_member_approve()",
+      "relname": "store_members",
+      "tgname": "trg_member_approve_employee"
+    },
+    {
+      "definition": "CREATE TRIGGER validate_purchase_item_store BEFORE INSERT OR UPDATE ON public.purchase_items FOR EACH ROW EXECUTE FUNCTION validate_purchase_item_store()",
+      "relname": "purchase_items",
+      "tgname": "validate_purchase_item_store"
+    },
+    {
+      "definition": "CREATE TRIGGER validate_recipe_ingredient_store BEFORE INSERT OR UPDATE ON public.recipe_ingredients FOR EACH ROW EXECUTE FUNCTION validate_recipe_ingredient_store()",
+      "relname": "recipe_ingredients",
+      "tgname": "validate_recipe_ingredient_store"
+    },
+    {
+      "definition": "CREATE TRIGGER prepare_auth_account_deletion BEFORE DELETE ON auth.users FOR EACH ROW EXECUTE FUNCTION prepare_auth_account_deletion()",
+      "relname": "users",
+      "tgname": "prepare_auth_account_deletion"
+    },
+    {
+      "definition": "CREATE TRIGGER notify_store_membership_request AFTER INSERT OR UPDATE OF status ON public.store_members FOR EACH ROW EXECUTE FUNCTION notify_store_membership_request()",
+      "relname": "store_members",
+      "tgname": "notify_store_membership_request"
+    },
+    {
+      "definition": "CREATE TRIGGER guard_join_profile_review BEFORE UPDATE OF status ON public.store_members FOR EACH ROW EXECUTE FUNCTION guard_join_profile_review()",
+      "relname": "store_members",
+      "tgname": "guard_join_profile_review"
+    }
+  ],
+  "migrationHistory": [
+    {
+      "name": "store_categories",
+      "version": "20260401"
+    },
+    {
+      "name": "fix_deliver_order_unit_price",
+      "version": "20260403"
+    },
+    {
+      "name": "pos_catalog",
+      "version": "20260407"
+    },
+    {
+      "name": "normalize_toss_orders",
+      "version": "20260408"
+    },
+    {
+      "name": "toss_order_items_category_options",
+      "version": "20260409"
+    },
+    {
+      "name": "store_members",
+      "version": "20260414"
+    },
+    {
+      "name": "delete_user_data",
+      "version": "20260416"
+    },
+    {
+      "name": "employees_payroll",
+      "version": "20260602"
+    },
+    {
+      "name": "employee_extra_fields",
+      "version": "20260604"
+    },
+    {
+      "name": "attendance",
+      "version": "20260605"
+    },
+    {
+      "name": "attendance_daily_wage",
+      "version": "20260608"
+    },
+    {
+      "name": "ingredient_drop_container",
+      "version": "20260609"
+    },
+    {
+      "name": "purchase_category_merge",
+      "version": "20260612"
+    },
+    {
+      "name": "toss_confirm_matching",
+      "version": "20260811"
+    }
+  ],
+  "overlappingSelectPolicies": [
+    {
+      "table": "employee_schedules",
+      "policies": [
+        "employee_schedules_select",
+        "employee_schedules_write"
+      ]
+    },
+    {
+      "table": "employee_wage_history",
+      "policies": [
+        "wage_history_select",
+        "wage_history_write"
+      ]
+    },
+    {
+      "table": "ingredients",
+      "policies": [
+        "ingredients_member_all",
+        "ingredients_member_select"
+      ]
+    },
+    {
+      "table": "notification_settings",
+      "policies": [
+        "notification_settings_select",
+        "notification_settings_write"
+      ]
+    },
+    {
+      "table": "notifications",
+      "policies": [
+        "notifications_members_admin_only",
+        "notifications_store_member"
+      ]
+    },
+    {
+      "table": "orders",
+      "policies": [
+        "orders_member_all",
+        "orders_member_select"
+      ]
+    },
+    {
+      "table": "payroll",
+      "policies": [
+        "payroll_read",
+        "payroll_write"
+      ]
+    },
+    {
+      "table": "recipe_ingredients",
+      "policies": [
+        "recipe_ingredients_manage",
+        "recipe_ingredients_select"
+      ]
+    },
+    {
+      "table": "recipes",
+      "policies": [
+        "recipes_manage",
+        "recipes_member_select",
+        "recipes_select"
+      ]
+    },
+    {
+      "table": "stores",
+      "policies": [
+        "Users can view own stores",
+        "stores_select_member"
+      ]
+    },
+    {
+      "table": "toss_catalog",
+      "policies": [
+        "toss_catalog: store owner only",
+        "toss_catalog_member_select"
+      ]
+    },
+    {
+      "table": "toss_order_items",
+      "policies": [
+        "Users can manage own toss order items",
+        "toss_order_items_member_select"
+      ]
+    },
+    {
+      "table": "toss_orders",
+      "policies": [
+        "Users can manage own toss sales",
+        "toss_orders_member_select"
+      ]
+    }
+  ],
+  "missingForeignKeyIndexCandidates": [
+    {
+      "conname": "attendance_employee_id_fkey",
+      "definition": "FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE",
+      "table_name": "attendance"
+    },
+    {
+      "conname": "attendance_corrections_employee_id_fkey",
+      "definition": "FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE",
+      "table_name": "attendance_corrections"
+    },
+    {
+      "conname": "attendance_corrections_reviewed_by_fkey",
+      "definition": "FOREIGN KEY (reviewed_by) REFERENCES auth.users(id) ON DELETE SET NULL",
+      "table_name": "attendance_corrections"
+    },
+    {
+      "conname": "cleaning_logs_checked_by_fkey",
+      "definition": "FOREIGN KEY (checked_by) REFERENCES auth.users(id) ON DELETE SET NULL",
+      "table_name": "cleaning_logs"
+    },
+    {
+      "conname": "employee_schedules_store_id_fkey",
+      "definition": "FOREIGN KEY (store_id) REFERENCES stores(id) ON DELETE CASCADE",
+      "table_name": "employee_schedules"
+    },
+    {
+      "conname": "employee_wage_history_created_by_fkey",
+      "definition": "FOREIGN KEY (created_by) REFERENCES auth.users(id) ON DELETE SET NULL",
+      "table_name": "employee_wage_history"
+    },
+    {
+      "conname": "employee_wage_history_store_id_fkey",
+      "definition": "FOREIGN KEY (store_id) REFERENCES stores(id) ON DELETE CASCADE",
+      "table_name": "employee_wage_history"
+    },
+    {
+      "conname": "employees_user_id_fkey",
+      "definition": "FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE SET NULL",
+      "table_name": "employees"
+    },
+    {
+      "conname": "home_alert_reads_user_id_fkey",
+      "definition": "FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE",
+      "table_name": "home_alert_reads"
+    },
+    {
+      "conname": "manual_sales_created_by_fkey",
+      "definition": "FOREIGN KEY (created_by) REFERENCES auth.users(id) ON DELETE SET NULL",
+      "table_name": "manual_sales"
+    },
+    {
+      "conname": "order_items_ingredient_id_fkey",
+      "definition": "FOREIGN KEY (ingredient_id) REFERENCES ingredients(id) ON DELETE SET NULL",
+      "table_name": "order_items"
+    },
+    {
+      "conname": "payroll_work_submission_id_fkey",
+      "definition": "FOREIGN KEY (work_submission_id) REFERENCES payroll_work_submissions(id) ON DELETE RESTRICT",
+      "table_name": "payroll"
+    },
+    {
+      "conname": "payroll_work_submissions_reviewed_by_fkey",
+      "definition": "FOREIGN KEY (reviewed_by) REFERENCES auth.users(id) ON DELETE SET NULL",
+      "table_name": "payroll_work_submissions"
+    },
+    {
+      "conname": "payroll_work_submissions_submitted_by_fkey",
+      "definition": "FOREIGN KEY (submitted_by) REFERENCES auth.users(id) ON DELETE SET NULL",
+      "table_name": "payroll_work_submissions"
+    },
+    {
+      "conname": "purchase_items_ingredient_id_fkey",
+      "definition": "FOREIGN KEY (ingredient_id) REFERENCES ingredients(id) ON DELETE SET NULL",
+      "table_name": "purchase_items"
+    },
+    {
+      "conname": "recipe_ingredients_ingredient_id_fkey",
+      "definition": "FOREIGN KEY (ingredient_id) REFERENCES ingredients(id) ON DELETE SET NULL",
+      "table_name": "recipe_ingredients"
+    },
+    {
+      "conname": "schedule_requests_employee_id_fkey",
+      "definition": "FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE",
+      "table_name": "schedule_requests"
+    },
+    {
+      "conname": "schedule_requests_reviewed_by_fkey",
+      "definition": "FOREIGN KEY (reviewed_by) REFERENCES auth.users(id) ON DELETE SET NULL",
+      "table_name": "schedule_requests"
+    },
+    {
+      "conname": "store_join_profiles_applicant_user_id_fkey",
+      "definition": "FOREIGN KEY (applicant_user_id) REFERENCES auth.users(id) ON DELETE CASCADE",
+      "table_name": "store_join_profiles"
+    },
+    {
+      "conname": "store_join_profiles_created_employee_id_fkey",
+      "definition": "FOREIGN KEY (created_employee_id) REFERENCES employees(id) ON DELETE SET NULL",
+      "table_name": "store_join_profiles"
+    },
+    {
+      "conname": "store_join_profiles_reviewed_by_fkey",
+      "definition": "FOREIGN KEY (reviewed_by) REFERENCES auth.users(id) ON DELETE SET NULL",
+      "table_name": "store_join_profiles"
+    },
+    {
+      "conname": "store_join_profiles_store_id_fkey",
+      "definition": "FOREIGN KEY (store_id) REFERENCES stores(id) ON DELETE CASCADE",
+      "table_name": "store_join_profiles"
+    },
+    {
+      "conname": "store_join_profiles_submitted_by_fkey",
+      "definition": "FOREIGN KEY (submitted_by) REFERENCES auth.users(id) ON DELETE SET NULL",
+      "table_name": "store_join_profiles"
+    },
+    {
+      "conname": "store_members_user_id_fkey",
+      "definition": "FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE",
+      "table_name": "store_members"
+    },
+    {
+      "conname": "toss_pending_installations_matched_store_id_fkey",
+      "definition": "FOREIGN KEY (matched_store_id) REFERENCES stores(id) ON DELETE SET NULL",
+      "table_name": "toss_pending_installations"
+    }
+  ],
+  "rpcGrants": [
+    {
+      "anon_execute": false,
+      "authenticated_execute": true,
+      "proname": "approve_join_onboarding"
+    },
+    {
+      "anon_execute": false,
+      "authenticated_execute": true,
+      "proname": "approve_store_member"
+    },
+    {
+      "anon_execute": false,
+      "authenticated_execute": true,
+      "proname": "assert_account_deletable"
+    },
+    {
+      "anon_execute": false,
+      "authenticated_execute": true,
+      "proname": "assert_store_finance_access"
+    },
+    {
+      "anon_execute": true,
+      "authenticated_execute": true,
+      "proname": "audit_payroll_work"
+    },
+    {
+      "anon_execute": true,
+      "authenticated_execute": true,
+      "proname": "can_manage_recipes"
+    },
+    {
+      "anon_execute": false,
+      "authenticated_execute": true,
+      "proname": "can_read_employee"
+    },
+    {
+      "anon_execute": true,
+      "authenticated_execute": true,
+      "proname": "change_purchase_type"
+    },
+    {
+      "anon_execute": false,
+      "authenticated_execute": false,
+      "proname": "claim_account_unlinks"
+    },
+    {
+      "anon_execute": true,
+      "authenticated_execute": true,
+      "proname": "confirm_toss_installation"
+    },
+    {
+      "anon_execute": false,
+      "authenticated_execute": false,
+      "proname": "create_employee_from_join"
+    },
+    {
+      "anon_execute": true,
+      "authenticated_execute": true,
+      "proname": "create_employee_on_member_approve"
+    },
+    {
+      "anon_execute": false,
+      "authenticated_execute": false,
+      "proname": "create_order_with_items"
+    },
+    {
+      "anon_execute": false,
+      "authenticated_execute": true,
+      "proname": "create_purchase_with_items"
+    },
+    {
+      "anon_execute": true,
+      "authenticated_execute": true,
+      "proname": "create_recipe_with_ingredients"
+    },
+    {
+      "anon_execute": false,
+      "authenticated_execute": false,
+      "proname": "deliver_order"
+    },
+    {
+      "anon_execute": false,
+      "authenticated_execute": false,
+      "proname": "find_store_by_biznum"
+    },
+    {
+      "anon_execute": true,
+      "authenticated_execute": true,
+      "proname": "find_store_by_business_number"
+    },
+    {
+      "anon_execute": false,
+      "authenticated_execute": true,
+      "proname": "get_home_financial_summary"
+    },
+    {
+      "anon_execute": false,
+      "authenticated_execute": true,
+      "proname": "get_member_approval_candidates"
+    },
+    {
+      "anon_execute": true,
+      "authenticated_execute": true,
+      "proname": "guard_join_profile_review"
+    },
+    {
+      "anon_execute": true,
+      "authenticated_execute": true,
+      "proname": "is_own_employee"
+    },
+    {
+      "anon_execute": true,
+      "authenticated_execute": true,
+      "proname": "is_store_admin"
+    },
+    {
+      "anon_execute": true,
+      "authenticated_execute": true,
+      "proname": "is_store_member"
+    },
+    {
+      "anon_execute": true,
+      "authenticated_execute": true,
+      "proname": "is_store_part_timer"
+    },
+    {
+      "anon_execute": true,
+      "authenticated_execute": true,
+      "proname": "list_pending_toss_installations"
+    },
+    {
+      "anon_execute": true,
+      "authenticated_execute": true,
+      "proname": "notify_store_membership_request"
+    },
+    {
+      "anon_execute": true,
+      "authenticated_execute": true,
+      "proname": "prepare_auth_account_deletion"
+    },
+    {
+      "anon_execute": false,
+      "authenticated_execute": false,
+      "proname": "process_toss_webhook"
+    },
+    {
+      "anon_execute": false,
+      "authenticated_execute": true,
+      "proname": "request_store_membership"
+    },
+    {
+      "anon_execute": false,
+      "authenticated_execute": true,
+      "proname": "resolve_store_member_approval"
+    },
+    {
+      "anon_execute": true,
+      "authenticated_execute": true,
+      "proname": "review_work_minutes"
+    },
+    {
+      "anon_execute": false,
+      "authenticated_execute": true,
+      "proname": "submit_join_onboarding"
+    },
+    {
+      "anon_execute": true,
+      "authenticated_execute": true,
+      "proname": "submit_work_minutes"
+    },
+    {
+      "anon_execute": false,
+      "authenticated_execute": true,
+      "proname": "transfer_store_ownership"
+    },
+    {
+      "anon_execute": false,
+      "authenticated_execute": true,
+      "proname": "update_purchase_item"
+    },
+    {
+      "anon_execute": true,
+      "authenticated_execute": true,
+      "proname": "update_recipe_full"
+    },
+    {
+      "anon_execute": true,
+      "authenticated_execute": true,
+      "proname": "upsert_toss_order_with_items"
+    },
+    {
+      "anon_execute": true,
+      "authenticated_execute": true,
+      "proname": "user_has_store_access"
+    },
+    {
+      "anon_execute": true,
+      "authenticated_execute": true,
+      "proname": "validate_purchase_item_store"
+    },
+    {
+      "anon_execute": true,
+      "authenticated_execute": true,
+      "proname": "validate_recipe_ingredient_store"
+    }
+  ],
+  "queryMetrics": [
+    {
+      "calls": 210272,
+      "max_ms": 525.25,
+      "mean_ms": 2.18,
+      "queryid": "3018587362529603713",
+      "rows": 210272,
+      "shared_blks_hit": 28816558,
+      "shared_blks_read": 1,
+      "temp_blks_written": 0,
+      "total_ms": 459276,
+      "queryShape": "WITH pgrst_source AS ( SELECT \"public\".\"toss_orders\".\"id\" FROM \"public\".\"toss_orders\" WHERE  \"public\".\"toss_orders\".\"store_id\" = $1 AND  \"public\".\"toss_orders\".\"order_at\" >= $2 AND  \"public\".\"toss_ord"
+    },
+    {
+      "calls": 4115,
+      "max_ms": 3063.8,
+      "mean_ms": 60.85,
+      "queryid": "7006987627252023152",
+      "rows": 4115,
+      "shared_blks_hit": 3143274,
+      "shared_blks_read": 147,
+      "temp_blks_written": 0,
+      "total_ms": 250377.87,
+      "queryShape": "WITH pgrst_source AS ( SELECT \"public\".\"toss_orders\".\"total_amount\", \"public\".\"toss_orders\".\"card_amount\", \"public\".\"toss_orders\".\"cash_amount\" FROM \"public\".\"toss_orders\" WHERE  \"public\".\"toss_orders"
+    },
+    {
+      "calls": 210541,
+      "max_ms": 340.99,
+      "mean_ms": 1.07,
+      "queryid": "-7868041998499422257",
+      "rows": 210541,
+      "shared_blks_hit": 14313433,
+      "shared_blks_read": 0,
+      "temp_blks_written": 0,
+      "total_ms": 224344.51,
+      "queryShape": "WITH pgrst_source AS ( SELECT \"public\".\"toss_orders\".\"total_amount\", \"public\".\"toss_orders\".\"status\" FROM \"public\".\"toss_orders\" WHERE  \"public\".\"toss_orders\".\"store_id\" = $1 AND  \"public\".\"toss_order"
+    },
+    {
+      "calls": 11214,
+      "max_ms": 761.93,
+      "mean_ms": 5.69,
+      "queryid": "7874561976469108554",
+      "rows": 11214,
+      "shared_blks_hit": 164881,
+      "shared_blks_read": 0,
+      "temp_blks_written": 0,
+      "total_ms": 63854.08,
+      "queryShape": "WITH pgrst_source AS (UPDATE \"public\".\"toss_orders\" SET \"card_amount\" = \"pgrst_body\".\"card_amount\", \"cash_amount\" = \"pgrst_body\".\"cash_amount\" FROM (SELECT $1 AS json_data) pgrst_payload, LATERAL (SEL"
+    },
+    {
+      "calls": 4116,
+      "max_ms": 1365.01,
+      "mean_ms": 10.16,
+      "queryid": "2100547997350413972",
+      "rows": 4116,
+      "shared_blks_hit": 105857,
+      "shared_blks_read": 1,
+      "temp_blks_written": 0,
+      "total_ms": 41817.35,
+      "queryShape": "WITH pgrst_source AS ( SELECT \"public\".\"employees\".\"id\", \"public\".\"employees\".\"employment_type\", \"public\".\"employees\".\"joined_at\", \"public\".\"employees\".\"is_resigned_during_probation\", \"public\".\"employ"
+    },
+    {
+      "calls": 120,
+      "max_ms": 2017.33,
+      "mean_ms": 345.3,
+      "queryid": "-5671727596704033431",
+      "rows": 120,
+      "shared_blks_hit": 153917,
+      "shared_blks_read": 2,
+      "temp_blks_written": 0,
+      "total_ms": 41436.43,
+      "queryShape": "WITH pgrst_source AS (SELECT \"pgrst_call\".* FROM (SELECT $1 AS json_data) pgrst_payload, LATERAL (SELECT \"p_store_id\", \"p_year_month\" FROM json_to_record(pgrst_payload.json_data) AS _(\"p_store_id\" uui"
+    },
+    {
+      "calls": 1121,
+      "max_ms": 1812.95,
+      "mean_ms": 19.05,
+      "queryid": "6960442738131491332",
+      "rows": 1121,
+      "shared_blks_hit": 259145,
+      "shared_blks_read": 2,
+      "temp_blks_written": 0,
+      "total_ms": 21351.46,
+      "queryShape": "WITH pgrst_source AS ( SELECT \"public\".\"notifications\".* FROM \"public\".\"notifications\" WHERE  \"public\".\"notifications\".\"store_id\" = $1 AND  \"public\".\"notifications\".\"category\" <> $2  ORDER BY \"public\""
+    },
+    {
+      "calls": 2751,
+      "max_ms": 1091.45,
+      "mean_ms": 5.89,
+      "queryid": "-240418568236634543",
+      "rows": 2751,
+      "shared_blks_hit": 27624,
+      "shared_blks_read": 5,
+      "temp_blks_written": 0,
+      "total_ms": 16207.72,
+      "queryShape": "WITH pgrst_source AS ( SELECT \"public\".\"employee_schedules\".*, row_to_json(\"employee_schedules_employees_1\".*)::jsonb AS \"employees\" FROM \"public\".\"employee_schedules\" LEFT JOIN LATERAL ( SELECT \"empl"
+    },
+    {
+      "calls": 4159,
+      "max_ms": 608.73,
+      "mean_ms": 2.56,
+      "queryid": "3292687598162557630",
+      "rows": 4159,
+      "shared_blks_hit": 13483,
+      "shared_blks_read": 2,
+      "temp_blks_written": 0,
+      "total_ms": 10650.8,
+      "queryShape": "WITH pgrst_source AS ( SELECT \"public\".\"purchases\".* FROM \"public\".\"purchases\" WHERE  \"public\".\"purchases\".\"store_id\" = $1 AND  \"public\".\"purchases\".\"date\" >= $2 AND  \"public\".\"purchases\".\"date\" <= $3"
+    },
+    {
+      "calls": 530,
+      "max_ms": 633.67,
+      "mean_ms": 17.38,
+      "queryid": "-5726186526367320371",
+      "rows": 530,
+      "shared_blks_hit": 49622,
+      "shared_blks_read": 0,
+      "temp_blks_written": 0,
+      "total_ms": 9209.01,
+      "queryShape": "WITH pgrst_source AS ( SELECT \"public\".\"employees\".* FROM \"public\".\"employees\" WHERE  \"public\".\"employees\".\"store_id\" = $1 AND  \"public\".\"employees\".\"is_active\" = $2  ORDER BY \"public\".\"employees\".\"cr"
+    },
+    {
+      "calls": 36,
+      "max_ms": 237.71,
+      "mean_ms": 46.93,
+      "queryid": "3157080439905649460",
+      "rows": 36,
+      "shared_blks_hit": 63170,
+      "shared_blks_read": 0,
+      "temp_blks_written": 0,
+      "total_ms": 1689.65,
+      "queryShape": "WITH pgrst_source AS ( SELECT \"public\".\"toss_orders\".\"order_at\", \"public\".\"toss_orders\".\"total_amount\", \"public\".\"toss_orders\".\"status\" FROM \"public\".\"toss_orders\" WHERE  \"public\".\"toss_orders\".\"store"
+    },
+    {
+      "calls": 142,
+      "max_ms": 219.15,
+      "mean_ms": 11.81,
+      "queryid": "2193453347937255582",
+      "rows": 142,
+      "shared_blks_hit": 6818,
+      "shared_blks_read": 0,
+      "temp_blks_written": 0,
+      "total_ms": 1677.41,
+      "queryShape": "WITH pgrst_source AS ( SELECT \"public\".\"store_members\".\"store_id\", \"public\".\"store_members\".\"role\", row_to_json(\"store_members_stores_1\".*)::jsonb AS \"stores\" FROM \"public\".\"store_members\" LEFT JOIN L"
+    },
+    {
+      "calls": 1,
+      "max_ms": 485.06,
+      "mean_ms": 485.06,
+      "queryid": "3501962345061830896",
+      "rows": 1,
+      "shared_blks_hit": 60,
+      "shared_blks_read": 0,
+      "temp_blks_written": 0,
+      "total_ms": 485.06,
+      "queryShape": "WITH pgrst_source AS (UPDATE \"public\".\"store_members\" SET \"applicant_name\" = \"pgrst_body\".\"applicant_name\", \"phone\" = \"pgrst_body\".\"phone\" FROM (SELECT $1 AS json_data) pgrst_payload, LATERAL (SELECT "
+    },
+    {
+      "calls": 42,
+      "max_ms": 40.81,
+      "mean_ms": 10.38,
+      "queryid": "-2745920465351917589",
+      "rows": 42,
+      "shared_blks_hit": 3830,
+      "shared_blks_read": 4,
+      "temp_blks_written": 0,
+      "total_ms": 436,
+      "queryShape": "WITH pgrst_source AS ( SELECT \"public\".\"store_members\".\"store_id\", \"public\".\"store_members\".\"role\", row_to_json(\"store_members_stores_1\".*)::jsonb AS \"stores\" FROM \"public\".\"store_members\" LEFT JOIN L"
+    },
+    {
+      "calls": 21,
+      "max_ms": 33.47,
+      "mean_ms": 4.84,
+      "queryid": "-5245601263124797197",
+      "rows": 21,
+      "shared_blks_hit": 1524,
+      "shared_blks_read": 0,
+      "temp_blks_written": 0,
+      "total_ms": 101.7,
+      "queryShape": "WITH pgrst_source AS ( SELECT \"public\".\"store_members\".* FROM \"public\".\"store_members\" WHERE  \"public\".\"store_members\".\"store_id\" = $1 AND  \"public\".\"store_members\".\"status\" = $2   LIMIT $3 OFFSET $4 "
+    },
+    {
+      "calls": 8,
+      "max_ms": 66.8,
+      "mean_ms": 12.62,
+      "queryid": "3949263560561096405",
+      "rows": 8,
+      "shared_blks_hit": 132,
+      "shared_blks_read": 0,
+      "temp_blks_written": 0,
+      "total_ms": 101,
+      "queryShape": "WITH pgrst_source AS ( SELECT \"public\".\"store_members\".* FROM \"public\".\"store_members\" WHERE  \"public\".\"store_members\".\"store_id\" = $1  ORDER BY \"public\".\"store_members\".\"created_at\" ASC  LIMIT $2 OFF"
+    },
+    {
+      "calls": 1,
+      "max_ms": 74.65,
+      "mean_ms": 74.65,
+      "queryid": "5001599956841432023",
+      "rows": 1,
+      "shared_blks_hit": 766,
+      "shared_blks_read": 1,
+      "temp_blks_written": 0,
+      "total_ms": 74.65,
+      "queryShape": "WITH pgrst_source AS (SELECT \"pgrst_call\".* FROM (SELECT $1 AS json_data) pgrst_payload, LATERAL (SELECT \"p_business_number\", \"p_name\", \"p_phone\" FROM json_to_record(pgrst_payload.json_data) AS _(\"p_b"
+    },
+    {
+      "calls": 1,
+      "max_ms": 45.96,
+      "mean_ms": 45.96,
+      "queryid": "-7778415301993024482",
+      "rows": 1,
+      "shared_blks_hit": 97,
+      "shared_blks_read": 0,
+      "temp_blks_written": 0,
+      "total_ms": 45.96,
+      "queryShape": "WITH pgrst_source AS (UPDATE \"public\".\"employees\" SET \"is_active\" = \"pgrst_body\".\"is_active\" FROM (SELECT $1 AS json_data) pgrst_payload, LATERAL (SELECT \"is_active\" FROM json_to_record(pgrst_payload."
+    },
+    {
+      "calls": 2,
+      "max_ms": 14.15,
+      "mean_ms": 12.91,
+      "queryid": "8164524824697792367",
+      "rows": 2,
+      "shared_blks_hit": 82,
+      "shared_blks_read": 0,
+      "temp_blks_written": 0,
+      "total_ms": 25.82,
+      "queryShape": "WITH pgrst_source AS ( SELECT \"public\".\"employees\".* FROM \"public\".\"employees\" WHERE  \"public\".\"employees\".\"store_id\" = $1  ORDER BY \"public\".\"employees\".\"created_at\" ASC  LIMIT $2 OFFSET $3 )  SELECT"
+    },
+    {
+      "calls": 2,
+      "max_ms": 13.12,
+      "mean_ms": 8.71,
+      "queryid": "1611305116339765613",
+      "rows": 2,
+      "shared_blks_hit": 65,
+      "shared_blks_read": 0,
+      "temp_blks_written": 0,
+      "total_ms": 17.43,
+      "queryShape": "WITH pgrst_source AS (UPDATE \"public\".\"notifications\" SET \"is_read\" = \"pgrst_body\".\"is_read\" FROM (SELECT $1 AS json_data) pgrst_payload, LATERAL (SELECT \"is_read\" FROM json_to_record(pgrst_payload.js"
+    },
+    {
+      "calls": 1,
+      "max_ms": 5.95,
+      "mean_ms": 5.95,
+      "queryid": "4842294774969376032",
+      "rows": 1,
+      "shared_blks_hit": 130,
+      "shared_blks_read": 0,
+      "temp_blks_written": 0,
+      "total_ms": 5.95,
+      "queryShape": "WITH pgrst_source AS ( SELECT \"public\".\"toss_order_items\".\"item_id\", \"public\".\"toss_order_items\".\"item_name\", \"public\".\"toss_order_items\".\"quantity\", \"public\".\"toss_order_items\".\"total_price\" FROM \"pu"
+    },
+    {
+      "calls": 34,
+      "max_ms": 2.43,
+      "mean_ms": 0.13,
+      "queryid": "7261344021080987914",
+      "rows": 34,
+      "shared_blks_hit": 121,
+      "shared_blks_read": 0,
+      "temp_blks_written": 0,
+      "total_ms": 4.36,
+      "queryShape": "WITH pgrst_source AS ( SELECT \"public\".\"store_members\".* FROM \"public\".\"store_members\" WHERE  \"public\".\"store_members\".\"store_id\" = $1 AND  \"public\".\"store_members\".\"status\" = $2   LIMIT $3 OFFSET $4 "
+    },
+    {
+      "calls": 1,
+      "max_ms": 2.45,
+      "mean_ms": 2.45,
+      "queryid": "2004719437541918024",
+      "rows": 1,
+      "shared_blks_hit": 1,
+      "shared_blks_read": 0,
+      "temp_blks_written": 0,
+      "total_ms": 2.45,
+      "queryShape": "WITH pgrst_source AS ( SELECT \"public\".\"schedule_requests\".*, row_to_json(\"schedule_requests_employees_1\".*)::jsonb AS \"employees\" FROM \"public\".\"schedule_requests\" LEFT JOIN LATERAL ( SELECT \"employe"
+    },
+    {
+      "calls": 1,
+      "max_ms": 0.82,
+      "mean_ms": 0.82,
+      "queryid": "-1803238699721307692",
+      "rows": 1,
+      "shared_blks_hit": 32,
+      "shared_blks_read": 0,
+      "temp_blks_written": 0,
+      "total_ms": 0.82,
+      "queryShape": "WITH pgrst_source AS ( SELECT \"public\".\"toss_orders\".\"id\" FROM \"public\".\"toss_orders\" WHERE  \"public\".\"toss_orders\".\"store_id\" = $1 AND  \"public\".\"toss_orders\".\"status\" = $2 AND  \"public\".\"toss_orders"
+    },
+    {
+      "calls": 1,
+      "max_ms": 0.62,
+      "mean_ms": 0.62,
+      "queryid": "5342992753543529314",
+      "rows": 1,
+      "shared_blks_hit": 0,
+      "shared_blks_read": 0,
+      "temp_blks_written": 0,
+      "total_ms": 0.62,
+      "queryShape": "WITH pgrst_source AS ( SELECT \"public\".\"toss_orders\".\"card_amount\", \"public\".\"toss_orders\".\"cash_amount\" FROM \"public\".\"toss_orders\"   LIMIT $1 OFFSET $2 )  SELECT $3::bigint AS total_result_set, pg_c"
+    }
+  ],
+  "largestExecution": [
+    {
+      "calls": 842149,
+      "mean_ms": 0.56,
+      "query_shape": "WITH pgrst_source AS ( SELECT \"public\".\"stores\".\"closing_time\" FROM \"public\".\"stores\" WHERE  \"public\".\"stores\".\"id\" = $1",
+      "queryid": "-5390954129436100477",
+      "total_ms": 468766.91
+    },
+    {
+      "calls": 210272,
+      "mean_ms": 2.18,
+      "query_shape": "WITH pgrst_source AS ( SELECT \"public\".\"toss_orders\".\"id\" FROM \"public\".\"toss_orders\" WHERE  \"public\".\"toss_orders\".\"sto",
+      "queryid": "3018587362529603713",
+      "total_ms": 459276
+    },
+    {
+      "calls": 11410,
+      "mean_ms": 27.26,
+      "query_shape": "WITH pgrst_source AS (SELECT pgrst_call.pgrst_scalar FROM (SELECT $1 AS json_data) pgrst_payload, LATERAL (SELECT \"p_sto",
+      "queryid": "-9101859455133730049",
+      "total_ms": 311071.78
+    },
+    {
+      "calls": 4115,
+      "mean_ms": 60.85,
+      "query_shape": "WITH pgrst_source AS ( SELECT \"public\".\"toss_orders\".\"total_amount\", \"public\".\"toss_orders\".\"card_amount\", \"public\".\"tos",
+      "queryid": "7006987627252023152",
+      "total_ms": 250377.87
+    },
+    {
+      "calls": 210541,
+      "mean_ms": 1.07,
+      "query_shape": "WITH pgrst_source AS ( SELECT \"public\".\"toss_orders\".\"total_amount\", \"public\".\"toss_orders\".\"status\" FROM \"public\".\"toss",
+      "queryid": "-7868041998499422257",
+      "total_ms": 224344.51
+    },
+    {
+      "calls": 11214,
+      "mean_ms": 5.69,
+      "query_shape": "WITH pgrst_source AS (UPDATE \"public\".\"toss_orders\" SET \"card_amount\" = \"pgrst_body\".\"card_amount\", \"cash_amount\" = \"pgr",
+      "queryid": "7874561976469108554",
+      "total_ms": 63854.08
+    },
+    {
+      "calls": 2192,
+      "mean_ms": 24.2,
+      "query_shape": "WITH pgrst_source AS (SELECT pgrst_call.pgrst_scalar FROM (SELECT $1 AS json_data) pgrst_payload, LATERAL (SELECT \"p_sto",
+      "queryid": "-472571456089494788",
+      "total_ms": 53044.84
+    },
+    {
+      "calls": 4116,
+      "mean_ms": 10.16,
+      "query_shape": "WITH pgrst_source AS ( SELECT \"public\".\"employees\".\"id\", \"public\".\"employees\".\"employment_type\", \"public\".\"employees\".\"j",
+      "queryid": "2100547997350413972",
+      "total_ms": 41817.35
+    },
+    {
+      "calls": 120,
+      "mean_ms": 345.3,
+      "query_shape": "WITH pgrst_source AS (SELECT \"pgrst_call\".* FROM (SELECT $1 AS json_data) pgrst_payload, LATERAL (SELECT \"p_store_id\", \"",
+      "queryid": "-5671727596704033431",
+      "total_ms": 41436.43
+    },
+    {
+      "calls": 4168,
+      "mean_ms": 7.37,
+      "query_shape": "WITH pgrst_source AS ( SELECT \"public\".\"employee_wage_history\".* FROM \"public\".\"employee_wage_history\" WHERE  \"public\".\"",
+      "queryid": "-8089216986569445948",
+      "total_ms": 30723.18
+    }
+  ],
+  "queryCounterRecheck": [
+    {
+      "calls": 120,
+      "max_ms": 2017.33,
+      "mean_ms": 345.3,
+      "queryid": "-5671727596704033431"
+    },
+    {
+      "calls": 210541,
+      "max_ms": 340.99,
+      "mean_ms": 1.07,
+      "queryid": "-7868041998499422257"
+    },
+    {
+      "calls": 210272,
+      "max_ms": 525.25,
+      "mean_ms": 2.18,
+      "queryid": "3018587362529603713"
+    }
+  ],
+  "planMeasurements": [
+    {
+      "key": "auth_plan",
+      "executionMs": 10.686,
+      "planningMs": 11.811,
+      "rows": 442,
+      "sharedHitBlocks": 1378
+    },
+    {
+      "key": "rpc_plan",
+      "executionMs": 49.75,
+      "planningMs": 0.029,
+      "rows": 1,
+      "sharedHitBlocks": 2084
+    },
+    {
+      "key": "bypass_plan",
+      "executionMs": 0.35,
+      "planningMs": 0.096,
+      "rows": 442,
+      "sharedHitBlocks": 58
+    }
+  ]
+}

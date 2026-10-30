@@ -1,0 +1,23 @@
+import { subscribeNotificationPolling } from '../../lib/query/notificationPolling';
+beforeEach(() => jest.useFakeTimers());
+afterEach(() => jest.useRealTimers());
+it('같은 범위 구독은 타이머 하나를 공유하고 마지막 구독 해제 시 정리한다', () => {
+  let active = true;
+  const pollA = jest.fn().mockResolvedValue(undefined), pollB = jest.fn().mockResolvedValue(undefined);
+  const unsubscribe = jest.fn();
+  const subscribeActive = jest.fn().mockReturnValue(unsubscribe);
+  const lifecycle = { isActive: () => active, subscribeActive };
+  const stopA = subscribeNotificationPolling('same', pollA, lifecycle);
+  const stopB = subscribeNotificationPolling('same', pollB, lifecycle);
+  expect(jest.getTimerCount()).toBe(1);
+  expect(subscribeActive).toHaveBeenCalledTimes(1);
+  expect(pollA).toHaveBeenCalledTimes(1);
+  expect(pollB).not.toHaveBeenCalled();
+  active = false; jest.advanceTimersByTime(30_000);
+  expect(pollA).toHaveBeenCalledTimes(1);
+  stopA(); active = true; jest.advanceTimersByTime(30_000);
+  expect(pollB).toHaveBeenCalledTimes(1);
+  stopB();
+  expect(jest.getTimerCount()).toBe(0);
+  expect(unsubscribe).toHaveBeenCalledTimes(1);
+});

@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, StyleSheet, Platform, ViewStyle, StyleProp } from 'react-native';
 import { BlurView } from 'expo-blur';
+import { useReducedTransparency } from '../hooks/useReducedTransparency';
 import { Colors } from '../../constants/colors';
 
 interface GlassCardProps {
@@ -19,15 +20,16 @@ interface GlassCardProps {
  * 그림자는 바깥 래퍼, 블러는 overflow:hidden 내부 래퍼로 분리해 둘 다 살린다.
  */
 export function GlassCard({ children, tint, intensity = 40, style, contentStyle }: GlassCardProps) {
+  const reducedTransparency = useReducedTransparency();
   const overlayTint = tint ?? Colors.glass.tint;
 
   return (
     <View style={[styles.shadowWrap, style]}>
       <View style={styles.clip}>
-        {Platform.OS === 'ios' ? (
+        {Platform.OS === 'ios' && !reducedTransparency ? (
           <BlurView intensity={intensity} tint="light" style={StyleSheet.absoluteFill} />
         ) : (
-          <View style={[StyleSheet.absoluteFill, styles.androidFill]} />
+          <View style={[StyleSheet.absoluteFill, styles.opaqueFill]} />
         )}
         {/* 매장 컬러 틴트 오버레이 */}
         <View style={[StyleSheet.absoluteFill, { backgroundColor: overlayTint }]} pointerEvents="none" />
@@ -42,8 +44,8 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     shadowColor: Colors.deeper,
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.12,
-    shadowRadius: 16,
+    shadowOpacity: 0.07,
+    shadowRadius: 14,
     elevation: 4,
   },
   clip: {
@@ -53,6 +55,6 @@ const styles = StyleSheet.create({
     borderColor: Colors.glass.border,
     backgroundColor: Colors.glass.background,
   },
-  androidFill: { backgroundColor: Colors.glass.background },
+  opaqueFill: { backgroundColor: Colors.white },
   content: { padding: 18 },
 });

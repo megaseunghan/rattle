@@ -39,7 +39,7 @@ export function Field({ label, helpText, rightSlot, style, onFocus, onBlur, ...i
 
 const styles = StyleSheet.create({
   label: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '600',
     color: Colors.gray500,
     marginBottom: 6,
@@ -51,6 +51,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.gray200,
     borderRadius: Radius.field,
+    backgroundColor: Colors.white,
+    minHeight: 48,
     paddingVertical: 13,
     paddingHorizontal: 14,
   },
@@ -59,15 +61,17 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
+    minWidth: 0,
     fontSize: Type.base,
     fontWeight: '600',
     color: Colors.black,
     padding: 0,
   },
   helpText: {
-    fontSize: 11,
+    fontSize: 12,
+    lineHeight: 18,
     fontWeight: '400',
-    color: Colors.gray400,
+    color: Colors.gray600,
     marginTop: 6,
   },
 });

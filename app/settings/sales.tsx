@@ -1,3 +1,4 @@
+import { SheetModal } from '../../lib/components/ui/SheetModal';
 import { useState, useEffect, useMemo } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
@@ -79,10 +80,10 @@ export default function SalesSettingsScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} accessibilityRole="button" accessibilityLabel="뒤로가기">
           <Ionicons name="chevron-back" size={24} color={Colors.black} />
         </TouchableOpacity>
-        <Text style={styles.title}>매출 정산 설정하기</Text>
+        <Text style={styles.title}>매출 마감 시각</Text>
         <TouchableOpacity
           style={[styles.saveBtn, (!dirty || saving) && styles.saveBtnDisabled]}
           onPress={handleSave}
@@ -93,33 +94,24 @@ export default function SalesSettingsScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        {/* 선택값 미리보기 */}
-        <View style={styles.heroCard}>
-          <Text style={styles.heroCaption}>설정된 시간 기준으로 매장의 하루 매출을 정산합니다.</Text>
-          <Text style={styles.heroValue}>{label}</Text>
-          <View style={styles.heroRange}>
-            <Ionicons name="time-outline" size={14} color={Colors.primary} />
-            <Text style={styles.heroRangeText}>{label} → 익일 {label}</Text>
-          </View>
-        </View>
-
-        {/* 마감 시각 선택 (드롭다운) */}
+        <Text style={styles.fieldLabel}>하루 매출을 나누는 시각</Text>
+        <Text style={styles.fieldDescription}>자정을 지나 영업한다면 실제 마감 시각에 맞춰 주세요.</Text>
         <View style={styles.selectRow}>
           <SelectField value={meridiem} onPress={() => setPicker('meridiem')} flex={1} />
           <SelectField value={`${hour12}시`} onPress={() => setPicker('hour')} flex={1.2} />
         </View>
 
-        {/* 안내 */}
-        <View style={styles.guideCard}>
-          <Ionicons name="information-circle-outline" size={16} color={Colors.gray400} />
+        <View style={styles.rangeSummary}>
+          <Text style={styles.rangeLabel}>집계 범위</Text>
+          <Text style={styles.rangeValue}>{label} → 익일 {label}</Text>
           <Text style={styles.guideText}>
-            {label}부터 익일 {label}까지의 주문을 하루 매출로 정산합니다.
+            이 시간 사이의 주문을 하루 매출로 집계합니다.
           </Text>
         </View>
       </ScrollView>
 
       {/* 셀렉트 모달 */}
-      <Modal visible={picker !== null} transparent animationType="fade" onRequestClose={() => setPicker(null)}>
+      <SheetModal visible={picker !== null} onRequestClose={() => setPicker(null)}>
         <Pressable style={styles.modalOverlay} onPress={() => setPicker(null)}>
           <Pressable style={styles.modalSheet} onPress={() => {}}>
             <Text style={styles.modalTitle}>{picker === 'meridiem' ? '오전 / 오후' : '시간 선택'}</Text>
@@ -144,7 +136,7 @@ export default function SalesSettingsScreen() {
             </ScrollView>
           </Pressable>
         </Pressable>
-      </Modal>
+      </SheetModal>
     </SafeAreaView>
   );
 }
@@ -168,34 +160,26 @@ function SelectOption({ label, selected, onPress }: { label: string; selected: b
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.gray50 },
+  container: { flex: 1, backgroundColor: Colors.homeCanvas },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 12, paddingVertical: 10, backgroundColor: Colors.white,
-    borderBottomWidth: 0.5, borderBottomColor: Colors.gray100,
+    paddingHorizontal: 20, paddingVertical: 12, backgroundColor: Colors.homeCanvas,
+    borderBottomWidth: 0.5, borderBottomColor: Colors.homeBorder,
   },
-  backBtn: { width: 40, height: 40, justifyContent: 'center' },
-  title: { fontSize: 16, fontWeight: '700', color: Colors.black },
-  saveBtn: { backgroundColor: Colors.primary, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 10 },
+  backBtn: { width: 44, height: 44, justifyContent: 'center' },
+  title: { flexShrink: 1, fontSize: 22, fontWeight: '700', color: Colors.black },
+  saveBtn: { backgroundColor: Colors.primary, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 12, minHeight: 44, justifyContent: 'center' },
   saveBtnDisabled: { opacity: 0.4 },
   saveBtnText: { color: Colors.white, fontSize: 14, fontWeight: '700' },
 
   scroll: { padding: 20, paddingBottom: 48 },
 
-  heroCard: {
-    backgroundColor: Colors.tinted, borderRadius: 20, padding: 24, alignItems: 'center',
-    borderWidth: 1, borderColor: Colors.primary + '22',
-  },
-  heroCaption: { fontSize: 13, color: Colors.primary, fontWeight: '500' },
-  heroValue: { fontSize: 25, fontWeight: '800', color: Colors.primary, marginTop: 6, letterSpacing: -1 },
-  heroRange: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 10 },
-  heroRangeText: { fontSize: 13, color: Colors.primary, fontWeight: '600' },
-
-  guideCard: {
-    flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginTop: 16,
-    backgroundColor: Colors.gray100, borderRadius: 12, padding: 14,
-  },
-  guideText: { flex: 1, fontSize: 13, color: Colors.gray600, lineHeight: 19 },
+  fieldLabel: { fontSize: 17, fontWeight: '700', color: Colors.black },
+  fieldDescription: { fontSize: 14, color: Colors.gray600, lineHeight: 22, marginTop: 8 },
+  rangeSummary: { marginTop: 24, paddingTop: 24, borderTopWidth: 1, borderTopColor: Colors.gray200, gap: 8 },
+  rangeLabel: { fontSize: 13, color: Colors.gray500 },
+  rangeValue: { fontSize: 17, fontWeight: '600', color: Colors.black },
+  guideText: { fontSize: 13, color: Colors.gray600, lineHeight: 20 },
 
   selectRow: { flexDirection: 'row', gap: 10, marginTop: 20 },
   selectField: {
@@ -205,15 +189,15 @@ const styles = StyleSheet.create({
   },
   selectValue: { fontSize: 16, color: Colors.black, fontWeight: '600' },
 
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
+  modalOverlay: { flex: 1, backgroundColor: Colors.overlay, justifyContent: 'flex-end' },
   modalSheet: {
-    backgroundColor: Colors.white, borderTopLeftRadius: 20, borderTopRightRadius: 20,
+    backgroundColor: Colors.white, borderTopLeftRadius: 24, borderTopRightRadius: 24,
     padding: 20, paddingBottom: 36,
   },
   modalTitle: { fontSize: 16, fontWeight: '700', color: Colors.black, marginBottom: 12 },
   optionItem: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingVertical: 14, borderBottomWidth: 0.5, borderBottomColor: Colors.gray100,
+    paddingVertical: 14, borderBottomWidth: 0.5, borderBottomColor: Colors.homeBorder,
   },
   optionItemText: { fontSize: 16, color: Colors.gray700 },
   optionItemTextActive: { color: Colors.primary, fontWeight: '700' },

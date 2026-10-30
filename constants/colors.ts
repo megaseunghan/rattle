@@ -1,6 +1,8 @@
 export const Colors = {
   // Toss TDS 기반 파랑 브랜드 (Primary #3182f6)
   primary: '#3182F6',
+  splashLight: '#B6D4FF',
+  action: '#1B64DA',   // 작은 액션 글자와 흰 글자 버튼용 대비 확보; 로고 primary는 유지
   dark: '#2272EB',    // primary-hover / 강조
   deeper: '#1B64DA',  // weak-foreground / 진한 파랑
   light: '#74A8F9',
@@ -9,6 +11,16 @@ export const Colors = {
   tinted: '#F0F6FF',
   black: '#191F28',   // TDS foreground
   white: '#FFFFFF',
+
+  // 로고 블루를 따른 차가운 바탕. 입력·읽기 전용·확인 필요 상태를 구분한다.
+  homeCanvas: '#F3F8FF',
+  homeBorder: '#DDE8F5',
+  taskBg: '#EAF2FF',
+  taskBorder: '#BDD3F2',
+  contextBg: '#F1F5FA',
+  focusBg: '#F4F8FF',
+  fieldErrorBg: '#FFF1F2',
+  totalBg: '#173B70',
 
   gray50: '#F9FAFB',
   gray100: '#F3F4F6',
@@ -23,6 +35,7 @@ export const Colors = {
 
   overlay: 'rgba(0,0,0,0.4)',
   overlaySheet: 'rgba(17,24,39,.45)',
+  overlayDetail: 'rgba(17,24,39,.28)',
   overlayCoach: 'rgba(17,24,39,.6)',
 
   success: '#10B981',

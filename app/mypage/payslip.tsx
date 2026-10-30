@@ -4,11 +4,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Colors } from '../../constants/colors';
+import { Fonts } from '../../constants/fonts';
 import { Spacing } from '../../constants/designTokens';
 import { useAuth } from '../../lib/contexts/AuthContext';
 import { useEmployees } from '../../lib/hooks/useEmployees';
 import { getMyPayroll } from '../../lib/services/payroll';
 import { Payroll } from '../../types';
+import { formatWorkedMinutes } from '../../lib/utils/workMinutes';
 import { resolveSelfEmployee } from '../../lib/utils/resolveSelfEmployee';
 import { AppBar } from '../../lib/components/ui';
 
@@ -91,11 +93,11 @@ export default function PayslipScreen() {
         )}
 
         <View style={styles.monthNav}>
-          <TouchableOpacity onPress={prevMonth} hitSlop={8}>
+          <TouchableOpacity onPress={prevMonth} style={styles.monthButton} hitSlop={8} accessibilityRole="button" accessibilityLabel="이전 달">
             <Ionicons name="chevron-back" size={18} color={Colors.gray600} />
           </TouchableOpacity>
           <Text style={styles.monthLabel}>{year}년 {month}월</Text>
-          <TouchableOpacity onPress={nextMonth} hitSlop={8} disabled={isCurrentMonth}>
+          <TouchableOpacity onPress={nextMonth} style={styles.monthButton} hitSlop={8} disabled={isCurrentMonth} accessibilityRole="button" accessibilityLabel="다음 달" accessibilityState={{ disabled: isCurrentMonth }}>
             <Ionicons name="chevron-forward" size={18} color={isCurrentMonth ? Colors.gray300 : Colors.gray600} />
           </TouchableOpacity>
         </View>
@@ -110,8 +112,11 @@ export default function PayslipScreen() {
         ) : (
           <>
             <View style={styles.summaryCard}>
-              <Text style={styles.netPay}>{fmt(payroll.net_pay)}</Text>
+              <Text style={styles.netPay} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{fmt(payroll.net_pay)}</Text>
               <Text style={styles.summaryLine}>지급 {fmt(payroll.gross)} − 공제 {fmt(totalDeduction)}</Text>
+              {(isPartTime || payroll.worked_minutes != null) && (
+                <Text style={styles.summaryLine}>급여 작성 근무: {formatWorkedMinutes(payroll.worked_minutes)}</Text>
+              )}
             </View>
 
             <Group title="지급 항목">
@@ -157,7 +162,7 @@ export default function PayslipScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.gray50 },
+  container: { flex: 1, backgroundColor: Colors.homeCanvas },
   scroll: { padding: Spacing.screenX, paddingBottom: 40, gap: 14 },
 
   previewBanner: {
@@ -167,22 +172,23 @@ const styles = StyleSheet.create({
   previewBannerText: { fontSize: 12, fontWeight: '500', color: Colors.warningStroke },
 
   monthNav: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 20 },
+  monthButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   monthLabel: { fontSize: 16, fontWeight: '700', color: Colors.black, minWidth: 96, textAlign: 'center' },
 
-  summaryCard: { alignItems: 'center', gap: 4, paddingVertical: 8 },
-  netPay: { fontSize: 30, fontWeight: '700', color: Colors.black, letterSpacing: -0.5 },
-  summaryLine: { fontSize: 12, fontWeight: '500', color: Colors.gray400 },
+  summaryCard: { alignItems: 'center', gap: 6, padding: 20, backgroundColor: Colors.white, borderRadius: 24, borderWidth: 1, borderColor: Colors.homeBorder },
+  netPay: { fontSize: 30, fontFamily: Fonts.spaceGroteskBold, fontWeight: '700', maxWidth: '100%', color: Colors.black, letterSpacing: -0.5 },
+  summaryLine: { textAlign: 'center', fontSize: 12, fontWeight: '500', color: Colors.gray400 },
 
   group: { gap: 8 },
   groupTitle: { fontSize: 13, fontWeight: '700', color: Colors.gray600 },
   groupCard: {
-    backgroundColor: Colors.white, borderRadius: 14, borderWidth: 0.5, borderColor: Colors.gray100,
+    backgroundColor: Colors.white, borderRadius: 20, borderWidth: 1, borderColor: Colors.homeBorder,
     overflow: 'hidden',
   },
   row: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 14, paddingVertical: 12,
-    borderBottomWidth: 0.5, borderBottomColor: Colors.gray100,
+    paddingHorizontal: 14, paddingVertical: 12, gap: 12,
+    borderBottomWidth: 0.5, borderBottomColor: Colors.homeBorder,
   },
   rowTotal: { backgroundColor: Colors.gray50, borderBottomWidth: 0 },
   rowLeft: { flex: 1, gap: 2 },

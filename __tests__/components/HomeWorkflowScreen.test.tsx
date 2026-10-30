@@ -1,0 +1,36 @@
+import { render, fireEvent, screen, waitFor } from '@testing-library/react-native';
+import { router } from 'expo-router';
+import HomeWorkflowScreen from '../../app/settings/home-workflow';
+import { DEFAULT_HOME_WORKFLOW } from '../../lib/utils/homeWorkflow';
+import { saveHomeWorkflow } from '../../lib/services/homeWorkflow';
+let mockRole = 'admin';
+const mockQuery = { isSuccess: true, isError: false, data: null, refetch: jest.fn() };
+jest.mock('expo-router', () => ({ router: { back: jest.fn() } }));
+jest.mock('../../lib/hooks/useConfirmLeave', () => ({ useConfirmLeave: () => jest.fn() }));
+jest.mock('../../lib/contexts/AuthContext', () => ({ useAuth: () => ({ store: { id: 'store1' }, currentRole: mockRole, devPreviewMode: 'self' }) }));
+jest.mock('../../lib/hooks/useHomeWorkflow', () => ({ useHomeWorkflow: () => mockQuery }));
+jest.mock('../../lib/services/homeWorkflow', () => ({ saveHomeWorkflow: jest.fn().mockResolvedValue(undefined) }));
+jest.mock('../../lib/components/GlassCard', () => ({ GlassCard: ({ children }: any) => children }));
+jest.mock('../../lib/components/GlassBackdrop', () => ({ GlassBackdrop: () => null }));
+jest.mock('../../lib/components/ui', () => ({ AppBar: () => null }));
+jest.mock('react-native-safe-area-context', () => ({ SafeAreaView: ({ children }: any) => children }));
+beforeEach(() => { jest.clearAllMocks(); mockRole = 'admin'; });
+it('정상 관리자가 단계별 선택 후 검토에서만 매장 공통 설정을 저장한다', async () => {
+  render(<HomeWorkflowScreen />);
+  fireEvent.press(screen.getByText('재고 확인'));
+  fireEvent.press(screen.getByText('다음'));
+  fireEvent.press(screen.getByText('다음'));
+  fireEvent.press(screen.getByText('다음'));
+  expect(saveHomeWorkflow).not.toHaveBeenCalled();
+  fireEvent.press(screen.getByLabelText('오픈 준비 수정'));
+  expect(screen.getByText('확인으로 돌아가기')).toBeTruthy();
+  fireEvent.press(screen.getByText('확인으로 돌아가기'));
+  fireEvent.press(screen.getByText('매장 홈에 적용'));
+  await waitFor(() => expect(saveHomeWorkflow).toHaveBeenCalledWith('store1', { ...DEFAULT_HOME_WORKFLOW, open: ['open_check', 'schedule'] }));
+  await waitFor(() => expect(router.back).toHaveBeenCalledTimes(1));
+});
+it('직원은 설정 저장 버튼에 접근하지 못한다', () => {
+  mockRole = 'member'; render(<HomeWorkflowScreen />);
+  expect(screen.getByText('홈 구성은 매장 관리자만 변경할 수 있어요.')).toBeTruthy();
+  expect(screen.queryByText('다음')).toBeNull();
+});

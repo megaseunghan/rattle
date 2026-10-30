@@ -1,9 +1,11 @@
 import { supabase } from '../supabase';
+import { invalidateCachedStore } from './cacheInvalidation';
+import { StoreTaxonomy } from '../../types';
 
 /** 매장별로 관리하는 카테고리 목록 하나를 다루는 CRUD 세트. stores.<column>(TEXT[])에 저장한다. */
 export interface CategoryTaxonomy {
   getCategories(storeId: string): Promise<string[]>;
-  saveCategories(storeId: string, categories: string[]): Promise<void>;
+  addCategory(storeId: string, name: string): Promise<void>;
   renameCategory(storeId: string, oldName: string, newName: string, currentCategories: string[]): Promise<void>;
   removeCategory(storeId: string, name: string, currentCategories: string[]): Promise<void>;
   countByCategory(storeId: string, category: string): Promise<number>;
@@ -20,55 +22,26 @@ export function createCategoryTaxonomy(
   defaultCategories: string[],
   linked?: LinkedTable,
 ): CategoryTaxonomy {
+  const domain: StoreTaxonomy['domain'] = storesColumn === 'purchase_categories' ? 'purchase' : 'ingredient';
   async function getCategories(storeId: string): Promise<string[]> {
-    const { data } = await supabase
-      .from('stores')
-      .select(storesColumn)
-      .eq('id', storeId)
-      .single();
-
-    return ((data as any)?.[storesColumn] as string[] | null) ?? defaultCategories;
+    const { data, error } = await supabase.from('store_taxonomies').select('name')
+      .eq('store_id', storeId).eq('domain', domain).eq('is_active', true).order('sort_order').order('id');
+    if (error) throw error;
+    return (data ?? []).map(row => row.name);
   }
-
-  async function saveCategories(storeId: string, categories: string[]): Promise<void> {
-    const { error } = await supabase
-      .from('stores')
-      .update({ [storesColumn]: categories })
-      .eq('id', storeId);
-
-    if (error) throw new Error(error.message);
+  async function change(storeId: string, action: string, oldName: string | null, newName: string | null) {
+    const { error } = await supabase.rpc('change_store_taxonomy', {
+      p_store_id: storeId, p_domain: domain, p_action: action, p_old_name: oldName, p_new_name: newName,
+    });
+    if (error) throw error;
+    await invalidateCachedStore(storeId);
   }
-
-  async function renameCategory(
-    storeId: string,
-    oldName: string,
-    newName: string,
-    currentCategories: string[],
-  ): Promise<void> {
-    const updated = currentCategories.map(c => (c === oldName ? newName : c));
-    await saveCategories(storeId, updated);
-
-    if (linked) {
-      const { error } = await supabase
-        .from(linked.table)
-        .update({ [linked.column]: newName })
-        .eq('store_id', storeId)
-        .eq(linked.column, oldName);
-      if (error) throw new Error(error.message);
-    }
+  async function addCategory(storeId: string, name: string) { await change(storeId, 'add', null, name); }
+  async function renameCategory(storeId: string, oldName: string, newName: string, _current: string[]) {
+    await change(storeId, 'rename', oldName, newName);
   }
-
-  async function removeCategory(storeId: string, name: string, currentCategories: string[]): Promise<void> {
-    const updated = currentCategories.filter(c => c !== name);
-    await saveCategories(storeId, updated);
-
-    if (linked) {
-      await supabase
-        .from(linked.table)
-        .update({ [linked.column]: linked.fallback })
-        .eq('store_id', storeId)
-        .eq(linked.column, name);
-    }
+  async function removeCategory(storeId: string, name: string, _current: string[]) {
+    await change(storeId, 'remove', name, linked?.fallback ?? '기타');
   }
 
   async function countByCategory(storeId: string, category: string): Promise<number> {
@@ -81,5 +54,5 @@ export function createCategoryTaxonomy(
     return count ?? 0;
   }
 
-  return { getCategories, saveCategories, renameCategory, removeCategory, countByCategory };
+  return { getCategories, addCategory, renameCategory, removeCategory, countByCategory };
 }

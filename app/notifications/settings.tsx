@@ -8,7 +8,7 @@ import { useNotificationSettings } from '../../lib/hooks/useNotificationSettings
 import { NOTIFICATION_SETTING_DEFS, NotificationSettingDef } from '../../lib/services/notifications';
 import { AppBar } from '../../lib/components/ui';
 
-const GROUPS: NotificationSettingDef['group'][] = ['근태', '재고', '매출·손익'];
+const GROUPS: NotificationSettingDef['group'][] = ['재고', '매출·손익'];
 
 export default function NotificationSettingsScreen() {
   const { settings, loading, refetch, toggle } = useNotificationSettings();
@@ -54,14 +54,14 @@ export default function NotificationSettingsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.gray50 },
+  container: { flex: 1, backgroundColor: Colors.homeCanvas },
   scroll: { padding: Spacing.screenX, paddingBottom: 40, gap: 20 },
 
   group: { gap: 8 },
   groupTitle: { fontSize: 13, fontWeight: '700', color: Colors.gray600 },
-  card: { backgroundColor: Colors.white, borderRadius: 16, borderWidth: 0.5, borderColor: Colors.gray100, overflow: 'hidden' },
+  card: { backgroundColor: Colors.white, borderRadius: 20, borderWidth: 1, borderColor: Colors.homeBorder, overflow: 'hidden' },
   row: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 13, gap: 12 },
-  rowBorder: { borderTopWidth: 0.5, borderTopColor: Colors.gray100 },
+  rowBorder: { borderTopWidth: 0.5, borderTopColor: Colors.homeBorder },
   rowText: { flex: 1, gap: 3 },
   rowLabel: { fontSize: 14, fontWeight: '600', color: Colors.black },
   rowDesc: { fontSize: 11, fontWeight: '400', color: Colors.gray400 },

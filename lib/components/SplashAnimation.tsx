@@ -1,161 +1,135 @@
-import { useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
+import Svg, { Defs, LinearGradient, Path, RadialGradient, Rect, Stop } from 'react-native-svg';
 import Animated, {
-  Easing, runOnJS, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming,
+  cancelAnimation, Easing, ReduceMotion,
+  useAnimatedProps, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming,
 } from 'react-native-reanimated';
+import { scheduleOnRN } from 'react-native-worklets';
 import { Colors } from '../../constants/colors';
+import { Fonts } from '../../constants/fonts';
+import { smoothProgress, splashPath, SPLASH_DURATION_MS } from '../utils/splashMorph';
 
-interface Props {
-  onDone: () => void;
-}
+interface Props { ready: boolean; canExit?: boolean; onDone: () => void }
+const AnimatedPath = Animated.createAnimatedComponent(Path);
 
-/**
- * 앱 시작 모션: 유기적인 블롭 하나가 등장 → 둘로 갈라지며 변형 → 정렬되어 R 마크로 완성 →
- * 스프링으로 살짝 튀며 안정 → Rattle 워드마크가 뒤따라 나타난다.
- * 타이밍은 0.0/0.3/0.6/0.8/1.0/1.2s 구간에 맞춰 손으로 짠 것(디자인 목업 기준)이라 매직넘버 그대로 둔다.
- */
-export function SplashAnimation({ onDone }: Props) {
-  const blobOpacity = useSharedValue(0);
-  const blobScale = useSharedValue(0.5);
-  const radiusA = useSharedValue(40); // 등장 시 둥근 사각형 → 변형되며 비대칭 블롭으로
-  const radiusB = useSharedValue(40);
-
-  const splitProgress = useSharedValue(0); // 0 = 합쳐진 블롭, 1 = 완전히 갈라진 두 블롭
-
-  const markOpacity = useSharedValue(0);
-  const markScale = useSharedValue(0.7);
-
-  const wordmarkOpacity = useSharedValue(0);
-  const wordmarkTranslateY = useSharedValue(8);
-
-  const containerOpacity = useSharedValue(1);
+/** One continuous UI clock drives geometry, settling and overlapping text; no image swaps. */
+export function SplashAnimation({ ready, canExit = true, onDone }: Props) {
+  const reduced = useReducedMotion();
+  const [sequenceDone, setSequenceDone] = useState(false);
+  const phase = useSharedValue(reduced ? 1 : 0);
+  const opacity = useSharedValue(1);
+  const alive = useRef(false);
+  const completed = useRef(false);
+  const doneRef = useRef(onDone);
+  useEffect(() => { doneRef.current = onDone; }, [onDone]);
 
   useEffect(() => {
-    blobOpacity.value = withTiming(1, { duration: 260, easing: Easing.out(Easing.quad) });
-    blobScale.value = withTiming(1, { duration: 260, easing: Easing.out(Easing.quad) });
+    alive.current = true;
+    if (!ready) return () => { alive.current = false; };
+    const sequenceFinished = () => { if (alive.current) setSequenceDone(true); };
+    const endSequence = (finished?: boolean) => {
+      'worklet';
+      if (finished) scheduleOnRN(sequenceFinished);
+    };
+    if (reduced) {
+      phase.set(1);
+      setSequenceDone(true);
+    } else {
+      phase.set(0);
+      opacity.set(1);
+      setSequenceDone(false);
+      phase.set(withTiming(1, { duration: SPLASH_DURATION_MS, easing: Easing.linear }, endSequence));
+    }
+    return () => {
+      alive.current = false;
+      cancelAnimation(phase);
+    };
+  }, [ready, reduced, phase, opacity]);
 
-    radiusA.value = withDelay(300, withTiming(999, { duration: 300, easing: Easing.inOut(Easing.quad) }));
-    radiusB.value = withDelay(300, withTiming(12, { duration: 300, easing: Easing.inOut(Easing.quad) }));
+  useEffect(() => {
+    if (!ready || !sequenceDone || !canExit) {
+      opacity.set(1);
+      return;
+    }
+    let cancelled = false;
+    const finish = () => {
+      if (!cancelled && alive.current && !completed.current) {
+        completed.current = true;
+        doneRef.current();
+      }
+    };
+    opacity.set(withTiming(0, { duration: reduced ? 150 : 220, reduceMotion: ReduceMotion.Never }, ended => {
+      if (ended) scheduleOnRN(finish);
+    }));
+    return () => { cancelled = true; cancelAnimation(opacity); };
+  }, [ready, sequenceDone, canExit, reduced, opacity]);
 
-    splitProgress.value = withDelay(600, withTiming(1, { duration: 200, easing: Easing.inOut(Easing.quad) }));
-
-    markOpacity.value = withDelay(800, withTiming(1, { duration: 150 }));
-    markScale.value = withDelay(
-      800,
-      withSequence(
-        withSpring(1.15, { damping: 5, stiffness: 200 }),
-        withSpring(1, { damping: 9, stiffness: 200 }),
-      ),
-    );
-
-    wordmarkOpacity.value = withDelay(1200, withTiming(1, { duration: 320 }));
-    wordmarkTranslateY.value = withDelay(1200, withTiming(0, { duration: 320, easing: Easing.out(Easing.quad) }));
-
-    containerOpacity.value = withDelay(
-      1900,
-      withTiming(0, { duration: 280 }, () => runOnJS(onDone)()),
-    );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const singleBlobStyle = useAnimatedStyle(() => ({
-    opacity: blobOpacity.value * (1 - splitProgress.value),
-    transform: [{ scale: blobScale.value }],
-    borderTopLeftRadius: radiusA.value,
-    borderBottomRightRadius: radiusA.value,
-    borderTopRightRadius: radiusB.value,
-    borderBottomLeftRadius: radiusB.value,
+  const geometry = useAnimatedProps(() => ({ d: splashPath(phase.get()) }));
+  const overlay = useAnimatedStyle(() => ({ opacity: opacity.get() }));
+  const mark = useAnimatedStyle(() => {
+    const t = phase.get();
+    return {
+      opacity: reduced ? 1 : smoothProgress(t, 0, 0.14),
+      transform: [
+        { translateY: -18 * smoothProgress(t, 0.38, 0.92) },
+        { scale: 0.94 + 0.06 * smoothProgress(t, 0, 0.35) - 0.15 * smoothProgress(t, 0.38, 0.94) },
+      ],
+    };
+  });
+  const mist = useAnimatedStyle(() => {
+    const t = phase.get();
+    return { opacity: reduced ? 0 : 0.55 * smoothProgress(t, 0, 0.18) * (1 - smoothProgress(t, 0.25, 0.85)) };
+  });
+  const halo = useAnimatedStyle(() => {
+    const t = phase.get();
+    return {
+      opacity: reduced ? 0 : 0.45 * smoothProgress(t, 0.45, 0.7) * (1 - smoothProgress(t, 0.7, 1)),
+      transform: [{ scale: 0.8 + 0.4 * smoothProgress(t, 0.4, 1) }],
+    };
+  });
+  const caption = useAnimatedStyle(() => ({
+    opacity: smoothProgress(phase.get(), 0.64, 0.94),
+    transform: [{ translateY: reduced ? 0 : 8 * (1 - smoothProgress(phase.get(), 0.6, 0.94)) }],
   }));
 
-  const blobLeftStyle = useAnimatedStyle(() => ({
-    opacity: splitProgress.value * (1 - markOpacity.value),
-    transform: [
-      { translateX: -16 * splitProgress.value },
-      { translateY: -8 * splitProgress.value },
-      { scale: 0.6 + 0.35 * splitProgress.value },
-    ],
-  }));
+  return <Animated.View style={[styles.overlay, overlay]} accessibilityViewIsModal
+    accessibilityRole="progressbar" accessibilityLabel="Rattle 준비 중">
+    <View style={styles.scene} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
+      <Animated.View style={[styles.halo, halo]} />
+      <Animated.View style={[styles.mark, mark]}>
+        <Svg width={144} height={144} viewBox="0 0 144 144">
+          <Defs><LinearGradient id="liquidBlue" x1="0" y1="0" x2="1" y2="1">
+            <Stop offset="0" stopColor={Colors.light} /><Stop offset="0.6" stopColor={Colors.primary} />
+            <Stop offset="1" stopColor={Colors.dark} />
+          </LinearGradient></Defs>
+          <AnimatedPath animatedProps={geometry} fill="url(#liquidBlue)" fillRule="nonzero" />
+        </Svg>
+        <Animated.View style={[styles.mist, mist]}>
+          <Svg width={200} height={200}><Defs>
+            <RadialGradient id="mist"><Stop offset="0.2" stopColor={Colors.primary} stopOpacity={0.7} />
+              <Stop offset="0.55" stopColor={Colors.splashLight} stopOpacity={0.4} />
+              <Stop offset="1" stopColor={Colors.white} stopOpacity={0} /></RadialGradient>
+          </Defs><Rect width={200} height={200} fill="url(#mist)" /></Svg>
+        </Animated.View>
 
-  const blobRightStyle = useAnimatedStyle(() => ({
-    opacity: splitProgress.value * (1 - markOpacity.value),
-    transform: [
-      { translateX: 16 * splitProgress.value },
-      { translateY: 10 * splitProgress.value },
-      { scale: 0.55 + 0.35 * splitProgress.value },
-    ],
-  }));
-
-  const markStyle = useAnimatedStyle(() => ({
-    opacity: markOpacity.value,
-    transform: [{ scale: markScale.value }],
-  }));
-
-  const wordmarkStyle = useAnimatedStyle(() => ({
-    opacity: wordmarkOpacity.value,
-    transform: [{ translateY: wordmarkTranslateY.value }],
-  }));
-
-  const containerStyle = useAnimatedStyle(() => ({ opacity: containerOpacity.value }));
-
-  return (
-    <Animated.View style={[styles.overlay, containerStyle]} pointerEvents="none">
-      <View style={styles.markBox}>
-        <Animated.View style={[styles.blob, styles.blobSingle, singleBlobStyle]} />
-        <Animated.View style={[styles.blob, styles.blobPiece, blobLeftStyle]} />
-        <Animated.View style={[styles.blob, styles.blobPiece, styles.blobPieceDark, blobRightStyle]} />
-        <Animated.Text style={[styles.markLetter, markStyle]}>R</Animated.Text>
-      </View>
-
-      <Animated.View style={[styles.wordmarkRow, wordmarkStyle]}>
-        <Text style={styles.wordmarkR}>R</Text>
-        <Text style={styles.wordmarkRest}>attle</Text>
-        <View style={styles.wordmarkDot} />
       </Animated.View>
-      <Animated.View style={[styles.underline, wordmarkStyle]} />
-    </Animated.View>
-  );
+      <Animated.View style={[styles.caption, caption]}>
+        <Text style={styles.name}>Rattle</Text>
+        <View style={styles.bar} />
+      </Animated.View>
+    </View>
+  </Animated.View>;
 }
 
 const styles = StyleSheet.create({
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: Colors.white,
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 999,
-  },
-  markBox: {
-    width: 96,
-    height: 96,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  blob: { position: 'absolute' },
-  blobSingle: { width: 72, height: 72, backgroundColor: Colors.primary },
-  blobPiece: { width: 40, height: 40, borderRadius: 20, backgroundColor: Colors.primary },
-  blobPieceDark: { backgroundColor: Colors.dark },
-  markLetter: {
-    position: 'absolute',
-    fontSize: 64,
-    fontWeight: '800',
-    color: Colors.primary,
-  },
-  wordmarkRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    marginTop: 20,
-  },
-  wordmarkR: { fontSize: 28, fontWeight: '800', color: Colors.primary },
-  wordmarkRest: { fontSize: 28, fontWeight: '800', color: Colors.black, letterSpacing: -1 },
-  wordmarkDot: {
-    width: 5, height: 5, borderRadius: 2.5,
-    backgroundColor: Colors.primary, marginLeft: -1, marginBottom: 8,
-  },
-  underline: {
-    marginTop: 8,
-    width: 28,
-    height: 3,
-    borderRadius: 1.5,
-    backgroundColor: Colors.primary,
-  },
+  overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: Colors.white, alignItems: 'center', justifyContent: 'center', zIndex: 999 },
+  scene: { width: 240, height: 240 },
+  mark: { position: 'absolute', top: 48, left: 48, width: 144, height: 144 },
+  mist: { position: 'absolute', top: -28, left: -28 },
+  halo: { position: 'absolute', top: 24, left: 24, width: 192, height: 192, borderRadius: 96, borderWidth: 16, borderColor: Colors.homeCanvas },
+  caption: { position: 'absolute', top: 162, left: 0, right: 0, alignItems: 'center' },
+  name: { fontFamily: Fonts.wantedBold, fontSize: 30, lineHeight: 38, letterSpacing: -1, color: Colors.primary },
+  // Decorative launch accent, not a fabricated percentage of network progress.
+  bar: { marginTop: 12, width: 44, height: 5, borderRadius: 3, backgroundColor: Colors.primary },
 });

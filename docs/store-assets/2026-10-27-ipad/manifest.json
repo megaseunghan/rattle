@@ -1,0 +1,26 @@
+{
+  "device": "iPad Pro 13-inch (M5)",
+  "runtime": "iOS 26.3",
+  "kind": "actual simulator screenshots; no resizing or compositing",
+  "files": [
+    {
+      "file": "raw/01-home.png",
+      "width": 2064,
+      "height": 2752,
+      "sha256": "380000920744f3688f2b4d2992797982a46d98a51049d49275d0970e7e507814"
+    },
+    {
+      "file": "raw/02-stock.png",
+      "width": 2064,
+      "height": 2752,
+      "sha256": "44dc12cad013d006e24d0649b073921d1b12215dd5e127797b4cb591d1fb0099"
+    },
+    {
+      "file": "raw/03-recipes.png",
+      "width": 2064,
+      "height": 2752,
+      "sha256": "34a3ea73cb5725f81f5ac1643b5b7621183bbf83fd4d3997e08b57e347e69eff"
+    }
+  ],
+  "apple_upload": "accepted in 13-inch iPad screenshot slot"
+}

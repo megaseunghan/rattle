@@ -1,4 +1,7 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { getErrorMessage } from '../utils/error';
+import { useState, useCallback, useRef, useMemo } from 'react';
+import { useInfiniteQuery, type InfiniteData } from '@tanstack/react-query';
+import { queryClient, queryKeys, useQueryScope } from '../query';
 import { useAuth } from '../contexts/AuthContext';
 import {
   getIngredients,
@@ -6,6 +9,7 @@ import {
   updateIngredient,
   deleteIngredient,
   bulkCreateIngredients,
+  updateIngredientCategories,
 } from '../services/ingredients';
 import { Ingredient } from '../../types';
 
@@ -18,7 +22,7 @@ interface UseIngredientsResult {
   loadingMore: boolean;
   hasMore: boolean;
   error: string | null;
-  refetch: () => Promise<void>;
+  refetch: (force?: boolean) => Promise<void>;
   loadMore: () => Promise<void>;
   create: (data: Omit<Ingredient, 'id' | 'updated_at' | 'created_at'>) => Promise<Ingredient>;
   update: (id: string, data: Partial<Pick<Ingredient, 'name' | 'category' | 'current_stock' | 'unit' | 'min_stock' | 'last_price'>>) => Promise<void>;
@@ -29,88 +33,85 @@ interface UseIngredientsResult {
 
 export function useIngredients(): UseIngredientsResult {
   const { store } = useAuth();
-  const [data, setData] = useState<Ingredient[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [hasMore, setHasMore] = useState(true);
-  const [page, setPage] = useState(0);
-  const [error, setError] = useState<string | null>(null);
-  const lastFetchedAt = useRef(0);
-
-  const refetch = useCallback(async () => {
-    if (!store) return;
-    if (Date.now() - lastFetchedAt.current < CACHE_TTL) return;
-    setLoading(true);
-    setError(null);
-    setPage(0);
-    setHasMore(true);
-    try {
-      const result = await getIngredients(store.id, 0, PAGE_SIZE);
-      setData(result);
-      setHasMore(result.length === PAGE_SIZE);
-      lastFetchedAt.current = Date.now();
-    } catch (e: any) {
-      setError(e.message);
-    } finally {
-      setLoading(false);
+  const scope = useQueryScope();
+  const storeId = store?.id;
+  const identity = `${scope}:${storeId ?? ''}`;
+  const active = useRef(identity);
+  active.current = identity;
+  const [mutationError, setMutationError] = useState<{ identity: string; message: string } | null>(null);
+  const key = queryKeys.store(scope, storeId ?? '', 'ingredients', 'pages', PAGE_SIZE);
+  const options = {
+    queryKey: key,
+    queryFn: ({ pageParam }: { pageParam: number }) => getIngredients(storeId!, pageParam, PAGE_SIZE),
+    initialPageParam: 0,
+    getNextPageParam: (last: Ingredient[], pages: Ingredient[][]) => last.length === PAGE_SIZE ? pages.length : undefined,
+    staleTime: CACHE_TTL, gcTime: 15 * 60_000,
+  };
+  const query = useInfiniteQuery({ ...options, enabled: !!storeId });
+  const data = useMemo(() => storeId ? query.data?.pages.flat() ?? [] : [], [storeId, query.data]);
+  const loading = !!storeId && query.isPending;
+  const loadingMore = query.isFetchingNextPage;
+  const hasMore = !!storeId && !!query.hasNextPage;
+  const error = mutationError?.identity === identity ? mutationError.message
+    : query.error ? getErrorMessage(query.error) : null;
+  const refetch = useCallback(async (force = true) => {
+    if (!storeId) return;
+    if (active.current === identity) setMutationError(null);
+    if (force) {
+      // Active observers refetch immediately and manual refresh bypasses staleTime.
+      await queryClient.invalidateQueries({ queryKey: queryKeys.store(scope, storeId, 'ingredients'), refetchType: 'none' });
     }
-  }, [store]);
-
-  const loadMore = useCallback(async () => {
-    if (!store || !hasMore || loadingMore) return;
-    setLoadingMore(true);
-    try {
-      const nextPage = page + 1;
-      const result = await getIngredients(store.id, nextPage, PAGE_SIZE);
-      setData(prev => [...prev, ...result]);
-      setPage(nextPage);
-      setHasMore(result.length === PAGE_SIZE);
-    } catch (e: any) {
-      setError(e.message);
-    } finally {
-      setLoadingMore(false);
+    try { await queryClient.fetchInfiniteQuery({
+      queryKey: queryKeys.store(scope, storeId, 'ingredients', 'pages', PAGE_SIZE),
+      queryFn: ({ pageParam }) => getIngredients(storeId, pageParam, PAGE_SIZE),
+      initialPageParam: 0,
+      getNextPageParam: (last: Ingredient[], pages: Ingredient[][]) => last.length === PAGE_SIZE ? pages.length : undefined,
+      staleTime: CACHE_TTL, gcTime: 15 * 60_000,
+    }); } catch (e) {
+      if (active.current === identity) setMutationError({ identity, message: getErrorMessage(e) });
     }
-  }, [store, page, hasMore, loadingMore]);
-
-  useEffect(() => {
-    refetch();
-  }, [refetch]);
+  }, [scope, storeId, identity]);
+  const loadMore = async () => {
+    if (storeId && query.hasNextPage && !query.isFetching) await query.fetchNextPage();
+  };
 
   async function create(ingredientData: Omit<Ingredient, 'id' | 'updated_at' | 'created_at'>): Promise<Ingredient> {
     const result = await createIngredient(ingredientData);
-    lastFetchedAt.current = 0;
-    await refetch();
+    if (active.current === identity) setMutationError(null);
     return result;
   }
 
   async function update(id: string, ingredientData: Partial<Pick<Ingredient, 'name' | 'category' | 'current_stock' | 'unit' | 'min_stock' | 'last_price'>>) {
     await updateIngredient(id, ingredientData);
-    lastFetchedAt.current = 0;
-    await refetch();
+    if (active.current === identity) setMutationError(null);
   }
 
   async function remove(id: string) {
-    const previous = data;
-    setData(prev => prev.filter(item => item.id !== id));
+    const cancelling = queryClient.cancelQueries({ queryKey: key });
+    const previous = queryClient.getQueryData<InfiniteData<Ingredient[], number>>(key);
+    const optimistic = previous ? { ...previous, pages: previous.pages.map(page => page.filter(item => item.id !== id)) } : undefined;
+    const optimisticVersion = queryClient.setQueryData(key, optimistic);
     try {
+      await cancelling;
       await deleteIngredient(id);
-    } catch (e: any) {
-      setData(previous);
-      setError(e.message);
+      if (active.current === identity) setMutationError(null);
+    } catch (e) {
+      // Roll back only this optimistic version; never replace a newer result.
+      if (queryClient.getQueryData(key) === optimisticVersion) queryClient.setQueryData(key, previous);
+      if (active.current === identity) setMutationError({ identity, message: getErrorMessage(e) });
     }
   }
 
   async function bulkCreate(items: Omit<Ingredient, 'id' | 'updated_at' | 'created_at'>[]) {
     const count = await bulkCreateIngredients(items);
-    lastFetchedAt.current = 0;
-    await refetch();
+    if (active.current === identity) setMutationError(null);
     return count;
   }
 
   async function bulkUpdateCategory(ids: string[], category: string) {
-    await Promise.all(ids.map(id => updateIngredient(id, { category })));
-    lastFetchedAt.current = 0;
-    await refetch();
+    if (!storeId) return;
+    await updateIngredientCategories(storeId, ids, category);
+    if (active.current === identity) setMutationError(null);
   }
 
   return { data, loading, loadingMore, hasMore, error, refetch, loadMore, create, update, remove, bulkCreate, bulkUpdateCategory };

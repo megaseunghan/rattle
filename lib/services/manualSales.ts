@@ -1,3 +1,5 @@
+import { readAllRows } from './readAllRows';
+import { invalidateCachedStore } from './cacheInvalidation';
 import { supabase } from '../supabase';
 import { ManualSale } from '../../types';
 
@@ -6,14 +8,13 @@ export async function getManualSalesByMonth(storeId: string, yearMonth: string):
   const lastDay = new Date(Number(yearMonth.slice(0, 4)), Number(yearMonth.slice(5, 7)), 0).getDate();
   const to = `${yearMonth}-${String(lastDay).padStart(2, '0')}`;
 
-  const { data, error } = await supabase
+  const data = await readAllRows((start, end) => supabase
     .from('manual_sales')
     .select('*')
     .eq('store_id', storeId)
     .gte('date', from)
     .lte('date', to)
-    .order('date', { ascending: false });
-  if (error) throw new Error(error.message);
+    .order('date', { ascending: false }).order('id').range(start, end));
   return (data ?? []) as ManualSale[];
 }
 
@@ -44,12 +45,14 @@ export async function saveManualSale(input: {
     .select()
     .single();
   if (error) throw new Error(error.message);
+  await invalidateCachedStore(input.storeId);
   return data as ManualSale;
 }
 
 export async function deleteManualSale(id: string): Promise<void> {
   const { error } = await supabase.from('manual_sales').delete().eq('id', id);
   if (error) throw new Error(error.message);
+  await invalidateCachedStore();
 }
 
 /** 손익계산서용 — 카드/현금 매출 합계 (할인액은 이미 입력된 금액에 반영된 순매출 기준) */

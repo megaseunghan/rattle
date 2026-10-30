@@ -1,85 +1,48 @@
-import { useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, NativeSyntheticEvent, NativeScrollEvent, LayoutChangeEvent } from 'react-native';
+import { GlassBackdrop } from '../../lib/components/GlassBackdrop';
+/* Hallmark · genre: modern-minimal · macrostructure: Workbench · design-system: DESIGN.md · designed-as-app */
+import { NumericText } from '../../lib/components/ui/NumericText';
+import { sumKnown } from '../../lib/utils/financialCoverage';
+import { useState, useCallback } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, Alert, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Colors } from '../../constants/colors';
+import { Fonts } from '../../constants/fonts';
 import { useAuth } from '../../lib/contexts/AuthContext';
 import { useTabPager } from '../../lib/contexts/TabPagerContext';
 import { useAdminDashboard } from '../../lib/hooks/useAdminDashboard';
-import { StorePnl, WeeklyCleaningDay, WeeklyScheduleDay } from '../../lib/services/adminDashboard';
+import { WeeklyCleaningDay, WeeklyScheduleDay } from '../../lib/services/adminDashboard';
 import { Badge } from '../../lib/components/ui';
+import { DashboardBreakdownCard } from '../../lib/components/DashboardBreakdownCard';
+import type { DashboardMetric } from '../../lib/services/dashboardBreakdown';
+import { DashboardProfitRing } from '../../lib/components/DashboardProfitRing';
+import { DashboardProfitTrend } from '../../lib/components/DashboardProfitTrend';
+import { DashboardSchedule } from '../../lib/components/DashboardSchedule';
+import { HomeAlertsPanel } from '../../lib/components/HomeAlertsPanel';
+import { getErrorMessage } from '../../lib/utils/error';
 
 const WEEKDAY_LABELS = ['월', '화', '수', '목', '금', '토', '일'];
 const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0]; // 0=일 ~ 6=토 (DB 값) → 월~일 표시 순서
 
-function fmt(v: number): string {
+function fmt(v: number | null): string {
+  if (v == null) return '확인 필요';
   return `${Math.round(v).toLocaleString()}원`;
 }
 
-function trendPct(current: number, previous: number): number | null {
-  if (previous === 0) return null;
+function trendPct(current: number | null, previous: number | null): number | null {
+  if (current == null || previous == null || previous === 0) return null;
   return ((current - previous) / Math.abs(previous)) * 100;
 }
 
-function TrendBadge({ pct, suffix = '%' }: { pct: number | null; suffix?: string }) {
+function TrendBadge({ pct, compareLabel }: { pct: number | null; compareLabel: string }) {
   if (pct == null) return null;
   const isUp = pct >= 0;
-  const label = `전월 대비 ${isUp ? '+' : ''}${pct.toFixed(1)}${suffix}`;
+  const label = `${compareLabel} 대비 ${isUp ? '+' : ''}${pct.toFixed(1)}%`;
   return <Badge label={label} variant={isUp ? 'positive' : 'negative'} />;
 }
 
-/** 최근 6개월/연도 합산 영업이익 미니 바 차트 — 마지막(현재) 막대만 강조 */
-function TrendBarChart({ data }: { data: { label: string; value: number }[] }) {
-  if (data.length === 0) return null;
-  const maxAbs = Math.max(1, ...data.map(d => Math.abs(d.value)));
-  return (
-    <View style={styles.trendChart}>
-      {data.map((d, i) => {
-        const isLast = i === data.length - 1;
-        const heightPct = Math.max(8, (Math.abs(d.value) / maxAbs) * 100);
-        return (
-          <View key={d.label} style={styles.trendBarCol}>
-            <View style={styles.trendBarTrack}>
-              <View style={[styles.trendBarFill, { height: `${heightPct}%` }, isLast ? styles.trendBarFillActive : styles.trendBarFillInactive]} />
-            </View>
-            <Text style={[styles.trendBarLabel, isLast && styles.trendBarLabelActive]}>{d.label}</Text>
-          </View>
-        );
-      })}
-    </View>
-  );
-}
-
-/** 헤더 중앙 드롭다운 — 매장을 고르면 캐러셀이 그 매장 페이지로 이동한다 (화면 이동 없음) */
-function StorePickerDropdown({
-  visible, onClose, storeNames, onSelectStore,
-}: {
-  visible: boolean; onClose: () => void;
-  storeNames: { id: string; name: string }[]; onSelectStore: (id: string) => void;
-}) {
-  if (!visible) return null;
-  return (
-    <>
-      <TouchableOpacity style={styles.dropdownOverlay} onPress={onClose} activeOpacity={1} />
-      <View style={styles.dropdownBox}>
-        <Text style={styles.dropdownHint}>매장을 선택하면 그 매장의 일반 홈 화면으로 전환돼요</Text>
-        {storeNames.map(s => (
-          <TouchableOpacity
-            key={s.id}
-            style={[styles.dropdownItem, styles.dropdownItemBorder]}
-            onPress={() => { onSelectStore(s.id); onClose(); }}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.dropdownItemText}>{s.name}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-    </>
-  );
-}
-
-function CleaningWeekCard({ weekly }: { weekly: { days: WeeklyCleaningDay[]; pct: number } | undefined }) {
+function CleaningWeekCard({ weekly, error }: { weekly: { days: WeeklyCleaningDay[]; pct: number } | undefined; error?: boolean }) {
   const days = weekly?.days ?? [];
   const byWeekday = new Map(days.map(d => [d.weekday, d]));
   return (
@@ -90,11 +53,13 @@ function CleaningWeekCard({ weekly }: { weekly: { days: WeeklyCleaningDay[]; pct
           <Text style={styles.linkText}>기록 ›</Text>
         </TouchableOpacity>
       </View>
-      <Text style={styles.weeklyPct}>{weekly?.pct ?? 0}%</Text>
+      {!weekly ? <Text style={styles.domainError}>{error ? '청소 기록을 불러오지 못했어요' : '청소 기록을 불러오는 중이에요'}</Text> : <>
+      <Text style={styles.weeklyPct}>{weekly.pct}%</Text>
       <View style={styles.weeklyPctTrack}>
-        <View style={[styles.weeklyPctFill, { width: `${weekly?.pct ?? 0}%` }]} />
+        <View style={[styles.weeklyPctFill, { width: `${weekly.pct}%` }]} />
       </View>
-      <View style={styles.weekdayRow}>
+      </>}
+      {weekly && <View style={styles.weekdayRow}>
         {WEEK_ORDER.map((weekday, i) => {
           const d = byWeekday.get(weekday);
           const hasTasks = (d?.total ?? 0) > 0;
@@ -113,79 +78,7 @@ function CleaningWeekCard({ weekly }: { weekly: { days: WeeklyCleaningDay[]; pct
             </View>
           );
         })}
-      </View>
-    </View>
-  );
-}
-
-/** 겹치는 인원 수에 비례해 진해지는 프라이머리 컬러 (0명 = 투명, 1명 이상부터 단계적으로 진해짐) */
-function overlapColor(overlap: number): string {
-  if (overlap <= 0) return 'transparent';
-  const opacity = Math.min(1, 0.3 + (overlap - 1) * 0.25);
-  return `${Colors.primary}${Math.round(opacity * 255).toString(16).padStart(2, '0')}`;
-}
-
-function ScheduleWeekCard({ days }: { days: WeeklyScheduleDay[] | undefined }) {
-  const byWeekday = new Map((days ?? []).map(d => [d.weekday, d]));
-  return (
-    <View style={styles.opsCard}>
-      <View style={styles.sectionHeaderRow}>
-        <Text style={styles.sectionTitle}>요일별 스케줄</Text>
-        <TouchableOpacity onPress={() => router.push('/mypage/schedule')} hitSlop={8}>
-          <Text style={styles.linkText}>배정 ›</Text>
-        </TouchableOpacity>
-      </View>
-      {WEEK_ORDER.map((weekday, i) => {
-        const d = byWeekday.get(weekday);
-        const isOff = !d || d.headcount === 0;
-        return (
-          <View key={weekday} style={styles.scheduleDayBlock}>
-            <View style={styles.scheduleRow}>
-              <Text style={[styles.scheduleDayLabel, weekday === 0 && styles.negativeText, weekday === 6 && styles.primaryText]}>
-                {WEEKDAY_LABELS[i]}
-              </Text>
-              <View style={styles.scheduleBarTrack}>
-                {!isOff && d!.segments.map(seg => (
-                  <View
-                    key={seg.startMin}
-                    style={[styles.scheduleBarSeg, { flex: seg.endMin - seg.startMin, backgroundColor: overlapColor(seg.overlap) }]}
-                  />
-                ))}
-              </View>
-              <Text style={styles.scheduleMeta}>{isOff ? '휴무' : `${d!.headcount}명 ${d!.totalHours}h`}</Text>
-            </View>
-            {!isOff && (
-              <Text style={styles.scheduleShiftList} numberOfLines={2}>
-                {d!.shifts.map(s => `${s.employeeName} ${s.start}-${s.end}`).join('  ·  ')}
-              </Text>
-            )}
-          </View>
-        );
-      })}
-      <Text style={styles.scheduleCaption}>겹치는 시간일수록 색이 진해져요</Text>
-    </View>
-  );
-}
-
-function StorePnlMiniCard({ pnl, periodLabel, onDetail }: { pnl: StorePnl; periodLabel: string; onDetail: () => void }) {
-  const isPositive = pnl.profit >= 0;
-  return (
-    <View style={styles.opsCard}>
-      <View style={styles.sectionHeaderRow}>
-        <Text style={styles.sectionTitle}>{periodLabel} 손익</Text>
-        <TouchableOpacity onPress={onDetail} hitSlop={8}>
-          <Text style={styles.linkText}>상세 ›</Text>
-        </TouchableOpacity>
-      </View>
-      <Text style={styles.pnlNetLabel}>순수익</Text>
-      <Text style={[styles.pnlNetValue, isPositive ? styles.positiveText : styles.negativeText]}>
-        {isPositive ? '' : '-'}{fmt(Math.abs(pnl.profit))}
-      </Text>
-      <View style={styles.pnlDivider} />
-      <View style={styles.pnlRow}><Text style={styles.pnlRowLabel}>매출</Text><Text style={styles.pnlRowValue}>{fmt(pnl.revenue)}</Text></View>
-      <View style={styles.pnlRow}><Text style={styles.pnlRowLabel}>매입</Text><Text style={styles.pnlRowValue}>{fmt(pnl.purchaseCost)}</Text></View>
-      <View style={styles.pnlRow}><Text style={styles.pnlRowLabel}>비용</Text><Text style={styles.pnlRowValue}>{fmt(pnl.otherExpense)}</Text></View>
-      <View style={styles.pnlRow}><Text style={styles.pnlRowLabel}>인건비</Text><Text style={styles.pnlRowValue}>{fmt(pnl.laborCost)}</Text></View>
+      </View>}
     </View>
   );
 }
@@ -193,287 +86,144 @@ function StorePnlMiniCard({ pnl, periodLabel, onDetail }: { pnl: StorePnl; perio
 /** 화면 00 — 통합 대시보드 (사장님 홈 탭 기본 화면) */
 export function AdminDashboardScreen() {
   const { realRole, switchStore } = useAuth();
-  const { goToTab, setHomeMode } = useTabPager();
+  const { goToTab, openStorePicker, selectStoreScope, selectedMonth, setSelectedMonth } = useTabPager();
+  const [selectedMetric, setSelectedMetric] = useState<DashboardMetric | null>(null);
+  const resetMetric = useCallback(() => setSelectedMetric(null), []);
+  const selectMetric = useCallback((metric: DashboardMetric) => setSelectedMetric(current => current === metric ? null : metric), []);
+  const [scopeId, setScopeId] = useState<string | null>(null);
+  const [storeSearch, setStoreSearch] = useState('');
   const {
     ownedStores, period, setPeriod, anchorYear, anchorMonth, isCurrentMonth,
-    pnl, trend, ops, weeklyCleaning, weeklySchedule, loading, refetch, goPrev, goNext,
-  } = useAdminDashboard();
-  const [dropdownVisible, setDropdownVisible] = useState(false);
-  const [carouselIndex, setCarouselIndex] = useState(0);
-  const carouselRef = useRef<ScrollView>(null);
-  const [pageWidth, setPageWidth] = useState(0);
-
-  function onCarouselLayout(e: LayoutChangeEvent) {
-    setPageWidth(e.nativeEvent.layout.width);
+    pnl, trend, weeklyCleaning, weeklySchedule, errors, financialError, loading, refetch, goPrev, goNext,
+  } = useAdminDashboard(selectedMonth, setSelectedMonth, scopeId);
+  const [alertRefreshKey, setAlertRefreshKey] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
+  async function onRefresh() {
+    setRefreshing(true);
+    setAlertRefreshKey(value => value + 1);
+    try { await refetch(); } finally { setRefreshing(false); }
   }
+  const [trendExpanded, setTrendExpanded] = useState(false);
+  const [operationsExpanded, setOperationsExpanded] = useState(false);
 
-  useEffect(() => { refetch(); }, [refetch]);
+  const showMonth = useCallback((index: number) => {
+    if (period !== 'month' || !trend) return;
+    const date = new Date(anchorYear, anchorMonth - trend.length + index, 1);
+    setSelectedMonth(`${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`);
+  }, [period, trend, anchorYear, anchorMonth, setSelectedMonth]);
 
-  if (realRole !== 'admin') {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.empty}><Text style={styles.emptyText}>접근 권한이 없어요</Text></View>
-      </SafeAreaView>
-    );
-  }
+  if (realRole !== 'admin') return <SafeAreaView style={styles.container}><GlassBackdrop /><View style={styles.empty}><Text style={styles.emptyText}>접근 권한이 없어요</Text></View></SafeAreaView>;
 
-  const headerStoreLabel = `전체 매장 ${ownedStores.length}곳`;
-  const activeStore = ownedStores[carouselIndex];
-  const activePnl = activeStore ? pnl.current.find(p => p.storeId === activeStore.id) : undefined;
-
-  // 최상단 고정 요약 — 항상 전체 매장 합산
-  const sumRevenue = pnl.current.reduce((s, p) => s + p.revenue, 0);
-  const sumExpense = pnl.current.reduce((s, p) => s + p.expense, 0);
-  const sumProfit = pnl.current.reduce((s, p) => s + p.profit, 0);
-  const sumMargin = sumRevenue > 0 ? (sumProfit / sumRevenue) * 100 : 0;
-
-  const prevRevenue = pnl.previous.reduce((s, p) => s + p.revenue, 0);
-  const prevExpense = pnl.previous.reduce((s, p) => s + p.expense, 0);
-  const prevProfit = pnl.previous.reduce((s, p) => s + p.profit, 0);
-  const prevMargin = prevRevenue > 0 ? (prevProfit / prevRevenue) * 100 : 0;
-
-  const profitTrend = trendPct(sumProfit, prevProfit);
-  const revenueTrend = trendPct(sumRevenue, prevRevenue);
-  const expenseTrend = trendPct(sumExpense, prevExpense);
-  const marginTrendPt = sumMargin - prevMargin;
-
-  const compareLabel = period === 'month' ? '전월' : '전년';
-  const periodLabel = period === 'month' ? `${anchorYear}년 ${anchorMonth}월` : `${anchorYear}년`;
-  const carouselPeriodLabel = period === 'month' ? `${anchorMonth}월` : `${anchorYear}년`;
-
-  // 전매장 근태 현황 — 항상 소유한 모든 매장 기준
-  const totalWorking = ownedStores.reduce((s, st) => s + (ops[st.id]?.attendance.working ?? 0), 0);
-  const totalLate = ownedStores.reduce((s, st) => s + (ops[st.id]?.attendance.late.length ?? 0), 0);
-  const totalNoShow = ownedStores.reduce((s, st) => s + (ops[st.id]?.attendance.noShow.length ?? 0), 0);
-  const alertParts: string[] = [];
-  ownedStores.forEach(st => {
-    const a = ops[st.id]?.attendance;
-    if (!a) return;
-    a.late.forEach(l => alertParts.push(`${st.name} ${l.name} ${l.time} 지각`));
-    if (a.noShow.length > 0) alertParts.push(`${st.name} ${a.noShow.length}명 미출근`);
+  const selectedStore = ownedStores.find(store => store.id === scopeId);
+  const activeScope = selectedStore?.id ?? null;
+  const scopeLabel = selectedStore?.name ?? '전체 매장';
+  const current = pnl?.current.filter(row => !activeScope || row.storeId === activeScope);
+  const previous = pnl?.previous.filter(row => !activeScope || row.storeId === activeScope);
+  const sumRevenue = current?.reduce((sum, row) => sum + row.revenue, 0) ?? null;
+  const sumProfit = current ? sumKnown(current.map(row => row.profit)) : null;
+  const sumPurchases = current?.reduce((sum, row) => sum + row.purchaseCost, 0) ?? null;
+  const sumLabor = current ? sumKnown(current.map(row => row.laborCost)) : null;
+  const sumOther = current?.reduce((sum, row) => sum + row.otherExpense, 0) ?? null;
+  const previousProfit = previous ? sumKnown(previous.map(row => row.profit)) : null;
+  const missingStores = current?.filter(row => row.laborCost == null) ?? [];
+  const scopedStores = selectedStore ? [selectedStore] : ownedStores;
+  const scheduleStores = scopedStores.filter(store => weeklySchedule[store.id] && !errors.schedule[store.id]);
+  const scheduleDays: WeeklyScheduleDay[] | undefined = !scheduleStores.length ? undefined : WEEK_ORDER.map(weekday => {
+    const rows = scheduleStores.map(store => ({ store, day: weeklySchedule[store.id].find(day => day.weekday === weekday) }));
+    return { weekday, headcount: rows.reduce((n, row) => n + (row.day?.headcount ?? 0), 0), totalHours: rows.reduce((n, row) => n + (row.day?.totalHours ?? 0), 0),
+      shifts: rows.flatMap(row => (row.day?.shifts ?? []).map(shift => ({ ...shift, employeeName: activeScope ? shift.employeeName : `${row.store.name} · ${shift.employeeName}` }))), segments: [], maxOverlap: 0 };
   });
-
-  function scrollToStore(id: string) {
-    const idx = ownedStores.findIndex(s => s.id === id);
-    if (idx < 0 || pageWidth === 0) return;
-    setCarouselIndex(idx);
-    carouselRef.current?.scrollTo({ x: idx * pageWidth, animated: true });
-  }
-
-  function onCarouselScrollEnd(e: NativeSyntheticEvent<NativeScrollEvent>) {
-    if (pageWidth === 0) return;
-    const idx = Math.round(e.nativeEvent.contentOffset.x / pageWidth);
-    setCarouselIndex(idx);
-  }
+  const cleaningStores = scopedStores.filter(store => weeklyCleaning[store.id] && !errors.cleaning[store.id]);
+  const cleaningDays = WEEK_ORDER.map(weekday => ({ weekday,
+    checked: cleaningStores.reduce((n, store) => n + (weeklyCleaning[store.id].days.find(day => day.weekday === weekday)?.checked ?? 0), 0),
+    total: cleaningStores.reduce((n, store) => n + (weeklyCleaning[store.id].days.find(day => day.weekday === weekday)?.total ?? 0), 0) }));
+  const cleaningTotal = cleaningDays.reduce((n, day) => n + day.total, 0);
+  const scopedCleaning = cleaningStores.length ? { days: cleaningDays, pct: cleaningTotal ? Math.round(cleaningDays.reduce((n, day) => n + day.checked, 0) / cleaningTotal * 100) : 0 } : undefined;
+  const periodLabel = period === 'month' ? `${anchorYear}년 ${anchorMonth}월` : `${anchorYear}년`;
+  const yearMonth = `${anchorYear}-${String(anchorMonth).padStart(2, '0')}`;
 
   async function goToDetail(storeId: string) {
-    await switchStore(storeId);
-    router.push('/profit-loss');
+    try {
+      await switchStore(storeId);
+      router.push({ pathname: '/profit-loss', params: { yearMonth, period } });
+    } catch (error) { Alert.alert('매장 전환', getErrorMessage(error, '매장을 바꾸지 못했어요. 다시 시도해 주세요.')); }
+  }
+  async function goToSchedule(storeId: string) {
+    try { await switchStore(storeId); router.push('/mypage/schedule'); }
+    catch (error) { Alert.alert('매장 전환', getErrorMessage(error, '매장을 바꾸지 못했어요. 다시 시도해 주세요.')); }
   }
 
-  /** 헤더 드롭다운에서 매장을 고르면 그 매장의 일반 홈 화면으로 전환한다 (대시보드는 사장님 전체 요약 전용) */
-  async function switchToStoreHome(storeId: string) {
-    await switchStore(storeId);
-    setHomeMode('store');
-  }
-
-  return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => goToTab('more')} hitSlop={8}>
-          <Ionicons name="ellipsis-horizontal" size={22} color={Colors.black} />
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.headerCenter} onPress={() => setDropdownVisible(v => !v)} activeOpacity={0.7}>
-          <Text style={styles.headerPeriod}>{periodLabel}</Text>
-          <View style={styles.headerStoreRow}>
-            <Text style={styles.headerStoreText}>{headerStoreLabel}</Text>
-            <Ionicons name={dropdownVisible ? 'chevron-up' : 'chevron-down'} size={14} color={Colors.gray500} />
-          </View>
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => router.push('/mypage')} hitSlop={8}>
-          <Ionicons name="person-circle-outline" size={24} color={Colors.gray600} />
-        </TouchableOpacity>
+  const metricTotals: Record<DashboardMetric, number | null> = { revenue: sumRevenue, purchase: sumPurchases, expense: sumOther, labor: sumLabor };
+  return <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}><GlassBackdrop />
+    <View style={styles.header}>
+      <TouchableOpacity style={styles.headerSideButton} onPress={() => goToTab('more')} accessibilityLabel="더보기" accessibilityRole="button"><Ionicons name="ellipsis-horizontal" size={22} color={Colors.black} /></TouchableOpacity>
+      <TouchableOpacity style={styles.headerCenter} onPress={() => openStorePicker()} accessibilityLabel="전체 매장, 매장 선택" accessibilityRole="button"><View style={styles.headerStoreRow}><Text style={styles.headerStoreText}>전체 매장 {ownedStores.length}곳</Text><Ionicons name="chevron-down" size={14} color={Colors.gray500} /></View></TouchableOpacity>
+      <TouchableOpacity style={styles.headerSideButton} onPress={() => router.push('/mypage')} accessibilityLabel="내 정보" accessibilityRole="button"><Ionicons name="person-circle-outline" size={24} color={Colors.gray600} /></TouchableOpacity>
+    </View>
+    <View style={styles.scopeBar}>
+      {ownedStores.length > 5 && <TextInput accessibilityLabel="대시보드 매장 검색" placeholder="매장 검색" value={storeSearch} onChangeText={setStoreSearch} style={styles.scopeSearch} />}
+      <View style={styles.scopeRow}><TouchableOpacity accessibilityRole="button" accessibilityLabel="전체 매장 영업이익" accessibilityState={{ selected: !activeScope }} onPress={() => setScopeId(null)} style={[styles.scopeChip, !activeScope && styles.scopeChipActive]}><Text style={[styles.scopeChipText, !activeScope && styles.scopeChipTextActive]}>전체 매장</Text></TouchableOpacity>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.scopeChips}>{ownedStores.filter(store => store.name.toLocaleLowerCase().includes(storeSearch.trim().toLocaleLowerCase())).map(store => <TouchableOpacity key={store.id} accessibilityRole="button" accessibilityLabel={`${store.name} 영업이익`} accessibilityState={{ selected: activeScope === store.id }} onPress={() => setScopeId(store.id)} style={[styles.scopeChip, activeScope === store.id && styles.scopeChipActive]}><Text numberOfLines={1} style={[styles.scopeChipText, activeScope === store.id && styles.scopeChipTextActive]}>{store.name}</Text></TouchableOpacity>)}</ScrollView>
       </View>
-
-      <StorePickerDropdown
-        visible={dropdownVisible}
-        onClose={() => setDropdownVisible(false)}
-        storeNames={ownedStores.map(s => ({ id: s.id, name: s.name }))}
-        onSelectStore={switchToStoreHome}
-      />
-
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        {/* 최상단 고정 요약 — 통합 매출/지출/마진 + 최근 6개월(연도) 트렌드, 매장 선택과 무관하게 항상 노출 */}
-        <View style={styles.summaryCard}>
-          <View style={styles.summaryTop}>
-            <Text style={styles.summaryTitle}>{ownedStores.length}개 매장 합산 영업이익</Text>
-            <TrendBadge pct={profitTrend} />
-          </View>
-          <Text style={[styles.summaryValue, sumProfit < 0 && styles.negativeText]}>
-            {sumProfit >= 0 ? '' : '-'}{fmt(Math.abs(sumProfit))}
-          </Text>
-
-          <TrendBarChart data={trend} />
-
-          <View style={styles.summaryDivider} />
-
-          <View style={styles.summaryCols}>
-            <View style={styles.summaryCol}>
-              <Text style={styles.summaryColLabel}>매출</Text>
-              <Text style={styles.summaryColValue}>{fmt(sumRevenue)}</Text>
-              {revenueTrend != null && (
-                <Text style={[styles.summaryColTrend, revenueTrend >= 0 ? styles.positiveText : styles.negativeText]}>
-                  {compareLabel} 대비 {revenueTrend >= 0 ? '+' : ''}{revenueTrend.toFixed(1)}%
-                </Text>
-              )}
-            </View>
-            <View style={styles.summaryCol}>
-              <Text style={styles.summaryColLabel}>지출</Text>
-              <Text style={styles.summaryColValue}>{fmt(sumExpense)}</Text>
-              {expenseTrend != null && (
-                <Text style={[styles.summaryColTrend, expenseTrend <= 0 ? styles.positiveText : styles.negativeText]}>
-                  {compareLabel} 대비 {expenseTrend >= 0 ? '+' : ''}{expenseTrend.toFixed(1)}%
-                </Text>
-              )}
-            </View>
-            <View style={styles.summaryCol}>
-              <Text style={styles.summaryColLabel}>마진</Text>
-              <Text style={[styles.summaryColValue, styles.marginValue]}>{sumMargin.toFixed(1)}%</Text>
-              <Text style={[styles.summaryColTrend, marginTrendPt >= 0 ? styles.positiveText : styles.negativeText]}>
-                {compareLabel} 대비 {marginTrendPt >= 0 ? '+' : ''}{marginTrendPt.toFixed(1)}%p
-              </Text>
-            </View>
-          </View>
-
-          <Text style={styles.summaryCaption}>
-            {period === 'month' ? '전년 동월 대비는 상세에서 확인해요 · 연도별 탭에서는 최근 6년으로 표시돼요' : '전년 동기 대비로 계산돼요'}
-          </Text>
-        </View>
-
+    </View>
+    <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />}>
+      <View style={styles.periodControls}>
         <View style={styles.periodTabs}>
-          <TouchableOpacity
-            style={[styles.periodTab, period === 'month' && styles.periodTabActive]}
-            onPress={() => setPeriod('month')}
-            activeOpacity={0.7}
-          >
-            <Text style={[styles.periodTabText, period === 'month' && styles.periodTabTextActive]}>월별</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.periodTab, period === 'year' && styles.periodTabActive]}
-            onPress={() => setPeriod('year')}
-            activeOpacity={0.7}
-          >
-            <Text style={[styles.periodTabText, period === 'year' && styles.periodTabTextActive]}>연도별</Text>
-          </TouchableOpacity>
+          {(['month', 'year'] as const).map(value => <TouchableOpacity key={value} style={[styles.periodTab, period === value && styles.periodTabActive]} onPress={() => setPeriod(value)} accessibilityRole="button" accessibilityState={{ selected: period === value }}><Text style={[styles.periodTabText, period === value && styles.periodTabTextActive]}>{value === 'month' ? '월별' : '연도별'}</Text></TouchableOpacity>)}
         </View>
+        <View style={styles.navRow}><TouchableOpacity onPress={goPrev} style={styles.navButton} accessibilityRole="button" accessibilityLabel="이전 기간"><Ionicons name="chevron-back" size={18} color={Colors.gray600} /></TouchableOpacity><Text style={styles.navLabel}>{periodLabel}</Text><TouchableOpacity onPress={goNext} style={styles.navButton} accessibilityRole="button" accessibilityLabel="다음 기간" disabled={period === 'month' ? isCurrentMonth : anchorYear >= new Date().getFullYear()}><Ionicons name="chevron-forward" size={18} color={(period === 'month' ? isCurrentMonth : anchorYear >= new Date().getFullYear()) ? Colors.gray300 : Colors.gray600} /></TouchableOpacity></View>
+      </View>
+      <View style={styles.summaryCard}>
+        <View style={styles.summaryTop}><Text style={styles.summaryTitle}>{scopeLabel} · 영업이익</Text><TrendBadge pct={pnl ? trendPct(sumProfit, previousProfit) : null} compareLabel={period === 'month' ? '전월' : '전년'} /></View>
 
-        <View style={styles.navRow}>
-          <TouchableOpacity onPress={goPrev} hitSlop={8}><Ionicons name="chevron-back" size={16} color={Colors.gray500} /></TouchableOpacity>
-          <Text style={styles.navLabel}>{periodLabel}</Text>
-          <TouchableOpacity onPress={goNext} hitSlop={8} disabled={period === 'month' && isCurrentMonth}>
-            <Ionicons name="chevron-forward" size={16} color={period === 'month' && isCurrentMonth ? Colors.gray300 : Colors.gray500} />
-          </TouchableOpacity>
-        </View>
+        {!pnl && !errors.pnl && <Text style={styles.summaryCaption}>손익을 불러오는 중이에요</Text>}
+        <DashboardProfitRing revenue={sumRevenue} profit={sumProfit} purchase={sumPurchases} expense={sumOther} labor={sumLabor} selected={selectedMetric} onReset={resetMetric} onSelect={selectMetric} />
+        {selectedMetric && <DashboardBreakdownCard key={`${activeScope ?? 'all'}:${period}:${yearMonth}:${selectedMetric}`} stores={scopedStores} period={period} yearMonth={yearMonth} metric={selectedMetric} expectedTotal={metricTotals[selectedMetric]} onClose={() => setSelectedMetric(null)} onRefresh={onRefresh} />}
+        {activeScope && <TouchableOpacity accessibilityRole="button" onPress={() => void goToDetail(activeScope)} style={styles.detailButton}><Text style={styles.linkText}>손익 상세 보기 ›</Text></TouchableOpacity>}
+        {pnl && sumProfit == null && <Text style={styles.summaryReason}>급여 조건을 확인하면 인건비와 이익을 계산할 수 있어요.</Text>}
+        {errors.pnl && <><Text style={styles.domainError}>{financialError ?? '손익을 불러오지 못했어요.'}</Text><TouchableOpacity onPress={() => void refetch()} style={styles.retryButton}><Text style={styles.linkText}>다시 불러오기</Text></TouchableOpacity></>}
+        {loading && pnl && <Text style={styles.summaryCaption}>표시한 {periodLabel} 자료를 갱신 중이에요</Text>}
+      </View>
+      {missingStores.length > 0 && <View style={styles.taskCard}><Text style={styles.sectionTitle}>확인할 일</Text>{missingStores.slice(0, 3).map(row => <TouchableOpacity key={row.storeId} style={styles.taskRow} accessibilityRole="button" onPress={() => { if (period === 'year') { Alert.alert('확인할 기간', '월별로 바꾼 뒤 확인할 월을 선택해 주세요.'); setPeriod('month'); } else void selectStoreScope(row.storeId, 'payroll').catch(() => Alert.alert('매장 전환', '매장을 바꾸지 못했어요. 다시 시도해 주세요.')); }}><View style={styles.rowBody}><Text style={styles.taskStore}>{row.storeName} · {periodLabel}</Text><Text style={styles.taskTitle}>직원 정보 확인 필요</Text><Text style={styles.taskHint}>확인할 직원 보기</Text></View><Ionicons name="chevron-forward" size={20} color={Colors.deeper} /></TouchableOpacity>)}{missingStores.length > 3 && <Text style={styles.summaryReason}>외 {missingStores.length - 3}곳 · 상단 매장 칩에서 확인해주세요</Text>}</View>}
 
-        {loading ? (
-          <ActivityIndicator color={Colors.primary} style={{ marginTop: 24 }} />
-        ) : ownedStores.length === 0 ? (
-          <View style={styles.empty}><Text style={styles.emptyText}>소유한 매장이 없어요</Text></View>
-        ) : (
-          <>
-            <Text style={styles.sectionTitle}>전매장 근태 현황</Text>
-            <View style={styles.statRow}>
-              <View style={styles.statBox}>
-                <Text style={styles.statValue}>{totalWorking}</Text>
-                <Text style={styles.statLabel}>근무 중</Text>
-              </View>
-              <View style={styles.statBox}>
-                <Text style={[styles.statValue, totalLate > 0 && styles.negativeText]}>{totalLate}</Text>
-                <Text style={styles.statLabel}>지각</Text>
-              </View>
-              <View style={styles.statBox}>
-                <Text style={[styles.statValue, totalNoShow > 0 && styles.negativeText]}>{totalNoShow}</Text>
-                <Text style={styles.statLabel}>미출근</Text>
-              </View>
-            </View>
-            {alertParts.length > 0 && (
-              <View style={styles.alertBanner}>
-                <Ionicons name="warning-outline" size={16} color={Colors.negative} />
-                <Text style={styles.alertText} numberOfLines={2}>{alertParts.join(' · ')}</Text>
-                <TouchableOpacity onPress={() => router.push('/attendance')} hitSlop={8}>
-                  <Text style={styles.alertAction}>확인 ›</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-
-            {/* 매장별 캐러셀 — 손익/청소/스케줄을 매장 하나씩 좌우로 스와이프해 확인 */}
-            <View style={styles.carouselNav}>
-              <TouchableOpacity
-                onPress={() => scrollToStore(ownedStores[(carouselIndex - 1 + ownedStores.length) % ownedStores.length].id)}
-                hitSlop={8}
-                disabled={ownedStores.length <= 1}
-              >
-                <Ionicons name="chevron-back" size={18} color={ownedStores.length <= 1 ? Colors.gray300 : Colors.gray500} />
-              </TouchableOpacity>
-              <View style={styles.carouselNavCenter}>
-                <Text style={styles.carouselStoreName}>{activeStore?.name ?? ''}</Text>
-                <Text style={styles.carouselIndexText}>{carouselIndex + 1} / {ownedStores.length}</Text>
-              </View>
-              <TouchableOpacity
-                onPress={() => scrollToStore(ownedStores[(carouselIndex + 1) % ownedStores.length].id)}
-                hitSlop={8}
-                disabled={ownedStores.length <= 1}
-              >
-                <Ionicons name="chevron-forward" size={18} color={ownedStores.length <= 1 ? Colors.gray300 : Colors.gray500} />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView
-              ref={carouselRef}
-              horizontal
-              pagingEnabled
-              showsHorizontalScrollIndicator={false}
-              onMomentumScrollEnd={onCarouselScrollEnd}
-              onLayout={onCarouselLayout}
-            >
-              {ownedStores.map(s => {
-                const p = pnl.current.find(row => row.storeId === s.id);
-                return (
-                  <View key={s.id} style={[styles.carouselPage, { width: pageWidth || undefined }]}>
-                    {p && <StorePnlMiniCard pnl={p} periodLabel={carouselPeriodLabel} onDetail={() => goToDetail(s.id)} />}
-                    <CleaningWeekCard weekly={weeklyCleaning[s.id]} />
-                    <ScheduleWeekCard days={weeklySchedule[s.id]} />
-                  </View>
-                );
-              })}
-            </ScrollView>
-
-            <View style={styles.dotsRow}>
-              {ownedStores.map((s, i) => (
-                <View key={s.id} style={[styles.dot, i === carouselIndex && styles.dotActive]} />
-              ))}
-            </View>
-          </>
-        )}
-      </ScrollView>
-    </SafeAreaView>
-  );
+      {activeScope && <DashboardSchedule key={`${activeScope ?? 'all'}:${selectedMonth}`} days={scheduleDays} onManage={activeScope ? () => void goToSchedule(activeScope) : undefined} error={scopedStores.some(store => errors.schedule[store.id])} partial={scheduleStores.length > 0 && scheduleStores.length < scopedStores.length} />}
+      <View style={styles.opsCard}><TouchableOpacity style={styles.expandRow} onPress={() => setTrendExpanded(value => !value)} accessibilityRole="button" accessibilityState={{ expanded: trendExpanded }}><Text style={styles.sectionTitle}>영업이익 추세</Text><Text style={styles.linkText}>{trendExpanded ? '접기' : '펼쳐보기'}</Text></TouchableOpacity>{trendExpanded && <>{trend ? <DashboardProfitTrend data={trend} onSelect={period === 'month' ? showMonth : undefined} /> : <Text style={styles.domainError}>{errors.trend ? '추세를 불러오지 못했어요' : '추세를 불러오는 중이에요'}</Text>}{period === 'month' && <Text style={styles.summaryCaption}>월을 누르면 해당 월의 현황과 확인할 일을 볼 수 있어요.</Text>}</>}</View>
+      {activeScope && <View style={styles.opsCard}><TouchableOpacity style={styles.expandRow} onPress={() => setOperationsExpanded(value => !value)} accessibilityRole="button" accessibilityState={{ expanded: operationsExpanded }}><Text style={styles.sectionTitle}>{scopeLabel} · 운영 현황</Text><Text style={styles.linkText}>{operationsExpanded ? '접기' : '펼쳐보기'}</Text></TouchableOpacity>{operationsExpanded && <>
+        {selectedStore && <HomeAlertsPanel store={selectedStore} financial={false} refreshKey={alertRefreshKey} />}
+        {cleaningStores.length < scopedStores.length && cleaningStores.length > 0 && <Text style={styles.summaryReason}>조회된 매장의 체크리스트만 집계했어요</Text>}
+        <CleaningWeekCard weekly={scopedCleaning} error={scopedStores.some(store => errors.cleaning[store.id])} />
+      </>}</View>}
+    </ScrollView>
+  </SafeAreaView>;
 }
 
 export default AdminDashboardScreen;
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.gray50 },
+  scopeBar: { paddingHorizontal: 20, paddingVertical: 8, gap: 8 },
+  scopeRow: { flexDirection: 'row', gap: 8 }, scopeChips: { gap: 8, paddingRight: 12 },
+  scopeChip: { minHeight: 44, paddingHorizontal: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.homeBorder, borderRadius: 999 },
+  scopeChipActive: { backgroundColor: Colors.action, borderColor: Colors.action }, scopeChipText: { maxWidth: 180, fontSize: 13, fontWeight: '600', color: Colors.gray600 }, scopeChipTextActive: { color: Colors.white },
+  scopeSearch: { minHeight: 42, borderWidth: 1, borderColor: Colors.homeBorder, borderRadius: 12, paddingHorizontal: 12, color: Colors.black, backgroundColor: Colors.white }, detailButton: { minHeight: 44, alignItems: 'center', justifyContent: 'center' },
+  container: { flex: 1, backgroundColor: Colors.homeCanvas },
+  periodControls: { gap: 2 },
+  summaryReason: { fontSize: 13, color: Colors.gray600, lineHeight: 20 },
+  taskCard: { padding: 16, borderRadius: 19, backgroundColor: Colors.taskBg, borderWidth: 1, borderColor: Colors.taskBorder, gap: 8 },
+  taskRow: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 72, paddingVertical: 8 },
+  rowBody: { flex: 1, minWidth: 0, gap: 4 }, taskStore: { fontSize: 12, color: Colors.gray600 }, taskTitle: { fontSize: 16, color: Colors.black, fontWeight: '700' }, taskHint: { fontSize: 13, color: Colors.deeper },
+  metricGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 }, metricCard: { width: '48%', flexGrow: 1, padding: 15, gap: 8, borderRadius: 19, backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.homeBorder }, metricPending: { backgroundColor: Colors.taskBg, borderColor: Colors.taskBorder }, metricAmount: { fontSize: 19, fontWeight: '700', color: Colors.black },
+  storeList: { gap: 10 }, storeRow: { flexDirection: 'row', alignItems: 'center', padding: 16, gap: 12, minHeight: 88, backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.homeBorder, borderRadius: 19 }, storeName: { fontSize: 16, fontWeight: '700', color: Colors.black }, storeMeta: { color: Colors.gray600, fontSize: 12 }, storeAmount: { fontSize: 19, color: Colors.black, fontWeight: '700' }, expandRow: { minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 }, operationsGroup: { gap: 12 },
 
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 20, paddingTop: 16, paddingBottom: 14,
-    backgroundColor: Colors.white, borderBottomWidth: 0.5, borderBottomColor: Colors.gray100,
+    paddingHorizontal: 20, paddingTop: 4, paddingBottom: 4,
+    backgroundColor: 'transparent',
   },
-  headerCenter: { alignItems: 'center', gap: 2 },
+  headerSideButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  headerCenter: { flex: 1, minHeight: 44, alignItems: 'center', gap: 2 },
   headerPeriod: { fontSize: 12, fontWeight: '500', color: Colors.gray400 },
-  headerStoreRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  headerStoreText: { fontSize: 16, fontWeight: '700', color: Colors.black },
+  headerStoreRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 18 },
+  headerStoreText: { fontSize: 16, fontWeight: '700', color: Colors.black, textAlign: 'center' },
 
   dropdownOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 10 },
   dropdownBox: {
@@ -486,75 +236,68 @@ const styles = StyleSheet.create({
   dropdownItemBorder: { borderTopWidth: 0.5, borderTopColor: Colors.gray100 },
   dropdownItemText: { fontSize: 14, fontWeight: '600', color: Colors.black },
 
-  scroll: { padding: 16, paddingBottom: 48, gap: 14 },
+  scroll: { padding: 20, paddingTop: 4, paddingBottom: 90, gap: 14 },
 
   periodTabs: { flexDirection: 'row', backgroundColor: Colors.gray100, borderRadius: 12, padding: 3 },
-  periodTab: { flex: 1, alignItems: 'center', paddingVertical: 9, borderRadius: 9 },
+  periodTab: { flex: 1, minHeight: 44, justifyContent: 'center', alignItems: 'center', paddingVertical: 9, borderRadius: 9 },
   periodTabActive: { backgroundColor: Colors.white },
   periodTabText: { fontSize: 13, fontWeight: '600', color: Colors.gray500 },
-  periodTabTextActive: { color: Colors.black },
+  periodTabTextActive: { color: Colors.action },
 
   navRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 16 },
+  navButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   navLabel: { fontSize: 13, fontWeight: '600', color: Colors.gray600, minWidth: 80, textAlign: 'center' },
 
-  summaryCard: { backgroundColor: Colors.tinted, borderRadius: 18, padding: 18, gap: 4 },
-  summaryTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  summaryCard: { backgroundColor: Colors.white, borderRadius: 24, borderWidth: 1, borderColor: Colors.homeBorder, padding: 18, gap: 8 },
+  summaryTop: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, alignItems: 'center', justifyContent: 'space-between' },
   summaryTitle: { fontSize: 13, fontWeight: '600', color: Colors.gray600 },
-  summaryValue: { fontSize: 28, fontWeight: '700', color: Colors.black, letterSpacing: -0.5 },
+  summaryValue: { fontSize: 34, fontFamily: Fonts.spaceGroteskBold, fontWeight: '700', color: Colors.positive, letterSpacing: -1 },
   summaryDivider: { height: 0.5, backgroundColor: Colors.gray200, marginVertical: 10 },
-  summaryCols: { flexDirection: 'row', justifyContent: 'space-between' },
-  summaryCol: { gap: 3 },
-  summaryColLabel: { fontSize: 11, fontWeight: '600', color: Colors.gray400 },
+  summaryCols: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, justifyContent: 'space-between' },
+  summaryCol: { gap: 5, flexGrow: 1, minWidth: 90 },
+  summaryColLabel: { fontSize: 13, fontWeight: '500', color: Colors.gray600 },
   summaryColValue: { fontSize: 15, fontWeight: '700', color: Colors.black },
-  marginValue: { color: Colors.primary },
+  marginValue: { color: Colors.action },
   summaryColTrend: { fontSize: 10, fontWeight: '500' },
   summaryCaption: { fontSize: 11, fontWeight: '400', color: Colors.gray400, marginTop: 10 },
 
-  trendChart: { flexDirection: 'row', alignItems: 'flex-end', gap: 8, height: 90, marginVertical: 14 },
-  trendBarCol: { flex: 1, alignItems: 'center', gap: 6 },
-  trendBarTrack: { width: '100%', flex: 1, justifyContent: 'flex-end' },
-  trendBarFill: { width: '100%', borderRadius: 6, minHeight: 6 },
-  trendBarFillActive: { backgroundColor: Colors.primary },
-  trendBarFillInactive: { backgroundColor: Colors.white, opacity: 0.7 },
+  trendChart: { flexDirection: 'row', alignItems: 'flex-end', gap: 8, marginVertical: 14 },
+  trendBarCol: { flex: 1, alignItems: 'center', gap: 5 },
+  trendAmount: { fontSize: 10, fontWeight: '600', color: Colors.gray600, textAlign: 'center', width: '100%' },
+  trendBarTrack: { width: '100%', height: 112, position: 'relative' },
+  trendZeroLine: { position: 'absolute', top: 56, left: 0, right: 0, height: 1, backgroundColor: Colors.gray300 },
+  trendBarFill: { position: 'absolute', width: '100%', borderRadius: 4 },
+  trendBarFillActive: { backgroundColor: Colors.positive },
+  trendBarFillInactive: { backgroundColor: Colors.gray500 },
+  trendBarFillNegative: { backgroundColor: Colors.negative },
   trendBarLabel: { fontSize: 10, fontWeight: '600', color: Colors.gray400 },
-  trendBarLabelActive: { color: Colors.primary, fontWeight: '700' },
+  trendBarLabelActive: { color: Colors.action, fontWeight: '700' },
 
-  sectionTitle: { fontSize: 13, fontWeight: '700', color: Colors.gray600 },
-  sectionHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  linkText: { fontSize: 12, fontWeight: '600', color: Colors.primary },
+  sectionTitle: { fontSize: 17, fontWeight: '700', color: Colors.black },
+  sectionHeaderRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, alignItems: 'center', justifyContent: 'space-between' },
+  linkText: { fontSize: 12, fontWeight: '600', color: Colors.action },
+  retryButton: { minHeight: 44, justifyContent: 'center', alignSelf: 'flex-start' },
 
-  opsCard: { backgroundColor: Colors.white, borderRadius: 16, borderWidth: 0.5, borderColor: Colors.gray100, padding: 14, gap: 10 },
+  opsCard: { backgroundColor: Colors.white, borderRadius: 20, borderWidth: 1, borderColor: Colors.homeBorder, padding: 16, gap: 10 },
+  domainError: { fontSize: 12, color: Colors.gray500, paddingVertical: 12 },
 
   positiveText: { color: Colors.positive },
   negativeText: { color: Colors.negative },
-  primaryText: { color: Colors.primary },
-
-  statRow: { flexDirection: 'row', gap: 10 },
-  statBox: {
-    flex: 1, alignItems: 'center', backgroundColor: Colors.white, borderRadius: 14,
-    borderWidth: 0.5, borderColor: Colors.gray100, paddingVertical: 14, gap: 4,
-  },
-  statValue: { fontSize: 22, fontWeight: '700', color: Colors.black },
-  statLabel: { fontSize: 12, fontWeight: '500', color: Colors.gray400 },
-
-  alertBanner: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    backgroundColor: Colors.negativeBg, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 11,
-  },
-  alertText: { flex: 1, fontSize: 12, fontWeight: '600', color: Colors.negative },
-  alertAction: { fontSize: 12, fontWeight: '700', color: Colors.negative },
+  primaryText: { color: Colors.action },
 
   carouselNav: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  carouselNavCenter: { alignItems: 'center', gap: 2 },
-  carouselStoreName: { fontSize: 16, fontWeight: '700', color: Colors.black },
+  carouselNavCenter: { flex: 1, minWidth: 0, alignItems: 'center', gap: 2 },
+  carouselStoreName: { fontSize: 17, fontWeight: '700', color: Colors.black, textAlign: 'center' },
   carouselIndexText: { fontSize: 11, fontWeight: '500', color: Colors.gray400 },
   carouselPage: { gap: 14 },
+  carousel: { flexGrow: 0, flexShrink: 0 },
+  carouselContent: { alignItems: 'flex-start' },
   dotsRow: { flexDirection: 'row', justifyContent: 'center', gap: 6 },
   dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: Colors.gray200 },
   dotActive: { backgroundColor: Colors.primary, width: 16 },
 
   pnlNetLabel: { fontSize: 12, fontWeight: '600', color: Colors.gray400 },
-  pnlNetValue: { fontSize: 24, fontWeight: '700' },
+  pnlNetValue: { fontSize: 28, fontFamily: Fonts.spaceGroteskBold, fontWeight: '700' },
   pnlDivider: { height: 0.5, backgroundColor: Colors.gray100, marginVertical: 4 },
   pnlRow: { flexDirection: 'row', justifyContent: 'space-between' },
   pnlRowLabel: { fontSize: 13, fontWeight: '500', color: Colors.gray500 },
@@ -570,7 +313,7 @@ const styles = StyleSheet.create({
   weekdayBoxDone: { backgroundColor: Colors.tinted },
   weekdayBoxBehind: { backgroundColor: Colors.negativeBg },
   weekdayBoxEmpty: { backgroundColor: Colors.gray50, borderWidth: 1, borderColor: Colors.gray100, borderStyle: 'dashed' },
-  weekdayBoxText: { fontSize: 11, fontWeight: '700', color: Colors.primary },
+  weekdayBoxText: { fontSize: 11, fontWeight: '700', color: Colors.action },
   weekdayBoxTextBehind: { color: Colors.negative },
 
   scheduleDayBlock: { gap: 3 },

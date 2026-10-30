@@ -1,0 +1,128 @@
+[
+  {
+    "file": "raw-ios/01-home.png",
+    "width": 1206,
+    "height": 2622,
+    "alphaChannel": true,
+    "sha256": "ba7e5c8af8b09eb156e689889731fdbd7ad7b05f30d33d1b16d6d8257e9d6a6b"
+  },
+  {
+    "file": "raw-ios/02-profit-loss.png",
+    "width": 1206,
+    "height": 2622,
+    "alphaChannel": true,
+    "sha256": "ad1517c1d52afde8a54f70221016955a2ff29592da3c778609f4ac325025fc22"
+  },
+  {
+    "file": "raw-ios/03-stock.png",
+    "width": 1206,
+    "height": 2622,
+    "alphaChannel": true,
+    "sha256": "cef1bca13a1bc26f5463dd843f37f29b8583267597809f0827e0d5e468d73d9f"
+  },
+  {
+    "file": "raw-ios/04-recipes.png",
+    "width": 1206,
+    "height": 2622,
+    "alphaChannel": true,
+    "sha256": "cd9e4acbf67834481fd3bc72b6ab84d866dbd6b38f8aa8dececf60186d67602d"
+  },
+  {
+    "file": "raw-ios/05-purchases.png",
+    "width": 1206,
+    "height": 2622,
+    "alphaChannel": true,
+    "sha256": "26d4bff35f34edcbdfdde24296b8da1e117b5069632ccc981c72518db59fe5bc"
+  },
+  {
+    "file": "raw-ios/06-payroll.png",
+    "width": 1206,
+    "height": 2622,
+    "alphaChannel": true,
+    "sha256": "8a7e5f20e68111d4fbb20be5cc494aea0478762f065647cee24d96ee5343af3f"
+  },
+  {
+    "file": "raw-ios/07-checklist.png",
+    "width": 1206,
+    "height": 2622,
+    "alphaChannel": true,
+    "sha256": "b9e33cf53a6d68b19ec452044ea31c5f13e32342f3ef28c4740ea524a26ac2ae"
+  },
+  {
+    "file": "raw-ios/08-sales.png",
+    "width": 1206,
+    "height": 2622,
+    "alphaChannel": true,
+    "sha256": "fbb57a5b3e028a49b614f43bd7970cd37a462b5c2d74b9d64280fb39b1f8ce6d"
+  },
+  {
+    "file": "raw-ios/09-expenses.png",
+    "width": 1206,
+    "height": 2622,
+    "alphaChannel": true,
+    "sha256": "5c7757f85c3eab279a733014933de3ece4ad7ecf6055ac82778c6545c2b55ebb"
+  },
+  {
+    "file": "apple-1206x2622/01-home.png",
+    "width": 1206,
+    "height": 2622,
+    "alphaChannel": false,
+    "sha256": "cf2344857b43d188d06e9dd85ab560546a99695e653319664e045963641e5240"
+  },
+  {
+    "file": "apple-1206x2622/02-profit-loss.png",
+    "width": 1206,
+    "height": 2622,
+    "alphaChannel": false,
+    "sha256": "7c6ec3641140aeaf63f553c0ff117ea8c69150de93bf61e798c6b5356a4bb88b"
+  },
+  {
+    "file": "apple-1206x2622/03-stock.png",
+    "width": 1206,
+    "height": 2622,
+    "alphaChannel": false,
+    "sha256": "cc9586bcf98687a1b728f16dd515d98cda96db18444a33f57fef05a79a482564"
+  },
+  {
+    "file": "apple-1206x2622/04-recipes.png",
+    "width": 1206,
+    "height": 2622,
+    "alphaChannel": false,
+    "sha256": "f93ca60dc31ba3312f15ab60ffff6c44b6421c00202741452758ecbcc425a504"
+  },
+  {
+    "file": "apple-1206x2622/05-purchases.png",
+    "width": 1206,
+    "height": 2622,
+    "alphaChannel": false,
+    "sha256": "f0444794d2ffb75a7d6a1e077c30973d0bc504eb99a07fbfb859e0aef39c3df3"
+  },
+  {
+    "file": "apple-1206x2622/06-payroll.png",
+    "width": 1206,
+    "height": 2622,
+    "alphaChannel": false,
+    "sha256": "d4313935f3bfd120c567bf144ad7cd31e950739fd36f0b6a7aa064f7341d8179"
+  },
+  {
+    "file": "apple-1206x2622/07-checklist.png",
+    "width": 1206,
+    "height": 2622,
+    "alphaChannel": false,
+    "sha256": "d7633e7bfc20cf7980bc0c75656242426485dac53a9fe5f62bccd21eb77ae03d"
+  },
+  {
+    "file": "apple-1206x2622/08-sales.png",
+    "width": 1206,
+    "height": 2622,
+    "alphaChannel": false,
+    "sha256": "3d661ba51247cc46a388634cfd173cdcb7c6c91a12ea58062e6336147049b2b1"
+  },
+  {
+    "file": "apple-1206x2622/09-expenses.png",
+    "width": 1206,
+    "height": 2622,
+    "alphaChannel": false,
+    "sha256": "9824069b541ab7e34fec6c0da75a3235c16d5f89d6735a71c4259b6a10190782"
+  }
+]

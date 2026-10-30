@@ -1,22 +1,21 @@
-import { useCallback, useEffect, useState } from 'react';
+import { getErrorMessage } from '../../lib/utils/error';
+import { useCallback, useEffect, useState, useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator, Alert, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Colors } from '../../constants/colors';
-import { Spacing, CardStyle } from '../../constants/designTokens';
+import { Fonts } from '../../constants/fonts';
+import { CardStyle } from '../../constants/designTokens';
 import { useAuth } from '../../lib/contexts/AuthContext';
 import { useEmployees } from '../../lib/hooks/useEmployees';
-import { getPayrollByMonth, settlePayrolls } from '../../lib/services/payroll';
-import { getMonthlyWageByEmployee } from '../../lib/services/attendance';
+import { getPayrollByMonth, getPayrollSettlementGaps, settlePayrolls } from '../../lib/services/payroll';
+import { formatWorkedMinutes } from '../../lib/utils/workMinutes';
 import { Employee, Payroll } from '../../types';
 import { AppBar, Badge, EmptyState } from '../../lib/components/ui';
+import { ErrorMessage } from '../../lib/components/ErrorMessage';
 
 function fmt(n: number): string {
   return `${n.toLocaleString()}원`;
-}
-
-function minutesToHours(minutes: number): string {
-  return `${Math.round(minutes / 60)}h`;
 }
 
 /** 화면 42: 급여 정산 리포트 (사장님 전용, 인건비 화면에서 진입) */
@@ -27,37 +26,42 @@ export default function PayrollSettlementScreen() {
   const monthLabel = `${Number(yearMonth.slice(5, 7))}월`;
 
   const { store } = useAuth();
-  const { employees, loading: empLoading } = useEmployees();
+  const { employees, loading: empLoading, error: empError, refetch: refetchEmployees } = useEmployees(true);
   const [payrolls, setPayrolls] = useState<Payroll[]>([]);
-  const [wageMap, setWageMap] = useState<Record<string, { totalMinutes: number }>>({});
   const [loading, setLoading] = useState(true);
   const [settling, setSettling] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!store) return;
     setLoading(true);
+    setError(null);
     try {
-      const [payrollResult, wageResult] = await Promise.all([
-        getPayrollByMonth(store.id, yearMonth),
-        getMonthlyWageByEmployee(store.id, yearMonth, store.closing_time ?? '23:00'),
-      ]);
-      setPayrolls(payrollResult);
-      setWageMap(wageResult);
+      setPayrolls(await getPayrollByMonth(store.id, yearMonth));
+    } catch (e) {
+      setError(getErrorMessage(e));
     } finally {
       setLoading(false);
     }
   }, [store, yearMonth]);
 
   useEffect(() => { load(); }, [load]);
+  useEffect(() => { refetchEmployees(); }, [refetchEmployees]);
 
-  const rows = employees
+  const rows = useMemo(() => employees
     .map(emp => ({ employee: emp, payroll: payrolls.find(p => p.employee_id === emp.id) }))
-    .filter((r): r is { employee: Employee; payroll: Payroll } => !!r.payroll);
+    .filter((r): r is { employee: Employee; payroll: Payroll } => !!r.payroll), [employees, payrolls]);
 
   const totalAmount = rows.reduce((s, r) => s + r.payroll.net_pay, 0);
   const settledCount = rows.filter(r => r.payroll.is_settled).length;
+  const { missingPayroll, missingPartTimeMinutes } = getPayrollSettlementGaps(employees, payrolls);
+  const hasGaps = missingPayroll.length > 0 || missingPartTimeMinutes.length > 0;
 
   const handleSettleAll = () => {
+    if (hasGaps) {
+      Alert.alert('정산 전 입력 필요', `급여 미작성 ${missingPayroll.length}명, 파트타이머 근무 분 미입력 ${missingPartTimeMinutes.length}명이에요. 인건비 화면에서 확인해주세요.`);
+      return;
+    }
     const unsettledIds = rows.filter(r => !r.payroll.is_settled).map(r => r.payroll.id);
     if (unsettledIds.length === 0) {
       Alert.alert('안내', '이미 모든 정산이 완료되었습니다');
@@ -73,7 +77,7 @@ export default function PayrollSettlementScreen() {
             await settlePayrolls(unsettledIds);
             await load();
           } catch (e: any) {
-            Alert.alert('정산 실패', e.message);
+            Alert.alert('정산 실패', getErrorMessage(e));
           } finally {
             setSettling(false);
           }
@@ -88,11 +92,20 @@ export default function PayrollSettlementScreen() {
 
       {loading || empLoading ? (
         <ActivityIndicator color={Colors.primary} style={{ marginTop: 40 }} />
+      ) : error || empError ? (
+        <ErrorMessage message={error || empError!} onRetry={() => { load(); refetchEmployees(); }} />
       ) : (
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+          {hasGaps && (
+            <View style={styles.workWarning}>
+              {missingPayroll.length > 0 && <Text style={styles.workWarningTitle}>급여 미작성 {missingPayroll.length}명</Text>}
+              {missingPartTimeMinutes.length > 0 && <Text style={styles.workWarningTitle}>파트타이머 근무시간 미입력 {missingPartTimeMinutes.length}명</Text>}
+              <Text style={styles.workWarningBody}>인건비 화면에서 필요한 입력을 마친 뒤 정산을 확정해 주세요.</Text>
+            </View>
+          )}
           <View style={styles.summaryCard}>
             <Text style={styles.summaryLabel}>총 지급 예정액 · {rows.length}명</Text>
-            <Text style={styles.summaryValue}>{fmt(totalAmount)}</Text>
+            <Text style={styles.summaryValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{fmt(totalAmount)}</Text>
           </View>
 
           <View style={styles.listHeader}>
@@ -108,7 +121,6 @@ export default function PayrollSettlementScreen() {
             />
           ) : (
             rows.map(({ employee, payroll }) => {
-              const minutes = wageMap[employee.id]?.totalMinutes ?? 0;
               const isPart = employee.employment_type === 'part_time';
               const deduction = payroll.gross - payroll.net_pay;
               return (
@@ -118,8 +130,9 @@ export default function PayrollSettlementScreen() {
                     <Badge label={payroll.is_settled ? '정산완료' : '대기'} variant={payroll.is_settled ? 'positive' : 'neutral'} />
                   </View>
                   <Text style={styles.meta}>
-                    근무 {minutesToHours(minutes)}{isPart ? ' (파트타이머)' : ''}
-                    {'  '}{isPart ? `시급 ${fmt(employee.hourly_wage ?? 0)}` : `기본급 ${fmt(employee.base_salary)}`}
+                    {isPart
+                      ? `근무 ${formatWorkedMinutes(payroll.worked_minutes)} · 적용 시급 ${payroll.applied_hourly_wage == null ? '미기록' : fmt(payroll.applied_hourly_wage)}`
+                      : `기본급 ${fmt(employee.base_salary)}`}
                   </Text>
                   {employee.bank_name && employee.account_number && (
                     <Text style={styles.meta}>{employee.bank_name} {employee.account_number}</Text>
@@ -137,17 +150,19 @@ export default function PayrollSettlementScreen() {
         </ScrollView>
       )}
 
-      {rows.length > 0 && (
+      {!loading && !empLoading && !error && !empError && rows.length > 0 && (
         <View style={styles.footer}>
           <TouchableOpacity
-            style={[styles.confirmBtn, settling && { opacity: 0.6 }]}
+            style={[styles.confirmBtn, hasGaps && styles.confirmBtnDisabled, settling && { opacity: 0.6 }]}
             onPress={handleSettleAll}
-            disabled={settling}
+            disabled={settling || hasGaps}
             activeOpacity={0.85}
           >
             {settling
               ? <ActivityIndicator color={Colors.white} />
-              : <Text style={styles.confirmBtnText}>전체 정산 확정하기</Text>
+              : <Text style={[styles.confirmBtnText, hasGaps && styles.confirmBtnTextDisabled]}>
+                  {hasGaps ? '미입력 내역 확인 필요' : '전체 정산 확정하기'}
+                </Text>
             }
           </TouchableOpacity>
         </View>
@@ -157,30 +172,39 @@ export default function PayrollSettlementScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.white },
-  scroll: { padding: Spacing.screenX, paddingBottom: 32, gap: 12 },
+  container: { flex: 1, backgroundColor: Colors.homeCanvas },
+  scroll: { padding: 20, paddingBottom: 32, gap: 18 },
 
   summaryCard: {
     ...CardStyle,
-    backgroundColor: Colors.tinted,
+    backgroundColor: Colors.white,
+    borderColor: Colors.homeBorder,
+    borderWidth: 1,
+    borderRadius: 24,
+    padding: 18,
     gap: 6,
   },
+  workWarning: { padding: 16, borderRadius: 16, backgroundColor: Colors.warningBg, gap: 8 },
+  workWarningTitle: { fontSize: 14, fontWeight: '700', color: Colors.black },
+  workWarningBody: { fontSize: 13, color: Colors.gray700, lineHeight: 20 },
   summaryLabel: { fontSize: 13, fontWeight: '600', color: Colors.gray500 },
-  summaryValue: { fontSize: 28, fontWeight: '800', color: Colors.black },
+  summaryValue: { fontSize: 34, fontFamily: Fonts.spaceGroteskBold, fontWeight: '700', color: Colors.black },
 
-  listHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 },
-  sectionLabel: { fontSize: 14, fontWeight: '700', color: Colors.black },
+  listHeader: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'space-between', alignItems: 'center', marginTop: 4 },
+  sectionLabel: { fontSize: 17, fontWeight: '700', color: Colors.black },
   progressLabel: { fontSize: 13, fontWeight: '700', color: Colors.primary },
 
-  row: { ...CardStyle, gap: 4 },
-  rowTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  row: { ...CardStyle, borderColor: Colors.homeBorder, borderWidth: 1, borderRadius: 20, padding: 16, gap: 4 },
+  rowTop: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'space-between', alignItems: 'center' },
   name: { fontSize: 16, fontWeight: '700', color: Colors.black },
   meta: { fontSize: 12, color: Colors.gray500 },
-  rowBottom: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: 10, marginTop: 6 },
+  rowBottom: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', alignItems: 'center', gap: 10, marginTop: 6 },
   deduction: { fontSize: 12, color: Colors.negative },
   netPay: { fontSize: 16, fontWeight: '800', color: Colors.black },
 
-  footer: { padding: Spacing.screenX, borderTopWidth: 0.5, borderTopColor: Colors.gray100 },
+  footer: { padding: 20, backgroundColor: Colors.homeCanvas, borderTopWidth: 1, borderTopColor: Colors.homeBorder },
+  confirmBtnDisabled: { backgroundColor: Colors.gray200 },
+  confirmBtnTextDisabled: { color: Colors.gray600 },
   confirmBtn: {
     backgroundColor: Colors.primary,
     borderRadius: 14,

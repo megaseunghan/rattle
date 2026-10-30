@@ -1,19 +1,20 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Colors } from '../../constants/colors';
 import { Spacing } from '../../constants/designTokens';
+import { useAuth } from '../../lib/contexts/AuthContext';
 import { useNotifications } from '../../lib/hooks/useNotifications';
 import { AppNotification, NotificationCategory } from '../../types';
+import { ErrorMessage } from '../../lib/components/ErrorMessage';
 import { AppBar, EmptyState } from '../../lib/components/ui';
 
 type FilterKey = 'all' | NotificationCategory;
 
 const FILTERS: { key: FilterKey; label: string }[] = [
   { key: 'all', label: '전체' },
-  { key: 'attendance', label: '근태' },
   { key: 'stock', label: '재고' },
   { key: 'sales', label: '매출' },
 ];
@@ -22,6 +23,7 @@ const CATEGORY_ICON: Record<NotificationCategory, keyof typeof Ionicons.glyphMap
   attendance: 'time-outline',
   stock: 'cube-outline',
   sales: 'stats-chart-outline',
+  members: 'people-outline',
 };
 
 function iconBg(n: AppNotification): string {
@@ -68,15 +70,16 @@ function NotificationRow({ item, onPress }: { item: AppNotification; onPress: ()
 }
 
 export default function NotificationsScreen() {
-  const { notifications, loading, unreadCount, refetch, markRead, markAllRead } = useNotifications();
+  const { notifications, loading, error, unreadCount, refetch, markRead, markAllRead } = useNotifications();
+  const { currentRole } = useAuth();
+  const filters = currentRole === 'admin' ? [...FILTERS, { key: 'members' as const, label: '매장 참여' }] : FILTERS;
   const [filter, setFilter] = useState<FilterKey>('all');
-
-  useEffect(() => { refetch(); }, [refetch]);
 
   const filtered = filter === 'all' ? notifications : notifications.filter(n => n.category === filter);
 
   function handlePress(n: AppNotification) {
-    if (!n.is_read) markRead(n.id);
+    if (!n.is_read) void markRead(n.id);
+    if (n.category === 'members') router.push('/settings/members');
   }
 
   return (
@@ -89,7 +92,7 @@ export default function NotificationsScreen() {
       />
 
       <View style={styles.chipRow}>
-        {FILTERS.map(f => (
+        {filters.map(f => (
           <TouchableOpacity
             key={f.key}
             style={[styles.chip, filter === f.key && styles.chipActive]}
@@ -102,10 +105,11 @@ export default function NotificationsScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        {loading ? (
+        {error && <ErrorMessage message={error} onRetry={() => void refetch()} />}
+        {loading && notifications.length === 0 ? (
           <ActivityIndicator color={Colors.primary} style={{ marginTop: 32 }} />
         ) : filtered.length === 0 ? (
-          <EmptyState icon="notifications-outline" title="새로운 알림이 없어요" description="근태, 재고, 매출 알림이 오면 이곳에 모여요" />
+          <EmptyState icon="notifications-outline" title="새로운 알림이 없어요" description="새로운 소식이 오면 이곳에 모여요" />
         ) : (
           filtered.map(n => <NotificationRow key={n.id} item={n} onPress={() => handlePress(n)} />)
         )}
@@ -115,18 +119,18 @@ export default function NotificationsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.gray50 },
+  container: { flex: 1, backgroundColor: Colors.homeCanvas },
   chipRow: { flexDirection: 'row', gap: 8, paddingHorizontal: Spacing.screenX, paddingTop: 12 },
-  chip: { paddingVertical: 7, paddingHorizontal: 14, borderRadius: 18, borderWidth: 1, borderColor: Colors.gray200 },
-  chipActive: { backgroundColor: Colors.black, borderColor: Colors.black },
+  chip: { minHeight: 44, justifyContent: 'center', backgroundColor: Colors.white, paddingVertical: 7, paddingHorizontal: 14, borderRadius: 18, borderWidth: 1, borderColor: Colors.gray200 },
+  chipActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
   chipText: { fontSize: 12, fontWeight: '500', color: Colors.gray600 },
   chipTextActive: { color: Colors.white, fontWeight: '600' },
 
-  scroll: { padding: Spacing.screenX, paddingBottom: 40, gap: 4 },
+  scroll: { padding: Spacing.screenX, paddingBottom: 40, gap: 10 },
 
   row: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
-    borderRadius: 14, paddingHorizontal: 10, paddingVertical: 12,
+    backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.homeBorder, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 14,
   },
   rowUnread: { backgroundColor: Colors.tinted },
   iconWrap: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },

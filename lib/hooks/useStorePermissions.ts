@@ -10,15 +10,16 @@ import { resolveSelfEmployee } from '../utils/resolveSelfEmployee';
  * - canManageRecipes: 레시피 조회·수정 가능 (멤버 가능, 파트타이머 차단)
  */
 export function useStorePermissions() {
-  const { user, currentRole, devPreviewEmployeeId } = useAuth();
+  const { user, currentRole, devPreviewEmployeeId, devPreviewMode, canReadFinancials } = useAuth();
   const { employees, refetch } = useEmployees();
 
   useEffect(() => { refetch(); }, [refetch]);
 
   const myEmployee = resolveSelfEmployee(employees, user?.id, devPreviewEmployeeId);
-  const isPartTime = currentRole !== 'admin' && myEmployee?.employment_type === 'part_time';
+  const isPartTime = currentRole !== 'admin' && (devPreviewMode === 'part_time' || myEmployee?.employment_type === 'part_time');
 
   return {
+    canReadFinancials,
     isAdmin: currentRole === 'admin',
     isPartTime,
     canManageRecipes: !isPartTime,

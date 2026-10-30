@@ -1,0 +1,12 @@
+PASS snapshot/__tests__/hooks/useConfirmLeave.test.ts
+  ✓ 작성 중 뒤로가기에서 계속 작성은 원래 이동을 실행하지 않는다 (26 ms)
+  ✓ 명시적으로 나가기를 선택했을 때에만 원래 뒤로 이동을 전달한다 (1 ms)
+  ✓ 저장 중에는 버리기 선택지를 주지 않고 이동을 막는다 (1 ms)
+  ✓ 저장 완료 후 의도한 복귀는 다시 이탈 확인을 띄우지 않는다 (1 ms)
+  ✓ 빈 폼은 이동을 허용하고 언마운트 시 구독을 정리한다 (1 ms)
+
+Test Suites: 1 passed, 1 total
+Tests:       5 passed, 5 total
+Snapshots:   0 total
+Time:        0.793 s
+Ran all test suites within paths "/Users/cookhan/Documents/Codex/2026-10-26/task-2/snapshot/__tests__/hooks/useConfirmLeave.test.ts".

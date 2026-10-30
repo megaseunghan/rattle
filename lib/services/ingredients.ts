@@ -1,3 +1,4 @@
+import { invalidateCachedStore } from './cacheInvalidation';
 import { supabase } from '../supabase';
 import { Ingredient } from '../../types';
 import { notifyIfEnabled } from './notifications';
@@ -44,6 +45,7 @@ export async function createIngredient(
     .single();
 
   if (error) throw new Error(error.message);
+  await invalidateCachedStore(data.store_id);
   return result as Ingredient;
 }
 
@@ -73,6 +75,7 @@ export async function updateIngredient(
     }).catch(() => {});
   }
 
+  await invalidateCachedStore();
   return ingredient;
 }
 
@@ -83,6 +86,7 @@ export async function deleteIngredient(id: string): Promise<void> {
     .eq('id', id);
 
   if (error) throw new Error(error.message);
+  await invalidateCachedStore();
 }
 
 export async function getIngredientsByCategory(storeId: string, category: string): Promise<{ id: string; name: string }[]> {
@@ -121,12 +125,27 @@ export async function bulkCreateIngredients(
       .eq('id', found.id);
   });
 
-  await Promise.all(updates);
+  const results = await Promise.all(updates);
+  const failed = results.find(result => result.error);
+  if (failed?.error) {
+    await invalidateCachedStore(storeId);
+    throw new Error(failed.error.message);
+  }
 
   if (toInsert.length > 0) {
     const { error } = await supabase.from('ingredients').insert(toInsert);
     if (error) throw new Error(error.message);
   }
 
+  await invalidateCachedStore();
   return toInsert.length + toUpdate.length;
+}
+
+/** One store-scoped update and one cache invalidation for the whole selection. */
+export async function updateIngredientCategories(storeId: string, ids: string[], category: string): Promise<void> {
+  if (!ids.length) return;
+  const { error } = await supabase.from('ingredients').update({ category, updated_at: new Date().toISOString() })
+    .in('id', [...new Set(ids)]).eq('store_id', storeId);
+  if (error) throw new Error(error.message);
+  await invalidateCachedStore(storeId);
 }

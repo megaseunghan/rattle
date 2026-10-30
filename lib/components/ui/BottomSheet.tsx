@@ -1,3 +1,4 @@
+import { SheetModal } from './SheetModal';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Colors } from '../../../constants/colors';
 import { Spacing, Type } from '../../../constants/designTokens';
@@ -11,7 +12,7 @@ interface BottomSheetProps {
 
 export function BottomSheet({ visible, onClose, title, children }: BottomSheetProps) {
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+    <SheetModal visible={visible} onRequestClose={onClose}>
       <Pressable style={styles.overlay} onPress={onClose}>
         <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
           <View style={styles.handle} />
@@ -19,7 +20,7 @@ export function BottomSheet({ visible, onClose, title, children }: BottomSheetPr
           {children}
         </Pressable>
       </Pressable>
-    </Modal>
+    </SheetModal>
   );
 }
 
@@ -30,7 +31,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   sheet: {
-    backgroundColor: Colors.white,
+    backgroundColor: Colors.homeCanvas,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     paddingTop: 10,

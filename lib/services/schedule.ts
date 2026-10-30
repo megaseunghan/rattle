@@ -1,3 +1,4 @@
+import { invalidateCachedStore } from './cacheInvalidation';
 import { supabase } from '../supabase';
 import { EmployeeSchedule, ScheduleDayInput, ScheduleRequest } from '../../types';
 
@@ -27,6 +28,16 @@ export async function getStoreScheduleForDay(
   return (data ?? []).map((r: any) => ({ ...r, employee_name: r.employees?.name ?? '' }));
 }
 
+/** All working weekdays for one store, fetched once rather than once per weekday. */
+export async function getStoreWeeklySchedule(storeId: string): Promise<(EmployeeSchedule & { employee_name: string })[]> {
+  const { data, error } = await supabase.from('employee_schedules').select('*, employees(name)')
+    .eq('store_id', storeId).eq('is_working', true).order('start_time', { ascending: true });
+  if (error) throw new Error(error.message);
+  return (data ?? []).map((row: EmployeeSchedule & { employees: { name: string } | null }) => ({
+    ...row, employee_name: row.employees?.name ?? '',
+  }));
+}
+
 /** 아직 처리되지 않은(pending) 내 스케줄 변경 요청 1건 */
 export async function getMyPendingScheduleRequest(employeeId: string): Promise<ScheduleRequest | null> {
   const { data, error } = await supabase
@@ -52,6 +63,7 @@ export async function submitScheduleRequest(
     .select()
     .single();
   if (error) throw new Error(error.message);
+  await invalidateCachedStore(storeId, ['schedule', 'notifications']);
   return data as ScheduleRequest;
 }
 
@@ -76,29 +88,38 @@ export async function reviewScheduleRequest(
   const { data: auth } = await supabase.auth.getUser();
   const reviewerId = auth.user?.id ?? null;
 
-  if (approve) {
-    const rows = request.days.map(d => ({
-      store_id: request.store_id,
-      employee_id: request.employee_id,
-      day_of_week: d.day_of_week,
-      is_working: d.is_working,
-      start_time: d.start_time,
-      end_time: d.end_time,
-      updated_at: new Date().toISOString(),
-    }));
-    const { error: upsertError } = await supabase
-      .from('employee_schedules')
-      .upsert(rows, { onConflict: 'employee_id,day_of_week' });
-    if (upsertError) throw new Error(upsertError.message);
+  let changed = false;
+  try {
+    if (approve) {
+      const rows = request.days.map(d => ({
+        store_id: request.store_id,
+        employee_id: request.employee_id,
+        day_of_week: d.day_of_week,
+        is_working: d.is_working,
+        start_time: d.start_time,
+        end_time: d.end_time,
+        updated_at: new Date().toISOString(),
+      }));
+      const { error: upsertError } = await supabase
+        .from('employee_schedules')
+        .upsert(rows, { onConflict: 'employee_id,day_of_week' });
+      if (upsertError) throw new Error(upsertError.message);
+      changed = true;
+    }
+
+    const { error } = await supabase
+      .from('schedule_requests')
+      .update({
+        status: approve ? 'approved' : 'rejected',
+        reviewed_at: new Date().toISOString(),
+        reviewed_by: reviewerId,
+      })
+      .eq('id', request.id);
+    if (error) throw new Error(error.message);
+    changed = true;
+  } finally {
+    // Approved schedules may commit before the request-status update fails.
+    if (changed) await invalidateCachedStore(request.store_id, ['schedule', 'notifications']);
   }
 
-  const { error } = await supabase
-    .from('schedule_requests')
-    .update({
-      status: approve ? 'approved' : 'rejected',
-      reviewed_at: new Date().toISOString(),
-      reviewed_by: reviewerId,
-    })
-    .eq('id', request.id);
-  if (error) throw new Error(error.message);
 }

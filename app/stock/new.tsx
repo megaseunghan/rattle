@@ -1,3 +1,4 @@
+import { getErrorMessage } from '../../lib/utils/error';
 import { useState } from 'react';
 import {
   View,
@@ -59,7 +60,7 @@ export default function NewIngredientScreen() {
       bypassLeaveGuard();
       router.back();
     } catch (e: any) {
-      Alert.alert('오류', e.message ?? '식자재 등록에 실패했습니다.');
+      Alert.alert('오류', getErrorMessage(e, '식자재 등록에 실패했습니다.'));
     } finally {
       setSubmitting(false);
     }
@@ -68,7 +69,7 @@ export default function NewIngredientScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backButton} accessibilityRole="button" accessibilityLabel="뒤로">
           <Ionicons name="chevron-back" size={24} color={Colors.black} />
         </TouchableOpacity>
         <Text style={styles.title}>새 식자재</Text>
@@ -170,47 +171,45 @@ export default function NewIngredientScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.gray50 },
+  backButton: { width: 44, height: 44, justifyContent: 'center' },
+  container: { flex: 1, backgroundColor: Colors.homeCanvas},
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
     paddingVertical: 14,
-    backgroundColor: Colors.white,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.gray100,
+    backgroundColor: Colors.homeCanvas,
+    borderBottomWidth: 0,
+    borderBottomColor: Colors.homeBorder,
   },
-  title: { fontSize: 17, fontWeight: '700', color: Colors.black },
+  title: { fontSize: 22, fontWeight: '700', color: Colors.black, flexShrink: 1 },
   submitBtn: {
     backgroundColor: Colors.primary,
     paddingHorizontal: 16,
     paddingVertical: 7,
-    borderRadius: 9,
-  },
+    borderRadius: 14, minHeight: 44, justifyContent: 'center' },
   submitBtnDisabled: { opacity: 0.5 },
   submitText: { color: Colors.white, fontSize: 14, fontWeight: '700' },
   content: { padding: 20, paddingBottom: 40 },
   label: { fontSize: 14, fontWeight: '600', color: Colors.gray700, marginBottom: 6, marginTop: 16 },
   input: {
     backgroundColor: Colors.white,
-    borderRadius: 10,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: Colors.gray200,
+    borderColor: Colors.homeBorder,
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 15,
-    color: Colors.black,
-  },
+    color: Colors.black, minHeight: 44 },
   categoryChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   categoryChip: {
     paddingHorizontal: 14,
     paddingVertical: 8,
-    borderRadius: 20,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: Colors.gray200,
-    backgroundColor: Colors.white,
-  },
+    borderColor: Colors.homeBorder,
+    backgroundColor: Colors.white, minHeight: 44, justifyContent: 'center' },
   categoryChipActive: { borderColor: Colors.primary, backgroundColor: Colors.bg },
   categoryChipText: { fontSize: 14, color: Colors.gray600 },
   categoryChipTextActive: { color: Colors.primary, fontWeight: '700' },
@@ -218,15 +217,14 @@ const styles = StyleSheet.create({
   unitChip: {
     paddingHorizontal: 14,
     paddingVertical: 7,
-    borderRadius: 20,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: Colors.gray200,
-    backgroundColor: Colors.white,
-  },
+    borderColor: Colors.homeBorder,
+    backgroundColor: Colors.white, minHeight: 44, justifyContent: 'center' },
   unitChipActive: { borderColor: Colors.primary, backgroundColor: Colors.bg },
   unitChipText: { fontSize: 14, color: Colors.gray600 },
   unitChipTextActive: { color: Colors.primary, fontWeight: '700' },
-  unitHelp: { fontSize: 12, color: Colors.gray400, marginTop: 2 },
+  unitHelp: { fontSize: 13, color: Colors.gray500, marginTop: 2 },
   row: { flexDirection: 'row', gap: 12 },
   halfField: { flex: 1 },
   hint: {

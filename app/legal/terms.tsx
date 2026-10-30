@@ -14,7 +14,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-/** 이용약관 — 실제 서비스 배포 전 법률 검토가 필요한 초안입니다 */
+/** 앱 내 이용약관 화면 */
 export default function TermsScreen() {
   return (
     <SafeAreaView style={styles.container}>
@@ -63,9 +63,6 @@ export default function TermsScreen() {
           약관에 대한 문의는 서비스 내 고객센터 또는 등록된 이메일을 통해 접수받습니다.
         </Section>
 
-        <Text style={styles.disclaimer}>
-          ※ 이 약관은 서비스 준비 과정에서 작성된 초안이며, 정식 배포 전 법률 전문가의 검토를 받아야 합니다.
-        </Text>
       </ScrollView>
     </SafeAreaView>
   );
@@ -78,5 +75,4 @@ const styles = StyleSheet.create({
   section: { gap: 6 },
   sectionTitle: { fontSize: 14, fontWeight: '700', color: Colors.black },
   sectionBody: { fontSize: 13, fontWeight: '400', color: Colors.gray600, lineHeight: 20 },
-  disclaimer: { fontSize: 11, fontWeight: '400', color: Colors.gray400, lineHeight: 16, marginTop: 8 },
 });

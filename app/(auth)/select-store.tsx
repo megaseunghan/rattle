@@ -12,18 +12,18 @@ import {
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { supabase } from '../../lib/supabase';
+import { StoreSetupWizard } from '../../lib/components/StoreSetupWizard';
 import { useAuth } from '../../lib/contexts/AuthContext';
 import { Colors } from '../../constants/colors';
 import { Spacing } from '../../constants/designTokens';
 import { getErrorMessage } from '../../lib/utils/error';
-import { Button, Field, ListCard } from '../../lib/components/ui';
+import { ErrorMessage } from '../../lib/components/ErrorMessage';
+import { ListCard } from '../../lib/components/ui';
 
 export default function SelectStoreScreen() {
-  const [storeName, setStoreName] = useState('');
-  const [loading, setLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const { user, store, stores, storesLoaded, switchStore, refreshStore, signOut } = useAuth();
   const router = useRouter();
 
@@ -34,44 +34,36 @@ export default function SelectStoreScreen() {
     ]);
   }
 
-  useFocusEffect(useCallback(() => {
+  const reload = useCallback(async () => {
     setIsRefreshing(true);
-    refreshStore().finally(() => setIsRefreshing(false));
-  }, []));
+    setLoadError(null);
+    try {
+      await refreshStore();
+    } catch (e) {
+      setLoadError(getErrorMessage(e, '매장 목록을 불러오지 못했어요.'));
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [refreshStore]);
+  useFocusEffect(useCallback(() => { void reload(); }, [reload]));
 
   async function handleSelectStore(storeId: string) {
-    await switchStore(storeId);
-    router.replace('/(tabs)');
-  }
-
-  async function handleCreateStore() {
-    if (!storeName.trim()) {
-      Alert.alert('알림', '매장 이름을 입력해주세요.');
-      return;
-    }
-
-    setLoading(true);
     try {
-      if (!user) throw new Error('로그인이 필요합니다.');
-
-      const { data, error } = await supabase
-        .from('stores')
-        .insert({ name: storeName.trim(), owner_id: user.id })
-        .select('id')
-        .single();
-
-      if (error) throw error;
-
-      await switchStore(data.id);
+      await switchStore(storeId);
       router.replace('/(tabs)');
-    } catch (error: unknown) {
-      Alert.alert('오류', getErrorMessage(error));
-    } finally {
-      setLoading(false);
+    } catch (e) {
+      Alert.alert('매장 전환', getErrorMessage(e, '매장을 바꾸지 못했어요. 다시 시도해주세요.'));
     }
   }
 
   const hasStores = stores.length > 0;
+
+  if (showForm && user) return <SafeAreaView style={[styles.container, { backgroundColor: Colors.homeCanvas }]}>
+    <StoreSetupWizard knownRequestIds={stores.flatMap(s => s.setup_request_id ? [s.setup_request_id] : [])} userId={user.id} onCancel={() => setShowForm(false)} onCreated={async (id, choice) => {
+      await refreshStore(id);
+      router.replace(choice === 'now' ? '/settings/pos-sync?setup=1' : '/(tabs)');
+    }} />
+  </SafeAreaView>;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -92,6 +84,7 @@ export default function SelectStoreScreen() {
         <ActivityIndicator style={{ marginTop: 60 }} color={Colors.primary} />
       ) : (
       <ScrollView contentContainerStyle={styles.scrollContent}>
+        {loadError && <ErrorMessage message={loadError} onRetry={() => { void reload(); }} />}
         {/* 기존 매장 목록 */}
         {hasStores && (
           <View style={styles.storeList}>
@@ -137,7 +130,7 @@ export default function SelectStoreScreen() {
                 </View>
                 <View style={styles.optionTextWrap}>
                   <Text style={styles.optionTitle}>기존 매장 참여</Text>
-                  <Text style={styles.optionDesc}>직원이라면 사업자번호로 참여를 신청하세요</Text>
+                  <Text style={styles.optionDesc}>관리자에게 받은 참여코드로 신청하세요</Text>
                 </View>
               </View>
             </ListCard>
@@ -166,36 +159,13 @@ export default function SelectStoreScreen() {
                 </View>
                 <View style={styles.optionTextWrap}>
                   <Text style={styles.optionTitle}>기존 매장 참여</Text>
-                  <Text style={styles.optionDesc}>사업자번호로 참여를 신청합니다</Text>
+                  <Text style={styles.optionDesc}>참여코드로 참여를 신청합니다</Text>
                 </View>
               </View>
             </ListCard>
           </View>
         )}
 
-        {/* 매장 등록 폼 */}
-        {storesLoaded && showForm && (
-          <View style={styles.form}>
-            <Text style={styles.formTitle}>{hasStores ? '새 매장 추가' : '매장 등록'}</Text>
-            <View style={styles.formField}>
-              <Field
-                label="매장 이름"
-                placeholder="예: 카페 라틀"
-                value={storeName}
-                onChangeText={setStoreName}
-              />
-            </View>
-            <Button
-              label={loading ? '등록 중...' : '등록하기'}
-              variant="primary"
-              onPress={handleCreateStore}
-              loading={loading}
-            />
-            <View style={styles.cancelButtonWrap}>
-              <Button label="취소" variant="text" onPress={() => setShowForm(false)} />
-            </View>
-          </View>
-        )}
       </ScrollView>
       )}
     </SafeAreaView>
@@ -205,7 +175,7 @@ export default function SelectStoreScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.white,
+    backgroundColor: Colors.homeCanvas,
   },
   header: {
     paddingHorizontal: Spacing.screenX,

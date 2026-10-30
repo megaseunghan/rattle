@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Rattle API Reference</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.17.14/swagger-ui.min.css">
+</head>
+<body>
+  <p style="padding: 16px">Rattle Edge Functions API · 조회용 문서 · <a href="./openapi.yaml">OpenAPI 스펙 다운로드</a></p>
+  <div id="swagger-ui"></div>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.17.14/swagger-ui-bundle.js"></script>
+  <script>
+    if (typeof SwaggerUIBundle === 'undefined') {
+      document.getElementById('swagger-ui').textContent = 'Swagger UI를 불러오지 못했습니다. 인터넷 연결을 확인하거나 위의 OpenAPI 파일을 사용해주세요.';
+    } else {
+      SwaggerUIBundle({
+        url: './openapi.yaml', dom_id: '#swagger-ui',
+        presets: [SwaggerUIBundle.presets.apis], layout: 'BaseLayout',
+        docExpansion: 'list', supportedSubmitMethods: [],
+        persistAuthorization: false, validatorUrl: null,
+      });
+    }
+  </script>
+</body>
+</html>

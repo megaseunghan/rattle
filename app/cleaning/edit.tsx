@@ -1,11 +1,13 @@
-import { useCallback, useEffect, useState } from 'react';
+import { entityKey } from '../../lib/utils/listKeys';
+import { GlassBackdrop } from '../../lib/components/GlassBackdrop';
+import { getErrorMessage } from '../../lib/utils/error';
+import { useCallback, useEffect, useState, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import DraggableFlatList, { RenderItemParams, ScaleDecorator } from 'react-native-draggable-flatlist';
 import { Colors } from '../../constants/colors';
-import { Spacing } from '../../constants/designTokens';
 import { useCleaningChecklist } from '../../lib/hooks/useCleaningChecklist';
 import { AppBar, Field, Button } from '../../lib/components/ui';
 import { CleaningItem, CleaningSegment } from '../../types';
@@ -46,18 +48,18 @@ export default function CleaningEditScreen() {
       await addItem(segment, title, segment === 'weekday' ? newWeekday : null);
       setNewTitle('');
     } catch (e: any) {
-      Alert.alert('추가 실패', e.message);
+      Alert.alert('추가 실패', getErrorMessage(e));
     } finally {
       setSaving(false);
     }
   }
 
-  function startEdit(id: string, title: string) {
+  const startEdit = useCallback((id: string, title: string) => {
     setEditingId(id);
     setEditingTitle(title);
-  }
+  }, []);
 
-  async function handleSaveEdit() {
+  const handleSaveEdit = useCallback(async () => {
     if (!editingId) return;
     const title = editingTitle.trim();
     if (!title) return;
@@ -65,16 +67,16 @@ export default function CleaningEditScreen() {
       await editItem(editingId, title);
       setEditingId(null);
     } catch (e: any) {
-      Alert.alert('수정 실패', e.message);
+      Alert.alert('수정 실패', getErrorMessage(e));
     }
-  }
+  }, [editingId, editingTitle, editItem]);
 
-  function confirmRemove(id: string, title: string) {
+  const confirmRemove = useCallback((id: string, title: string) => {
     Alert.alert('항목 삭제', `"${title}" 항목을 삭제할까요?`, [
       { text: '취소', style: 'cancel' },
-      { text: '삭제', style: 'destructive', onPress: () => removeItem(id).catch(e => Alert.alert('삭제 실패', e.message)) },
+      { text: '삭제', style: 'destructive', onPress: () => removeItem(id).catch(e => Alert.alert('삭제 실패', getErrorMessage(e))) },
     ]);
-  }
+  }, [removeItem]);
 
   async function handleDragEnd(data: CleaningItem[]) {
     setOrderedItems(data);
@@ -82,13 +84,14 @@ export default function CleaningEditScreen() {
     try {
       await reorder(data);
     } catch (e: any) {
-      Alert.alert('순서 저장 실패', e.message);
+      Alert.alert('순서 저장 실패', getErrorMessage(e));
     } finally {
       setReordering(false);
     }
   }
 
-  function renderItem({ item, drag, isActive }: RenderItemParams<CleaningItem>) {
+  const listExtraData = useMemo(() => ({ editingId, editingTitle, segment }), [editingId, editingTitle, segment]);
+  const renderItem = useCallback(({ item, drag, isActive }: RenderItemParams<CleaningItem>) => {
     return (
       <ScaleDecorator>
         <View style={[styles.row, isActive && styles.rowActive]}>
@@ -124,11 +127,11 @@ export default function CleaningEditScreen() {
         </View>
       </ScaleDecorator>
     );
-  }
+  }, [editingId, editingTitle, segment, handleSaveEdit, startEdit, confirmRemove]);
 
   return (
-    <SafeAreaView style={styles.container}>
-      <AppBar title="체크리스트 편집" onBack={() => router.back()} />
+    <SafeAreaView style={styles.container}><GlassBackdrop />
+      <AppBar transparent title="체크리스트 편집" onBack={() => router.back()} />
 
       <View style={styles.segmentRow}>
         {SEGMENTS.map(s => (
@@ -144,9 +147,13 @@ export default function CleaningEditScreen() {
       </View>
 
       <DraggableFlatList
+        initialNumToRender={5}
+        maxToRenderPerBatch={10}
+        windowSize={5}
         data={orderedItems}
-        keyExtractor={item => item.id}
+        keyExtractor={entityKey}
         onDragEnd={({ data }) => handleDragEnd(data)}
+        extraData={listExtraData}
         renderItem={renderItem}
         activationDistance={0}
         dragItemOverflow
@@ -192,28 +199,28 @@ export default function CleaningEditScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.gray50 },
+  container: { flex: 1, backgroundColor: Colors.homeCanvas },
   segmentRow: {
     flexDirection: 'row', gap: 4, backgroundColor: Colors.gray100,
-    borderRadius: 12, padding: 3, marginHorizontal: Spacing.screenX, marginTop: 14,
+    borderRadius: 12, padding: 3, marginHorizontal: 20, marginTop: 14,
   },
-  segmentTab: { flex: 1, paddingVertical: 7, borderRadius: 10, alignItems: 'center' },
+  segmentTab: { flex: 1, minHeight: 44, paddingVertical: 7, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   segmentTabActive: { backgroundColor: Colors.white },
   segmentText: { fontSize: 14, fontWeight: '500', color: Colors.gray400 },
-  segmentTextActive: { color: Colors.black, fontWeight: '700' },
-  scroll: { padding: Spacing.screenX, paddingBottom: 40, gap: 8 },
+  segmentTextActive: { color: Colors.primary, fontWeight: '700' },
+  scroll: { padding: 20, paddingBottom: 40, gap: 8 },
   hintRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 },
   hintText: { fontSize: 11, fontWeight: '500', color: Colors.gray400 },
   row: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
-    borderWidth: 1, borderColor: Colors.gray100, borderRadius: 14, padding: 14,
+    borderWidth: 1, borderColor: Colors.homeBorder, borderRadius: 20, padding: 16,
     backgroundColor: Colors.white, marginBottom: 8,
   },
   rowActive: { borderColor: Colors.primary, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 10, elevation: 6 },
   dragHandle: { marginRight: -4 },
   rowTitle: { flex: 1, fontSize: 14, fontWeight: '600', color: Colors.black },
   rowWeekday: { fontSize: 11, color: Colors.gray400 },
-  iconBtn: { padding: 4 },
+  iconBtn: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
   editRow: { flex: 1, flexDirection: 'row', alignItems: 'flex-end', gap: 10 },
   editInput: { flex: 1 },
   saveText: { fontSize: 13, fontWeight: '700', color: Colors.primary, paddingBottom: 13 },
@@ -221,10 +228,10 @@ const styles = StyleSheet.create({
   addSection: { gap: 14, marginTop: 16 },
   weekdayChipRow: { flexDirection: 'row', gap: 6 },
   weekdayChip: {
-    flex: 1, paddingVertical: 8, borderRadius: 10,
+    flex: 1, minHeight: 44, paddingVertical: 8, justifyContent: 'center', borderRadius: 10,
     borderWidth: 1, borderColor: Colors.gray200, alignItems: 'center',
   },
-  weekdayChipActive: { backgroundColor: Colors.black, borderColor: Colors.black },
+  weekdayChipActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
   weekdayChipText: { fontSize: 12, fontWeight: '500', color: Colors.gray600 },
   weekdayChipTextActive: { color: Colors.white, fontWeight: '600' },
   addButtonWrap: { marginTop: 4 },
