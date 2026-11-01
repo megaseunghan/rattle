@@ -2,7 +2,7 @@ import { GlassBackdrop } from '../../lib/components/GlassBackdrop';
 import { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import { AppIcon } from '../../lib/icons/AppIcon';
 import { router } from 'expo-router';
 import { Colors } from '../../constants/colors';
 import { Spacing } from '../../constants/designTokens';
@@ -20,13 +20,13 @@ function fmtHHmm(t: string | null): string {
 }
 
 function MenuRow({ icon, label, onPress, withBorder }: {
-  icon: keyof typeof Ionicons.glyphMap; label: string; onPress: () => void; withBorder?: boolean;
+  icon: keyof typeof AppIcon.glyphMap; label: string; onPress: () => void; withBorder?: boolean;
 }) {
   return (
-    <TouchableOpacity style={[styles.menuRow, withBorder && styles.menuRowBorder]} onPress={onPress} activeOpacity={0.7}>
-      <Ionicons name={icon} size={19} color={Colors.gray600} style={styles.menuIcon} />
+    <TouchableOpacity style={[styles.menuRow, withBorder && styles.menuRowBorder]} onPress={onPress} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel={label}>
+      <AppIcon name={icon} size={19} color={Colors.gray600} style={styles.menuIcon} />
       <Text style={styles.menuLabel}>{label}</Text>
-      <Ionicons name="chevron-forward" size={16} color={Colors.gray300} />
+      <AppIcon name="chevron-forward" size={16} color={Colors.gray300} />
     </TouchableOpacity>
   );
 }
@@ -74,7 +74,7 @@ export default function MyPageScreen() {
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         {isPreviewing && (
           <View style={styles.previewBanner}>
-            <Ionicons name="eye-outline" size={16} color={Colors.warningStroke} />
+            <AppIcon name="eye-outline" size={16} color={Colors.warningStroke} />
             <Text style={styles.previewBannerText}>
               {myEmployee ? `${myEmployee.name}님 화면을 미리 보는 중이에요` : '오른쪽 아래 테스트 보기 버튼에서 직원을 선택해주세요'}
             </Text>
@@ -170,7 +170,7 @@ const styles = StyleSheet.create({
   scheduleDay: { width: 48, fontSize: 14, fontWeight: '600', color: Colors.gray600 },
   scheduleDayToday: { color: Colors.primary },
   todayLabel: { fontSize: 12, fontWeight: '600', color: Colors.primary },
-  scheduleTime: { flex: 1, textAlign: 'right', fontSize: 14, fontWeight: '600', color: Colors.black },
+  scheduleTime: { fontVariant: ['tabular-nums'], flex: 1, textAlign: 'right', fontSize: 14, fontWeight: '600', color: Colors.black },
   scheduleTimeMuted: { fontWeight: '500', color: Colors.gray400 },
 
   menuCard: { backgroundColor: Colors.white, borderRadius: 20, borderWidth: 1, borderColor: Colors.homeBorder, overflow: 'hidden' },

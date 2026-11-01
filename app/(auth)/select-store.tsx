@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { AppIcon } from '../../lib/icons/AppIcon';
 import { StoreSetupWizard } from '../../lib/components/StoreSetupWizard';
 import { useAuth } from '../../lib/contexts/AuthContext';
 import { Colors } from '../../constants/colors';
@@ -70,8 +70,8 @@ export default function SelectStoreScreen() {
       <View style={styles.header}>
         <View style={styles.headerRow}>
           <Text style={styles.title}>{hasStores ? '매장 관리' : '환영합니다'}</Text>
-          <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} hitSlop={8}>
-            <Ionicons name="log-out-outline" size={20} color={Colors.gray500} />
+          <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} accessibilityRole="button" accessibilityLabel="로그아웃" activeOpacity={0.7}>
+            <AppIcon name="log-out-outline" size={20} color={Colors.gray500} />
             <Text style={styles.logoutText}>로그아웃</Text>
           </TouchableOpacity>
         </View>
@@ -99,7 +99,7 @@ export default function SelectStoreScreen() {
                   <View style={styles.storeCardRow}>
                     <Text style={styles.storeName}>{item.name}</Text>
                     {isSelected && (
-                      <Ionicons name="checkmark-circle" size={22} color={Colors.primary} />
+                      <AppIcon name="checkmark-circle" size={22} color={Colors.primary} />
                     )}
                   </View>
                 </ListCard>
@@ -114,7 +114,7 @@ export default function SelectStoreScreen() {
             <ListCard trailingIcon="chevron" onPress={() => setShowForm(true)} style={styles.optionCardPrimary}>
               <View style={styles.optionRow}>
                 <View style={[styles.optionIcon, styles.optionIconPrimary]}>
-                  <Ionicons name="storefront" size={22} color={Colors.primary} />
+                  <AppIcon name="storefront" size={22} color={Colors.primary} />
                 </View>
                 <View style={styles.optionTextWrap}>
                   <Text style={styles.optionTitle}>매장 등록</Text>
@@ -126,7 +126,7 @@ export default function SelectStoreScreen() {
             <ListCard trailingIcon="chevron" onPress={() => router.push('/(auth)/join-store')}>
               <View style={styles.optionRow}>
                 <View style={styles.optionIcon}>
-                  <Ionicons name="people" size={22} color={Colors.gray600} />
+                  <AppIcon name="people" size={22} color={Colors.gray600} />
                 </View>
                 <View style={styles.optionTextWrap}>
                   <Text style={styles.optionTitle}>기존 매장 참여</Text>
@@ -143,7 +143,7 @@ export default function SelectStoreScreen() {
             <ListCard trailingIcon="chevron" onPress={() => setShowForm(true)}>
               <View style={styles.optionRow}>
                 <View style={[styles.optionIcon, styles.optionIconPrimary]}>
-                  <Ionicons name="add" size={22} color={Colors.primary} />
+                  <AppIcon name="add" size={22} color={Colors.primary} />
                 </View>
                 <View style={styles.optionTextWrap}>
                   <Text style={styles.optionTitle}>새 매장 추가</Text>
@@ -155,7 +155,7 @@ export default function SelectStoreScreen() {
             <ListCard trailingIcon="chevron" onPress={() => router.push('/(auth)/join-store')}>
               <View style={styles.optionRow}>
                 <View style={styles.optionIcon}>
-                  <Ionicons name="people" size={22} color={Colors.gray600} />
+                  <AppIcon name="people" size={22} color={Colors.gray600} />
                 </View>
                 <View style={styles.optionTextWrap}>
                   <Text style={styles.optionTitle}>기존 매장 참여</Text>
@@ -193,6 +193,8 @@ const styles = StyleSheet.create({
     color: Colors.black,
   },
   logoutBtn: {
+    minHeight: 44,
+    minWidth: 44,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
@@ -218,11 +220,13 @@ const styles = StyleSheet.create({
     gap: Spacing.listGap,
   },
   storeCardRow: {
+    gap: 12,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
   storeName: {
+    flex: 1,
     fontSize: 14,
     fontWeight: '600',
     color: Colors.black,

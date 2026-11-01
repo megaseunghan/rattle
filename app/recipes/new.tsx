@@ -1,3 +1,6 @@
+import { useStorePermissions } from '../../lib/hooks/useStorePermissions';
+import { AppBar } from '../../lib/components/ui';
+import { ErrorMessage } from '../../lib/components/ErrorMessage';
 import { entityKey } from '../../lib/utils/listKeys';
 import { SheetModal } from '../../lib/components/ui/SheetModal';
 import { getErrorMessage } from '../../lib/utils/error';
@@ -19,8 +22,10 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { AppIcon } from '../../lib/icons/AppIcon';
 import { Colors } from '../../constants/colors';
+import { Fonts } from '../../constants/fonts';
+import { NumericText } from '../../lib/components/ui/NumericText';
 import { useRecipes } from '../../lib/hooks/useRecipes';
 import { useIngredients } from '../../lib/hooks/useIngredients';
 import { useAuth } from '../../lib/contexts/AuthContext';
@@ -49,6 +54,9 @@ const IngredientPickerRow = memo(function IngredientPickerRow({ item, already, o
         style={[styles.pickerRow, already && styles.pickerRowAdded]}
         onPress={handlePress}
         disabled={already}
+        accessibilityRole="button"
+        accessibilityLabel={`${item.name}, ${item.unit}${already ? ', 이미 추가됨' : ', 추가'}`}
+        accessibilityState={{ disabled: already }}
       >
         <Text style={[styles.pickerName, already && styles.pickerNameAdded]}>
           {item.name}
@@ -59,6 +67,16 @@ const IngredientPickerRow = memo(function IngredientPickerRow({ item, already, o
 });
 
 export default function NewRecipeScreen() {
+  const { canManageRecipes, permissionsReady } = useStorePermissions();
+  const { store } = useAuth();
+  if (!canManageRecipes) return <SafeAreaView style={styles.container}>
+    <AppBar title="레시피 등록·수정" onBack={() => router.back()} />
+    <ErrorMessage message={permissionsReady ? '레시피는 조회만 할 수 있어요. 등록·수정은 관리자나 담당 직원에게 요청해 주세요.' : '매장과 직원 권한을 확인한 뒤 다시 열어 주세요.'} />
+  </SafeAreaView>;
+  return <NewRecipeScreenForm key={store?.id} />;
+}
+
+function NewRecipeScreenForm() {
   const { id } = useLocalSearchParams<{ id?: string }>();
   const isEdit = !!id;
 
@@ -75,6 +93,7 @@ export default function NewRecipeScreen() {
     return Array.from(new Set(recipes.filter(r => r.category !== '기타').map(r => r.category))).sort();
   }, [recipes]);
   const [items, setItems] = useState<RecipeIngredientForm[]>([]);
+  const [originalStoreId, setOriginalStoreId] = useState<string | null>(null);
   const [original, setOriginal] = useState<{ name: string; category: string; sellingPrice: string; itemsKey: string } | null>(null);
   const [loading, setLoading] = useState(isEdit);
   const [submitting, setSubmitting] = useState(false);
@@ -138,6 +157,8 @@ export default function NewRecipeScreen() {
     if (!id) return;
     try {
       const data = await getRecipeById(id);
+      if (data.store_id !== store?.id) throw new Error('현재 매장의 레시피가 아니에요.');
+      setOriginalStoreId(data.store_id);
       setName(data.name);
       setCategory(data.category);
       setSellingPrice(String(data.selling_price));
@@ -241,6 +262,7 @@ export default function NewRecipeScreen() {
   }
 
   async function handleSubmit() {
+    if (!store || (isEdit && originalStoreId !== store.id)) return;
     if (!name.trim()) {
       Alert.alert('입력 오류', '레시피명을 입력해주세요.');
       return;
@@ -330,6 +352,8 @@ export default function NewRecipeScreen() {
                 key={cat}
                 style={[styles.categoryChip, category === cat && styles.categoryChipActive]}
                 onPress={() => { setCategory(cat); setShowCustomCat(false); }}
+                accessibilityRole="radio"
+                accessibilityState={{ checked: !showCustomCat && category === cat }}
               >
                 <Text style={[styles.categoryChipText, category === cat && styles.categoryChipTextActive]}>
                   {cat}
@@ -343,8 +367,10 @@ export default function NewRecipeScreen() {
                 showCustomCat && styles.categoryChipActive
               ]}
               onPress={() => setShowCustomCat(true)}
+              accessibilityRole="radio"
+              accessibilityState={{ checked: showCustomCat }}
             >
-              <Ionicons 
+              <AppIcon
                 name="add-circle-outline" 
                 size={14} 
                 color={showCustomCat ? Colors.white : Colors.primary} 
@@ -380,14 +406,14 @@ export default function NewRecipeScreen() {
           <View style={styles.costPreview}>
             <View style={styles.costItem}>
               <Text style={styles.costLabel}>예상 원가</Text>
-              <Text style={styles.costValue}>{costKnown ? `${Math.round(cost).toLocaleString('ko-KR')}원` : items.length ? '단가 확인 필요' : '재료 미등록'}</Text>
+              <NumericText style={styles.costValue}>{costKnown ? `${Math.round(cost).toLocaleString('ko-KR')}원` : items.length ? '단가 확인 필요' : '재료 미등록'}</NumericText>
             </View>
             <View style={styles.costDivider} />
             <View style={styles.costItem}>
               <Text style={styles.costLabel}>마진율</Text>
-              <Text style={[styles.costValue, { color: marginColor }]}>
+              <NumericText style={[styles.costValue, { color: marginColor }]}>
                 {costKnown && sellingPriceNum > 0 ? `${marginRate.toFixed(1)}%` : '확인 필요'}
-              </Text>
+              </NumericText>
             </View>
           </View>
 
@@ -416,6 +442,7 @@ export default function NewRecipeScreen() {
                 <View style={styles.recipeItemRight}>
                   <TextInput
                     style={styles.qtyInput}
+                    accessibilityLabel={`${item.ingredient.name} 사용량, ${item.unit}`}
                     value={item.quantity}
                     onChangeText={v => updateQuantity(item.ingredient.id, v)}
                     keyboardType="numeric"
@@ -427,6 +454,9 @@ export default function NewRecipeScreen() {
                           key={u}
                           style={[styles.unitToggleChip, item.unit === u && styles.unitToggleChipActive]}
                           onPress={() => updateUnit(item.ingredient.id, u)}
+                          accessibilityRole="radio"
+                          accessibilityLabel={`${item.ingredient.name} 단위 ${u}`}
+                          accessibilityState={{ checked: item.unit === u }}
                         >
                           <Text style={[styles.unitToggleText, item.unit === u && styles.unitToggleTextActive]}>{u}</Text>
                         </TouchableOpacity>
@@ -435,8 +465,8 @@ export default function NewRecipeScreen() {
                   ) : (
                     <Text style={styles.unitText}>{item.unit}</Text>
                   )}
-                  <TouchableOpacity onPress={() => removeItem(item.ingredient.id)} style={styles.actionButton} accessibilityRole="button">
-                    <Ionicons name="close" size={16} color={Colors.gray400} />
+                  <TouchableOpacity onPress={() => removeItem(item.ingredient.id)} style={styles.actionButton} accessibilityRole="button" accessibilityLabel={`${item.ingredient.name} 재료 삭제`}>
+                    <AppIcon name="close" size={16} color={Colors.gray400} />
                   </TouchableOpacity>
                 </View>
               </View>
@@ -533,11 +563,11 @@ export default function NewRecipeScreen() {
         <Pressable style={styles.volOverlay} onPress={() => setVolumeTarget(null)}>
           <Pressable style={styles.volSheet} onPress={() => {}}>
             <View style={styles.volHeader}>
-              <TouchableOpacity onPress={() => setVolumeTarget(null)} hitSlop={8} style={styles.actionButton} accessibilityRole="button">
+              <TouchableOpacity onPress={() => setVolumeTarget(null)} style={styles.actionButton} accessibilityRole="button">
                 <Text style={styles.volHeaderCancel}>나중에</Text>
               </TouchableOpacity>
-              <Text style={styles.volHeaderTitle} numberOfLines={1}>{volumeTarget?.name} 개당 용량</Text>
-              <TouchableOpacity onPress={handleSaveVolume} disabled={savingVol} hitSlop={8} style={styles.actionButton} accessibilityRole="button">
+              <Text style={styles.volHeaderTitle}>{volumeTarget?.name} 개당 용량</Text>
+              <TouchableOpacity onPress={handleSaveVolume} disabled={savingVol} style={styles.actionButton} accessibilityRole="button" accessibilityLabel="개당 용량 저장" accessibilityState={{ disabled: savingVol, busy: savingVol }}>
                 {savingVol
                   ? <ActivityIndicator size="small" color={Colors.primary} />
                   : <Text style={styles.volHeaderSave}>저장</Text>}
@@ -562,6 +592,8 @@ export default function NewRecipeScreen() {
                     key={u}
                     style={[styles.volUnitChip, volUnit === u && styles.volUnitChipActive]}
                     onPress={() => setVolUnit(u)}
+                    accessibilityRole="radio"
+                    accessibilityState={{ checked: volUnit === u }}
                   >
                     <Text style={[styles.volUnitText, volUnit === u && styles.volUnitTextActive]}>{u}</Text>
                   </TouchableOpacity>
@@ -615,6 +647,8 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   categoryChip: {
+    minWidth: 44,
+    maxWidth: '100%',
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 14,
@@ -693,6 +727,7 @@ const styles = StyleSheet.create({
   recipeItemPrice: { fontSize: 13, color: Colors.gray500},
   recipeItemRight: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8 },
   qtyInput: {
+    fontFamily: Fonts.geistSemiBold, fontVariant: ['tabular-nums'],
     flex: 1,
     backgroundColor: Colors.gray50,
     borderRadius: 12,
@@ -733,6 +768,7 @@ const styles = StyleSheet.create({
   modalTitle: { fontSize: 17, fontWeight: '700', color: Colors.black },
   modalClose: { fontSize: 15, color: Colors.primary, fontWeight: '600' },
   pickerRow: {
+    gap: 12,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -742,7 +778,7 @@ const styles = StyleSheet.create({
     borderBottomColor: Colors.gray100,
   },
   pickerRowAdded: { opacity: 0.4 },
-  pickerName: { fontSize: 15, color: Colors.black, fontWeight: '500' },
+  pickerName: { flex: 1, fontSize: 15, color: Colors.black, fontWeight: '500' },
   pickerNameAdded: { color: Colors.gray400 },
   pickerUnit: { fontSize: 13, color: Colors.gray500 },
   newIngredientBtn: {
@@ -777,10 +813,12 @@ const styles = StyleSheet.create({
   volDesc: { fontSize: 13, color: Colors.gray500, marginTop: 8, lineHeight: 19 },
   volInputRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 18 },
   volInput: {
+    fontFamily: Fonts.geistRegular, fontVariant: ['tabular-nums'],
     flex: 1, backgroundColor: Colors.gray50, borderRadius: 12, borderWidth: 1, borderColor: Colors.homeBorder,
     paddingHorizontal: 14, paddingVertical: 11, fontSize: 15, color: Colors.black, minHeight: 44 },
   volUnitToggle: { flexDirection: 'row', gap: 4 },
   volUnitChip: {
+    minWidth: 44,
     paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12,
     borderWidth: 1, borderColor: Colors.gray200, backgroundColor: Colors.gray50, minHeight: 44, justifyContent: 'center' },
   volUnitChipActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },

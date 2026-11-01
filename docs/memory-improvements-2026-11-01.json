@@ -1,0 +1,587 @@
+{
+  "at": "2026-11-01T23:35:13+09:00",
+  "branch": "feature/memory-improvements-2026-11-01",
+  "head": "0d04e7860ed7b72af933854e5d347a7b8a23bb09",
+  "base_branch": "feature/operations-workflows",
+  "remote_checked": false,
+  "session_count": 18,
+  "scope": "메모리 등록 세션 요약과 현재 작업본; 전체 대화 원문/전체 과거 세션 보장 아님",
+  "sessions": [
+    {
+      "id": "01a18b8c-bd33-7842-a212-ab83e6f815a4",
+      "date": "2026-10-30",
+      "summary": "2026-10-30T06-43-38-fbeI-rattle_social_auth_eas_update_deployment.md"
+    },
+    {
+      "id": "01a18b83-929b-7ae0-9769-cb3979455649",
+      "date": "2026-10-30",
+      "summary": "2026-10-30T06-33-38-GV4J-rattle_qa_full_scroll_capture_verification.md"
+    },
+    {
+      "id": "01a18cad-ef85-7693-9067-4dceaaadfe57",
+      "date": "2026-10-30",
+      "summary": "2026-10-30T11-59-31-N4QD-rattle_mobile_html_ui_redesign.md"
+    },
+    {
+      "id": "01a1874a-2046-7813-992d-fef8ccd8ba28",
+      "date": "2026-10-29",
+      "summary": "2026-10-29T10-52-24-Ah6g-rattle_full_screen_performance_audit_and_push.md"
+    },
+    {
+      "id": "01a1860b-f22a-7100-a372-881b89ac34f7",
+      "date": "2026-10-29",
+      "summary": "2026-10-29T05-04-52-jxdB-dashboard_chart_ux_and_simulator_qa.md"
+    },
+    {
+      "id": "01a18cc7-e8a5-7b41-8ebe-0290a083e1db",
+      "date": "2026-10-30",
+      "summary": "2026-10-30T12-27-53-fxH5-rattle_ui_audit_interactive_prototype.md"
+    },
+    {
+      "id": "01a177cc-a36b-7a90-b4f6-eb057339f846",
+      "date": "2026-10-26",
+      "summary": "2026-10-26T10-41-02-Pq9E-rattle_release_website_github_domain_verification.md"
+    },
+    {
+      "id": "01a18cac-eeaf-7cb1-b47c-72f9489d92e2",
+      "date": "2026-10-30",
+      "summary": "2026-10-30T11-58-25-rNV8-ios_simulator_ui_audit_finalization.md"
+    },
+    {
+      "id": "01a176cb-6895-7571-a87f-de74a4ca2008",
+      "date": "2026-10-26",
+      "summary": "2026-10-26T06-00-04-6rl6-rattle_full_ui_audit_payroll_demo_sql.md"
+    },
+    {
+      "id": "01a15e34-bb0c-7730-bab4-57e0096c6ed9",
+      "date": "2026-10-21",
+      "summary": "2026-10-21T11-24-36-Hnlv-pnl_detail_motion_fix_and_device_validation.md"
+    },
+    {
+      "id": "01a15e89-7d89-7280-8d23-7998ef9985c7",
+      "date": "2026-10-21",
+      "summary": "2026-10-21T12-57-11-2JJZ-rattle_the_crew_analysis_and_store_sharing_implementation.md"
+    },
+    {
+      "id": "01a159d9-b87f-7dc0-8100-157b35419ce2",
+      "date": "2026-10-20",
+      "summary": "2026-10-20T15-06-43-t0cy-rattle_membership_approval_notifications_onboarding_reservat.md"
+    },
+    {
+      "id": "01a14eaa-4f09-7272-967c-18052fbe36d9",
+      "date": "2026-10-18",
+      "summary": "2026-10-18T10-59-06-cToJ-rattle_operations_inputs_and_terminal_session_resume.md"
+    },
+    {
+      "id": "01a1541b-f203-7360-8660-bfb0e3c735c2",
+      "date": "2026-10-19",
+      "summary": "2026-10-19T12-21-20-CypY-rattle_ux_auth_deployment_hook_repair.md"
+    },
+    {
+      "id": "01a14490-cd5a-7ce0-8271-a72c11a0dee0",
+      "date": "2026-10-16",
+      "summary": "2026-10-16T11-55-02-0XvO-rattle_scope_manual_work_minutes_hook_and_antigravity_review.md"
+    },
+    {
+      "id": "01a0e7c7-148b-7722-9000-4878e9ae74ed",
+      "date": "2026-09-28",
+      "summary": "2026-09-28T11-29-38-k7wx-rattle_document_cleanup_codex_migration.md"
+    },
+    {
+      "id": "01a159d0-c27a-72b1-acab-57dae8cacb11",
+      "date": "2026-10-20",
+      "summary": "2026-10-20T14-56-55-jw6R-rattle_hook_disable_gradle_android_build_diagnosis.md"
+    },
+    {
+      "id": "01a0aefc-46d1-75f3-94ff-3447ce204832",
+      "date": "2026-09-17",
+      "summary": "2026-09-17T10-49-23-2lyi-notion_ops_rattle_erp_and_compensation_review.md"
+    }
+  ],
+  "items": [
+    {
+      "id": "U01",
+      "priority": "P1",
+      "status": "기존 구현",
+      "screens": "S26",
+      "title": "수기 매출 기존값 보호",
+      "files": "app/pos/new.tsx;lib/services/manualSales.ts",
+      "finding": "기존값 조회·변경 확인·조건부 update/insert가 이미 존재. 새 테스트 포함.",
+      "acceptance": "현금·할인·메모 보존, 충돌·중복·조회 실패 검증"
+    },
+    {
+      "id": "U02",
+      "priority": "P1",
+      "status": "이번 수정",
+      "screens": "S16",
+      "title": "급여명세 월·계정·매장 응답 격리",
+      "files": "app/mypage/payslip.tsx",
+      "finding": "조회 scope/이전 effect 무효화, 로딩·실패·미작성·직원 미연결 분리.",
+      "acceptance": "역순 월 응답, 매장 전환, 동일 월 재시도"
+    },
+    {
+      "id": "U03",
+      "priority": "P1",
+      "status": "이번 수정",
+      "screens": "S16",
+      "title": "과거 명세에 현재 직원 조건 사용 금지",
+      "files": "app/mypage/payslip.tsx",
+      "finding": "현재 고용형태·비과세로 지급/공제 분기하지 않고 저장된 총액·과세 기준·공제 항목 표시.",
+      "acceptance": "현재 직원 조건을 바꿔도 명세 표시가 변하지 않음"
+    },
+    {
+      "id": "U04",
+      "priority": "P1",
+      "status": "로컬 구현·회귀 통과 / 실제 업무 미검증",
+      "screens": "S05/M04",
+      "title": "저장된 확정액과 미저장 공제 예상액 구분",
+      "files": "app/(tabs)/payroll.tsx",
+      "finding": "저장된 확정액/미저장 예상액 분리, 초안·월 이동 보호 존재. 후속 공제 저장/재조회 겹침의 직원 누락도 수정하고 2명 합계 회귀 확인.",
+      "acceptance": "저장 확정액 별도 표시, 초안 보호·정산 해제 안내"
+    },
+    {
+      "id": "U05",
+      "priority": "P1",
+      "status": "이번 수정",
+      "screens": "S21",
+      "title": "알림 설정 저장 실패·응답 역전 복구",
+      "files": "lib/hooks/useNotificationSettings.ts;app/notifications/settings.tsx",
+      "finding": "scope·조회 순번·동기 쓰기 잠금, 실패 시 이전값 복구/재조회 요구, 저장중 비활성.",
+      "acceptance": "조회 실패·저장 실패·연타·오래된 매장 응답 검사"
+    },
+    {
+      "id": "U06",
+      "priority": "P1",
+      "status": "로컬 구현·회귀 통과 / 실제 업무 미검증",
+      "screens": "S11/S17/S25",
+      "title": "실패와 빈 목록 분리",
+      "files": "lib/hooks/useCleaningChecklist.ts;app/mypage/requests.tsx;lib/hooks/useManualSales.ts",
+      "finding": "청소·요청함·수기매출의 읽기 오류와 빈 상태 분리, 쓰기 결과 불명 후 재조회 보호 구현 및 관련 mock 회귀 존재.",
+      "acceptance": "요청함·수기매출 조회/쓰기 실패 안내, 청소 회귀 검사"
+    },
+    {
+      "id": "U07",
+      "priority": "P1",
+      "status": "미적용 확인",
+      "screens": "S29/S32",
+      "title": "전체 식자재 검색·페이지 선택",
+      "files": "app/purchases/new.tsx;app/recipes/new.tsx;lib/hooks/useIngredients.ts",
+      "finding": "매입 startsWith·로드된 품목 기준, 레시피 선택기 페이지 계약 누락이 남음.",
+      "acceptance": "빈 캐시 21번째 이후 중간 단어 검색·선택·실패 복구"
+    },
+    {
+      "id": "U08",
+      "priority": "P1",
+      "status": "기존 구현",
+      "screens": "S30",
+      "title": "레시피 재시도 후 오류 해제",
+      "files": "app/recipes/[id].tsx",
+      "finding": "setError(null)과 요청 순번 보호 이미 존재.",
+      "acceptance": "실패→재시도 성공 행동 테스트·실제 화면은 별도"
+    },
+    {
+      "id": "U09",
+      "priority": "P1",
+      "status": "이번 수정",
+      "screens": "S38/S39",
+      "title": "저장 완료와 후속 조회 실패 분리",
+      "files": "app/settings/sales.tsx;app/settings/store.tsx",
+      "finding": "쓰기 성공을 유지하고 읽기만 재시도. 재저장 잠금·매장 전환 후 오래된 결과 억제.",
+      "acceptance": "두 설정 화면의 쓰기/읽기 분리 테스트"
+    },
+    {
+      "id": "U10",
+      "priority": "P2",
+      "status": "결정 충돌",
+      "screens": "S01",
+      "title": "Apple 로그인 제공 범위",
+      "files": "app/(auth)/login.tsx;__tests__/components/LoginScreen.test.tsx",
+      "finding": "AGENTS iOS 한정과 현재 Android Apple 노출 기대 테스트가 충돌. 무조건 옛 범위로 회귀 금지.",
+      "acceptance": "최신 사용자 결정/원문 확인 후 화면·서비스·테스트 동시 정합화"
+    },
+    {
+      "id": "U11",
+      "priority": "P2",
+      "status": "미적용 확인",
+      "screens": "S05",
+      "title": "과거 월 퇴사자 명세 조회",
+      "files": "app/(tabs)/payroll.tsx",
+      "finding": "is_active !== false 필터가 남음.",
+      "acceptance": "선택 월 명세가 있는 퇴사자 포함, 총액 구성원 추적"
+    },
+    {
+      "id": "U12",
+      "priority": "P2",
+      "status": "미적용 확인",
+      "screens": "S05",
+      "title": "직원 삭제·퇴사 용어 구분",
+      "files": "app/(tabs)/payroll.tsx",
+      "finding": "deactivate 동작의 직원 삭제 문구가 남음.",
+      "acceptance": "퇴사 처리로 명명하고 급여 보존·계정 접근 영향 안내"
+    },
+    {
+      "id": "U13",
+      "priority": "P2",
+      "status": "부분 적용",
+      "screens": "S05/S18/S26/S33/S35/S36/S38/S39/M06",
+      "title": "작성값·이탈 보호",
+      "files": "app/pos/new.tsx;app/mypage/schedule.tsx;lib/components/MemberApprovalModal.tsx",
+      "finding": "수기매출은 기존 보호 확인. 나머지 폼별 dirty/취소/월 이동 상태는 재확인 필요.",
+      "acceptance": "공통 useConfirmLeave 적용 범위표·쓰는 중 뒤로/취소·초안 보존"
+    },
+    {
+      "id": "U14",
+      "priority": "P2",
+      "status": "재확인 필요",
+      "screens": "S17/S18",
+      "title": "스케줄 확정과 요청의 전후 비교",
+      "files": "app/mypage/schedule.tsx;app/mypage/requests.tsx",
+      "finding": "기존 감사 지적. 현재 업무 행동 재현은 미실행.",
+      "acceptance": "확정/승인대기/작성 분리·이전→요청 시간"
+    },
+    {
+      "id": "U15",
+      "priority": "P2",
+      "status": "미적용 확인",
+      "screens": "S15/S18",
+      "title": "스케줄 로딩·미연결·조회 실패 분리",
+      "files": "lib/hooks/useSchedule.ts",
+      "finding": "현재 반환값에 error 없음.",
+      "acceptance": "직원과 스케줄 각각 로딩/실패/미연결/미설정 분리"
+    },
+    {
+      "id": "U16",
+      "priority": "P2",
+      "status": "미적용 확인",
+      "screens": "S19/M05",
+      "title": "날짜 선택·시간/분 입력·필드 오류",
+      "files": "lib/components/DailyWorkPanel.tsx",
+      "finding": "YYYY-MM-DD 문자열과 분 직접 입력·공통 메시지 유지.",
+      "acceptance": "날짜 선택기·시간/분→총분 환산·필드 오류"
+    },
+    {
+      "id": "U17",
+      "priority": "P2",
+      "status": "미적용 확인",
+      "screens": "S19/M05",
+      "title": "일별 근무 검토 압축·반영 불가 이유",
+      "files": "lib/components/DailyWorkPanel.tsx",
+      "finding": "모든 일별 카드 반복, disabled 조건·이력에 변경자/시각/사유 설명 부족.",
+      "acceptance": "확인 대기 필터·선택 상세·반영 불가 원인·전체 이력 맥락"
+    },
+    {
+      "id": "U18",
+      "priority": "P2",
+      "status": "재확인 필요",
+      "screens": "S22",
+      "title": "정산 누락 직원 바로가기·전체 완료",
+      "files": "app/payroll/settlement.tsx",
+      "finding": "서비스 결과 건수 검사는 이미 추가. 화면의 누락 대상·완료 UX는 별도.",
+      "acceptance": "누락 직원/항목 표시·전체 정산 완료와 새 확정 행동 구분"
+    },
+    {
+      "id": "U19",
+      "priority": "P1",
+      "status": "부분 적용",
+      "screens": "S07/S31",
+      "title": "레시피 두 목록 페이지·오류 일치",
+      "files": "app/(tabs)/stock.tsx;app/recipes/index.tsx",
+      "finding": "독립 목록은 loadMore/error 사용, 재고 탭은 useRecipes 일부 반환값만 사용.",
+      "acceptance": "전체 기준 검색/정렬/개수 또는 로드 자료 명시, 두 목록 비교"
+    },
+    {
+      "id": "U20",
+      "priority": "P1",
+      "status": "미적용 확인",
+      "screens": "S40/S41",
+      "title": "재고 숫자·단위 입력 검증",
+      "files": "app/stock/new.tsx;app/stock/[id].tsx",
+      "finding": "parseFloat 또는 0 경로 유지.",
+      "acceptance": "빈값/0/음수/Infinity/접미사/쉼표 정규화·단위 라벨·범위 검증"
+    },
+    {
+      "id": "U21",
+      "priority": "P1",
+      "status": "재확인 필요",
+      "screens": "S32",
+      "title": "레시피 재료별 양수·유한수 검증",
+      "files": "app/recipes/new.tsx",
+      "finding": "기존 감사의 행별 수량 검증 지적은 별도 재현 필요.",
+      "acceptance": "행별 오류·포커스·저장 수량과 원가 미리보기 일치"
+    },
+    {
+      "id": "U22",
+      "priority": "P2",
+      "status": "결정 필요",
+      "screens": "S28/S29",
+      "title": "0원 단가 신규·수정 규칙 통일",
+      "files": "app/purchases/[id].tsx;app/purchases/new.tsx",
+      "finding": "상세는 0 거부, 신규/서버 허용. 추천은 무상 품목 0 허용 일치.",
+      "acceptance": "정책 확정 후 신규→수량 수정→0원 유지 저장"
+    },
+    {
+      "id": "U23",
+      "priority": "P1",
+      "status": "미적용 확인",
+      "screens": "S28/S40",
+      "title": "매입·재고 상세 조회 재시도",
+      "files": "app/purchases/[id].tsx;app/stock/[id].tsx",
+      "finding": "매입 오류 텍스트만, 재고 ErrorMessage onRetry 없음.",
+      "acceptance": "같은 경로에서 재시도·뒤로 유지·성공 후 오류 해제"
+    },
+    {
+      "id": "U24",
+      "priority": "P2",
+      "status": "재확인 필요",
+      "screens": "S12/S28",
+      "title": "저장 중 취소·닫기 계약",
+      "files": "lib/components/ExpensesPanel.tsx;app/purchases/[id].tsx",
+      "finding": "기존 감사 지적. 실제 요청 중 닫기 재현 미실행.",
+      "acceptance": "요청 중 닫기 차단 또는 처리 결과 추적·취소 오인 방지"
+    },
+    {
+      "id": "U25",
+      "priority": "P2",
+      "status": "재확인 필요",
+      "screens": "S12",
+      "title": "등록 비용·이월 고정비·손익 반영액 구분",
+      "files": "lib/components/ExpensesPanel.tsx",
+      "finding": "기존 감사의 서로 다른 합계 기준 안내 보완 제안.",
+      "acceptance": "직접 등록 + 이월 적용 = 손익 반영 관계 표시"
+    },
+    {
+      "id": "U26",
+      "priority": "P2",
+      "status": "미적용 확인",
+      "screens": "S20",
+      "title": "알림에서 대상 업무로 이동",
+      "files": "app/notifications/index.tsx",
+      "finding": "members 카테고리만 이동.",
+      "acceptance": "대상 매장·날짜·권한을 보존한 목적지, 읽음과 해결 구분"
+    },
+    {
+      "id": "U27",
+      "priority": "P2",
+      "status": "미적용 확인",
+      "screens": "S04",
+      "title": "읽음 실패와 업무 진입 분리",
+      "files": "lib/components/HomeAlertsPanel.tsx",
+      "finding": "markRead 성공/현재 scope 확인 후에만 이동. 읽음 체크 아이콘 유지.",
+      "acceptance": "읽기 저장 실패에도 안전한 현재 매장 업무 진입·읽음 의미 안내"
+    },
+    {
+      "id": "U28",
+      "priority": "P2",
+      "status": "부분 적용",
+      "screens": "S10",
+      "title": "청소 순서 저장 실패 복원·행 저장 보호",
+      "files": "app/cleaning/edit.tsx",
+      "finding": "기존 조회 동기화 hotfix와 reordering 표시는 있음. handleDragEnd catch는 경고뿐.",
+      "acceptance": "실패 시 이전 순서 복원/미저장 안내·입력 유지·동시 드래그 잠금"
+    },
+    {
+      "id": "U29",
+      "priority": "P2",
+      "status": "부분 적용",
+      "screens": "S37",
+      "title": "POS 연결 장기 대기 복구",
+      "files": "app/settings/pos-sync.tsx",
+      "finding": "초기 조회 실패 재확인 있음. 대기 중 마지막 확인·명시적 수동 재확인/문의는 부족.",
+      "acceptance": "상태별 수동 재확인·마지막 시각·지원 경로"
+    },
+    {
+      "id": "U30",
+      "priority": "P2",
+      "status": "미적용 확인",
+      "screens": "S13/S14",
+      "title": "약관·개인정보 문의와 보존 안내 일치",
+      "files": "app/legal/terms.tsx;app/legal/privacy.tsx",
+      "finding": "개인정보는 실제 이메일, 약관은 일반 표현. 보존 설명 차이 유지.",
+      "acceptance": "지원 이메일 행동·계정 삭제와 매장 공용자료 보존 문구 통일; 법률 검토 별도"
+    },
+    {
+      "id": "U31",
+      "priority": "P2",
+      "status": "미적용 확인",
+      "screens": "S27",
+      "title": "수수료 추정·이월·원천징수 산정 근거",
+      "files": "app/profit-loss/index.tsx;lib/services/profitLoss.ts",
+      "finding": "카드 수수료와 원천징수 하위 항목 설명 보완 필요.",
+      "acceptance": "추정 기준·이월 출처·원천징수는 세전 인건비 내 참고항목 명시"
+    },
+    {
+      "id": "U32",
+      "priority": "P2",
+      "status": "미적용 확인",
+      "screens": "S04/S27",
+      "title": "홈 선택 월로 손익계산서 이동",
+      "files": "app/(tabs)/index.tsx",
+      "finding": "손익 정산 라벨과 파라미터 없는 /profit-loss 이동 유지.",
+      "acceptance": "손익계산서 보기 명칭·yearMonth 전달·이전 연도 월 유지"
+    },
+    {
+      "id": "U33",
+      "priority": "P2",
+      "status": "결정 필요",
+      "screens": "S09/S27",
+      "title": "관리자 연간/월간 손익 진입 계약",
+      "files": "app/admin/index.tsx;app/profit-loss/index.tsx",
+      "finding": "관리자는 period 전달, 상세는 yearMonth만 읽음.",
+      "acceptance": "연간 진입 시 연간 화면/월 선택 등 의도 확정·매장명과 기간 일치"
+    },
+    {
+      "id": "U34",
+      "priority": "P2",
+      "status": "재확인 필요",
+      "screens": "M07",
+      "title": "분류·가져오기 요청 대상·선택 고정",
+      "files": "lib/components/CatalogImportModal.tsx;lib/components/BulkCategoryModal.tsx",
+      "finding": "기존 감사 지적. 현재 부모 처리 포함 실제 취소/부분 실패 검증 필요.",
+      "acceptance": "저장중 선택 고정·닫기 계약·대상 매장/개수/부분 실패 표시"
+    }
+  ],
+  "visual_proposals": [
+    {
+      "id": "V01",
+      "status": "제안/검증 필요"
+    },
+    {
+      "id": "V02",
+      "status": "제안/검증 필요"
+    },
+    {
+      "id": "V03",
+      "status": "제안/검증 필요"
+    },
+    {
+      "id": "V04",
+      "status": "제안/검증 필요"
+    },
+    {
+      "id": "V05",
+      "status": "제안/검증 필요"
+    },
+    {
+      "id": "V06",
+      "status": "제안/검증 필요"
+    },
+    {
+      "id": "V07",
+      "status": "제안/검증 필요"
+    }
+  ],
+  "verification": {
+    "at": "2026-11-01T23:39:05+09:00",
+    "typecheck": "passed",
+    "full_jest": {
+      "suites": 101,
+      "tests": 616,
+      "status": "passed"
+    },
+    "after_test_stabilization": {
+      "suites": 4,
+      "tests": 28,
+      "status": "passed"
+    },
+    "manifest_routes": 42,
+    "diff_check": "passed",
+    "independent_review": "approved_no_open_findings",
+    "remote": false,
+    "device": false,
+    "committed": false
+  },
+  "additional_items": [
+    {
+      "id": "DB-01/05",
+      "status": "기존 로컬 수정 존재",
+      "acceptance": "`20261101011000_part_time_catalog_write_guards.sql`, 권한 훅·UI·테스트 이미 추가. PT 레시피 조회/재고 수량만 변경 계약. 현재 원격 적용은 이번 세션 미조회이므로 미적용 확정 금지. 실제 정규직/PT/타매장/대기 JWT·전체 정책 누적 검사 남음"
+    },
+    {
+      "id": "DB-02",
+      "status": "U22와 중복",
+      "acceptance": "0원 단가 정책·클라이언트/서버 일치로 묶음"
+    },
+    {
+      "id": "DB-03",
+      "status": "기존 로컬 수정 존재",
+      "acceptance": "settlePayrolls가 반환 ID set과 기대 ID를 비교. 관련 payrollSettlementResult 테스트 존재. 실제 권한 회수/삭제/혼합 ID E2E는 별도"
+    },
+    {
+      "id": "DB-04",
+      "status": "제품 제외·점검 필요",
+      "acceptance": "발주 화면을 새로 만들지 않음. 레거시 deliver_order RPC 노출·멱등성은 서버 보안 점검 후보"
+    },
+    {
+      "id": "DB-06",
+      "status": "검증 필요",
+      "acceptance": "financial RPC 후속 재정의·migration 순서의 권한 가드 유지. 전체 체인 격리 검사와 실제 JWT 거절 검증"
+    },
+    {
+      "id": "DB-07",
+      "status": "기존 로컬 수정 존재",
+      "acceptance": "`20261101010000_revoke_client_truncate.sql`이 잔여 TRUNCATE ACL 회수 준비. 실제 원격 적용/ACL은 새 조회 전 불명. 삭제 명령으로 검증하지 않음"
+    },
+    {
+      "id": "DB-08",
+      "status": "서버 대조 기록 있음",
+      "acceptance": "11/1 문서에 급여·일별 함수 11/11 본문 일치. 당시 '미적용' 메모리는 과거 사실. migration 이력 부재와 객체 부재를 혼동하지 않음. 과거 보정 DML/실제 업무 검증은 남음"
+    },
+    {
+      "id": "AUTH-01",
+      "status": "설계·제품 결정 필요",
+      "acceptance": "동일 이메일 소셜 계정을 명시 연결 전 분리하려던 과거 요청. 현 문서는 Provider 정책에 따름. 최신 요구 확인 후 계정 이동·급여 연결 보존을 포함한 설계, 자동 계정 분리/새 자격증명 생성 금지"
+    },
+    {
+      "id": "AUTH-02",
+      "status": "검증 필요",
+      "acceptance": "Apple/카카오 로그인·탈퇴·연결 해제, 세션 만료·권한 변경·실제 소유권. Google 탈퇴 성공 기록으로 다른 Provider 통과 추정 금지"
+    },
+    {
+      "id": "JOIN-01",
+      "status": "결정 이력 대조 필요",
+      "acceptance": "현재 16자리 참여코드와 과거 사업자번호 기반 신청 차이. 최신 결정/최초 설정 무번호 정책과 대조 후 요구 확정. 기존 흐름 무단 회귀 금지"
+    },
+    {
+      "id": "POS-01",
+      "status": "후순위·미완성",
+      "acceptance": "서비스코드만으로 사업자번호 없는 신규 매장을 안전하게 자동 연결하는 절차. 현재 안내형 연결을 성공으로 부르지 않음"
+    },
+    {
+      "id": "RELEASE-01",
+      "status": "검증 필요",
+      "acceptance": "최종 소스 해시/빌드/런타임/채널/스토어 승인·OTA 수신/오프라인 재실행·복구 연결. 과거 발행 완료 기록은 유지"
+    },
+    {
+      "id": "RELEASE-02",
+      "status": "과거 경고·재확인",
+      "acceptance": "iOS framework dSYM 누락 경고와 crash symbolication 가능 범위를 최종 배포 산출물에서 확인"
+    },
+    {
+      "id": "BUILD-01",
+      "status": "재현 필요",
+      "acceptance": "Android 클린 의존성 설치 후 Gradle/Foojay 지속 설정 확인. 과거 오류 때문에 현재 빌드 실패로 단정하지 않음"
+    }
+  ],
+  "verified_source_sha256": {
+    "app/mypage/payslip.tsx": "4839d2552c704b2540d7e17a2860766e9ccaccd71c2fe9e80b9ce8d2c22ae89d",
+    "lib/hooks/useNotificationSettings.ts": "33cfab2b38580d8a0eb8d03e89d5de124757cd481979f7d86dff57851005583c",
+    "app/notifications/settings.tsx": "c8e75cbc4290f698e192aaa174ada83120d3c32a0e41fa989baa9b75b8b63dc9",
+    "app/settings/store.tsx": "3addb6d43def19917f3494e13c995f6cb1a162f442f3b1a82f0ec77aeb620d0f",
+    "app/settings/sales.tsx": "2f2210729466a4e60d990a318372309104d4585f9b083796b529d6c1d3420fe1"
+  },
+  "workspace_baseline_verification": {
+    "at": "2026-11-02T00:13:38.332609+09:00",
+    "typecheck": "passed",
+    "jest": {
+      "suites": 107,
+      "tests": 663,
+      "status": "passed"
+    },
+    "sql": "local PGlite passed",
+    "manifest_routes": 42,
+    "independent_review": "HIGH fixed; no open blockers in reviewed scope",
+    "remote": false,
+    "device": false,
+    "note": "Historical verification above is preserved. New baseline commit SHA is in workspaces/creation-record.json after creation."
+  }
+}

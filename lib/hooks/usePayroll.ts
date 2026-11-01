@@ -1,5 +1,5 @@
 import { getErrorMessage, UserFacingError } from '../utils/error';
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import {
   getPayrollByMonth,
@@ -17,19 +17,32 @@ import { buildRegularWageSnapshot, regularSnapshotGross, regularSnapshotNonTaxab
 import { probationFactor } from '../services/payroll';
 
 export function usePayroll(yearMonth: string) {
-  const { store } = useAuth();
+  const { store, user, currentRole } = useAuth();
   const [payrolls, setPayrolls] = useState<Payroll[]>([]);
   const [loading, setLoading] = useState(false);
   const [calculating, setCalculating] = useState<string | null>(null); // employeeId
   const [savingDeductions, setSavingDeductions] = useState<string | null>(null); // employeeId
   const [error, setError] = useState<string | null>(null);
   const requestId = useRef(0);
-  useEffect(() => () => { requestId.current += 1; }, [store?.id, yearMonth]);
+  const scope = useMemo(() => ({}), [user?.id, currentRole, store?.id, yearMonth]);
+  const currentScope = useRef(scope);
+  currentScope.current = scope;
+  const deductionSave = useRef<object | null>(null);
+  const readScope = useRef(scope);
+  useEffect(() => {
+    setSavingDeductions(null);
+    return () => { requestId.current += 1; };
+  }, [scope]);
 
   const refetch = useCallback(async () => {
+    if (currentScope.current !== scope || deductionSave.current === scope) return;
     const id = ++requestId.current;
-    setPayrolls([]);
-    if (!store) { setLoading(false); return; }
+    // Keep the full same-scope snapshot while a read overlaps a deduction save.
+    if (readScope.current !== scope) {
+      readScope.current = scope;
+      setPayrolls([]);
+    }
+    if (!store) { setPayrolls([]); setLoading(false); return; }
     setLoading(true);
     setError(null);
     try {
@@ -40,7 +53,7 @@ export function usePayroll(yearMonth: string) {
     } finally {
       if (id === requestId.current) setLoading(false);
     }
-  }, [store, yearMonth]);
+  }, [store, yearMonth, scope]);
 
   const calculate = useCallback(async (employee: Employee) => {
     if (!store) throw new UserFacingError('매장 정보가 없습니다');
@@ -81,15 +94,25 @@ export function usePayroll(yearMonth: string) {
   }, [store, yearMonth]);
 
   const saveDeductions = useCallback(async (payroll: Payroll, deductions: PayrollDeductions) => {
+    if (!store || payroll.store_id !== store.id || payroll.year_month !== yearMonth || currentScope.current !== scope) {
+      throw new UserFacingError('선택한 매장과 월의 급여를 다시 확인해주세요.');
+    }
+    if (deductionSave.current === scope) throw new UserFacingError('공제 저장이 진행 중이에요.');
+    deductionSave.current = scope;
     setSavingDeductions(payroll.employee_id);
     try {
       const saved = await updatePayrollDeductions(payroll, deductions);
-      setPayrolls(prev => prev.map(row => row.id === saved.id ? saved : row));
+      if (currentScope.current === scope) {
+        requestId.current += 1; // A pre-save read must not overwrite the committed result.
+        setLoading(false);
+        setPayrolls(prev => [...prev.filter(row => row.id !== saved.id), saved]);
+      }
       return saved;
     } finally {
-      setSavingDeductions(null);
+      if (deductionSave.current === scope) deductionSave.current = null;
+      if (currentScope.current === scope) setSavingDeductions(null);
     }
-  }, []);
+  }, [store?.id, yearMonth, scope]);
 
   const totalLaborCost = payrolls.reduce((sum, p) => sum + p.gross, 0);
   const totalNetPay = payrolls.reduce((sum, p) => sum + p.net_pay, 0);

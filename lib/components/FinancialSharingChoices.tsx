@@ -1,6 +1,6 @@
 /* Hallmark · genre: modern-minimal · macrostructure: Workbench · design-system: DESIGN.md · designed-as-app */
 import { View, Text, Pressable, StyleSheet } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { AppIcon } from '../icons/AppIcon';
 import { Colors } from '../../constants/colors';
 import type { FinancialShareScope } from '../../types';
 import { FINANCIAL_SHARE_OPTIONS } from '../utils/financialSharing';
@@ -13,7 +13,7 @@ export function FinancialSharingChoices({ value, onChange, disabled = false }: {
       accessibilityRole="radio" accessibilityLabel={option.title} accessibilityHint={option.description} accessibilityState={{ checked: value === option.value, disabled }}
       onPress={() => onChange(option.value)} style={({ pressed }) => [styles.card, value === option.value && styles.selected, pressed && { backgroundColor: Colors.focusBg }]}>
       <View style={{ flex: 1, gap: 6 }}><Text style={styles.title}>{option.title}</Text><Text style={styles.description}>{option.description}</Text></View>
-      <Ionicons name={value === option.value ? 'radio-button-on' : 'radio-button-off'} accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" size={22} color={value === option.value ? Colors.action : Colors.gray500} />
+      <AppIcon name={value === option.value ? 'radio-button-on' : 'radio-button-off'} accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" size={22} color={value === option.value ? Colors.action : Colors.gray500} />
     </Pressable>)}
     <Text style={styles.caption}>사장님과 관리자는 항상 확인할 수 있어요. 다른 사람의 급여·공제·계좌와 관리자 상세 손익은 공유하지 않아요.</Text>
   </View>;

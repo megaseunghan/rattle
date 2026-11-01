@@ -1,10 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, Alert,
   ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import { AppIcon } from '../../lib/icons/AppIcon';
 import { router } from 'expo-router';
 import { Colors } from '../../constants/colors';
 import { Spacing } from '../../constants/designTokens';
@@ -18,6 +18,12 @@ export default function StoreInfoScreen() {
   const [name, setName] = useState(store?.name ?? '');
   const [address, setAddress] = useState(store?.address ?? '');
   const [saving, setSaving] = useState(false);
+  const savingLock = useRef(false);
+  const scope = useMemo(() => ({}), [store?.id, user?.id]);
+  const currentScope = useRef<object | null>(scope);
+  currentScope.current = scope;
+  useEffect(() => { currentScope.current = scope; return () => { currentScope.current = null; }; }, [scope]);
+  const [savedNeedsRefresh, setSavedNeedsRefresh] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
@@ -26,18 +32,33 @@ export default function StoreInfoScreen() {
     setAddress(store.address ?? '');
   }, [store?.id]);
 
+  useEffect(() => { setSavedNeedsRefresh(false); }, [scope]);
+
   async function handleSave() {
-    if (!store) return;
+    if (!store || savingLock.current || savedNeedsRefresh) return;
     if (!name.trim()) { Alert.alert('입력 오류', '매장 이름을 입력해주세요.'); return; }
 
+    savingLock.current = true;
     setSaving(true);
     try {
       await updateStoreInfo(store.id, { name: name.trim(), address: address.trim() || null });
-      await refreshStore();
+      if (currentScope.current !== scope) return;
+      setSavedNeedsRefresh(true);
+      try {
+        await refreshStore();
+        if (currentScope.current !== scope) return;
+        setSavedNeedsRefresh(false);
+      } catch {
+        if (currentScope.current !== scope) return;
+        Alert.alert('저장 완료 · 새로고침 필요', '내용은 저장됐어요. 화면을 다시 불러와 확인해주세요.');
+        return;
+      }
       Alert.alert('저장 완료', '매장 정보가 저장되었습니다.');
     } catch (e: unknown) {
+      if (currentScope.current !== scope) return;
       Alert.alert('저장 실패', getErrorMessage(e));
     } finally {
+      savingLock.current = false;
       setSaving(false);
     }
   }
@@ -71,6 +92,15 @@ export default function StoreInfoScreen() {
     );
   }
 
+  async function retryRefresh() {
+    if (savingLock.current) return;
+    savingLock.current = true;
+    setSaving(true);
+    try { await refreshStore(); if (currentScope.current === scope) setSavedNeedsRefresh(false); }
+    catch { if (currentScope.current !== scope) return; Alert.alert('새로고침 실패', '저장된 내용은 유지돼요. 잠시 후 다시 불러와 주세요.'); }
+    finally { savingLock.current = false; setSaving(false); }
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       <AppBar title="매장 정보" onBack={() => router.back()} />
@@ -80,9 +110,10 @@ export default function StoreInfoScreen() {
         keyboardShouldPersistTaps="handled"
       >
         {store?.owner_id === user?.id && currentRole === 'admin' && <TouchableOpacity style={styles.settlementRow} onPress={() => router.push('/settings/financial-sharing')} accessibilityRole="button">
-          <View style={styles.settlementLeft}><Text style={styles.fieldLabel}>손익 공유</Text><Text style={styles.settlementValue}>공유 대상 설정</Text></View><Ionicons name="chevron-forward" size={18} color={Colors.gray400} />
+          <View style={styles.settlementLeft}><Text style={styles.fieldLabel}>손익 공유</Text><Text style={styles.settlementValue}>공유 대상 설정</Text></View><AppIcon name="chevron-forward" size={18} color={Colors.gray400} />
         </TouchableOpacity>}
-        <Field label="매장명" value={name} onChangeText={setName} placeholder="매장 이름" />
+        {savedNeedsRefresh && <Button label="저장된 정보 다시 불러오기" variant="secondary" onPress={() => void retryRefresh()} loading={saving} />}
+        <Field editable={!saving && !savedNeedsRefresh} label="매장명" value={name} onChangeText={setName} placeholder="매장 이름" />
 
         <TouchableOpacity style={styles.settlementRow} onPress={() => router.push('/settings/sales')} activeOpacity={0.7}>
           <View style={styles.settlementLeft}>
@@ -91,13 +122,13 @@ export default function StoreInfoScreen() {
               매일 {(store?.closing_time as string | undefined)?.slice(0, 5) ?? '23:00'}
             </Text>
           </View>
-          <Ionicons name="chevron-forward" size={18} color={Colors.gray400} />
+          <AppIcon name="chevron-forward" size={18} color={Colors.gray400} />
         </TouchableOpacity>
 
-        <Field label="매장 주소" value={address} onChangeText={setAddress} placeholder="도로명 주소 입력" />
+        <Field editable={!saving && !savedNeedsRefresh} label="매장 주소" value={address} onChangeText={setAddress} placeholder="도로명 주소 입력" />
 
         <View style={styles.saveButtonWrap}>
-          <Button label={saving ? '저장 중...' : '저장하기'} variant="primary" onPress={handleSave} loading={saving} disabled={deleting} />
+          <Button label={saving ? '저장 중...' : '저장하기'} variant="primary" onPress={handleSave} loading={saving} disabled={deleting || savedNeedsRefresh} />
         </View>
 
         {store?.owner_id === user?.id && currentRole === 'admin' && (

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { AppIcon } from '../icons/AppIcon';
 import { router } from 'expo-router';
 import { Colors } from '../../constants/colors';
 import { HomeAlert, Store } from '../../types';
@@ -37,7 +37,7 @@ export function HomeAlertsPanel({ active = true, refreshKey = 0, todaySales, sto
       </TouchableOpacity>
       <TouchableOpacity style={styles.dismiss} onPress={() => void read(alert, false)} disabled={saving !== null}
         accessibilityRole="button" accessibilityLabel={`${alert.message} 읽음 처리`}>
-        <Ionicons name="checkmark" size={18} color={Colors.gray500} />
+        <AppIcon name="checkmark" size={18} color={Colors.gray500} />
       </TouchableOpacity>
     </View>)}
   </View>;

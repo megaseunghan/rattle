@@ -1,14 +1,16 @@
 import { GlassBackdrop } from '../../lib/components/GlassBackdrop';
 import { useCallback, useState, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { AppIcon } from '../../lib/icons/AppIcon';
 import { Colors } from '../../constants/colors';
 import { useAuth } from '../../lib/contexts/AuthContext';
 import { resolveSelfEmployee } from '../../lib/utils/resolveSelfEmployee';
 import { useEmployees } from '../../lib/hooks/useEmployees';
 import { useCleaningChecklist } from '../../lib/hooks/useCleaningChecklist';
+import { getErrorMessage } from '../../lib/utils/error';
+import { ErrorMessage } from '../../lib/components/ErrorMessage';
 import { AppBar, EmptyState } from '../../lib/components/ui';
 import { CleaningItem, CleaningSegment } from '../../types';
 
@@ -25,9 +27,9 @@ function formatCheckedTime(iso: string): string {
 }
 
 export default function CleaningScreen() {
-  const { user, devPreviewEmployeeId } = useAuth();
+  const { store, user, devPreviewEmployeeId } = useAuth();
   const { employees, refetch: refetchEmployees } = useEmployees();
-  const { items, logs, loading, checkingId, refetch, toggle } = useCleaningChecklist();
+  const { items, logs, loading, error, itemsReady, checkingId, refetch, toggle } = useCleaningChecklist();
   const params = useLocalSearchParams<{ segment?: string }>();
   const [segment, setSegment] = useState<CleaningSegment>(params.segment === 'close' || params.segment === 'weekday' ? params.segment : 'open');
 
@@ -50,8 +52,8 @@ export default function CleaningScreen() {
         title="청소 체크리스트"
         onBack={() => router.back()}
         rightSlot={(
-          <TouchableOpacity onPress={() => router.push('/cleaning/edit')} hitSlop={8}>
-            <Ionicons name="pencil" size={18} color={Colors.gray600} />
+          <TouchableOpacity onPress={() => router.push('/cleaning/edit')} style={styles.editButton} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel="체크리스트 편집">
+            <AppIcon name="pencil" size={18} color={Colors.gray600} />
           </TouchableOpacity>
         )}
       />
@@ -62,6 +64,7 @@ export default function CleaningScreen() {
             key={s.key}
             style={[styles.segmentTab, segment === s.key && styles.segmentTabActive]}
             onPress={() => setSegment(s.key)}
+            accessibilityRole="tab" accessibilityLabel={s.label} accessibilityState={{ selected: segment === s.key }}
             activeOpacity={0.7}
           >
             <Text style={[styles.segmentText, segment === s.key && styles.segmentTextActive]}>{s.label}</Text>
@@ -70,7 +73,11 @@ export default function CleaningScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        {loading ? (
+        {!store ? (
+          <Text style={styles.rowMeta}>매장을 선택해주세요.</Text>
+        ) : error ? (
+          <ErrorMessage message={error} onRetry={() => { void refetch(); }} />
+        ) : loading || !itemsReady ? (
           <ActivityIndicator color={Colors.primary} style={{ marginTop: 32 }} />
         ) : segmentItems.length === 0 ? (
           <EmptyState
@@ -88,14 +95,16 @@ export default function CleaningScreen() {
                 <TouchableOpacity
                   key={item.id}
                   style={[styles.row, checked ? styles.rowChecked : styles.rowUnchecked]}
-                  onPress={() => toggle(item, myName)}
-                  disabled={busy}
+                  onPress={() => { void toggle(item, myName).catch(e => Alert.alert('체크 결과 확인 필요', getErrorMessage(e), [{ text: '다시 불러오기', onPress: () => { void refetch(); } }])); }}
+                  disabled={checkingId !== null}
+                  accessibilityRole="checkbox" accessibilityLabel={item.title}
+                  accessibilityState={{ checked, disabled: checkingId !== null, busy }}
                   activeOpacity={0.7}
                 >
                   <View style={[styles.checkbox, checked && styles.checkboxChecked]}>
                     {busy
                       ? <ActivityIndicator size="small" color={checked ? Colors.white : Colors.primary} />
-                      : checked && <Ionicons name="checkmark" size={15} color={Colors.white} />
+                      : checked && <AppIcon name="checkmark" size={15} color={Colors.white} />
                     }
                   </View>
                   <View style={styles.rowTextWrap}>
@@ -119,6 +128,7 @@ export default function CleaningScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.homeCanvas },
+  editButton: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
   segmentRow: {
     flexDirection: 'row', gap: 4, backgroundColor: Colors.gray100,
     borderRadius: 12, padding: 3, marginHorizontal: 20, marginTop: 14,
@@ -143,5 +153,5 @@ const styles = StyleSheet.create({
   checkboxChecked: { backgroundColor: Colors.primary, borderColor: Colors.primary },
   rowTextWrap: { flex: 1, gap: 2 },
   rowTitle: { fontSize: 14, fontWeight: '600', color: Colors.black },
-  rowMeta: { fontSize: 11, fontWeight: '400', color: Colors.gray400 },
+  rowMeta: { fontVariant: ['tabular-nums'], fontSize: 11, fontWeight: '400', color: Colors.gray400 },
 });

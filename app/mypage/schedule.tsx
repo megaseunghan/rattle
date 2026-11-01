@@ -1,3 +1,4 @@
+import { NumericText } from '../../lib/components/ui/NumericText';
 import { getErrorMessage } from '../../lib/utils/error';
 import { useEffect, useState } from 'react';
 import {
@@ -5,7 +6,7 @@ import {
   Platform, Alert, ActivityIndicator, Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import { AppIcon } from '../../lib/icons/AppIcon';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { router } from 'expo-router';
 import { Colors } from '../../constants/colors';
@@ -67,14 +68,14 @@ function DayEditModal({
           <Text style={styles.modalTitle}>{WEEKDAYS[day.day_of_week]}요일 근무시간</Text>
 
           <View style={styles.modalTimeRow}>
-            <TouchableOpacity style={styles.modalTimeBtn} onPress={() => setPickerField('start')} activeOpacity={0.7}>
+            <TouchableOpacity style={styles.modalTimeBtn} onPress={() => setPickerField('start')} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel={`출근 시간 ${fmtHHmm(toHHmmss(startTime))} 수정`}>
               <Text style={styles.modalTimeLabel}>출근</Text>
-              <Text style={styles.modalTimeValue}>{fmtHHmm(toHHmmss(startTime))}</Text>
+              <NumericText style={styles.modalTimeValue}>{fmtHHmm(toHHmmss(startTime))}</NumericText>
             </TouchableOpacity>
             <Text style={styles.modalTimeSep}>~</Text>
-            <TouchableOpacity style={styles.modalTimeBtn} onPress={() => setPickerField('end')} activeOpacity={0.7}>
+            <TouchableOpacity style={styles.modalTimeBtn} onPress={() => setPickerField('end')} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel={`퇴근 시간 ${fmtHHmm(toHHmmss(endTime))} 수정`}>
               <Text style={styles.modalTimeLabel}>퇴근</Text>
-              <Text style={styles.modalTimeValue}>{fmtHHmm(toHHmmss(endTime))}</Text>
+              <NumericText style={styles.modalTimeValue}>{fmtHHmm(toHHmmss(endTime))}</NumericText>
             </TouchableOpacity>
           </View>
 
@@ -99,6 +100,7 @@ function DayEditModal({
                 key={i}
                 style={[styles.bulkChip, bulkDays.has(i) && styles.bulkChipActive]}
                 onPress={() => toggleBulkDay(i)}
+                accessibilityRole="checkbox" accessibilityLabel={`${label}요일에도 적용`} accessibilityState={{ checked: bulkDays.has(i) }}
                 activeOpacity={0.7}
               >
                 <Text style={[styles.bulkChipText, bulkDays.has(i) && styles.bulkChipTextActive]}>{label}</Text>
@@ -107,11 +109,12 @@ function DayEditModal({
           </View>
 
           <View style={styles.modalBtnRow}>
-            <TouchableOpacity style={styles.modalCancelBtn} onPress={onClose} activeOpacity={0.7}>
+            <TouchableOpacity style={styles.modalCancelBtn} onPress={onClose} accessibilityRole="button" accessibilityLabel="근무시간 수정 취소" activeOpacity={0.7}>
               <Text style={styles.modalCancelText}>취소</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.modalApplyBtn}
+              accessibilityRole="button" accessibilityLabel="선택한 요일에 근무시간 적용"
               onPress={() => onApply(toHHmmss(startTime), toHHmmss(endTime), Array.from(bulkDays))}
               activeOpacity={0.7}
             >
@@ -194,13 +197,13 @@ export default function ScheduleSettingsScreen() {
           <>
             {isPreviewing && (
               <View style={styles.pendingBanner}>
-                <Ionicons name="eye-outline" size={16} color={Colors.warningStroke} />
+                <AppIcon name="eye-outline" size={16} color={Colors.warningStroke} />
                 <Text style={styles.pendingBannerText}>{myEmployee?.name}님 화면 미리보기 중이에요. 실제 제출은 본인 계정으로 로그인해야 반영돼요.</Text>
               </View>
             )}
             {pendingRequest && (
               <View style={styles.pendingBanner}>
-                <Ionicons name="time-outline" size={16} color={Colors.warningStroke} />
+                <AppIcon name="time-outline" size={16} color={Colors.warningStroke} />
                 <Text style={styles.pendingBannerText}>이전에 제출한 변경 요청이 사장님 승인을 기다리고 있어요</Text>
               </View>
             )}
@@ -209,14 +212,16 @@ export default function ScheduleSettingsScreen() {
               <View key={d.day_of_week} style={[styles.dayRow, d.is_working ? styles.dayRowActive : styles.dayRowInactive]}>
                 <Text style={styles.dayLabel}>{WEEKDAYS[d.day_of_week]}</Text>
                 {d.is_working ? (
-                  <TouchableOpacity style={styles.timeGroup} onPress={() => setEditingDay(d.day_of_week)} activeOpacity={0.7}>
+                  <TouchableOpacity style={styles.timeGroup} accessibilityRole="button" accessibilityLabel={`${WEEKDAYS[d.day_of_week]}요일 근무시간 ${fmtHHmm(d.start_time)}부터 ${fmtHHmm(d.end_time)}까지 수정`} onPress={() => setEditingDay(d.day_of_week)} activeOpacity={0.7}>
                     <Text style={styles.timeText}>{fmtHHmm(d.start_time)} ~ {fmtHHmm(d.end_time)}</Text>
-                    <Ionicons name="pencil" size={13} color={Colors.gray400} style={{ marginLeft: 4 }} />
+                    <AppIcon name="pencil" size={13} color={Colors.gray400} style={{ marginLeft: 4 }} />
                   </TouchableOpacity>
                 ) : (
                   <Text style={styles.offText}>휴무</Text>
                 )}
                 <Switch
+                  hitSlop={{ top: 7, bottom: 7 }}
+                  accessibilityLabel={`${WEEKDAYS[d.day_of_week]}요일 근무 여부`}
                   value={d.is_working}
                   onValueChange={() => toggleDay(d.day_of_week)}
                   trackColor={{ false: Colors.gray200, true: Colors.primary }}
@@ -226,7 +231,7 @@ export default function ScheduleSettingsScreen() {
             ))}
 
             <View style={styles.infoBox}>
-              <Ionicons name="information-circle-outline" size={16} color={Colors.gray500} />
+              <AppIcon name="information-circle-outline" size={16} color={Colors.gray500} />
               <Text style={styles.infoText}>변경한 스케줄은 사장님 승인 후 확정돼요</Text>
             </View>
 
@@ -266,8 +271,8 @@ const styles = StyleSheet.create({
   dayRowActive: { borderWidth: 1, borderColor: Colors.primary, backgroundColor: Colors.tinted },
   dayRowInactive: { borderWidth: 1, borderColor: Colors.homeBorder, backgroundColor: Colors.white },
   dayLabel: { width: 24, fontSize: 14, fontWeight: '700', color: Colors.black },
-  timeGroup: { flex: 1, flexDirection: 'row', alignItems: 'center' },
-  timeText: { fontSize: 14, fontWeight: '600', color: Colors.black },
+  timeGroup: { flex: 1, minHeight: 44, flexDirection: 'row', alignItems: 'center' },
+  timeText: { fontVariant: ['tabular-nums'], flexShrink: 1, fontSize: 14, fontWeight: '600', color: Colors.black },
   offText: { flex: 1, fontSize: 14, fontWeight: '500', color: Colors.gray400 },
 
   infoBox: {
@@ -293,7 +298,7 @@ const styles = StyleSheet.create({
 
   modalSectionLabel: { fontSize: 12, fontWeight: '700', color: Colors.gray600, marginTop: 4 },
   bulkChipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  bulkChip: { minHeight: 44, justifyContent: 'center', paddingVertical: 7, paddingHorizontal: 12, borderRadius: 16, borderWidth: 1, borderColor: Colors.gray200 },
+  bulkChip: { minWidth: 44, minHeight: 44, justifyContent: 'center', paddingVertical: 7, paddingHorizontal: 12, borderRadius: 16, borderWidth: 1, borderColor: Colors.gray200 },
   bulkChipActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
   bulkChipText: { fontSize: 12, fontWeight: '600', color: Colors.gray600 },
   bulkChipTextActive: { color: Colors.white },

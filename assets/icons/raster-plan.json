@@ -1,0 +1,204 @@
+{
+  "version": 1,
+  "created": "2026-10-30",
+  "scope": "24 raster assets, app integration excluded",
+  "styleReference": {
+    "file": "reference/style-options-2-and-3.png",
+    "selectedPanel": "lower panel labelled 안 3",
+    "sharedUrl": "https://chatgpt.com/s/m_6ae46bcb43308191bdb70630da99c728"
+  },
+  "assets": [
+    {
+      "id": "open-prep",
+      "label": "오픈 준비",
+      "category": "business",
+      "file": "business/open-prep.png",
+      "subject": "A rounded clipboard with a few blue check marks and one small muted warm sun peeking beside it.",
+      "status": "generated-and-alpha-cleaned"
+    },
+    {
+      "id": "business-hours",
+      "label": "영업 중",
+      "category": "business",
+      "file": "business/business-hours.png",
+      "subject": "A simple open neighborhood storefront with a blue awning, no sign or lettering.",
+      "status": "generated-and-alpha-cleaned"
+    },
+    {
+      "id": "closing",
+      "label": "마감 정리",
+      "category": "business",
+      "file": "business/closing.png",
+      "subject": "A neatly completed checklist clipboard with blue check marks and one small muted crescent moon beside it.",
+      "status": "generated-and-alpha-cleaned"
+    },
+    {
+      "id": "inventory",
+      "label": "재고",
+      "category": "business",
+      "file": "business/inventory.png",
+      "subject": "A warm tan open storage box containing a white jar with a blue lid, one cream package with blue tape and one simple white carton.",
+      "status": "generated-and-alpha-cleaned"
+    },
+    {
+      "id": "purchase",
+      "label": "매입",
+      "category": "business",
+      "file": "business/purchase.png",
+      "subject": "A rounded shopping basket with a blue handle containing two simple grocery packages.",
+      "status": "generated-and-alpha-cleaned"
+    },
+    {
+      "id": "recipe",
+      "label": "레시피",
+      "category": "business",
+      "file": "business/recipe.png",
+      "subject": "An open white recipe book with a blue cover and simple non-text ingredient marks on the pages.",
+      "status": "generated-and-alpha-cleaned"
+    },
+    {
+      "id": "sales",
+      "label": "매출",
+      "category": "business",
+      "file": "business/sales.png",
+      "subject": "A compact white sales display panel with three rounded blue vertical bars of different heights, no axes or numbers.",
+      "status": "generated-and-alpha-cleaned"
+    },
+    {
+      "id": "expense",
+      "label": "비용",
+      "category": "business",
+      "file": "business/expense.png",
+      "subject": "A single white expense receipt with a folded corner, blue rules instead of text, no numbers or currency symbols.",
+      "status": "generated-and-alpha-cleaned"
+    },
+    {
+      "id": "staff",
+      "label": "직원 관리",
+      "category": "business",
+      "file": "business/staff.png",
+      "subject": "Two overlapping white staff identity cards, each showing one simple anonymous blue person silhouette, no personal details.",
+      "status": "generated-and-alpha-cleaned"
+    },
+    {
+      "id": "payroll",
+      "label": "급여",
+      "category": "business",
+      "file": "business/payroll.png",
+      "subject": "A white payroll statement with abstract blue rules partly emerging from a rounded white payment envelope with a blue flap.",
+      "status": "generated-and-alpha-cleaned"
+    },
+    {
+      "id": "schedule",
+      "label": "스케줄",
+      "category": "business",
+      "file": "business/schedule.png",
+      "subject": "A compact white desk calendar with blue binding and a clean abstract date grid without numbers or letters.",
+      "status": "generated-and-alpha-cleaned"
+    },
+    {
+      "id": "profit-loss",
+      "label": "손익",
+      "category": "business",
+      "file": "business/profit-loss.png",
+      "subject": "An open white financial ledger with a blue spine and two clear columns of abstract marks representing income and expenses, no text, digits, currency or rising arrow.",
+      "status": "generated-and-alpha-cleaned"
+    },
+    {
+      "id": "checklist",
+      "label": "체크리스트",
+      "category": "business",
+      "file": "business/checklist.png",
+      "subject": "A single rounded white clipboard with three clear blue tick boxes and abstract rules, no extra object.",
+      "status": "generated-and-alpha-cleaned"
+    },
+    {
+      "id": "work-time",
+      "label": "근무시간 입력",
+      "category": "business",
+      "file": "business/work-time.png",
+      "subject": "A rounded white work record sheet with blue abstract rules and one small blue-and-white clock, no digits, no attendance punch terminal or location pin.",
+      "status": "generated-and-alpha-cleaned"
+    },
+    {
+      "id": "store",
+      "label": "매장 관리",
+      "category": "business",
+      "file": "business/store.png",
+      "subject": "A single tidy small shop facade with a soft blue awning and a simple centered doorway, no sign, no text, use same architectural language as business-hours.",
+      "status": "generated-and-alpha-cleaned"
+    },
+    {
+      "id": "pos-connect",
+      "label": "POS 연결",
+      "category": "business",
+      "file": "business/pos-connect.png",
+      "subject": "A rounded white POS touchscreen terminal with an abstract blue screen and one small blue chain link beside it, no logo, no letters or digits.",
+      "status": "generated-and-alpha-cleaned"
+    },
+    {
+      "id": "empty-data",
+      "label": "등록 자료 없음",
+      "category": "status",
+      "file": "status/empty-data.png",
+      "subject": "A single open white ledger with mostly blank pages and a blue spine; calm neutral empty state, no warning symbol.",
+      "status": "generated-and-alpha-cleaned"
+    },
+    {
+      "id": "empty-search",
+      "label": "검색 결과 없음",
+      "category": "status",
+      "file": "status/empty-search.png",
+      "subject": "A simple blue-and-white magnifying glass over one white list sheet with only a couple of pale abstract rules; no text.",
+      "status": "generated-and-alpha-cleaned"
+    },
+    {
+      "id": "completed",
+      "label": "처리 완료",
+      "category": "status",
+      "file": "status/completed.png",
+      "subject": "A substantial rounded blue check mark in a simple white circular confirmation ring, no confetti, no text, ring is the subject itself not a background badge.",
+      "status": "generated-and-alpha-cleaned"
+    },
+    {
+      "id": "review-pending",
+      "label": "확인 대기",
+      "category": "status",
+      "file": "status/review-pending.png",
+      "subject": "One white document with pale blue abstract rules and a small blue-and-white clock beside it; pending review, no check mark, no digits.",
+      "status": "generated-and-alpha-cleaned"
+    },
+    {
+      "id": "connection-pending",
+      "label": "연결 대기",
+      "category": "status",
+      "file": "status/connection-pending.png",
+      "subject": "A small white POS terminal with a muted blue screen and one disconnected chain link element beside it with a visible gap; no check mark, no wireless status text.",
+      "status": "generated-and-alpha-cleaned"
+    },
+    {
+      "id": "stock-low",
+      "label": "재고 부족",
+      "category": "status",
+      "file": "status/stock-low.png",
+      "subject": "An open white storage box containing just one small muted blue supply package, visibly sparse but tidy, no arrows or lettering.",
+      "status": "generated-and-alpha-cleaned"
+    },
+    {
+      "id": "load-error",
+      "label": "불러오기 실패",
+      "category": "status",
+      "file": "status/load-error.png",
+      "subject": "One white document with a small muted amber warning triangle beside it, clean exclamation stroke without any word, no red alarm effects.",
+      "status": "generated-and-alpha-cleaned"
+    },
+    {
+      "id": "access-denied",
+      "label": "접근 제한",
+      "category": "status",
+      "file": "status/access-denied.png",
+      "subject": "One white document with a small closed blue-and-white padlock in front, no letters or numbers, calm permission state.",
+      "status": "generated-and-alpha-cleaned"
+    }
+  ]
+}

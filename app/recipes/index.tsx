@@ -2,10 +2,10 @@ import { entityKey } from '../../lib/utils/listKeys';
 import { GlassBackdrop } from '../../lib/components/GlassBackdrop';
 import { SheetModal } from '../../lib/components/ui/SheetModal';
 import { getErrorMessage } from '../../lib/utils/error';
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, FlatList, Alert, ScrollView, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import { AppIcon } from '../../lib/icons/AppIcon';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { Colors } from '../../constants/colors';
 import { useRecipes } from '../../lib/hooks/useRecipes';
@@ -33,7 +33,9 @@ const SORT_OPTIONS: { key: SortKey; label: string }[] = [
 
 export default function RecipesScreen() {
   const { store } = useAuth();
-  const { canManageRecipes } = useStorePermissions();
+  const { canReadRecipes, canManageRecipes } = useStorePermissions();
+  const writeAccess = useRef({ allowed: canManageRecipes, storeId: store?.id });
+  writeAccess.current = { allowed: canManageRecipes, storeId: store?.id };
   const { data, loading, loadingMore, hasMore, loadMore, error, refetch, remove, bulkUpdateCategory } = useRecipes();
   const { syncCatalog } = useTossSync();
   const { sort: sortParam } = useLocalSearchParams<{ sort?: string }>();
@@ -62,6 +64,7 @@ export default function RecipesScreen() {
   }, [sortParam, store]));
 
   async function handleSyncCatalog() {
+    if (!canManageRecipes) return;
     setSyncingCatalog(true);
     try {
       const items = await syncCatalog();
@@ -76,7 +79,7 @@ export default function RecipesScreen() {
   }
 
   async function handleCatalogImportConfirm(selectedItems: TossCatalogItem[]) {
-    if (!store) return;
+    if (!store || !canManageRecipes) return;
     try {
       const count = await upsertRecipesFromCatalog(
         store.id,
@@ -95,7 +98,7 @@ export default function RecipesScreen() {
   }
 
   async function handleOpenBulkCat() {
-    if (!store) return;
+    if (!store || !canManageRecipes) return;
     setLoadingBulkCat(true);
     try {
       const items = await getRecipesByCategory(store.id, '미분류');
@@ -113,7 +116,7 @@ export default function RecipesScreen() {
 
   async function handleRenameCategory() {
     const newName = editingCatName.trim();
-    if (!newName || !editingCat || !store) return;
+    if (!canManageRecipes || !newName || !editingCat || !store) return;
     if (newName === editingCat) { setEditingCat(null); return; }
     setCatOpLoading(true);
     try {
@@ -128,7 +131,7 @@ export default function RecipesScreen() {
   }
 
   async function handleDeleteCategory(name: string) {
-    if (!store) return;
+    if (!store || !canManageRecipes) return;
     const count = data.filter(r => r.category === name).length;
     const message = count > 0
       ? `"${name}" 카테고리를 삭제하면 해당 레시피 ${count}개가 '미분류'로 이동됩니다.`
@@ -140,6 +143,7 @@ export default function RecipesScreen() {
         text: '삭제',
         style: 'destructive',
         onPress: async () => {
+          if (!writeAccess.current.allowed || writeAccess.current.storeId !== store.id) return;
           setCatOpLoading(true);
           try {
             await deleteRecipeCategory(store.id, name);
@@ -165,9 +169,10 @@ export default function RecipesScreen() {
   }, [data, activeCategory, sortBy]);
 
   const renderRecipe = useCallback(({ item }: { item: RecipeWithIngredients }) => (
-    <RecipeCard recipe={item} onDelete={remove} isAdmin={canManageRecipes} />
+    <RecipeCard recipe={item} onDelete={id => { if (writeAccess.current.allowed && item.store_id === writeAccess.current.storeId) void remove(id); }} isAdmin={canManageRecipes} />
   ), [remove, canManageRecipes]);
 
+  if (!canReadRecipes) return <ErrorMessage message="매장을 선택한 뒤 레시피를 열어 주세요." />;
   if (loading) return <LoadingSpinner />;
   if (error) return <ErrorMessage message={error} onRetry={refetch} />;
 
@@ -179,19 +184,22 @@ export default function RecipesScreen() {
           {data.length > 0 && <Text style={styles.subtitle}>{data.length}개</Text>}
         </View>
         <View style={styles.headerButtons}>
-          <TouchableOpacity
+          {canManageRecipes && <TouchableOpacity
             style={[styles.syncButton, syncingCatalog && styles.syncButtonDisabled]}
             onPress={handleSyncCatalog}
             disabled={syncingCatalog}
+            accessibilityRole="button"
+            accessibilityLabel="POS 메뉴 동기화"
+            accessibilityState={{ disabled: syncingCatalog, busy: syncingCatalog }}
           >
             {syncingCatalog
               ? <ActivityIndicator size="small" color={Colors.primary} />
-              : <Ionicons name="sync-outline" size={17} color={Colors.primary} />
+              : <AppIcon name="sync-outline" size={17} color={Colors.primary} />
             }
-          </TouchableOpacity>
+          </TouchableOpacity>}
           {canManageRecipes && (
             <TouchableOpacity style={styles.addButton} onPress={() => router.push('/recipes/new')}>
-              <Ionicons name="add" size={16} color={Colors.white} />
+              <AppIcon name="add" size={16} color={Colors.white} />
               <Text style={styles.addText}>새 레시피</Text>
             </TouchableOpacity>
           )}
@@ -199,7 +207,7 @@ export default function RecipesScreen() {
       </View>
 
       <CatalogImportModal
-        visible={showCatalogImport}
+        visible={showCatalogImport && canManageRecipes}
         items={catalogItems}
         onConfirm={handleCatalogImportConfirm}
         onClose={() => setShowCatalogImport(false)}
@@ -207,7 +215,7 @@ export default function RecipesScreen() {
 
       {data.length === 0 ? (
         <EmptyState
-          icon="restaurant-outline"
+          icon="restaurant-outline" illustration="recipe"
           title="등록된 레시피가 없어요"
           description="재료와 판매가를 입력하면 원가와 마진율을 확인할 수 있어요."
           ctaLabel={canManageRecipes ? '레시피 등록' : undefined}
@@ -222,6 +230,8 @@ export default function RecipesScreen() {
                 key={opt.key}
                 style={[styles.sortChip, sortBy === opt.key && styles.sortChipActive]}
                 onPress={() => setSortBy(opt.key)}
+                accessibilityRole="radio"
+                accessibilityState={{ checked: sortBy === opt.key }}
               >
                 <Text style={[styles.sortChipText, sortBy === opt.key && styles.sortChipTextActive]}>
                   {opt.label}
@@ -243,6 +253,8 @@ export default function RecipesScreen() {
                   key={cat}
                   style={[styles.categoryChip, activeCategory === cat && styles.categoryChipActive]}
                   onPress={() => setActiveCategory(cat)}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: activeCategory === cat }}
                 >
                   <Text style={[styles.categoryChipText, activeCategory === cat && styles.categoryChipTextActive]}>
                     {cat}
@@ -250,17 +262,19 @@ export default function RecipesScreen() {
                 </TouchableOpacity>
               ))}
             </ScrollView>
-            {categories.length > 1 && (
+            {canManageRecipes && categories.length > 1 && (
               <TouchableOpacity
                 style={styles.editCatBtn}
                 onPress={() => setShowCategoryModal(true)}
+                accessibilityRole="button"
+                accessibilityLabel="레시피 카테고리 관리"
               >
-                <Ionicons name="settings-outline" size={15} color={Colors.gray500} />
+                <AppIcon name="settings-outline" size={15} color={Colors.gray500} />
               </TouchableOpacity>
             )}
           </View>
 
-          {unclassifiedCount > 0 && (
+          {canManageRecipes && unclassifiedCount > 0 && (
             <TouchableOpacity
               style={styles.unclassifiedBanner}
               onPress={handleOpenBulkCat}
@@ -268,7 +282,7 @@ export default function RecipesScreen() {
               activeOpacity={0.75}
             >
               <View style={styles.unclassifiedLeft}>
-                <Ionicons name="folder-open-outline" size={15} color={Colors.warning} />
+                <AppIcon name="folder-open-outline" size={15} color={Colors.warning} />
                 <Text style={styles.unclassifiedText}>미분류 {unclassifiedCount}개</Text>
               </View>
               {loadingBulkCat
@@ -279,10 +293,11 @@ export default function RecipesScreen() {
           )}
 
           <BulkCategoryModal
-            visible={showBulkCat}
+            visible={showBulkCat && canManageRecipes}
             items={bulkCatItems}
             categories={categories.filter(c => c !== '전체')}
             onConfirm={async (ids, category) => {
+              if (!canManageRecipes) return;
               await bulkUpdateCategory(ids, category);
               setShowBulkCat(false);
             }}
@@ -290,7 +305,7 @@ export default function RecipesScreen() {
           />
 
           {/* 카테고리 편집 모달 */}
-          <SheetModal visible={showCategoryModal} onRequestClose={() => setShowCategoryModal(false)}>
+          <SheetModal visible={showCategoryModal && canManageRecipes} onRequestClose={() => setShowCategoryModal(false)}>
             <TouchableOpacity
               style={styles.modalOverlay}
               activeOpacity={1}
@@ -300,8 +315,8 @@ export default function RecipesScreen() {
                 <View style={styles.modalHandle} />
                 <View style={styles.modalHeader}>
                   <Text style={styles.modalTitle}>카테고리 관리</Text>
-                  <TouchableOpacity onPress={() => setShowCategoryModal(false)} style={styles.modalCloseBtn}>
-                    <Ionicons name="close" size={20} color={Colors.gray500} />
+                  <TouchableOpacity onPress={() => setShowCategoryModal(false)} style={styles.modalCloseBtn} accessibilityRole="button" accessibilityLabel="카테고리 관리 닫기">
+                    <AppIcon name="close" size={20} color={Colors.gray500} />
                   </TouchableOpacity>
                 </View>
 
@@ -334,16 +349,20 @@ export default function RecipesScreen() {
                             <TouchableOpacity
                               style={styles.catActionBtn}
                               onPress={() => { setEditingCat(cat); setEditingCatName(cat); }}
+                              accessibilityRole="button"
+                              accessibilityLabel={`${cat} 카테고리 이름 수정`}
                             >
-                              <Ionicons name="pencil-outline" size={16} color={Colors.gray500} />
+                              <AppIcon name="pencil-outline" size={16} color={Colors.gray500} />
                             </TouchableOpacity>
                           )}
                           <TouchableOpacity
                             style={styles.catActionBtn}
                             onPress={() => handleDeleteCategory(cat)}
                             disabled={catOpLoading}
+                            accessibilityRole="button"
+                            accessibilityLabel={`${cat} 카테고리 삭제`}
                           >
-                            <Ionicons name="trash-outline" size={16} color={Colors.danger} />
+                            <AppIcon name="trash-outline" size={16} color={Colors.danger} />
                           </TouchableOpacity>
                         </View>
                       )}
@@ -386,7 +405,7 @@ const styles = StyleSheet.create({
     paddingTop: 16,
     paddingBottom: 12, backgroundColor: 'transparent' },
   title: { fontSize: 22, fontWeight: '700', color: Colors.black, letterSpacing: -0.5, flexShrink: 1 },
-  subtitle: { fontSize: 13, color: Colors.gray500, marginTop: 2 },
+  subtitle: { fontVariant: ['tabular-nums'], fontSize: 13, color: Colors.gray500, marginTop: 2 },
   headerButtons: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -506,6 +525,7 @@ const styles = StyleSheet.create({
   },
   modalScroll: { paddingHorizontal: 20 },
   catRow: {
+    gap: 8,
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 14,
@@ -554,7 +574,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.warning + '12',
     borderWidth: 1,
     borderColor: Colors.warning + '40', minHeight: 44 },
-  unclassifiedLeft: { flexDirection: 'row', alignItems: 'center', gap: 7 },
-  unclassifiedText: { fontSize: 13, fontWeight: '600', color: Colors.warning },
-  unclassifiedAction: { fontSize: 13, fontWeight: '600', color: Colors.warning },
+  unclassifiedLeft: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 7 },
+  unclassifiedText: { flexShrink: 1, fontVariant: ['tabular-nums'], fontSize: 13, fontWeight: '600', color: Colors.warning },
+  unclassifiedAction: { flexShrink: 1, marginLeft: 8, fontSize: 13, fontWeight: '600', color: Colors.warning },
 });

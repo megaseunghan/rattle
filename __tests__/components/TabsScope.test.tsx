@@ -41,7 +41,11 @@ jest.mock('../../lib/components/DraggableFab', () => ({ DraggableFab: ({ onPress
   const React = require('react'); const { Pressable } = require('react-native');
   return React.createElement(Pressable, { onPress, accessibilityLabel: '빠른 등록 열기', accessibilityRole: 'button' });
 } }));
-jest.mock('../../lib/components/MoreDrawer', () => ({ MoreDrawer: () => null }));
+jest.mock('../../lib/components/MoreDrawer', () => ({ MoreDrawer: ({ visible, onSelectStore, onAllStores, onClose }: any) => {
+  if (!visible) return null;
+  const React = require('react'); const { View, Text, Pressable } = require('react-native');
+  return <View><Text>더보기 열림</Text><Pressable accessibilityLabel="서랍에서 나매장 선택" onPress={() => onSelectStore('b')} /><Pressable accessibilityLabel="서랍에서 전체 매장" onPress={onAllStores} /><Pressable accessibilityLabel="더보기 닫기" onPress={onClose} /></View>;
+} }));
 jest.mock('../../app/(tabs)/index', () => ({ HomeScreen: () => {
   mockPagerContext = require('../../lib/contexts/TabPagerContext').useTabPager();
   return null;
@@ -171,17 +175,35 @@ it('첫 홈은 선택된 매장 업무 흐름이며 전체 매장 범위로 시�
   expect(view.queryByText('이 업무를 진행할 매장을 먼저 선택해 주세요.')).toBeNull();
 });
 
-it('재고 탭에서도 홈과 같은 상단바로 알림·마이페이지·매장 선택을 연다', async () => {
+it('탭을 바꿔도 상단바는 하나이며 매장 전환과 마이페이지는 서랍에서 접근한다', async () => {
+  mockRouteParams = {};
   const view = renderTabs();
-  fireEvent.press(view.getByRole('tab', { name: '재고' }));
-  fireEvent.press(view.getByText('나매장'));
-  await waitFor(() => expect(view.getByRole('tab', { name: '재고' }).props.accessibilityState.selected).toBe(true));
+  for (const name of ['재고', '매입', '인건비', '홈']) {
+    fireEvent.press(view.getByRole('tab', { name }));
+    expect(view.getAllByLabelText('Rattle')).toHaveLength(1);
+    expect(view.getAllByLabelText('더보기')).toHaveLength(1);
+    expect(view.queryByLabelText('매장 전환')).toBeNull();
+    expect(view.queryByLabelText('마이페이지')).toBeNull();
+  }
   fireEvent.press(view.getByLabelText('알림'));
   expect(mockPush).toHaveBeenCalledWith('/notifications');
-  fireEvent.press(view.getByLabelText('마이페이지'));
-  expect(mockPush).toHaveBeenCalledWith('/mypage');
-  fireEvent.press(view.getByLabelText('매장 전환'));
-  expect(view.getByLabelText('매장 선택 닫기')).toBeTruthy();
+  fireEvent.press(view.getByLabelText('더보기'));
+  expect(view.getByText('더보기 열림')).toBeTruthy();
+  fireEvent.press(view.getByLabelText('서랍에서 나매장 선택'));
+  await waitFor(() => expect(mockSwitchStore).toHaveBeenCalledWith('b'));
+});
+
+it('더보기의 전체 매장 선택으로 대시보드를 열고 같은 매장으로 돌아올 수 있다', async () => {
+  mockRouteParams = {};
+  const view = renderTabs();
+  fireEvent.press(view.getByLabelText('더보기'));
+  fireEvent.press(view.getByLabelText('서랍에서 전체 매장'));
+  expect(view.getByTestId('pager').props.scrollEnabled).toBe(false);
+  expect(view.getByText(/^전체 20/)).toBeTruthy();
+  fireEvent.press(view.getByLabelText('서랍에서 나매장 선택'));
+  await waitFor(() => expect(view.getByTestId('pager').props.scrollEnabled).toBe(false));
+  fireEvent.press(view.getByLabelText('더보기 닫기'));
+  expect(view.getByTestId('pager').props.scrollEnabled).toBe(true);
 });
 
 

@@ -7,7 +7,7 @@ import {
   Modal, Alert, KeyboardAvoidingView, Platform,
   ActivityIndicator, RefreshControl,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { AppIcon } from '../icons/AppIcon';
 import { Colors } from '../../constants/colors';
 import { useAuth } from '../contexts/AuthContext';
 import { useExpenses } from '../hooks/useExpenses';
@@ -23,7 +23,7 @@ import { Field } from './ui';
 // 색이 너무 많이 쓰이지 않게 한다.
 const CATEGORIES: {
   key: ExpenseCategory;
-  icon: keyof typeof Ionicons.glyphMap;
+  icon: keyof typeof AppIcon.glyphMap;
   color: string;
   bg: string;
 }[] = [
@@ -177,10 +177,10 @@ export function ExpensesPanel({ selectedMonth, onMonthChange }: { selectedMonth?
             <View key={cat.key} style={styles.section}>
               <View style={styles.sectionHeader}>
                 <View style={[styles.catIconBg, { backgroundColor: cat.bg }]} accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-                  <Ionicons name={cat.icon} size={16} color={cat.color} />
+                  <AppIcon name={cat.icon} size={16} color={cat.color} />
                 </View>
                 <Text style={styles.catLabel}>{cat.key}</Text>
-                {locked && <Ionicons name="lock-closed" size={12} color={Colors.gray400} style={{ marginLeft: 4 }} />}
+                {locked && <AppIcon name="lock-closed" size={12} color={Colors.gray400} style={{ marginLeft: 4 }} />}
                 {!loading && !error && catTotal > 0 && (
                   <NumericText style={[styles.catTotal, { color: cat.color }]}>
                     {catTotal.toLocaleString()}원
@@ -216,7 +216,7 @@ export function ExpensesPanel({ selectedMonth, onMonthChange }: { selectedMonth?
                           hitSlop={8}
                           style={styles.deleteIconBtn}
                         >
-                          <Ionicons name="trash-outline" size={16} color={Colors.gray500} />
+                          <AppIcon name="trash-outline" size={16} color={Colors.gray500} />
                         </TouchableOpacity>
                       )}
                     </TouchableOpacity>
@@ -224,7 +224,7 @@ export function ExpensesPanel({ selectedMonth, onMonthChange }: { selectedMonth?
                 ) : (
                   <>
                     <View style={styles.carriedBanner}>
-                      <Ionicons name="repeat-outline" size={13} color={Colors.gray500} />
+                      <AppIcon name="repeat-outline" size={13} color={Colors.gray500} />
                       <Text style={styles.carriedBannerText}>지난달과 동일(자동 적용)</Text>
                     </View>
                     {carriedItems.map((item, idx) => (
@@ -248,7 +248,7 @@ export function ExpensesPanel({ selectedMonth, onMonthChange }: { selectedMonth?
                           ? <ActivityIndicator size="small" color={cat.color} />
                           : (
                             <>
-                              <Ionicons name="create-outline" size={16} color={cat.color} />
+                              <AppIcon name="create-outline" size={16} color={cat.color} />
                               <Text style={[styles.addRowText, { color: cat.color }]}>이번 달로 복사해서 수정</Text>
                             </>
                           )}
@@ -259,7 +259,7 @@ export function ExpensesPanel({ selectedMonth, onMonthChange }: { selectedMonth?
 
                 {locked ? (
                   <View style={[styles.addRow, (catItems.length > 0 || carriedItems.length > 0) && styles.addRowBorder]}>
-                    <Ionicons name="lock-closed-outline" size={14} color={Colors.gray400} />
+                    <AppIcon name="lock-closed-outline" size={14} color={Colors.gray400} />
                     <Text style={[styles.addRowText, { color: Colors.gray400 }]}>관리자만 수정할 수 있어요</Text>
                   </View>
                 ) : (
@@ -270,7 +270,7 @@ export function ExpensesPanel({ selectedMonth, onMonthChange }: { selectedMonth?
                     accessibilityLabel={`${cat.key} 항목 추가`}
                     activeOpacity={0.7}
                   >
-                    <Ionicons name="add-circle-outline" size={16} color={Colors.primary} />
+                    <AppIcon name="add-circle-outline" size={16} color={Colors.primary} />
                     <Text style={[styles.addRowText, { color: Colors.action }]}>항목 추가</Text>
                   </TouchableOpacity>
                 )}
@@ -290,7 +290,7 @@ export function ExpensesPanel({ selectedMonth, onMonthChange }: { selectedMonth?
                 <Text style={styles.sheetCancelText}>취소</Text>
               </TouchableOpacity>
               <Text style={styles.sheetHeaderTitle}>{editTarget} 항목 {editingItem ? '수정' : '추가'}</Text>
-              <TouchableOpacity onPress={handleSave} disabled={saving} accessibilityRole="button" style={styles.sheetAction} hitSlop={8}>
+              <TouchableOpacity onPress={handleSave} disabled={saving} accessibilityRole="button" accessibilityLabel="비용 저장" accessibilityState={{ disabled: saving, busy: saving }} style={styles.sheetAction}>
                 {saving
                   ? <ActivityIndicator size="small" color={Colors.primary} />
                   : <Text style={styles.sheetSaveText}>저장</Text>}

@@ -1,3 +1,4 @@
+import { UserFacingError } from '../utils/error';
 import { invalidateCachedStore } from './cacheInvalidation';
 import { supabase } from '../supabase';
 import { EmployeeSchedule, ScheduleDayInput, ScheduleRequest } from '../../types';
@@ -107,15 +108,16 @@ export async function reviewScheduleRequest(
       changed = true;
     }
 
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('schedule_requests')
       .update({
         status: approve ? 'approved' : 'rejected',
         reviewed_at: new Date().toISOString(),
         reviewed_by: reviewerId,
       })
-      .eq('id', request.id);
+      .eq('id', request.id).select('id').maybeSingle();
     if (error) throw new Error(error.message);
+    if (!data) throw new UserFacingError('요청 처리 결과를 확인하지 못했어요. 요청함을 다시 불러와 확인해주세요.');
     changed = true;
   } finally {
     // Approved schedules may commit before the request-status update fails.

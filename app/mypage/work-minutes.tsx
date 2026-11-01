@@ -94,9 +94,9 @@ export function LegacyWorkMinutesScreen({ readOnly = false }: { readOnly?: boole
       {employeeLoading ? <LoadingSpinner /> : employeeError ? <ErrorMessage message={employeeError} onRetry={refetchEmployees} /> : !eligible ? <Text style={styles.hint}>연결된 파트타이머 정보가 없어요. 관리자에게 직원 계정 연결을 요청해 주세요.</Text> : <>
         <Text style={styles.title}>{employee.name}님의 월별 근무시간</Text>
         <View style={styles.monthRow}>
-          <TouchableOpacity onPress={() => changeMonth(-1)} disabled={saving} accessibilityRole="button" accessibilityLabel="이전 달" style={styles.nav}><Text>‹</Text></TouchableOpacity>
+          <TouchableOpacity onPress={() => changeMonth(-1)} disabled={saving} accessibilityRole="button" accessibilityLabel="이전 달" accessibilityState={{ disabled: saving }} style={[styles.nav, saving && styles.navDisabled]}><Text>‹</Text></TouchableOpacity>
           <Text style={styles.title}>{month}</Text>
-          <TouchableOpacity onPress={() => changeMonth(1)} disabled={saving || month >= `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`} accessibilityRole="button" accessibilityLabel="다음 달" style={styles.nav}><Text>›</Text></TouchableOpacity>
+          <TouchableOpacity onPress={() => changeMonth(1)} disabled={saving || month >= `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`} accessibilityRole="button" accessibilityLabel="다음 달" accessibilityState={{ disabled: saving || month >= `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}` }} style={[styles.nav, (saving || month >= `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`) && styles.navDisabled]}><Text>›</Text></TouchableOpacity>
         </View>
         {readOnly && <Text style={styles.hint}>기존 월 합계 제출 이력이에요. 새 기록은 일별 근무시간에서 입력해 주세요.</Text>}
         {preview && <Text style={styles.hint}>미리보기에서는 직원 명의로 제출할 수 없어요.</Text>}
@@ -130,9 +130,10 @@ const styles = StyleSheet.create({
   flex: { flex: 1 }, footer: { padding: 16, borderTopWidth: 1, borderTopColor: Colors.homeBorder, backgroundColor: Colors.white },
   fieldError: { color: Colors.negative, backgroundColor: Colors.fieldErrorBg, padding: 12, borderRadius: 12, fontSize: 13, lineHeight: 20 },
   container: { flex: 1, backgroundColor: Colors.homeCanvas }, content: { padding: 20, gap: 16, paddingBottom: 40 },
-  title: { fontSize: 17, fontWeight: '700', color: Colors.black }, hint: { fontSize: 13, lineHeight: 21, color: Colors.gray600 },
-  status: { fontSize: 14, fontWeight: '600', color: Colors.primary },
+  title: { fontVariant: ['tabular-nums'], fontSize: 17, fontWeight: '700', color: Colors.black }, hint: { fontSize: 13, lineHeight: 21, color: Colors.gray600 },
+  status: { fontVariant: ['tabular-nums'], fontSize: 14, fontWeight: '600', color: Colors.primary },
   monthRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }, nav: { minHeight: 44, minWidth: 44, alignItems: 'center', justifyContent: 'center' },
+  navDisabled: { opacity: 0.35 },
   history: { padding: 16, gap: 6, backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.homeBorder, borderRadius: 20 },
 });
 
@@ -156,7 +157,7 @@ export default function WorkMinutesScreen() {
   }
   return <SafeAreaView style={styles.container}>
     <AppBar title="일별 근무시간" onBack={() => router.back()} />
-    {loading ? <LoadingSpinner /> : error ? <ErrorMessage message={error} onRetry={refetch} /> : !employee || employee.employment_type !== 'part_time' ? <Text style={styles.hint}>연결된 파트타이머 정보가 없어요. 관리자에게 계정 연결을 요청해 주세요.</Text> : <>
+    {loading ? <LoadingSpinner /> : error ? <ErrorMessage message={error} onRetry={refetch} /> : !employee || employee.employment_type !== 'part_time' ? <View style={styles.content}><Text style={styles.hint}>{'연결된 파트타이머 정보가 없어요.\n관리자에게 계정 연결을 요청해 주세요.'}</Text></View> : <>
       <View style={[styles.monthRow, { paddingHorizontal: 16 }]}>
         <Button label="이전 달" variant="text" onPress={() => move(-1)} disabled={busy} />
         <Text style={styles.title}>{month}</Text>

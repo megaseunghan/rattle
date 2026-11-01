@@ -1,3 +1,4 @@
+import { NumericText } from '../../lib/components/ui/NumericText';
 import { dailyItemKey, stringKey } from '../../lib/utils/listKeys';
 import { useCallback, memo, useMemo } from 'react';
 import {
@@ -5,7 +6,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router, useFocusEffect } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { AppIcon } from '../../lib/icons/AppIcon';
 import { Colors } from '../../constants/colors';
 import { usePosAnalytics } from '../../lib/hooks/usePosAnalytics';
 import { ErrorMessage } from '../../lib/components/ErrorMessage';
@@ -21,8 +22,8 @@ const ItemRow = memo(function ItemRow({ item }: { item: DailyItem }) {
         ) : null}
       </View>
       <View style={styles.itemRight}>
-        <Text style={styles.itemQty}>{item.quantity}개</Text>
-        <Text style={styles.itemAmount}>{item.totalAmount.toLocaleString('ko-KR')}원</Text>
+        <NumericText style={styles.itemQty}>{item.quantity}개</NumericText>
+        <NumericText style={styles.itemAmount}>{item.totalAmount.toLocaleString('ko-KR')}원</NumericText>
       </View>
     </View>
   );
@@ -52,6 +53,7 @@ export default function PosDateScreen() {
     <TouchableOpacity
       style={[styles.filterChip, activeCategory === cat && styles.filterChipActive]}
       onPress={() => setActiveCategory(cat)}
+      activeOpacity={0.7} accessibilityRole="button" accessibilityLabel={`${cat || '미분류'} 분류`} accessibilityState={{ selected: activeCategory === cat }}
     >
       <Text style={[styles.filterChipText, activeCategory === cat && styles.filterChipTextActive]}>
         {cat || '미분류'}
@@ -65,11 +67,11 @@ export default function PosDateScreen() {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} accessibilityRole="button" accessibilityLabel="뒤로가기">
-          <Ionicons name="chevron-back" size={24} color={Colors.black} />
+          <AppIcon name="chevron-back" size={24} color={Colors.black} />
         </TouchableOpacity>
         <View style={styles.headerCenter}>
-          <Text style={styles.headerDate}>{date}</Text>
-          <Text style={styles.headerSub}>{totalQty}개 · {totalAmount.toLocaleString('ko-KR')}원</Text>
+          <NumericText style={styles.headerDate}>{date}</NumericText>
+          <NumericText style={styles.headerSub}>{totalQty}개 · {totalAmount.toLocaleString('ko-KR')}원</NumericText>
         </View>
         <View style={{ width: 44 }} />
       </View>
@@ -123,7 +125,7 @@ const styles = StyleSheet.create({
   backBtn: { width: 44, height: 44, justifyContent: 'center' },
   headerCenter: { flex: 1, alignItems: 'center' },
   headerDate: { fontSize: 22, fontWeight: '700', color: Colors.black },
-  headerSub: { fontSize: 12, color: Colors.gray500, marginTop: 2 },
+  headerSub: { textAlign: 'center', fontSize: 12, color: Colors.gray500, marginTop: 2 },
   filterBar: { backgroundColor: Colors.homeCanvas },
   filterContent: { paddingHorizontal: 20, paddingVertical: 10, gap: 8, flexDirection: 'row' },
   filterChip: {
@@ -139,13 +141,14 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: Colors.homeBorder,
   },
   itemRow: {
+    flexWrap: 'wrap', rowGap: 8,
     paddingVertical: 14,
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
   },
   itemLeft: { flex: 1, minWidth: 0, marginRight: 12 },
   itemName: { fontSize: 15, fontWeight: '600', color: Colors.black },
   itemCategory: { fontSize: 12, color: Colors.gray400, marginTop: 2 },
-  itemRight: { alignItems: 'flex-end', gap: 2 },
+  itemRight: { maxWidth: '100%', marginLeft: 'auto', alignItems: 'flex-end', gap: 2 },
   itemQty: { fontSize: 13, color: Colors.gray500 },
   itemAmount: { fontSize: 15, fontWeight: '700', color: Colors.black },
   separator: { height: 0.5, backgroundColor: Colors.gray100 },

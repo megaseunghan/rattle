@@ -4,7 +4,7 @@ import {
   ScrollView, ActivityIndicator, Share,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import { AppIcon } from '../../lib/icons/AppIcon';
 import { router, useFocusEffect } from 'expo-router';
 import { Colors } from '../../constants/colors';
 import { useAuth } from '../../lib/contexts/AuthContext';
@@ -135,7 +135,7 @@ export default function MembersScreen() {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} accessibilityRole="button" accessibilityLabel="뒤로가기">
-          <Ionicons name="chevron-back" size={24} color={Colors.black} />
+          <AppIcon name="chevron-back" size={24} color={Colors.black} />
         </TouchableOpacity>
         <Text style={styles.title}>멤버 관리</Text>
         <View style={{ width: 44 }} />
@@ -161,7 +161,7 @@ export default function MembersScreen() {
                 {pending.map((m, i) => (
                   <View key={m.id} style={[styles.row, i > 0 && styles.rowBorder]}>
                     <View style={styles.rowLeft}>
-                      <Ionicons name="person-circle-outline" size={36} color={Colors.gray300} />
+                      <AppIcon name="person-circle-outline" size={36} color={Colors.gray300} />
                       <View style={styles.rowInfo}>
                         <Text style={styles.email}>{m.applicant_name ?? m.user_email ?? '알 수 없는 사용자'}</Text>
                         <Text style={styles.date}>
@@ -192,7 +192,7 @@ export default function MembersScreen() {
               {approved.map((m, i) => (
                 <View key={m.id} style={[styles.row, i > 0 && styles.rowBorder]}>
                   <View style={styles.rowLeft}>
-                    <Ionicons name="person-circle-outline" size={36} color={Colors.gray300} />
+                    <AppIcon name="person-circle-outline" size={36} color={Colors.gray300} />
                     <View style={styles.rowInfo}>
                       <Text style={styles.email}>{m.applicant_name ?? m.user_email ?? '알 수 없는 사용자'}</Text>
                       <View style={styles.roleBadge}>
@@ -208,8 +208,8 @@ export default function MembersScreen() {
                     </TouchableOpacity>
                   )}
                   {m.role !== 'admin' && (
-                    <TouchableOpacity disabled={busy} onPress={() => handleRemove(m)} hitSlop={10}>
-                      <Ionicons name="person-remove-outline" size={20} color={Colors.danger} />
+                    <TouchableOpacity disabled={busy} onPress={() => handleRemove(m)} style={styles.iconButton} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel={`${m.applicant_name ?? m.user_email ?? '멤버'} 제거`}>
+                      <AppIcon name="person-remove-outline" size={20} color={Colors.danger} />
                     </TouchableOpacity>
                   )}
                 </View>
@@ -225,15 +225,15 @@ export default function MembersScreen() {
                 {rejected.map((m, i) => (
                   <View key={m.id} style={[styles.row, i > 0 && styles.rowBorder]}>
                     <View style={styles.rowLeft}>
-                      <Ionicons name="person-circle-outline" size={36} color={Colors.gray200} />
+                      <AppIcon name="person-circle-outline" size={36} color={Colors.gray200} />
                       <View style={styles.rowInfo}>
                         <Text style={[styles.email, { color: Colors.gray400 }]}>
                           {m.user_email ?? '알 수 없는 사용자'}
                         </Text>
                       </View>
                     </View>
-                    <TouchableOpacity disabled={busy} onPress={() => handleRemove(m)} hitSlop={10}>
-                      <Ionicons name="close-circle-outline" size={20} color={Colors.gray400} />
+                    <TouchableOpacity disabled={busy} onPress={() => handleRemove(m)} style={styles.iconButton} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel={`${m.user_email ?? '거절된 멤버'} 제거`}>
+                      <AppIcon name="close-circle-outline" size={20} color={Colors.gray400} />
                     </TouchableOpacity>
                   </View>
                 ))}
@@ -285,6 +285,7 @@ const styles = StyleSheet.create({
   },
   roleAdmin: { color: Colors.primary, backgroundColor: Colors.tinted },
   actionBtns: { flexDirection: 'row', gap: 8 },
+  iconButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   approveBtn: {
     backgroundColor: Colors.primary, paddingHorizontal: 14,
     paddingVertical: 7, borderRadius: 12, minHeight: 44, justifyContent: 'center',

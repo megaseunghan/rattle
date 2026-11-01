@@ -1,5 +1,4 @@
 import { scheduleIdleTask } from '../../lib/utils/scheduleIdleTask';
-import { StoreAppBar } from '../../lib/components/StoreAppBar';
 /* Hallmark · genre: modern-minimal · macrostructure: Workbench · design-system: DESIGN.md · designed-as-app */
 import { useEffect, useState } from 'react';
 import {
@@ -7,7 +6,7 @@ import {
   RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import { AppIcon } from '../../lib/icons/AppIcon';
 import { router } from 'expo-router';
 import { Colors } from '../../constants/colors';
 import { Fonts } from '../../constants/fonts';
@@ -15,7 +14,6 @@ import { useAuth } from '../../lib/contexts/AuthContext';
 import { useIngredients } from '../../lib/hooks/useIngredients';
 import { useEmployees } from '../../lib/hooks/useEmployees';
 import { DailyOperationsHome } from '../../lib/components/DailyOperationsHome';
-import { GlassBackdrop } from '../../lib/components/GlassBackdrop';
 import { GlassCard } from '../../lib/components/GlassCard';
 import { HomeAlertsPanel } from '../../lib/components/HomeAlertsPanel';
 import { useNotifications } from '../../lib/hooks/useNotifications';
@@ -75,7 +73,7 @@ function FinancialSummaryCard({ pnl, loading, selected, onSelect, periodLabel, o
 }) {
   const profit = metricValue(pnl, 'profit');
   const margin = pct(profit, pnl?.revenue);
-  const metrics: { key: MetricKey; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
+  const metrics: { key: MetricKey; label: string; icon: keyof typeof AppIcon.glyphMap }[] = [
     { key: 'revenue', label: '매출', icon: 'trending-up-outline' },
     { key: 'purchase', label: '매입', icon: 'bag-handle-outline' },
     { key: 'labor', label: '인건비', icon: 'people-outline' },
@@ -87,11 +85,11 @@ function FinancialSummaryCard({ pnl, loading, selected, onSelect, periodLabel, o
         <Text style={styles.summaryEyebrow}>우리 매장 손익</Text>
         <View style={styles.trendNavRow}>
           <TouchableOpacity onPress={onPrev} style={styles.trendNavBtn} accessibilityRole="button" accessibilityLabel="이전 달">
-            <Ionicons name="chevron-back" size={16} color={Colors.gray600} />
+            <AppIcon name="chevron-back" size={16} color={Colors.gray600} />
           </TouchableOpacity>
           <Text style={styles.trendNavLabel}>{periodLabel}</Text>
           <TouchableOpacity onPress={onNext} style={styles.trendNavBtn} disabled={nextDisabled} accessibilityRole="button" accessibilityLabel="다음 달" accessibilityState={{ disabled: nextDisabled }}>
-            <Ionicons name="chevron-forward" size={16} color={nextDisabled ? Colors.gray300 : Colors.gray600} />
+            <AppIcon name="chevron-forward" size={16} color={nextDisabled ? Colors.gray300 : Colors.gray600} />
           </TouchableOpacity>
         </View>
       </View>
@@ -103,7 +101,7 @@ function FinancialSummaryCard({ pnl, loading, selected, onSelect, periodLabel, o
         <View style={styles.profitLabelRow}>
           <Text style={styles.profitLabel}>영업이익</Text>
           <Text style={styles.aggregateLabel}>현재 집계</Text>
-          {selected === 'profit' && <Ionicons name="checkmark-circle" size={16} color={Colors.primary} />}
+          {selected === 'profit' && <AppIcon name="checkmark-circle" size={16} color={Colors.primary} />}
         </View>
         {loading ? <ActivityIndicator style={styles.summaryLoading} color={Colors.primary} accessibilityLabel="손익 불러오는 중" /> : (
           <Text style={[styles.profitValue, profit != null && profit < 0 && styles.metricValueNegative]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>{fmt(profit)}</Text>
@@ -119,7 +117,7 @@ function FinancialSummaryCard({ pnl, loading, selected, onSelect, periodLabel, o
             accessibilityState={{ selected: selected === metric.key, busy: loading }}
           >
             <View style={styles.metricTileHeading}>
-              <Ionicons name={metric.icon} size={16} color={selected === metric.key ? Colors.primary : Colors.gray500} />
+              <AppIcon name={metric.icon} size={16} color={selected === metric.key ? Colors.primary : Colors.gray500} />
               <Text style={[styles.metricTileLabel, selected === metric.key && styles.metricTileLabelActive]}>{metric.label}</Text>
             </View>
             {loading ? <ActivityIndicator size="small" color={Colors.gray400} /> : (
@@ -217,8 +215,8 @@ function TrendChartSection({
 
 export function HomeScreen({ active = true }: { active?: boolean }) {
   const { store, user, currentRole, devPreviewEmployeeId, devPreviewMode, canReadFinancials } = useAuth();
-  const { goToTab, openStorePicker, selectedMonth, setSelectedMonth } = useTabPager();
-  const { unreadCount, refetch: refetchNotifications } = useNotifications();
+  const { goToTab, selectedMonth, setSelectedMonth } = useTabPager();
+  const { refetch: refetchNotifications } = useNotifications();
   const { data: ingredients, refetch } = useIngredients();
   const { employees, refetch: refetchEmp } = useEmployees();
 
@@ -292,11 +290,7 @@ export function HomeScreen({ active = true }: { active?: boolean }) {
   const monthLabel = `${anchorYear}년 ${anchorMonth}월`;
 
   return (
-    <SafeAreaView style={styles.container}>
-      <GlassBackdrop />
-      <StoreAppBar name={store?.name ?? '매장 선택'} unreadCount={unreadCount}
-        onMenu={() => goToTab('more')} onStore={() => openStorePicker()}
-        onNotifications={() => router.push('/notifications')} onProfile={() => router.push('/mypage')} />
+    <SafeAreaView style={styles.container} edges={['left', 'right']}>
 
       <ScrollView
         contentContainerStyle={styles.scroll}
@@ -307,9 +301,9 @@ export function HomeScreen({ active = true }: { active?: boolean }) {
         <HomeAlertsPanel active={active} refreshKey={alertRefreshKey} todaySales={todaySales} financial={currentRole === 'admin'} />
         {canReadFinancials && <GlassCard contentStyle={{ padding: 0 }}>
           <TouchableOpacity onPress={() => setShowFinancial(value => !value)} accessibilityRole="button" accessibilityLabel="월별 손익 요약" accessibilityState={{ expanded: showFinancial }} style={{ padding: 18, minHeight: 64, flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-            <Ionicons name="analytics-outline" size={22} color={Colors.action} />
+            <AppIcon name="analytics-outline" size={22} color={Colors.action} />
             <View style={{ flex: 1, gap: 4 }}><Text style={{ fontFamily: Fonts.wantedBold, fontSize: 16, color: Colors.black }}>월별 손익 요약</Text><Text style={{ color: Colors.gray600, fontSize: 12 }}>매장 운영의 결과를 확인해요</Text></View>
-            <Ionicons name={showFinancial ? 'chevron-up' : 'chevron-down'} size={18} color={Colors.gray600} />
+            <AppIcon name={showFinancial ? 'chevron-up' : 'chevron-down'} size={18} color={Colors.gray600} />
           </TouchableOpacity>
         </GlassCard>}
         {canReadFinancials && showFinancial && <>
@@ -357,7 +351,7 @@ export function HomeScreen({ active = true }: { active?: boolean }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.homeCanvas },
+  container: { flex: 1, backgroundColor: 'transparent' },
 
   storeDropdownOverlay: {
     position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,

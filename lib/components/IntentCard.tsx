@@ -1,12 +1,12 @@
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, ViewStyle, StyleProp } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { AppIcon } from '../icons/AppIcon';
 import { Colors } from '../../constants/colors';
 
 export type IntentTone = 'urgent' | 'warning' | 'info';
 
 export interface IntentCardProps {
   tone: IntentTone;
-  icon: keyof typeof Ionicons.glyphMap;
+  icon: keyof typeof AppIcon.glyphMap;
   title: string;
   description: string;
   actionLabel: string;
@@ -34,7 +34,7 @@ export function IntentCard({
     <View style={[styles.card, { backgroundColor: c.bg }, style]}>
       <View style={styles.topRow}>
         <View style={[styles.iconWrap, { backgroundColor: c.iconBg }]}>
-          <Ionicons name={icon} size={16} color={c.fg} />
+          <AppIcon name={icon} size={16} color={c.fg} />
         </View>
         <View style={styles.textCol}>
           <Text style={styles.title} numberOfLines={1}>{title}</Text>
@@ -42,7 +42,7 @@ export function IntentCard({
         </View>
         {onDismiss && (
           <TouchableOpacity onPress={onDismiss} hitSlop={8} style={styles.dismissBtn}>
-            <Ionicons name="close" size={16} color={Colors.gray400} />
+            <AppIcon name="close" size={16} color={Colors.gray400} />
           </TouchableOpacity>
         )}
       </View>

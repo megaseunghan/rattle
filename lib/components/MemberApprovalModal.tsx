@@ -49,7 +49,7 @@ export function MemberApprovalModal({ member, candidates, busy, onChoose, onClos
                   <Text style={styles.body}>퇴사 기록 {index + 1}</Text>
                   {e.has_other_account && <Text style={styles.body}>다른 계정에 연결되어 있어 선택할 수 없어요.</Text>}
                   {!e.has_other_account && blocked && <Text style={styles.body}>신청 계정에 이미 연결된 기록을 선택해주세요.</Text>}
-                  <TouchableOpacity accessibilityRole="button" disabled={busy || blocked} style={[styles.button, (busy || blocked) && styles.disabled]} onPress={() => choose({ kind: 'rehire', employeeId: e.id })}>
+                  <TouchableOpacity accessibilityRole="button" accessibilityLabel={`${e.name}, 입사일 ${e.joined_at || '미등록'}, 등록일 ${e.created_at.slice(0, 10)}, 이 직원으로 최종 합류`} disabled={busy || blocked} style={[styles.button, (busy || blocked) && styles.disabled]} onPress={() => choose({ kind: 'rehire', employeeId: e.id })}>
                     <Text style={styles.buttonText}>이 직원으로 최종 합류</Text>
                   </TouchableOpacity>
                 </View>

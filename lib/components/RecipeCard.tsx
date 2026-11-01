@@ -1,8 +1,9 @@
 import { memo, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { AppIcon } from '../icons/AppIcon';
 import { router } from 'expo-router';
 import { Colors } from '../../constants/colors';
+import { NumericText } from './ui/NumericText';
 import { RecipeWithIngredients } from '../services/recipes';
 import { recipeLineCost } from '../utils/unit';
 
@@ -63,7 +64,7 @@ export const RecipeCard = memo(function RecipeCard({
         </View>
         {isAdmin && (
           <TouchableOpacity onPress={handleDelete} style={styles.deleteBtn} accessibilityRole="button" accessibilityLabel={`${recipe.name} 레시피 삭제`}>
-            <Ionicons name="trash-outline" size={15} color={Colors.gray300} />
+            <AppIcon name="trash-outline" size={15} color={Colors.gray300} />
           </TouchableOpacity>
         )}
       </View>
@@ -71,19 +72,19 @@ export const RecipeCard = memo(function RecipeCard({
       <View style={styles.recipeStats}>
         <View style={styles.recipeStat}>
           <Text style={styles.recipeStatLabel}>판매가</Text>
-          <Text style={styles.recipeStatValue}>{recipe.selling_price.toLocaleString('ko-KR')}원</Text>
+          <NumericText style={styles.recipeStatValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{recipe.selling_price.toLocaleString('ko-KR')}원</NumericText>
         </View>
         <View style={styles.recipeStatDivider} />
         <View style={styles.recipeStat}>
           <Text style={styles.recipeStatLabel}>원가</Text>
-          <Text style={styles.recipeStatValue}>{costKnown ? `${Math.round(currentCost).toLocaleString('ko-KR')}원` : '확인 필요'}</Text>
+          <NumericText style={styles.recipeStatValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{costKnown ? `${Math.round(currentCost).toLocaleString('ko-KR')}원` : '확인 필요'}</NumericText>
         </View>
         <View style={styles.recipeStatDivider} />
         <View style={styles.recipeStat}>
           <Text style={styles.recipeStatLabel}>마진율</Text>
-          <Text style={[styles.recipeStatValue, styles.recipeStatMargin, { color: marginColor }]}>
+          <NumericText style={[styles.recipeStatValue, styles.recipeStatMargin, { color: marginColor }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
             {costKnown && recipe.selling_price > 0 ? `${currentMarginRate.toFixed(1)}%` : '확인 필요'}
-          </Text>
+          </NumericText>
         </View>
       </View>
 
@@ -111,7 +112,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     marginBottom: 14,
   },
-  recipeLeft: { flex: 1, gap: 6 },
+  recipeLeft: { flex: 1, minWidth: 0, gap: 6 },
   recipeName: { fontSize: 16, fontWeight: '700', color: Colors.black },
   categoryPill: {
     alignSelf: 'flex-start',
@@ -134,6 +135,8 @@ const styles = StyleSheet.create({
   },
   recipeStat: {
     flex: 1,
+    minWidth: 0,
+    paddingHorizontal: 4,
     alignItems: 'center',
   },
   recipeStatDivider: {

@@ -1,4 +1,4 @@
-import { Ionicons } from '@expo/vector-icons';
+import { AppIcon } from '../../icons/AppIcon';
 import { Pressable, StyleSheet, View, ViewStyle } from 'react-native';
 import { Colors } from '../../../constants/colors';
 import { ListCardSelectedStyle, ListCardStyle } from '../../../constants/designTokens';
@@ -17,7 +17,7 @@ export function ListCard({ children, selected = false, onPress, trailingIcon = '
     <View style={[selected ? ListCardSelectedStyle : ListCardStyle, styles.row, style]}>
       <View style={styles.content}>{children}</View>
       {trailingIcon !== 'none' && (
-        <Ionicons
+        <AppIcon
           name={trailingIcon === 'chevron' ? 'chevron-forward' : 'pencil'}
           size={16}
           color={Colors.gray400}

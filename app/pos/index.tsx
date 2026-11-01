@@ -1,3 +1,4 @@
+import { NumericText } from '../../lib/components/ui/NumericText';
 import { GlassBackdrop } from '../../lib/components/GlassBackdrop';
 import { getErrorMessage } from '../../lib/utils/error';
 import { useState, useCallback, useRef, useEffect, useContext, useMemo } from 'react';
@@ -7,7 +8,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useFocusEffect } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { AppIcon } from '../../lib/icons/AppIcon';
 import { Colors } from '../../constants/colors';
 import { Fonts } from '../../constants/fonts';
 import { useTossSync } from '../../lib/hooks/useTossSync';
@@ -17,6 +18,7 @@ import { LoadingSpinner } from '../../lib/components/LoadingSpinner';
 import { getStoreDetails } from '../../lib/services/stores';
 import { useManualSales } from '../../lib/hooks/useManualSales';
 import { DailySummary } from '../../types';
+import { ErrorMessage } from '../../lib/components/ErrorMessage';
 import { Badge, EmptyState } from '../../lib/components/ui';
 import { TabPagerContext } from '../../lib/contexts/TabPagerContext';
 
@@ -84,7 +86,7 @@ export function PosScreen({ active = true, reserveFab = false }: { active?: bool
       void fetchSummariesByRange(from, to);
     }
   }, [tabScope?.selectedMonth, active, status, closingTime, fetchSummariesByRange]);
-  const { sales: manualSales, loading: loadingManualSales, total: manualTotal, refetch: refetchManualSales, remove: removeManualSale } = useManualSales(manualYearMonth);
+  const { sales: manualSales, loading: loadingManualSales, total: manualTotal, ready: manualReady, refreshing: refreshingManualSales, error: manualError, actionError: manualActionError, removingId, refetch: refetchManualSales, remove: removeManualSale } = useManualSales(manualYearMonth);
 
   useEffect(() => {
     if (!active || status !== 'unregistered') return;
@@ -195,7 +197,7 @@ export function PosScreen({ active = true, reserveFab = false }: { active?: bool
   const statusLabel = status === 'connected' ? 'Toss POS 연동' : 'Toss POS 미연동';
 
   return (
-    <SafeAreaView style={styles.container} edges={tabScope ? ['left', 'right'] : ['top', 'left', 'right', 'bottom']}><GlassBackdrop />
+    <SafeAreaView style={[styles.container, tabScope && { backgroundColor: 'transparent' }]} edges={tabScope ? ['left', 'right'] : ['top', 'left', 'right', 'bottom']}>{!tabScope && <GlassBackdrop />}
       <View style={styles.header}>
         <View style={styles.headerTitle}>
           <Text style={styles.title}>매출</Text>
@@ -250,21 +252,22 @@ export function PosScreen({ active = true, reserveFab = false }: { active?: bool
                     <View style={styles.queryRow}>
                       <View style={styles.monthPickerRow}>
                         <TouchableOpacity onPress={prevQueryMonth} style={styles.monthNavBtn} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel="이전 달">
-                          <Ionicons name="chevron-back" size={18} color={Colors.gray600} />
+                          <AppIcon name="chevron-back" size={18} color={Colors.gray600} />
                         </TouchableOpacity>
-                        <Text style={styles.monthPickerText}>{queryYear}년 {queryMonth}월</Text>
+                        <NumericText style={styles.monthPickerText}>{queryYear}년 {queryMonth}월</NumericText>
                         <TouchableOpacity onPress={nextQueryMonth} style={styles.monthNavBtn} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel="다음 달">
-                          <Ionicons name="chevron-forward" size={18} color={Colors.gray600} />
+                          <AppIcon name="chevron-forward" size={18} color={Colors.gray600} />
                         </TouchableOpacity>
                       </View>
                       <TouchableOpacity
                         style={[styles.syncBtn, syncing && styles.syncBtnDisabled]}
                         onPress={handleManualSync}
                         disabled={syncing}
+                        activeOpacity={0.7} accessibilityRole="button" accessibilityLabel="선택한 달 매출 조회" accessibilityState={{ disabled: syncing, busy: syncing }}
                       >
                         {syncing
                           ? <ActivityIndicator size="small" color={Colors.white} />
-                          : <><Ionicons name="search-outline" size={15} color={Colors.white} /><Text style={styles.syncBtnText}>조회</Text></>
+                          : <><AppIcon name="search-outline" size={15} color={Colors.white} /><Text style={styles.syncBtnText}>조회</Text></>
                         }
                       </TouchableOpacity>
                     </View>
@@ -274,7 +277,7 @@ export function PosScreen({ active = true, reserveFab = false }: { active?: bool
                   <View style={styles.sectionHeader}>
                     <Text style={styles.sectionTitle}>{queryYear}년 {queryMonth}월 매출</Text>
                     {monthTotal > 0 && (
-                      <Text style={styles.sectionTotal}>{monthTotal.toLocaleString('ko-KR')}원</Text>
+                      <NumericText style={styles.sectionTotal}>{monthTotal.toLocaleString('ko-KR')}원</NumericText>
                     )}
                   </View>
 
@@ -303,6 +306,7 @@ export function PosScreen({ active = true, reserveFab = false }: { active?: bool
                                   <TouchableOpacity
                                     key={day}
                                     style={styles.dayCell}
+                                    accessibilityRole="button" accessibilityLabel={`${queryYear}년 ${queryMonth}월 ${day}일${todayFlag ? ' 오늘' : ''}${hasSales ? ' 매출 있음' : ''}`} accessibilityState={{ selected: isSelected }}
                                     onPress={() => setSelectedDay(isSelected ? null : day)}
                                     activeOpacity={0.7}
                                   >
@@ -330,6 +334,7 @@ export function PosScreen({ active = true, reserveFab = false }: { active?: bool
                           selectedSummary ? (
                             <TouchableOpacity
                               style={styles.selectedDayCard}
+                              accessibilityRole="button" accessibilityLabel={`${queryMonth}월 ${selectedDay}일 매출 ${selectedSummary.totalAmount.toLocaleString('ko-KR')}원, ${selectedSummary.orderCount}건 상세 보기`}
                               onPress={() => router.push(`/pos/${selectedSummary.date}?from=${encodeURIComponent(selectedSummary.dateFrom)}&to=${encodeURIComponent(selectedSummary.dateTo)}`)}
                               activeOpacity={0.75}
                             >
@@ -338,9 +343,9 @@ export function PosScreen({ active = true, reserveFab = false }: { active?: bool
                                 <Text style={styles.selectedDayCount}>{selectedSummary.orderCount}건</Text>
                               </View>
                               <View style={styles.selectedDayRight}>
-                                <Text style={styles.selectedDayAmount}>{selectedSummary.totalAmount.toLocaleString('ko-KR')}원</Text>
+                                <NumericText style={styles.selectedDayAmount}>{selectedSummary.totalAmount.toLocaleString('ko-KR')}원</NumericText>
                                 <View style={styles.dayCardChevron}>
-                                  <Ionicons name="chevron-forward" size={14} color={Colors.gray400} />
+                                  <AppIcon name="chevron-forward" size={14} color={Colors.gray400} />
                                 </View>
                               </View>
                             </TouchableOpacity>
@@ -369,7 +374,7 @@ export function PosScreen({ active = true, reserveFab = false }: { active?: bool
             <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
               {/* ── 미연동: POS 연동 화면으로 안내 ── */}
               <View style={styles.infoCard}>
-                <Ionicons name="storefront-outline" size={28} color={Colors.primary} style={{ marginBottom: 10 }} />
+                <AppIcon name="storefront-outline" size={28} color={Colors.primary} style={{ marginBottom: 10 }} />
                 <Text style={styles.infoTitle}>아직 POS가 연동되지 않았어요</Text>
                 <Text style={styles.infoDesc}>
                   토스 포스에서 Rattle 서비스코드로 연동하면{'\n'}매출 데이터가 자동으로 표시됩니다.
@@ -384,7 +389,7 @@ export function PosScreen({ active = true, reserveFab = false }: { active?: bool
               </View>
 
               <View style={styles.notice}>
-                <Ionicons name="information-circle-outline" size={16} color={Colors.gray400} />
+                <AppIcon name="information-circle-outline" size={16} color={Colors.gray400} />
                 <Text style={styles.noticeText}>
                   포스 설정 &gt; 서비스 연동에서 서비스코드를 입력하면 자동으로 연결됩니다.
                 </Text>
@@ -393,24 +398,27 @@ export function PosScreen({ active = true, reserveFab = false }: { active?: bool
               {/* ── 화면 10/11: 수기 매출 ── */}
               <View style={styles.sectionHeader}>
                 <Text style={styles.sectionTitle}>{queryYear}년 {queryMonth}월 수기 매출</Text>
-                {manualTotal > 0 && <Text style={styles.sectionTotal}>{manualTotal.toLocaleString('ko-KR')}원</Text>}
+                {manualTotal != null && manualTotal > 0 && <NumericText style={styles.sectionTotal}>{manualTotal.toLocaleString('ko-KR')}원</NumericText>}
               </View>
 
               <View style={styles.monthPickerRow}>
                 <TouchableOpacity onPress={prevQueryMonth} style={styles.monthNavBtn} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel="이전 달">
-                  <Ionicons name="chevron-back" size={18} color={Colors.gray600} />
+                  <AppIcon name="chevron-back" size={18} color={Colors.gray600} />
                 </TouchableOpacity>
-                <Text style={styles.monthPickerText}>{queryYear}년 {queryMonth}월</Text>
+                <NumericText style={styles.monthPickerText}>{queryYear}년 {queryMonth}월</NumericText>
                 <TouchableOpacity onPress={nextQueryMonth} style={styles.monthNavBtn} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel="다음 달">
-                  <Ionicons name="chevron-forward" size={18} color={Colors.gray600} />
+                  <AppIcon name="chevron-forward" size={18} color={Colors.gray600} />
                 </TouchableOpacity>
               </View>
 
+              {(manualError || manualActionError) && <ErrorMessage message={manualError || manualActionError!} onRetry={() => { void refetchManualSales(); }} />}
+              {manualError && manualSales.length > 0 && <Text style={styles.noticeText}>마지막으로 조회한 내역이에요. 최신 상태는 다시 불러와 확인해주세요.</Text>}
+              {refreshingManualSales && !loadingManualSales && <Text style={styles.noticeText}>수기 매출을 다시 불러오는 중이에요.</Text>}
               {loadingManualSales ? (
                 <LoadingSpinner fullScreen={false} />
-              ) : manualSales.length === 0 ? (
+              ) : !manualReady && manualSales.length === 0 ? null : manualSales.length === 0 ? (
                 <EmptyState
-                  icon="cash-outline"
+                  icon="cash-outline" illustration="sales"
                   title="이번 달 등록된 매출이 없어요"
                   description="POS 연동 전이라면 직접 등록해서 손익계산서에 반영할 수 있어요"
                   ctaLabel="매출 등록하기"
@@ -432,22 +440,24 @@ export function PosScreen({ active = true, reserveFab = false }: { active?: bool
                           <Text style={styles.manualRowDate}>{s.date.slice(5).replace('-', '/')}</Text>
                           <Text style={styles.manualRowMethod} numberOfLines={1}>{methodLabel}</Text>
                         </View>
-                        <Text style={styles.manualRowAmount}>{total.toLocaleString('ko-KR')}원</Text>
+                        <NumericText style={styles.manualRowAmount}>{total.toLocaleString('ko-KR')}원</NumericText>
                         <TouchableOpacity
                           onPress={() => Alert.alert('삭제', '이 매출 기록을 삭제할까요?', [
                             { text: '취소', style: 'cancel' },
-                            { text: '삭제', style: 'destructive', onPress: () => removeManualSale(s.id) },
+                            { text: '삭제', style: 'destructive', onPress: () => { void removeManualSale(s.id); } },
                           ])}
-                          hitSlop={8}
+                          disabled={removingId !== null || refreshingManualSales || !!manualError || !!manualActionError}
+                          accessibilityState={{ disabled: removingId !== null || refreshingManualSales || !!manualError || !!manualActionError, busy: removingId === s.id }}
+                          style={styles.deleteManualBtn} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel={`${s.date} 수기 매출 삭제`}
                         >
-                          <Ionicons name="trash-outline" size={16} color={Colors.negative} />
+                          <AppIcon name="trash-outline" size={16} color={Colors.negative} />
                         </TouchableOpacity>
                       </View>
                       );
                     })}
                   </View>
-                  <TouchableOpacity style={styles.addManualBtn} onPress={() => router.push('/pos/new')} activeOpacity={0.7}>
-                    <Ionicons name="add" size={16} color={Colors.primary} />
+                  <TouchableOpacity style={styles.addManualBtn} accessibilityRole="button" accessibilityLabel="수기 매출 추가" onPress={() => router.push('/pos/new')} activeOpacity={0.7}>
+                    <AppIcon name="add" size={16} color={Colors.primary} />
                     <Text style={styles.addManualBtnText}>매출 추가</Text>
                   </TouchableOpacity>
                 </>
@@ -548,15 +558,16 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.white, borderRadius: 20, borderWidth: 1, borderColor: Colors.homeBorder,
     overflow: 'hidden', marginTop: 8,
   },
-  manualRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, paddingVertical: 12 },
+  manualRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 10, paddingHorizontal: 14, paddingVertical: 12 },
   manualRowBorder: { borderTopWidth: 0.5, borderTopColor: Colors.gray100 },
-  manualRowInfo: { flex: 1, gap: 2 },
-  manualRowDate: { fontSize: 13, fontWeight: '700', color: Colors.black },
+  manualRowInfo: { flexGrow: 1, flexShrink: 1, minWidth: 100, gap: 2 },
+  manualRowDate: { fontVariant: ['tabular-nums'], fontSize: 13, fontWeight: '700', color: Colors.black },
   manualRowMethod: { fontSize: 11, fontWeight: '400', color: Colors.gray400 },
-  manualRowAmount: { fontSize: 14, fontWeight: '700', color: Colors.primary },
+  deleteManualBtn: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
+  manualRowAmount: { maxWidth: '100%', fontSize: 14, fontWeight: '700', color: Colors.primary },
   addManualBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
-    marginTop: 10, paddingVertical: 12, borderRadius: 12, borderWidth: 1, borderColor: Colors.primary,
+    marginTop: 10, minHeight: 44, paddingVertical: 12, borderRadius: 12, borderWidth: 1, borderColor: Colors.primary,
   },
   addManualBtnText: { fontSize: 13, fontWeight: '700', color: Colors.primary },
 
@@ -591,7 +602,7 @@ const styles = StyleSheet.create({
   },
   todayValue: { fontSize: 34, fontFamily: Fonts.spaceGroteskBold, fontWeight: '700', color: Colors.black, letterSpacing: -1, fontVariant: ['tabular-nums'] },
   todayLabel: { fontSize: 13, color: Colors.gray600, fontWeight: '500' },
-  todayOrderCount: { fontSize: 14, color: Colors.gray600 },
+  todayOrderCount: { fontVariant: ['tabular-nums'], fontSize: 14, color: Colors.gray600 },
 
   querySection: { marginBottom: 20 },
   queryRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
@@ -655,11 +666,11 @@ const styles = StyleSheet.create({
   sundayText: { color: Colors.negative },
   saturdayText: { color: Colors.primary },
   calendarRow: { flexDirection: 'row' },
-  dayCell: { flex: 1, alignItems: 'center', paddingVertical: 4, gap: 3 },
+  dayCell: { flex: 1, minHeight: 44, alignItems: 'center', paddingVertical: 4, gap: 3 },
   dayInner: { width: 34, height: 34, borderRadius: 17, justifyContent: 'center', alignItems: 'center' },
   daySelected: { backgroundColor: Colors.primary },
   dayToday: { borderWidth: 1.5, borderColor: Colors.primary },
-  dayText: { fontSize: 14, color: Colors.black },
+  dayText: { fontVariant: ['tabular-nums'], fontSize: 14, color: Colors.black },
   dayTextSelected: { color: Colors.white, fontWeight: '600' },
   dayTextToday: { color: Colors.primary, fontWeight: '600' },
   dot: { width: 4, height: 4, borderRadius: 2, backgroundColor: Colors.primary },
@@ -667,14 +678,15 @@ const styles = StyleSheet.create({
 
   // 선택된 날짜 요약
   selectedDayCard: {
+    flexWrap: 'wrap', gap: 8, minHeight: 44,
     backgroundColor: Colors.white, borderRadius: 20,
     paddingVertical: 14, paddingHorizontal: 16,
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     borderWidth: 0.5, borderColor: Colors.homeBorder,
   },
   selectedDayInfo: { gap: 3, flexShrink: 1 },
-  selectedDayDate: { fontSize: 15, fontWeight: '700', color: Colors.black },
-  selectedDayCount: { fontSize: 12, color: Colors.gray500 },
+  selectedDayDate: { fontVariant: ['tabular-nums'], fontSize: 15, fontWeight: '700', color: Colors.black },
+  selectedDayCount: { fontVariant: ['tabular-nums'], fontSize: 12, color: Colors.gray500 },
   selectedDayRight: { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 1 },
   selectedDayAmount: { fontSize: 16, fontWeight: '700', color: Colors.primary, letterSpacing: -0.3, flexShrink: 1 },
   selectedDayEmpty: {

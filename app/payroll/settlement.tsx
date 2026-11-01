@@ -1,3 +1,4 @@
+import { NumericText } from '../../lib/components/ui/NumericText';
 import { getErrorMessage } from '../../lib/utils/error';
 import { useCallback, useEffect, useState, useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator, Alert, TouchableOpacity } from 'react-native';
@@ -105,12 +106,12 @@ export default function PayrollSettlementScreen() {
           )}
           <View style={styles.summaryCard}>
             <Text style={styles.summaryLabel}>총 지급 예정액 · {rows.length}명</Text>
-            <Text style={styles.summaryValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{fmt(totalAmount)}</Text>
+            <NumericText style={styles.summaryValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{fmt(totalAmount)}</NumericText>
           </View>
 
           <View style={styles.listHeader}>
             <Text style={styles.sectionLabel}>직원별 정산 내역</Text>
-            <Text style={styles.progressLabel}>{settledCount} / {rows.length} 완료</Text>
+            <NumericText style={styles.progressLabel}>{settledCount} / {rows.length} 완료</NumericText>
           </View>
 
           {rows.length === 0 ? (
@@ -141,7 +142,7 @@ export default function PayrollSettlementScreen() {
                     {deduction > 0 && (
                       <Text style={styles.deduction}>공제 -{fmt(deduction)}</Text>
                     )}
-                    <Text style={styles.netPay}>{fmt(payroll.net_pay)}</Text>
+                    <NumericText style={styles.netPay}>{fmt(payroll.net_pay)}</NumericText>
                   </View>
                 </View>
               );
@@ -156,6 +157,8 @@ export default function PayrollSettlementScreen() {
             style={[styles.confirmBtn, hasGaps && styles.confirmBtnDisabled, settling && { opacity: 0.6 }]}
             onPress={handleSettleAll}
             disabled={settling || hasGaps}
+            accessibilityRole="button" accessibilityLabel={hasGaps ? '미입력 내역 확인 필요' : '전체 정산 확정하기'}
+            accessibilityState={{ disabled: settling || hasGaps, busy: settling }}
             activeOpacity={0.85}
           >
             {settling
@@ -196,10 +199,10 @@ const styles = StyleSheet.create({
 
   row: { ...CardStyle, borderColor: Colors.homeBorder, borderWidth: 1, borderRadius: 20, padding: 16, gap: 4 },
   rowTop: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'space-between', alignItems: 'center' },
-  name: { fontSize: 16, fontWeight: '700', color: Colors.black },
-  meta: { fontSize: 12, color: Colors.gray500 },
+  name: { flexShrink: 1, fontSize: 16, fontWeight: '700', color: Colors.black },
+  meta: { fontVariant: ['tabular-nums'], fontSize: 12, color: Colors.gray500 },
   rowBottom: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', alignItems: 'center', gap: 10, marginTop: 6 },
-  deduction: { fontSize: 12, color: Colors.negative },
+  deduction: { fontVariant: ['tabular-nums'], fontSize: 12, color: Colors.negative },
   netPay: { fontSize: 16, fontWeight: '800', color: Colors.black },
 
   footer: { padding: 20, backgroundColor: Colors.homeCanvas, borderTopWidth: 1, borderTopColor: Colors.homeBorder },
@@ -207,6 +210,7 @@ const styles = StyleSheet.create({
   confirmBtnTextDisabled: { color: Colors.gray600 },
   confirmBtn: {
     backgroundColor: Colors.primary,
+    minHeight: 44,
     borderRadius: 14,
     paddingVertical: 14,
     alignItems: 'center',

@@ -1,0 +1,2231 @@
+{
+  "at": "2026-11-02T00:13:38.618506+09:00",
+  "parent_head": "0d04e7860ed7b72af933854e5d347a7b8a23bb09",
+  "included": [
+    {
+      "path": ".easignore",
+      "bytes": 2140,
+      "sha256": "31382ff47cf0a7c8054b8185c0c2317e1346d489b21b03604e7315e0b3cf3394"
+    },
+    {
+      "path": "DESIGN.md",
+      "bytes": 18708,
+      "sha256": "214985f8fd59c10856446b2334cba7bef670956965e54ff694759d090fae6d95"
+    },
+    {
+      "path": "README.md",
+      "bytes": 6213,
+      "sha256": "978efb171abe5b0b25414f2fc09812555fce5ca016358cc155af707268d5328e"
+    },
+    {
+      "path": "__tests__/components/AppIcon.test.tsx",
+      "bytes": 1503,
+      "sha256": "aa45e0ee351e70356c041e9590ea4b7b53b896659aa26613a30278464e20f559"
+    },
+    {
+      "path": "__tests__/components/CleaningEditSync.test.tsx",
+      "bytes": 5451,
+      "sha256": "20d4ee1085a7c5fdfd5ead9d9016d033c6c473c9a8cdcb0e08cbc52caff57c12"
+    },
+    {
+      "path": "__tests__/components/HomeFinancialSummary.test.tsx",
+      "bytes": 9936,
+      "sha256": "9e4c09cfd4e5f4332235e7014843135755d267b79f7aa64d2a292edada23485c"
+    },
+    {
+      "path": "__tests__/components/ManualSaleDraft.test.tsx",
+      "bytes": 5901,
+      "sha256": "897ec3b967790e715888920b3b395991753bf0729a4744d448dbfd8c680acc79"
+    },
+    {
+      "path": "__tests__/components/MoreDrawerMotion.test.tsx",
+      "bytes": 3588,
+      "sha256": "bbb16b1778e0b3082323f3613d79913d9d4757fe429a991d392556d72aa8bf12"
+    },
+    {
+      "path": "__tests__/components/NotificationSettingsRecovery.test.tsx",
+      "bytes": 2457,
+      "sha256": "b6d4cd8cd7f30a45a9c22a27836f68efbc13cee0431f98d62fc5b6f3447c2f5e"
+    },
+    {
+      "path": "__tests__/components/OperationsEmptyState.test.tsx",
+      "bytes": 4399,
+      "sha256": "2cf43d2bb2cd8efa52c157d40ee9b80b11bb398a19a6a2f564ce2f46a04756b0"
+    },
+    {
+      "path": "__tests__/components/PayrollDeductionDraft.test.tsx",
+      "bytes": 9213,
+      "sha256": "03dd57b1eb1846a597e67c73325ad234c09a5690ae97d44b6115291f104f65e5"
+    },
+    {
+      "path": "__tests__/components/PayslipRecovery.test.tsx",
+      "bytes": 3989,
+      "sha256": "d00a68c94d5282aca698a7004d6e149a27ec4747a17236e79af44266aa3e1cb9"
+    },
+    {
+      "path": "__tests__/components/PayslipScope.test.tsx",
+      "bytes": 11504,
+      "sha256": "eb9e70934b447c2bfe888b31aa980241e66c90c74eae135ac2bd20726848af06"
+    },
+    {
+      "path": "__tests__/components/StockRecipePermissions.test.tsx",
+      "bytes": 9138,
+      "sha256": "03b8ddd37b63b085037db85442ac6e3c4c340a3c3d903a0510b4d3a0c3d9722d"
+    },
+    {
+      "path": "__tests__/components/StoreSettingsRecovery.test.tsx",
+      "bytes": 4977,
+      "sha256": "77a0fafc607b2225102ee0542b73b070c294eccc25b68f624dcc07d1cc432a2e"
+    },
+    {
+      "path": "__tests__/components/TabsScope.test.tsx",
+      "bytes": 12503,
+      "sha256": "0cdcad9a3089b2d5f6ce71856223beba3e5d7269220898f6bdcf3eb61a3c562f"
+    },
+    {
+      "path": "__tests__/hooks/OperationsReadRecovery.test.ts",
+      "bytes": 6958,
+      "sha256": "f1ecf27cd9c2f011d89a7c7eff40ec6f1a5646fdc1496221b0be516dffe8ccdc"
+    },
+    {
+      "path": "__tests__/hooks/useCleaningChecklist.test.ts",
+      "bytes": 6532,
+      "sha256": "ef77a73ff274a0cb8de18a1ac1670184be30106af0e27949bb67869d49c78271"
+    },
+    {
+      "path": "__tests__/hooks/useNotificationSettingsRecovery.test.ts",
+      "bytes": 8967,
+      "sha256": "0ce37fda1bd92b460a229b3c6afa5bbb1a43518877c9923d9b5cf44ae561d84b"
+    },
+    {
+      "path": "__tests__/hooks/usePayrollDeductions.test.ts",
+      "bytes": 5291,
+      "sha256": "1de11b7024516275a4f4ab4ddb9b23de142ba80893b3749b2665eb7258bdbd67"
+    },
+    {
+      "path": "__tests__/hooks/useStorePermissions.test.ts",
+      "bytes": 3139,
+      "sha256": "b0dba1d976b53f66a0184655f223a2712d922a15f812933021753e8c44b321ec"
+    },
+    {
+      "path": "__tests__/services/manualSaleWrite.test.ts",
+      "bytes": 4129,
+      "sha256": "b1ba6ac796ddd10708efbaa161f9adb955fbbb6712c013f5056349046e18bdee"
+    },
+    {
+      "path": "__tests__/services/payrollSettlementResult.test.ts",
+      "bytes": 2103,
+      "sha256": "2b21ee0918f8382faf46005b557d409b6d10d77dfcb6cd3caa3cfab23a7ccdf5"
+    },
+    {
+      "path": "__tests__/services/scheduleReviewResult.test.ts",
+      "bytes": 1989,
+      "sha256": "f5ce6d068ba8938dc2f578f08819b311f0edfe7be378e00f3d562933eaf22b9b"
+    },
+    {
+      "path": "__tests__/services/weeklyDashboardBatch.test.ts",
+      "bytes": 4304,
+      "sha256": "f707fc83b2096a21646ddb942f27632e40af1f0bb7cda6e0b6aa64cc7d871174"
+    },
+    {
+      "path": "app.json",
+      "bytes": 1745,
+      "sha256": "fd95d618d776ce2be5db44865bc2e3cc4c286c16d4192d5c8e9556608785922e"
+    },
+    {
+      "path": "app/(auth)/join-store.tsx",
+      "bytes": 21501,
+      "sha256": "02e503c2970d9e3e038dc7f68b87a34f8f77d0780858c69fff1f45e8b8c38a99"
+    },
+    {
+      "path": "app/(auth)/login.tsx",
+      "bytes": 9106,
+      "sha256": "9e04b6b656c3e669f24906e8fbfdc943e20145b5632ff66eaa40232e00a2d994"
+    },
+    {
+      "path": "app/(auth)/select-store.tsx",
+      "bytes": 9314,
+      "sha256": "48199686d78703785167a4017e5b5be628b567d7f5759b03cb60319cea841f54"
+    },
+    {
+      "path": "app/(tabs)/_layout.tsx",
+      "bytes": 20452,
+      "sha256": "b00f2e4c5f493f728d836c5bde8d80a9bffd751840cf9a2125ed43c7665f3823"
+    },
+    {
+      "path": "app/(tabs)/index.tsx",
+      "bytes": 24235,
+      "sha256": "c33e0c783ed31485ae67afb681bde0384bca118d62d7ca52f96e4e5b1fed21d0"
+    },
+    {
+      "path": "app/(tabs)/payroll.tsx",
+      "bytes": 60563,
+      "sha256": "2d8293bc96aa1bfdf61ef9e09017e34455f7d92b656bfcb3397c612b3d85b66f"
+    },
+    {
+      "path": "app/(tabs)/purchases.tsx",
+      "bytes": 22245,
+      "sha256": "595531ef7daa09841f8746ba9aa2b951912d02e61354c70f0e0fe2a11be2d70f"
+    },
+    {
+      "path": "app/(tabs)/stock.tsx",
+      "bytes": 18527,
+      "sha256": "eee894671718b01bc8e12b8dfb2cd0c8376e3c465570cd1dd801bde5b3b4b42f"
+    },
+    {
+      "path": "app/admin/index.tsx",
+      "bytes": 27760,
+      "sha256": "7693d05f43b48b113deee8b8b1e15db2a76d7d056462a1fc63f708421b8449cc"
+    },
+    {
+      "path": "app/cleaning/edit.tsx",
+      "bytes": 15078,
+      "sha256": "0092c67d4c6a5b1bba351808ee077cb48ea0e071b2744ba6f33c40e6545353bd"
+    },
+    {
+      "path": "app/cleaning/index.tsx",
+      "bytes": 7678,
+      "sha256": "3c5296fa8de5ca58e1165f289990245d335a99aa6ee7fa83a01009235cf94ac5"
+    },
+    {
+      "path": "app/mypage/index.tsx",
+      "bytes": 8808,
+      "sha256": "dbd93e97973d28e526326fffa5065c12f02fb46fdeb8c50ab254cac757b45552"
+    },
+    {
+      "path": "app/mypage/payslip.tsx",
+      "bytes": 10788,
+      "sha256": "4839d2552c704b2540d7e17a2860766e9ccaccd71c2fe9e80b9ce8d2c22ae89d"
+    },
+    {
+      "path": "app/mypage/requests.tsx",
+      "bytes": 5213,
+      "sha256": "1746b56a454cca98265b7dc0e2f258867a26bec63a5329ef65326952e23a70f7"
+    },
+    {
+      "path": "app/mypage/schedule.tsx",
+      "bytes": 14825,
+      "sha256": "70cc46f5da647758c3b0f78c818393e999566629fbd472458de5954a655aef62"
+    },
+    {
+      "path": "app/mypage/work-minutes.tsx",
+      "bytes": 13849,
+      "sha256": "c21dd08028eccb3785476c554ae554e2958c6528baf776054589032887208aaf"
+    },
+    {
+      "path": "app/notifications/index.tsx",
+      "bytes": 6360,
+      "sha256": "545500b63c6c90461c1b8b507f4ec76f6e45d8f4a84d5dcea42f6e0fd57d9fd1"
+    },
+    {
+      "path": "app/notifications/settings.tsx",
+      "bytes": 4215,
+      "sha256": "8b1752dc6318b0d4bdd56a61b48b33bd272c05ce299403dda4be6724648a156f"
+    },
+    {
+      "path": "app/payroll/settlement.tsx",
+      "bytes": 10519,
+      "sha256": "bffc544fd311f3833e29dc27f2bf2e2c627b6dce7c26f94a7c90703db609b33e"
+    },
+    {
+      "path": "app/payroll/wage-condition.tsx",
+      "bytes": 17217,
+      "sha256": "28732f440ef9c882785374345d6a790c2a8136e3e73eaa39594d0c81d35a9f80"
+    },
+    {
+      "path": "app/pos/[date].tsx",
+      "bytes": 6583,
+      "sha256": "2960380e36f0bbe2f68d8ed1c629a843f8294b160bea9e6942c5133f10583559"
+    },
+    {
+      "path": "app/pos/index.tsx",
+      "bytes": 36646,
+      "sha256": "a297ab5dfc9a143a3be274a69e617f17ad2513096d5dd98bbb3b086f7c3a629d"
+    },
+    {
+      "path": "app/pos/new.tsx",
+      "bytes": 14907,
+      "sha256": "36098881fd8dba526ff2aaab5d23326e273748670375963e8be930d674304610"
+    },
+    {
+      "path": "app/profit-loss/index.tsx",
+      "bytes": 23965,
+      "sha256": "02bb12a014bdc6d41fb7c29e848657998a9eb3e1cac4e9aae5d85ef6329ed334"
+    },
+    {
+      "path": "app/purchases/[id].tsx",
+      "bytes": 11350,
+      "sha256": "bfe5dbf80b7dcbe7e11a5a37c7aa88448959500d468e78731c5c22240d627de3"
+    },
+    {
+      "path": "app/purchases/new.tsx",
+      "bytes": 48160,
+      "sha256": "ad9402bed17df837eeadf433b3bd0d063acd0cac0b75a99666c79667f071d273"
+    },
+    {
+      "path": "app/recipes/[id].tsx",
+      "bytes": 10595,
+      "sha256": "2c540b51a2af83d2c253b93b261c0b3f125e0b5ee3b2eb24354b4bbef792fd58"
+    },
+    {
+      "path": "app/recipes/index.tsx",
+      "bytes": 22410,
+      "sha256": "d7954d57ee10bab40e13aef5fd0f8a0028169a54c7613a9c7fa5128c724273ff"
+    },
+    {
+      "path": "app/recipes/new.tsx",
+      "bytes": 34027,
+      "sha256": "98cc6ad3fb7a5dbbd1b4e377e7bbfd59983b4a85c8fbdccff2c04d26b63a0147"
+    },
+    {
+      "path": "app/settings/account.tsx",
+      "bytes": 4663,
+      "sha256": "7badffdffd52d41f5a38c0f05f1eeb7a50434a7753d6309b1f5e1fbafcce9dc4"
+    },
+    {
+      "path": "app/settings/home-workflow.tsx",
+      "bytes": 7265,
+      "sha256": "e2a64fa4a8a9a14457fd13f5024d9dc59ef09ba31b7f8190cf0e0f1b5e415807"
+    },
+    {
+      "path": "app/settings/members.tsx",
+      "bytes": 14955,
+      "sha256": "3e419fc490770757957d0fec4dac5bb92b956ad7f6ae0f9322163d3fc51c3189"
+    },
+    {
+      "path": "app/settings/password.tsx",
+      "bytes": 4990,
+      "sha256": "59f8069445b34daefdb0a2b285dfb68244e56ac56a663ba5702bba11f6233789"
+    },
+    {
+      "path": "app/settings/pos-sync.tsx",
+      "bytes": 10359,
+      "sha256": "f1b1961b4b6fe6e8a011f2d32c3feacb5cf01d8fb42207368ec0c268abf49eb4"
+    },
+    {
+      "path": "app/settings/sales.tsx",
+      "bytes": 10949,
+      "sha256": "2f2210729466a4e60d990a318372309104d4585f9b083796b529d6c1d3420fe1"
+    },
+    {
+      "path": "app/settings/store.tsx",
+      "bytes": 7429,
+      "sha256": "3addb6d43def19917f3494e13c995f6cb1a162f442f3b1a82f0ec77aeb620d0f"
+    },
+    {
+      "path": "app/stock/[id].tsx",
+      "bytes": 11751,
+      "sha256": "325b6d17bbc44448aed382cdd4e120ba2790dd968196702715f8f54d12fd9ee4"
+    },
+    {
+      "path": "app/stock/new.tsx",
+      "bytes": 9891,
+      "sha256": "23a5e2ac1d70dd57ed54ab90411fb3b2ac9860298ba0d51536a2a9683a92ec31"
+    },
+    {
+      "path": "assets/icons/README.md",
+      "bytes": 5327,
+      "sha256": "c0d071d85078526f8e24fc0918f3a8135f196289aa18a9a8d8b02d0158f6ed65"
+    },
+    {
+      "path": "assets/icons/brand/app-icon-android.png",
+      "bytes": 123312,
+      "sha256": "aed8088c6dad5c27e10ed60d1b1d7c09c9c1989c170535acc4b8d9f386a19818"
+    },
+    {
+      "path": "assets/icons/brand/app-icon-ios.png",
+      "bytes": 399338,
+      "sha256": "b4ccfd3cd4a3331e17887971749c8b2710dd18fb22a0fd0d0d227d1087f958d5"
+    },
+    {
+      "path": "assets/icons/business/business-hours.png",
+      "bytes": 781613,
+      "sha256": "b028c970a7da8d3ff28c6c1c662b060e31da07bbcb150116e29ef46104f26da4"
+    },
+    {
+      "path": "assets/icons/business/checklist.png",
+      "bytes": 802117,
+      "sha256": "5ed747d403b4c42129ecb752b618b1d8d516dbbbceb4e9b8c7725f43454cad01"
+    },
+    {
+      "path": "assets/icons/business/closing.png",
+      "bytes": 754473,
+      "sha256": "bf3c4a05b0f564563f252ec518235220ff479406584ebce25be02972b0c3db86"
+    },
+    {
+      "path": "assets/icons/business/expense.png",
+      "bytes": 612723,
+      "sha256": "561787ea688978f6ed1af3e76cd8cf29668cd3ce0b2280cec0824db79030f14e"
+    },
+    {
+      "path": "assets/icons/business/inventory.png",
+      "bytes": 753280,
+      "sha256": "8b3d9d8c43b1c759b89154d99a7d05ed19483022a27eb9b4d7ab3bf20ab14380"
+    },
+    {
+      "path": "assets/icons/business/open-prep.png",
+      "bytes": 737699,
+      "sha256": "9f6979b22851807cb7adfcab7ad0f37ba81a2ce22e1964a4cf4eb3a19adf4427"
+    },
+    {
+      "path": "assets/icons/business/payroll.png",
+      "bytes": 736037,
+      "sha256": "333e3c35acfe9ab829149b1a1a878ab627d614d669a2deb31a32821d05fc2ca5"
+    },
+    {
+      "path": "assets/icons/business/pos-connect.png",
+      "bytes": 841641,
+      "sha256": "43abf8de6e5378e61cab405e69d2397a4304dd65ee1154539b5151d3b7662bb6"
+    },
+    {
+      "path": "assets/icons/business/profit-loss.png",
+      "bytes": 739938,
+      "sha256": "005a6a1413b422eae762be6c782ad914aa16ef836a0d855ccba3d761475b30f5"
+    },
+    {
+      "path": "assets/icons/business/purchase.png",
+      "bytes": 864848,
+      "sha256": "46023a1b2fc47528c1fc922e7ef1d4e73feab0db09f0090c0113389a3d13c3dc"
+    },
+    {
+      "path": "assets/icons/business/recipe.png",
+      "bytes": 771543,
+      "sha256": "720ca611bdf2d54a01adcedc59ce2287b0e1eef86c9f5c220a15ab1396ab027d"
+    },
+    {
+      "path": "assets/icons/business/sales.png",
+      "bytes": 567384,
+      "sha256": "353d4e84f3c55f7416a2be0977c01e6b56f58a219f70d4518ec042ac2397665d"
+    },
+    {
+      "path": "assets/icons/business/schedule.png",
+      "bytes": 760380,
+      "sha256": "352e36a697492733f617ef27b5d7e7249d0356234fbacf583d5916c77b2e2a0b"
+    },
+    {
+      "path": "assets/icons/business/staff.png",
+      "bytes": 707025,
+      "sha256": "b18979effc17fa8c3fc4a22417586c660097633a089b3490bef19dc140692086"
+    },
+    {
+      "path": "assets/icons/business/store.png",
+      "bytes": 801125,
+      "sha256": "d14a3d9badee65195bcb3c8c66e16276c38e044feee1884743397349454735f1"
+    },
+    {
+      "path": "assets/icons/business/work-time.png",
+      "bytes": 742094,
+      "sha256": "6a4781f4e6db9b8b496bfc023f727d2d3a6a960d7f3941d8c2b0f76dab034009"
+    },
+    {
+      "path": "assets/icons/catalog.json",
+      "bytes": 26625,
+      "sha256": "4ad2d312f114eec4be3802ddc29f551e3e2e94b5264a4a6a9d97751235185efe"
+    },
+    {
+      "path": "assets/icons/generation.json",
+      "bytes": 11481,
+      "sha256": "44a55e64021635a65f9c76ca9141d3f67b251f542f8477d79a2765e9c11b4b3e"
+    },
+    {
+      "path": "assets/icons/navigation/README.md",
+      "bytes": 2079,
+      "sha256": "b5b1aeb3593fc2261e0829261bf5d8e4f9b0b48c481f9e5e5c027fa042cb3bec"
+    },
+    {
+      "path": "assets/icons/navigation/add.svg",
+      "bytes": 222,
+      "sha256": "0bb8ef6320b5e8ce2833e9e8080e5a0265ba67aa38d873e26b10ae93b1046533"
+    },
+    {
+      "path": "assets/icons/navigation/calculator.svg",
+      "bytes": 338,
+      "sha256": "06891cb556bfeb188bd49d245b484cbf56842d7b9aa85ebfe8b69c3dd6a76667"
+    },
+    {
+      "path": "assets/icons/navigation/calendar.svg",
+      "bytes": 344,
+      "sha256": "ed5da49ecaf275dbf40e2d1c599491fcd9d2cda792944fd1452743e493a51866"
+    },
+    {
+      "path": "assets/icons/navigation/card.svg",
+      "bytes": 274,
+      "sha256": "bd82bf4e23483c887b55c0d3f95c65844adee05b60b7d4eab9957852a09cba6f"
+    },
+    {
+      "path": "assets/icons/navigation/cash.svg",
+      "bytes": 329,
+      "sha256": "76e3245b7807cae875dbac7034e77b710bd3a8d5efd58083f5612868d2ee6778"
+    },
+    {
+      "path": "assets/icons/navigation/category.svg",
+      "bytes": 315,
+      "sha256": "9d52bfbd1fba21147ab456508373ef4497ea2fab78f1460c637e94bc60c64ead"
+    },
+    {
+      "path": "assets/icons/navigation/check.svg",
+      "bytes": 223,
+      "sha256": "9e0a7d3a52f658b88a7338ec31a2d27eb94bb8cf8db830ce86e1c0da574192a6"
+    },
+    {
+      "path": "assets/icons/navigation/checkbox-checked.svg",
+      "bytes": 276,
+      "sha256": "cf5fcf5e812cef83c289741209a29936cb275fd582682f04af530c711e6fe63b"
+    },
+    {
+      "path": "assets/icons/navigation/checkbox.svg",
+      "bytes": 243,
+      "sha256": "16946465da3b63295410b82f5dc867592c25ec3b52eb87d3a0e6184194197758"
+    },
+    {
+      "path": "assets/icons/navigation/checklist.svg",
+      "bytes": 294,
+      "sha256": "b9bcffe4435fa755f18ae012bd33e2aa81c4a6ef2603fe8a82c43887b5dac13e"
+    },
+    {
+      "path": "assets/icons/navigation/chevron-down.svg",
+      "bytes": 220,
+      "sha256": "88ba905283626a4d1cfd010ea57f6b641ef31afcfe5bfef82a538cfc3c37b423"
+    },
+    {
+      "path": "assets/icons/navigation/chevron-left.svg",
+      "bytes": 221,
+      "sha256": "adfc6f6a32e30c517cf5334241a0ea4011ef1c9a100c8bbc5ee56e1aff747f11"
+    },
+    {
+      "path": "assets/icons/navigation/chevron-right.svg",
+      "bytes": 220,
+      "sha256": "2f93309a368aea406ef812be5fb062665c5d1756b8b15264f69cc9663a3f7143"
+    },
+    {
+      "path": "assets/icons/navigation/chevron-up.svg",
+      "bytes": 221,
+      "sha256": "512b15f1f2fc373a528d95ac6d267432fc395dd58fa53bbf9ac862da699fda26"
+    },
+    {
+      "path": "assets/icons/navigation/close.svg",
+      "bytes": 236,
+      "sha256": "3ceb4141cf1cb50c7ff63d58110de5ac3d359f3e19fa0e98027d3a448f15085f"
+    },
+    {
+      "path": "assets/icons/navigation/closing.svg",
+      "bytes": 283,
+      "sha256": "73ca8a9cf30c3e0615f8faefec7c666fc5622298c1cfed7972034bc0a183cdab"
+    },
+    {
+      "path": "assets/icons/navigation/copy.svg",
+      "bytes": 279,
+      "sha256": "8cd25594bab6e744911d403733404bc48c5357843711092a6db3f643aec8c0c2"
+    },
+    {
+      "path": "assets/icons/navigation/dashboard.svg",
+      "bytes": 410,
+      "sha256": "388654fb006ecb1b909dcd090fe74a9d6b19a36a9f7057ceda029fdb40dca4eb"
+    },
+    {
+      "path": "assets/icons/navigation/delete.svg",
+      "bytes": 272,
+      "sha256": "4067542c6cf5c6d573cd13b980ebb25e04d365e2257135577530cef098022b3c"
+    },
+    {
+      "path": "assets/icons/navigation/document.svg",
+      "bytes": 257,
+      "sha256": "08375d0611c504a818366daa4724c0595cb887075c6108e2f9d5ed848ed41ec1"
+    },
+    {
+      "path": "assets/icons/navigation/edit.svg",
+      "bytes": 311,
+      "sha256": "3e99dc5b0d7f84d8164dfd3e475e16bb01bbddffdf9aacd9ada68f2bff2d24cb"
+    },
+    {
+      "path": "assets/icons/navigation/error.svg",
+      "bytes": 257,
+      "sha256": "85ca7abbf7387ccd55e0c6110eb9116f5171856924e53cc4ba067fa857df8c7e"
+    },
+    {
+      "path": "assets/icons/navigation/expense.svg",
+      "bytes": 274,
+      "sha256": "cf132aed57a64008edced28e2a50149d257af113cf015bd0c83d48d3521d0dcf"
+    },
+    {
+      "path": "assets/icons/navigation/filter.svg",
+      "bytes": 342,
+      "sha256": "e83b13c7ad77e53cbfb3222556b54a206724ed493ebd8f88a2c3737f12d11331"
+    },
+    {
+      "path": "assets/icons/navigation/financial-sharing.svg",
+      "bytes": 337,
+      "sha256": "422bc3b5ad5d1e601e663c3b3bbecc81505ecd2dcc1400f2a202c6077337909e"
+    },
+    {
+      "path": "assets/icons/navigation/folder.svg",
+      "bytes": 241,
+      "sha256": "28c38a4434adb462d3fe4dc8e9dbd0585343a9ef876bb81b61e363d4afdf8f83"
+    },
+    {
+      "path": "assets/icons/navigation/home.svg",
+      "bytes": 245,
+      "sha256": "9dfba71a2a5998804ad9bc1ccda051a7b973c8f6e2c675ded10220c1741dc030"
+    },
+    {
+      "path": "assets/icons/navigation/info.svg",
+      "bytes": 258,
+      "sha256": "d4a27f6dc5eca9076ca57091c5c59190f6b73c43b31dd4cbe0fade60d24f9457"
+    },
+    {
+      "path": "assets/icons/navigation/inventory.svg",
+      "bytes": 288,
+      "sha256": "4ba790ae63d11de0bf42f6a3c400fc9de2ab18d1cd750c6dad367a8bc22a6d86"
+    },
+    {
+      "path": "assets/icons/navigation/lock.svg",
+      "bytes": 289,
+      "sha256": "0aa0f04f16c4ea26afa508fa23315cba64cba68a9130c3c7c3edbbb9b568162c"
+    },
+    {
+      "path": "assets/icons/navigation/logout.svg",
+      "bytes": 239,
+      "sha256": "ee16fc32008cc45f632b3c7841e6f247ab0a5b6896c92d369ff3dddfa4fcdb89"
+    },
+    {
+      "path": "assets/icons/navigation/maintenance.svg",
+      "bytes": 313,
+      "sha256": "5a19e1bcee325fe52a91686097e352d6521be028a7f382836f8d82ec03d9fcdd"
+    },
+    {
+      "path": "assets/icons/navigation/marketing.svg",
+      "bytes": 274,
+      "sha256": "9f55f4d76712f0b4e1b20bbfa737f42afb40bb605ab1a6008ec6c87da4336fab"
+    },
+    {
+      "path": "assets/icons/navigation/member-remove.svg",
+      "bytes": 293,
+      "sha256": "64a17e60444de8ee6c54f1e9758882ee1f8b530ba53fb5a29ada8ade27e9660a"
+    },
+    {
+      "path": "assets/icons/navigation/menu.svg",
+      "bytes": 229,
+      "sha256": "c0a4b6f831c96c45f9471f015fbfb3253a603282c0bc108d14a2845fc3d67bab"
+    },
+    {
+      "path": "assets/icons/navigation/notification.svg",
+      "bytes": 284,
+      "sha256": "b906cb631f50762560c58338f592658b9f23378431053f34e7363101dd50efa2"
+    },
+    {
+      "path": "assets/icons/navigation/open-prep.svg",
+      "bytes": 277,
+      "sha256": "7c3c43cb95d9abc1d961f8908d9d7058e025db4044ce33a0132d17a9948a2f6a"
+    },
+    {
+      "path": "assets/icons/navigation/pos.svg",
+      "bytes": 295,
+      "sha256": "beb28165a84f40eb0da6b8e1834ef5f01bb8808c18f98b0d21192e93a82dc246"
+    },
+    {
+      "path": "assets/icons/navigation/profile.svg",
+      "bytes": 283,
+      "sha256": "8a95891379df7267c784786484246ab61444676f4234c92d3c3f00dffe1d348c"
+    },
+    {
+      "path": "assets/icons/navigation/profit-loss.svg",
+      "bytes": 287,
+      "sha256": "1ce6ca51489aa9a79530c5e26fc4423934b90d48828c95642df3c1729cc5948a"
+    },
+    {
+      "path": "assets/icons/navigation/purchase.svg",
+      "bytes": 312,
+      "sha256": "71bc8b71b2226f3f73f6166d906d3d4c429f22286f03efb4175089577d960b54"
+    },
+    {
+      "path": "assets/icons/navigation/radio-checked.svg",
+      "bytes": 258,
+      "sha256": "272751388578b52b16a2516893e81da7d2beffe469fb441859c42f6c99392de5"
+    },
+    {
+      "path": "assets/icons/navigation/radio.svg",
+      "bytes": 225,
+      "sha256": "f06857f0eb11bd3517248a9e71c881dd651b20dfb029430dc03c91f539cb6288"
+    },
+    {
+      "path": "assets/icons/navigation/recipe.svg",
+      "bytes": 320,
+      "sha256": "b4dbc3ec64e12062fc6ac4288850ec747d6860d0ef3e9ba3e8a9fcf1f84060ef"
+    },
+    {
+      "path": "assets/icons/navigation/refresh.svg",
+      "bytes": 305,
+      "sha256": "d8d0f917ce6dd5d0f3d483af056dfd2de27db08d30192cf6b6927909f36fd6eb"
+    },
+    {
+      "path": "assets/icons/navigation/reorder.svg",
+      "bytes": 255,
+      "sha256": "65ca9ff930476fad1a15fc59ed39face1923119b52aca7673c2eb56b4e9d4730"
+    },
+    {
+      "path": "assets/icons/navigation/sales.svg",
+      "bytes": 242,
+      "sha256": "6c159f73902806a61469e3bbe4a28921ed510f6ff838a6c59915ed66105cfdec"
+    },
+    {
+      "path": "assets/icons/navigation/search.svg",
+      "bytes": 257,
+      "sha256": "3836dde7ebb49327192c31b1be5ba2e1c54b32d6226e2bece3f16f239745bb78"
+    },
+    {
+      "path": "assets/icons/navigation/settings.svg",
+      "bytes": 400,
+      "sha256": "ba8a762e00d34e012d464a102e13a1ea44a7aff8127ff66ccb5df17918c50d68"
+    },
+    {
+      "path": "assets/icons/navigation/shield.svg",
+      "bytes": 297,
+      "sha256": "54b4bf0efeadc65678111a04d3d51dfe7f6b7e0dee591735b3e3563326736f96"
+    },
+    {
+      "path": "assets/icons/navigation/staff.svg",
+      "bytes": 325,
+      "sha256": "81e75eeb72699aa444ecfd90a493a65f075ab81ed3e1b32a4660a71af4c72b73"
+    },
+    {
+      "path": "assets/icons/navigation/store.svg",
+      "bytes": 297,
+      "sha256": "18860031201dea4683bb637d7e6d2da151922740786013d7ee1cc60c6a99cfb9"
+    },
+    {
+      "path": "assets/icons/navigation/success.svg",
+      "bytes": 254,
+      "sha256": "340de98c41faedba72eb7ee1a7e22c2361cf2bd05e53631b0e966046a7bb9492"
+    },
+    {
+      "path": "assets/icons/navigation/sync.svg",
+      "bytes": 259,
+      "sha256": "3dd477aa4c2fe749e68af37e3f303b98ae2411a256920061a248abfb00b2a649"
+    },
+    {
+      "path": "assets/icons/navigation/time.svg",
+      "bytes": 254,
+      "sha256": "e700908864ecd2d581a0671087cb2dca9d30cbb03cc246a9e0b0bc07be0ddd68"
+    },
+    {
+      "path": "assets/icons/navigation/utilities.svg",
+      "bytes": 247,
+      "sha256": "f0cdffe8c6267081601ee5d3bdf59c2528d9d66c92b85be92da4ff82da5a0228"
+    },
+    {
+      "path": "assets/icons/navigation/visibility.svg",
+      "bytes": 293,
+      "sha256": "2e988eba4c6ee1734fc16bd8696c597aeadf4b5757ea63db616bdb7c39fe7400"
+    },
+    {
+      "path": "assets/icons/navigation/warning.svg",
+      "bytes": 313,
+      "sha256": "da433debf62b43d420652be072613a6cf19329ba580d3f049ba82ffb2427fecc"
+    },
+    {
+      "path": "assets/icons/originals/business/business-hours.png",
+      "bytes": 913674,
+      "sha256": "c1fcd4066d6340d452c2b692afb60165d7dceb2748e0a4730910dc6b4f5b04e9"
+    },
+    {
+      "path": "assets/icons/originals/business/checklist.png",
+      "bytes": 960891,
+      "sha256": "7e4262d442d3d26cbaeddd68d555176f736573f5f7a20dde199c4bec270976e1"
+    },
+    {
+      "path": "assets/icons/originals/business/closing.png",
+      "bytes": 896786,
+      "sha256": "8197e66fee4e94f0e705cb490e6c521f9695f62157cb9b9e762a46cfc043bf64"
+    },
+    {
+      "path": "assets/icons/originals/business/expense.png",
+      "bytes": 737165,
+      "sha256": "d87dabb3120878580c7ed77e7f869411273a1d1399674327cab2f52d191c83fd"
+    },
+    {
+      "path": "assets/icons/originals/business/inventory.png",
+      "bytes": 884843,
+      "sha256": "9867e63f4b76b2603845892a85c9105fc53883746b552c1451a4a86e9d394ee1"
+    },
+    {
+      "path": "assets/icons/originals/business/open-prep.png",
+      "bytes": 869823,
+      "sha256": "c8090f69565c66d6adab94980fd9c0a4294c18ac14b7099393c43ad52022778f"
+    },
+    {
+      "path": "assets/icons/originals/business/payroll.png",
+      "bytes": 879322,
+      "sha256": "ae20629c8cecb2588c662173a96c52b08dfbe1f2a9070a6dab5da5f08e9f8eea"
+    },
+    {
+      "path": "assets/icons/originals/business/pos-connect.png",
+      "bytes": 977494,
+      "sha256": "3c770d8ae0d26541dfc76967192bbcd2f2802ae9baa1fda23905c0ea4bf590a5"
+    },
+    {
+      "path": "assets/icons/originals/business/profit-loss.png",
+      "bytes": 851710,
+      "sha256": "43190e5ce8d722751828364745ec627d8a0a26f99ed59c0eac2beff89483b6ca"
+    },
+    {
+      "path": "assets/icons/originals/business/purchase.png",
+      "bytes": 999450,
+      "sha256": "19526d125e73fa9854bfce031a23903f79fb27521b081f889dd89f5eece39d4f"
+    },
+    {
+      "path": "assets/icons/originals/business/recipe.png",
+      "bytes": 882084,
+      "sha256": "d4416ce843eaaec5ea7b727939f20025362588eb884179a9a70078f5cdf42588"
+    },
+    {
+      "path": "assets/icons/originals/business/sales.png",
+      "bytes": 723160,
+      "sha256": "ceca61612d528ef29669c8de7af9cc2151e2bc2f3d2dd1ec24a4d86e7a349847"
+    },
+    {
+      "path": "assets/icons/originals/business/schedule.png",
+      "bytes": 889808,
+      "sha256": "52897c1b85665f851fb8fa4dc646293ad3cf1c2c40a1235c161d38f8af00cbbf"
+    },
+    {
+      "path": "assets/icons/originals/business/staff.png",
+      "bytes": 860176,
+      "sha256": "2e562c536094e79743cca5d2667d61fdaa850ace91f354574e738702a8d6c8d3"
+    },
+    {
+      "path": "assets/icons/originals/business/store.png",
+      "bytes": 932917,
+      "sha256": "e823bc41cdaa9afd07cd8732e175bea5ff7f84ce6b45140782b544688ed9c2b5"
+    },
+    {
+      "path": "assets/icons/originals/business/work-time.png",
+      "bytes": 864345,
+      "sha256": "c842073639d1007f017a04b7831439f3dc3fdce9593c7c8265a6a3436dadcb04"
+    },
+    {
+      "path": "assets/icons/originals/status/access-denied.png",
+      "bytes": 792332,
+      "sha256": "ace4006d5621d51b224c8b9b67690542da460c62606e255e4ac688518e61936c"
+    },
+    {
+      "path": "assets/icons/originals/status/completed.png",
+      "bytes": 794713,
+      "sha256": "4e45f308b98f20a62c4c14221f8a832bc05db165aeb1caf517409a63e5095d59"
+    },
+    {
+      "path": "assets/icons/originals/status/connection-pending.png",
+      "bytes": 732097,
+      "sha256": "348144eb6f2abc35db497ca11346253c5528359a4e44b17eb19662b38e933777"
+    },
+    {
+      "path": "assets/icons/originals/status/empty-data.png",
+      "bytes": 787542,
+      "sha256": "4591097d41e7383058bcda8e2b4e284376a807a61691bcdc02f0f5bd7d276a31"
+    },
+    {
+      "path": "assets/icons/originals/status/empty-search.png",
+      "bytes": 732833,
+      "sha256": "8b3bf75290943c8a669c067122014d9d0c794c0fd15da02bdfd6193f34b6e75e"
+    },
+    {
+      "path": "assets/icons/originals/status/load-error.png",
+      "bytes": 712545,
+      "sha256": "c2ec2374b69c7d8ad9062968a088f7387e4a9dd497ba57828d4d221e7846a468"
+    },
+    {
+      "path": "assets/icons/originals/status/review-pending.png",
+      "bytes": 850910,
+      "sha256": "7c225174b748debf7da7a1bbc1efc710372f1ed4dc29d4f105fab4f45a6af390"
+    },
+    {
+      "path": "assets/icons/originals/status/stock-low.png",
+      "bytes": 814471,
+      "sha256": "ddd8ea0695435fb371b6196ba8acc76499e9fd5cac4da71e434a65cf4053cf6d"
+    },
+    {
+      "path": "assets/icons/preview-board.png",
+      "bytes": 973037,
+      "sha256": "297d57ea067d4834348ebb5ac902de7557719767f7b569bd67bf0d1f3c67e2d1"
+    },
+    {
+      "path": "assets/icons/preview.html",
+      "bytes": 99183,
+      "sha256": "1e0e4a6614e8f41870c63869a578575c332fe45d044b8639ed6909fdd9838c69"
+    },
+    {
+      "path": "assets/icons/processing.json",
+      "bytes": 9247,
+      "sha256": "5ecc921e167a5772869a13944278970859a62e8686c2c7800c033082a9e65bcd"
+    },
+    {
+      "path": "assets/icons/providers/google-g.png",
+      "bytes": 33661,
+      "sha256": "d1ce9c2af0b10a7333abc99bc706f9a6a199e5b65bf3e3009624f076b8638e6a"
+    },
+    {
+      "path": "assets/icons/raster-plan.json",
+      "bytes": 8191,
+      "sha256": "1bc594b7946b691085b8ccc62a9d38c66663acb54260efa8dce39d473e1aae53"
+    },
+    {
+      "path": "assets/icons/runtime/business/business-hours.png",
+      "bytes": 46541,
+      "sha256": "4d6b40bd2d1de9bad73f5889ec5848e565da31288878fbff5051b59c9e6821a5"
+    },
+    {
+      "path": "assets/icons/runtime/business/checklist.png",
+      "bytes": 42241,
+      "sha256": "8122de5fdc23a37a66c6039e81b313c3f79cfe617671c89e2c670cce26bb6d3c"
+    },
+    {
+      "path": "assets/icons/runtime/business/closing.png",
+      "bytes": 40725,
+      "sha256": "bbcab47aaba0fb49c01566b551690379e0279b2a4124d7ee6ea418a6ffbeddeb"
+    },
+    {
+      "path": "assets/icons/runtime/business/expense.png",
+      "bytes": 33860,
+      "sha256": "864cc02fd95fd974679495842befe20ceabf6587f7439927e3f4b79a6b4c7672"
+    },
+    {
+      "path": "assets/icons/runtime/business/inventory.png",
+      "bytes": 42487,
+      "sha256": "0bc13b88ca5bfb846235f18d9c53c8339650a8c669f531d6999baa52beb30273"
+    },
+    {
+      "path": "assets/icons/runtime/business/open-prep.png",
+      "bytes": 42263,
+      "sha256": "aa28f143ea109c6eaba3041940cba17781c4b0fe2493025fdf1cd7597db92933"
+    },
+    {
+      "path": "assets/icons/runtime/business/payroll.png",
+      "bytes": 39077,
+      "sha256": "269817380d4babc1e76807be69228071fcd9d8b0faf0dc966b092e952b312215"
+    },
+    {
+      "path": "assets/icons/runtime/business/pos-connect.png",
+      "bytes": 49206,
+      "sha256": "94a35685bc2a49d90423c5fa9c0a6584e938559cb2d56f5b007cabefa61f4a1c"
+    },
+    {
+      "path": "assets/icons/runtime/business/profit-loss.png",
+      "bytes": 43767,
+      "sha256": "0e3b4c8145b2fe5f0de6ca4e33b4fdfc4e28160de8a749c57a4aaf8fe5f8674c"
+    },
+    {
+      "path": "assets/icons/runtime/business/purchase.png",
+      "bytes": 54208,
+      "sha256": "0215cf5fea50497e9e959292bd9ef998a6e02a5b9c9e7abb6a574a83a9899a01"
+    },
+    {
+      "path": "assets/icons/runtime/business/recipe.png",
+      "bytes": 45380,
+      "sha256": "ee9d560e378bba53335fd3f47c53ff7ac649231daea54000cb39d28b1b5b308e"
+    },
+    {
+      "path": "assets/icons/runtime/business/sales.png",
+      "bytes": 30175,
+      "sha256": "76374386db0d5c4f47a948d07812c563c9afecba2e4b38b2d48f75887d8d0eb4"
+    },
+    {
+      "path": "assets/icons/runtime/business/schedule.png",
+      "bytes": 43399,
+      "sha256": "1027722bc84a68575756598b04ac828ccd2d8265202757884122657bbf7f35b4"
+    },
+    {
+      "path": "assets/icons/runtime/business/staff.png",
+      "bytes": 37160,
+      "sha256": "35cc8006ae5ea04ffc1ba5556264f2a32e51422c17c6340853dea486649b4eff"
+    },
+    {
+      "path": "assets/icons/runtime/business/store.png",
+      "bytes": 48084,
+      "sha256": "c79c220f0fe20273d1c5f8864ebff771d402a4c0b850d37151961727e047d8fe"
+    },
+    {
+      "path": "assets/icons/runtime/business/work-time.png",
+      "bytes": 40930,
+      "sha256": "a508fd122c2661e281a3ce2c4e8196e051f733ca1fde9490fed6adcbaaa23b5f"
+    },
+    {
+      "path": "assets/icons/runtime/status/access-denied.png",
+      "bytes": 35144,
+      "sha256": "7f710e76c311b6ef146e2af583b5d1efb8d97cff175efe469c8e3dbaa9b64595"
+    },
+    {
+      "path": "assets/icons/runtime/status/completed.png",
+      "bytes": 39641,
+      "sha256": "b19d49bb598b899b003f99790b062620d7c7ebc607f65909ec40eb45abdbc07a"
+    },
+    {
+      "path": "assets/icons/runtime/status/connection-pending.png",
+      "bytes": 41086,
+      "sha256": "c74d81eff98de423ac921f07a22bbe5658a1bbec828279b9255cb5c5289e2cb9"
+    },
+    {
+      "path": "assets/icons/runtime/status/empty-data.png",
+      "bytes": 36038,
+      "sha256": "3f498b476d77ed0077150f0239dcbc61569eb97177b5a685e091a1bc3c549d24"
+    },
+    {
+      "path": "assets/icons/runtime/status/empty-search.png",
+      "bytes": 34694,
+      "sha256": "62cad1ee023e7ed9e289b60ff83f32d3c51273a765d9a51d1478d9acb4f1c87d"
+    },
+    {
+      "path": "assets/icons/runtime/status/load-error.png",
+      "bytes": 32175,
+      "sha256": "7766a79e72152175957689893cc6fd9a0c04e2a957a1095bcdd562e9ffc56414"
+    },
+    {
+      "path": "assets/icons/runtime/status/review-pending.png",
+      "bytes": 39636,
+      "sha256": "8210e013e56cf6c8c79def3310dc4da64249cb2006889f9cd27c4bd07f7489c3"
+    },
+    {
+      "path": "assets/icons/runtime/status/stock-low.png",
+      "bytes": 37826,
+      "sha256": "48d0365636e0f05ee555b71b680d3c89f1fcac9398bd967e09e90015342cb310"
+    },
+    {
+      "path": "assets/icons/status/access-denied.png",
+      "bytes": 650307,
+      "sha256": "0049035db6cb3699853bff3c4ee399d5102f6540d2a5990473c6e31bb167989b"
+    },
+    {
+      "path": "assets/icons/status/completed.png",
+      "bytes": 652692,
+      "sha256": "a1426e384f7e11828c897576fcf5beca13da88719cf15003ad085fcfc701362d"
+    },
+    {
+      "path": "assets/icons/status/connection-pending.png",
+      "bytes": 641357,
+      "sha256": "4399abf5c542c5a7192c959f4034a1e421a295fd037f108adfe6f512a0da59a4"
+    },
+    {
+      "path": "assets/icons/status/empty-data.png",
+      "bytes": 651205,
+      "sha256": "7b562e4773d361d065ccf04665b2f9f3c97e5321866b8822b3c935656ffbc2a4"
+    },
+    {
+      "path": "assets/icons/status/empty-search.png",
+      "bytes": 612662,
+      "sha256": "0031d71ffdbf0caacaa6f577af353a73df223ec5d30aa2b81a5102f877eefb53"
+    },
+    {
+      "path": "assets/icons/status/load-error.png",
+      "bytes": 589542,
+      "sha256": "efaf8a2dad60a6d152bec3cba8bd933549dafe5ac404d1c8ee1888f556b84945"
+    },
+    {
+      "path": "assets/icons/status/review-pending.png",
+      "bytes": 713819,
+      "sha256": "ff74c955e594f2bb121ba721a25d32e71d798f50e1d11a54541639676d006cc6"
+    },
+    {
+      "path": "assets/icons/status/stock-low.png",
+      "bytes": 663543,
+      "sha256": "9bfc8611bec30998378333ec9e34bd3922afea08d1365c86ac51746ec8129ad1"
+    },
+    {
+      "path": "assets/icons/validation.json",
+      "bytes": 10215,
+      "sha256": "8cb02e851e96ddd352040b57d6cfadaf3da7700d2f269bdd10a685fdaa9f7434"
+    },
+    {
+      "path": "docs/EAS-업데이트-운영-2026-10-30.md",
+      "bytes": 14345,
+      "sha256": "167ec2ffc588f13aa7d0e0809c2ce4b19d7ebd0c87ae73bf6ca16943d3fd0b80"
+    },
+    {
+      "path": "docs/EAS-첫배포-2026-10-30.md",
+      "bytes": 7928,
+      "sha256": "f6b84cb6a7fbcb5c2b5352c6ff9fec60b06fc34c125e05a1aef1a0519ac76714"
+    },
+    {
+      "path": "docs/UI-디테일-적용-2026-10-30.md",
+      "bytes": 4359,
+      "sha256": "ead2d0c05e8da34d12b023f5dd47e2cba3ce37d765b77404c7a8c6b311575e9d"
+    },
+    {
+      "path": "docs/UI-전체화면-시뮬레이터-점검-2026-10-30.md",
+      "bytes": 21576,
+      "sha256": "45073de1b0c11a705155dd8ebe7e7e5b8463b29d9c6f484e4aa87e55bce94e39"
+    },
+    {
+      "path": "docs/UIUX-휴리스틱-전체화면-검토-2026-10-30.md",
+      "bytes": 30457,
+      "sha256": "b45dca05b6f914f71805bda53e3bb63ac6a2cde5b022bf6e39d18ddc111254ba"
+    },
+    {
+      "path": "docs/memory-improvements-2026-11-01.json",
+      "bytes": 24492,
+      "sha256": "7b411da257c4c65b17de92b87840255e4b3d6024093c161786223e719bb7a10a"
+    },
+    {
+      "path": "docs/workspaces/01-design-system.md",
+      "bytes": 4718,
+      "sha256": "0dd972ac968b09b245f7161475dce1df670b2c13a5624c746ff124f466581f7a"
+    },
+    {
+      "path": "docs/workspaces/02-payroll.md",
+      "bytes": 4638,
+      "sha256": "26524bec5ec3c9e78c5f2df96506acb40c254568b07b47ad95d6260a2cdd24f0"
+    },
+    {
+      "path": "docs/workspaces/03-inventory.md",
+      "bytes": 4590,
+      "sha256": "0c69ee5ecfb18aa5790e749fe8a1f2b0d5b7134832fbaccd65cd5ee5a5045a4e"
+    },
+    {
+      "path": "docs/workspaces/04-operations.md",
+      "bytes": 4721,
+      "sha256": "d34137cb6c3dd49a690d5be5dd1b7b88160557c82c46ef9dccf68b1eab2a3bb2"
+    },
+    {
+      "path": "docs/workspaces/05-finance-settings.md",
+      "bytes": 4693,
+      "sha256": "2852dcb87496dc8f2f309f7b292a4d002befc0b5ade050bbb3dd7be23b91d949"
+    },
+    {
+      "path": "docs/workspaces/06-security-auth.md",
+      "bytes": 4823,
+      "sha256": "c0b53c6a16693e24cb5594116b2bf86cca5e5759fcab5b6172d167990954f79f"
+    },
+    {
+      "path": "docs/workspaces/README.md",
+      "bytes": 6040,
+      "sha256": "115ffbb5d0d2581ce7d3c8cfd767f3bb28c7abb4b3ec5a6b27923001806ae63a"
+    },
+    {
+      "path": "docs/workspaces/current-status.md",
+      "bytes": 2411,
+      "sha256": "54c83efe518950bdb6ea8ee8e44bf66847732109a243841f75a01435cd03adfc"
+    },
+    {
+      "path": "docs/workspaces/preparation-record.md",
+      "bytes": 6332,
+      "sha256": "d379be1b5b0fc7c6c13603bd3885d142ebfdf7fe188065730be7172ccf8edad8"
+    },
+    {
+      "path": "docs/고정-글래스-상단바와-공유배경-2026-10-30.md",
+      "bytes": 6257,
+      "sha256": "25c93a83acdb79e478dc99ca96e024bc0bf853dcd14c4d7db6860a1450889a4c"
+    },
+    {
+      "path": "docs/공통-아이콘-Assets-제작목록-2026-10-30.md",
+      "bytes": 14172,
+      "sha256": "d2f08d7cc5f41cdaf2d466fea86541d080e95ba2a725a2d822b37a8e2dfa3f6a"
+    },
+    {
+      "path": "docs/급여-일별근무-SQL-서버대조-2026-11-01.md",
+      "bytes": 9182,
+      "sha256": "92a212be3e4829ec858cc0c52e907913e335d6cb11330b07cb9523be5a664dab"
+    },
+    {
+      "path": "docs/급여-일별근무-적용안내-2026-10-26.md",
+      "bytes": 4140,
+      "sha256": "269fd1b461dcd39964aa1108636cd3fc08f0e43323b22072117403ad1fd6c9b5"
+    },
+    {
+      "path": "docs/급여변경-입사일-스냅샷-구현-2026-10-27.md",
+      "bytes": 4755,
+      "sha256": "454b18bece123275f526ee378708af2e3264205da8ca57351801e140ce98a86c"
+    },
+    {
+      "path": "docs/남은작업-우선순위-보고-2026-11-01.md",
+      "bytes": 14908,
+      "sha256": "b8ff40c52b6ca3f3edfc3bc4236b497209b827290289d220053d10495076ea7e"
+    },
+    {
+      "path": "docs/메모리-미적용개선-통합계획-2026-11-01.md",
+      "bytes": 26545,
+      "sha256": "3bc9a4c035211ccf2d07098aca97837e701c14aacf2f2af6cf46b7e58ea8216b"
+    },
+    {
+      "path": "docs/소셜로그인-설정-2026-10-20.md",
+      "bytes": 12718,
+      "sha256": "c68bd93f9d3e4c70be81b601f0d7b4da4888221a2f9aaada946ec15d7a646ab4"
+    },
+    {
+      "path": "docs/손익-기준과-배경통일-2026-10-27.md",
+      "bytes": 6795,
+      "sha256": "b21aba855b433325a5e87fc74d0f09c3b43ffdabdd0af73037e5d045cd77f6fc"
+    },
+    {
+      "path": "docs/일별근무-스냅샷-구현인계-2026-10-27.md",
+      "bytes": 5058,
+      "sha256": "b7965266235b3037a3fa189cd9c0af57868308b75a15bb66d77f6a686a1e8111"
+    },
+    {
+      "path": "docs/전체화면-기능명세-2026-10-26.md",
+      "bytes": 18514,
+      "sha256": "9fa3dbb976a3f2459f3432dfe5f87341a9761971532cf38d86a121275c5b5da5"
+    },
+    {
+      "path": "docs/체크리스트-즉시동기화-hotfix-2026-11-01.md",
+      "bytes": 4477,
+      "sha256": "dc570c4476a49c0fdc65feb0550a8f05995bb0ad2041ccbf585bbe8719475423"
+    },
+    {
+      "path": "docs/화면-설명-문구-정리표-2026-10-19.md",
+      "bytes": 54886,
+      "sha256": "890474597bdbaa8c940cf48de5be01a1b5d5ecb46868c2a66095bd6b5eb2b8c8"
+    },
+    {
+      "path": "eas.json",
+      "bytes": 967,
+      "sha256": "282fc418fc0a2e5009b662d6855f040511d554a8b14d0ff27dee74ee1e2a9e90"
+    },
+    {
+      "path": "lib/components/BulkCategoryModal.tsx",
+      "bytes": 10034,
+      "sha256": "e31be6e92ed3281c7ce10ab2e7995337d6490c26b8e9f743a27bf205eafaed06"
+    },
+    {
+      "path": "lib/components/CatalogImportModal.tsx",
+      "bytes": 8915,
+      "sha256": "f3a8278e2627f4d3fd777a6a0e8df56c8bb29ae61ee58e48c8d29249742beb04"
+    },
+    {
+      "path": "lib/components/CategoryManageButton.tsx",
+      "bytes": 699,
+      "sha256": "ed2f06e5018add9aaeadf1d8a44c3c92f9e2b9a8f5b8d1de340769839f8e446d"
+    },
+    {
+      "path": "lib/components/CategoryManageModal.tsx",
+      "bytes": 8203,
+      "sha256": "3945ef1a91149264c49752112a69b3d91845a97e4f4dc089e82a41266a19c480"
+    },
+    {
+      "path": "lib/components/DailyOperationsHome.tsx",
+      "bytes": 9136,
+      "sha256": "d62ce893b8bdc3718da8ddb25cb44d0de4fd2a21f765796f1510cb1ce63dfdd1"
+    },
+    {
+      "path": "lib/components/DevRoleSwitcher.tsx",
+      "bytes": 5274,
+      "sha256": "bd37ecdc62f424940c8e413d0242a1a3ba30bf2adfee969f3da682b5a2b022c1"
+    },
+    {
+      "path": "lib/components/DraggableFab.tsx",
+      "bytes": 7653,
+      "sha256": "6f17b85345c3860b94cb418a396858d7e98367b575b2f23b3b0f645ad33f2e5a"
+    },
+    {
+      "path": "lib/components/ErrorMessage.tsx",
+      "bytes": 1615,
+      "sha256": "113293e1d393425ce4889b35dba1df197d6ed846547d3dd0307cf5be28225ffa"
+    },
+    {
+      "path": "lib/components/ExpensesPanel.tsx",
+      "bytes": 18230,
+      "sha256": "10082f8bc60a4169f86e5aa0cc9fbe99f4aed5a8b8fd01269c8d490a10431ee9"
+    },
+    {
+      "path": "lib/components/FinancialSharingChoices.tsx",
+      "bytes": 2251,
+      "sha256": "1a94c311477601a4e7e660a7d4d47a28b5ae37b08af5a111923974041b2823ba"
+    },
+    {
+      "path": "lib/components/HomeAlertsPanel.tsx",
+      "bytes": 3167,
+      "sha256": "df72c53212bb5e3c24a2871475fb52ea30bdfb485a308c29747d98b78b4f0cc0"
+    },
+    {
+      "path": "lib/components/IntentCard.tsx",
+      "bytes": 2935,
+      "sha256": "6d67405328f45c05eecdec00fd4c05cf842701031e77b3b3b6d9d0128ae9469a"
+    },
+    {
+      "path": "lib/components/LedgerFilters.tsx",
+      "bytes": 1846,
+      "sha256": "e254e80f9e26805b5004cb7cc2d28de716359861790e66c5933c6c1b5b3c80b7"
+    },
+    {
+      "path": "lib/components/LedgerHeader.tsx",
+      "bytes": 1811,
+      "sha256": "30acb0e02a6d4d0e7c1253a1d4979e9533ea01dad4d9220a83ca78a8c0316f5c"
+    },
+    {
+      "path": "lib/components/MemberApprovalModal.tsx",
+      "bytes": 6640,
+      "sha256": "7200f17c8a0f5909a665d66681bb77e913b187a8df2fd07328201537995537f5"
+    },
+    {
+      "path": "lib/components/MoreDrawer.tsx",
+      "bytes": 15709,
+      "sha256": "979a16e9d4584667e9c9b05e6177e6f1af4abda24dedf131c52ce5ca8b0e8e5c"
+    },
+    {
+      "path": "lib/components/RecipeCard.tsx",
+      "bytes": 5949,
+      "sha256": "692c3bb07d90764b7c4ab330db0fe8bb65b5452740bbe761cc0a66f7464fc8cd"
+    },
+    {
+      "path": "lib/components/StaffWorkHome.tsx",
+      "bytes": 5580,
+      "sha256": "05a519ebfd04817cfa0603cac1c86b367a8c6a730c23f5bc30fcb77fe9609c17"
+    },
+    {
+      "path": "lib/components/StoreAppBar.tsx",
+      "bytes": 2394,
+      "sha256": "2e9aef3ddf1b2de44633e8a5e2cbade49c4436cceb37566405ebea6aa8fcc35d"
+    },
+    {
+      "path": "lib/components/StoreScopeHeader.tsx",
+      "bytes": 5196,
+      "sha256": "2937051707fdd3abc0fa92a2ba695a131674413de9e03bb6cc6c2152b9bb2f5f"
+    },
+    {
+      "path": "lib/components/StoreSetupWizard.tsx",
+      "bytes": 10663,
+      "sha256": "621f05b8fe595017ca23c778ef4b9c422882ddcaf9cb6e036e306c2ecb09c0e4"
+    },
+    {
+      "path": "lib/components/ui/AppBar.tsx",
+      "bytes": 3523,
+      "sha256": "a612442469f553125a97af7b7cf16d2b44a287a4b3e5f445f80bf17609864754"
+    },
+    {
+      "path": "lib/components/ui/Button.tsx",
+      "bytes": 3794,
+      "sha256": "6a5e90801d9071041100921a98f7b267dfbde3453d4a0be04bd69b6c377c5a4a"
+    },
+    {
+      "path": "lib/components/ui/ChipRow.tsx",
+      "bytes": 1767,
+      "sha256": "980030bef0c8104e6fc6c7c996b5692de78f46b371354f9e3aa9b0886ac8b2c5"
+    },
+    {
+      "path": "lib/components/ui/EmptyState.tsx",
+      "bytes": 2018,
+      "sha256": "2ec9c75dbeedb0e989841358cdab7f508ed405c39468ee8400cfb179558e1186"
+    },
+    {
+      "path": "lib/components/ui/ListCard.tsx",
+      "bytes": 1361,
+      "sha256": "c29986a3f416c02bc6bc5980df545440dd6c0fc03708e8f645f8e535973f1f86"
+    },
+    {
+      "path": "lib/components/ui/SectionHeader.tsx",
+      "bytes": 1706,
+      "sha256": "72283acf724a697deaa441738baeb382ff2f1f0979f3e7c17d97550579c9d3f2"
+    },
+    {
+      "path": "lib/components/ui/SummaryCard.tsx",
+      "bytes": 3210,
+      "sha256": "99844f4edfa7fe770c7d1d3337c94001e1ffe26987a030da6d34b9526406652d"
+    },
+    {
+      "path": "lib/hooks/useCleaningChecklist.ts",
+      "bytes": 5996,
+      "sha256": "cee17c3554d0083a1406dffac1b1f1af7795117a87fa57f9dfdb5845457cb68e"
+    },
+    {
+      "path": "lib/hooks/useManualSales.ts",
+      "bytes": 3397,
+      "sha256": "ed3879746ae0ef7d94bf8f631fc88653497242e6f6be8c331a7dc1b561a77129"
+    },
+    {
+      "path": "lib/hooks/useNotificationSettings.ts",
+      "bytes": 3615,
+      "sha256": "530b6e4ffd169510373ec6c0fab69e365f6a87501a9345d56265368002ccf0d7"
+    },
+    {
+      "path": "lib/hooks/usePayroll.ts",
+      "bytes": 5557,
+      "sha256": "8d015644453803b8ce317cd76457326c42738e8754640b38287440b2842b8323"
+    },
+    {
+      "path": "lib/hooks/usePayrollDeductionDraft.ts",
+      "bytes": 2118,
+      "sha256": "ca759e55eab13928e29e6559bd4f045afb6907430e50b22c08ec6a6bee7c8d0a"
+    },
+    {
+      "path": "lib/hooks/useRequestApprovals.ts",
+      "bytes": 3627,
+      "sha256": "98f32b2f2af223280db364b6b679a1181c79b138428e446e26638ab6928efbf5"
+    },
+    {
+      "path": "lib/hooks/useStorePermissions.ts",
+      "bytes": 1534,
+      "sha256": "cae504995c07f785a2791709237e231961677a80c3760df0815c1f03b6a9013e"
+    },
+    {
+      "path": "lib/icons/AppIcon.tsx",
+      "bytes": 3539,
+      "sha256": "f67c60bfd74d197e0222bc613e72d5716ce419109196cd937866782ac9c63ac0"
+    },
+    {
+      "path": "lib/icons/Illustration.tsx",
+      "bytes": 2499,
+      "sha256": "1bc615460027f75147530a3a7b969bb95addb3b936799a08dc311fbb01173550"
+    },
+    {
+      "path": "lib/icons/vectorAssets.ts",
+      "bytes": 18874,
+      "sha256": "e515298604af2e7e7040cdaf2815997ddf48ff992436ae973f3540e4cd53879b"
+    },
+    {
+      "path": "lib/services/manualSales.ts",
+      "bytes": 4444,
+      "sha256": "4a49462d399fba73f56ae539deb4548a574a65232fe5daf6adbc54df679f634f"
+    },
+    {
+      "path": "lib/services/payroll.ts",
+      "bytes": 14770,
+      "sha256": "5fcafc17d5a035134aef7344559a6e102c97e6d0399013ff198291a935894fc6"
+    },
+    {
+      "path": "lib/services/schedule.ts",
+      "bytes": 4907,
+      "sha256": "952016a168617eeb9013bc1b9654adc7432541bdf52439a7d47dd8d728c17975"
+    },
+    {
+      "path": "lib/services/socialAuth.ts",
+      "bytes": 3993,
+      "sha256": "d2d683aeaf6f92648d965021572960f209ef53f19209778c3cd07fb184f69e36"
+    },
+    {
+      "path": "package-lock.json",
+      "bytes": 479786,
+      "sha256": "d1e2697b58fe6e8ce4df26e2caf2ffca610774fcfce7cfa3e3eec1b3efe830da"
+    },
+    {
+      "path": "package.json",
+      "bytes": 3287,
+      "sha256": "f239854b36586634afdcceb609bc5392030f7f4ea95594d0db895c8f718d7e29"
+    },
+    {
+      "path": "scripts/build-rattle-icon-gallery.mjs",
+      "bytes": 13195,
+      "sha256": "ef48b26445faf04655102066a69c75435a64cb2a93621c41ce5db91dd0d47a07"
+    },
+    {
+      "path": "scripts/build-rattle-native-icons.mjs",
+      "bytes": 716,
+      "sha256": "94e56a7c85ac85670f3025bf3dc84d427856dd9065cd7552c9dcb3b5b8da305e"
+    },
+    {
+      "path": "scripts/build-rattle-runtime-images.mjs",
+      "bytes": 2161,
+      "sha256": "6450e468971a3c8b73864109d21be15d35064ecf37c71c4949715305ba2ca4e2"
+    },
+    {
+      "path": "scripts/configure-native-updates.cjs",
+      "bytes": 2691,
+      "sha256": "d7976d8bdbac655fa6d9f85a3d07d3b87c14ba6af442e3f47828ba8b9457b6a9"
+    },
+    {
+      "path": "scripts/create-rattle-icons.mjs",
+      "bytes": 9136,
+      "sha256": "052f89855c2cbe1106f0368a826f795f74d4609765d3fc3c16b49484ca4c08a3"
+    },
+    {
+      "path": "scripts/prepare-rattle-icon-pngs.mjs",
+      "bytes": 1846,
+      "sha256": "68854598899b05a58f45b781868e16a7c14988f47c9d4ab099ff1694199ac3a5"
+    },
+    {
+      "path": "scripts/qa/rebundle-ios.mjs",
+      "bytes": 1724,
+      "sha256": "f9f61a3990d59dda095f075cae701a23e28d67ac9c8eaf8ba3bda82b85117ee3"
+    },
+    {
+      "path": "scripts/validate-catalog-permissions-sql.mjs",
+      "bytes": 10187,
+      "sha256": "428ca89d26d162f4378694e05549049f648a1246a210ba904222f58b9ae0b787"
+    },
+    {
+      "path": "scripts/validate-rattle-icon-assets.mjs",
+      "bytes": 5922,
+      "sha256": "f3f0029056280cae20aeae5db89430fa0141097084572f3205ed64bea4b3a6f2"
+    },
+    {
+      "path": "supabase/migrations/20261101010000_revoke_client_truncate.sql",
+      "bytes": 528,
+      "sha256": "dc663e2995edcffd42a4d2b518b2fb9ca407072148370cae527a0388ef55be25"
+    },
+    {
+      "path": "supabase/migrations/20261101011000_part_time_catalog_write_guards.sql",
+      "bytes": 4102,
+      "sha256": "2dd2d973d0bbb024a06f47370d16d7d0f8c04890ea19ca69850518f03088b9dc"
+    }
+  ],
+  "excluded": [
+    {
+      "path": ".agents/skills/make-interfaces-feel-better/SKILL.md",
+      "bytes": 11818,
+      "sha256": "c1d508fa7bef8e47ee682b4f214c7a4ed1416b91d05a97285e555bad1c41a23e",
+      "reason": "로컬 스킬 설치 변경; 앱 필수 의존성 아님"
+    },
+    {
+      "path": ".agents/skills/make-interfaces-feel-better/agents/openai.yaml",
+      "bytes": 130,
+      "sha256": "3f5ae62f7339814fef24715c700a97c07458ec3ae15dbaa7ce12fde3ba7e9ec3",
+      "reason": "로컬 스킬 설치 변경; 앱 필수 의존성 아님"
+    },
+    {
+      "path": ".agents/skills/make-interfaces-feel-better/animations.md",
+      "bytes": 12711,
+      "sha256": "248ad6d995b4a80038c7fec2ec2c4761fdad49738aca070bd3ca727e19a5f2c8",
+      "reason": "로컬 스킬 설치 변경; 앱 필수 의존성 아님"
+    },
+    {
+      "path": ".agents/skills/make-interfaces-feel-better/icons.md",
+      "bytes": 2277,
+      "sha256": "746601dcf81a322c8ba5cc5730f991496dd94dc63279bc363f781666f84fa6b0",
+      "reason": "로컬 스킬 설치 변경; 앱 필수 의존성 아님"
+    },
+    {
+      "path": ".agents/skills/make-interfaces-feel-better/performance.md",
+      "bytes": 3046,
+      "sha256": "f1e8b9f22de1081d1d22cd2923fdec4441ff6192082dc6988435310635e76e8f",
+      "reason": "로컬 스킬 설치 변경; 앱 필수 의존성 아님"
+    },
+    {
+      "path": ".agents/skills/make-interfaces-feel-better/surfaces.md",
+      "bytes": 7239,
+      "sha256": "36d7845774eb331d9889112c5339c80bbe72a342c61dd941372e5e168b9ebf45",
+      "reason": "로컬 스킬 설치 변경; 앱 필수 의존성 아님"
+    },
+    {
+      "path": ".agents/skills/make-interfaces-feel-better/typography.md",
+      "bytes": 4690,
+      "sha256": "518cae9f0d48d48081cd87739993d76e145c0fe2394bb9f95cbde2b003c44549",
+      "reason": "로컬 스킬 설치 변경; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "assets/icons/reference/style-options-2-and-3.png",
+      "bytes": 1521860,
+      "sha256": "1167ee48ee6d88912b3a3d1786ac30bba983cd0ce25ad3a088734bd020686538",
+      "reason": "사용자 참조 원본; 공통 런타임 의존성 아님"
+    },
+    {
+      "path": "assets/rattle-common-icons-2026-10-30.zip",
+      "bytes": 36135242,
+      "sha256": "559514653c4573fa4be86b4e7e55e0aa845f1254fce8e822dafce60dd89ce4f9",
+      "reason": "납품/중복 압축본; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-26/raw-ios/01-home.png",
+      "bytes": 1017402,
+      "sha256": "5cf5f04afaf1611120f173262a681742b4647d6888c4e1ae915d1a70bfe16cf0",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-26/raw-ios/02-stock.png",
+      "bytes": 342988,
+      "sha256": "d7da825d5c4deda46e0d3b8428f4476ddfa79df7bb3450456e2c6012b228a6e8",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27 2/README.md",
+      "bytes": 4502,
+      "sha256": "2aad2c28176873ecc38f55c60d541ca603a585208f04dacf38079fa0ed2cf019",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27 2/apple-1206x2622/01-home.png",
+      "bytes": 858718,
+      "sha256": "319ed69d1cc427493ec255a6477667ad69e8dc8e254b60f506c1bec727299e9a",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27 2/apple-1206x2622/02-profit-loss.png",
+      "bytes": 512135,
+      "sha256": "36ddaf1c7e56175c17c2cc9628fe1496a71ccdb792aa3dc1cfc292515f60adb4",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27 2/apple-1206x2622/03-stock.png",
+      "bytes": 469796,
+      "sha256": "acd33127a18136aecf505d1e8a9dfc4c3f1bdd7a44cf70ad3954e0d22bf0da1f",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27 2/apple-1206x2622/04-recipes.png",
+      "bytes": 484982,
+      "sha256": "74e54836e00ee30f3c82df9e8395a82df864209f19aa3dcae1535d7a45d52d27",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27 2/apple-1206x2622/05-purchases.png",
+      "bytes": 824304,
+      "sha256": "3dc79e2c07a43b785692134883c454c53666afd48dd5cf533d7a8200aae60862",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27 2/apple-1206x2622/06-payroll.png",
+      "bytes": 536518,
+      "sha256": "6241d875200d496c3d451d876f74bf9f558896e98d8f3538ff99af8dccbc2594",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27 2/apple-1206x2622/07-checklist.png",
+      "bytes": 354521,
+      "sha256": "1fa95d99e37d1ca15f070888ae47d530bc8808520aff656f04bb0e97873b2de2",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27 2/captions.json",
+      "bytes": 1482,
+      "sha256": "12cc8273ef873cf64fc8f4fd53e0c927201d249691e2a3a710b9940a5076e86a",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27 2/copy/apple-keywords-ko.txt",
+      "bytes": 94,
+      "sha256": "bebcf0c8c6ce4c803672f5489e3fccb79e59c49b7a4b670a9c8e749b5a0a1e1b",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27 2/copy/apple-promo-ko.txt",
+      "bytes": 229,
+      "sha256": "83b50b333f5a18ed70f8347d6086012a0f1e7cb6bd0bc2c0151a8103c67edcb9",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27 2/copy/apple-subtitle-ko.txt",
+      "bytes": 54,
+      "sha256": "9f205559de3efa39453253eaf0601630077a56331838e0d4f4e6e0057c9d85bf",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27 2/copy/description-ko.txt",
+      "bytes": 2441,
+      "sha256": "e1b0ec75ddd61df003549f87224707a050fd0234a7e63c0b391a28ca84ed9010",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27 2/copy/google-short-ko.txt",
+      "bytes": 135,
+      "sha256": "9720770dc159ba42c5ac34b7cda91da12ff7d10f0f9e99dd04932d493a494d6d",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27 2/copy/title-ko.txt",
+      "bytes": 40,
+      "sha256": "ae405161ce9a63308d3e85679716f6a57e90cb77d72c2b94ecd0439fd6cab712",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27 2/fonts/WantedSans-Bold.ttf",
+      "bytes": 2809488,
+      "sha256": "254e72a4938bb0ee80614c0e59a197f9f8ed317c6030d5941996dfc778ed9896",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27 2/fonts/WantedSans-OFL.txt",
+      "bytes": 4394,
+      "sha256": "db345ad0216d0b73ba5dd3a540507281da6695f234e0a4e70cf2e1a8f30d4331",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27 2/fonts/WantedSans-Regular.ttf",
+      "bytes": 2778504,
+      "sha256": "149bd77509f3b37156ae526288b4a8e26cebc2d710235954cca4e827782443d2",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27 2/index.html",
+      "bytes": 2546,
+      "sha256": "b76339a02b0d90758659a7e341ced50692e91848fbf7ac4565fe67f3939a0975",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27 2/manifest.json",
+      "bytes": 2411,
+      "sha256": "1edb415e567a17da8334fbb58394624cda12baf37ad8bf448f9678f5be3892c3",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27 2/overview.png",
+      "bytes": 662997,
+      "sha256": "026e2ffb3e9f794cd75fbe2901a513b80223288083413398df6702d1b3b4df8a",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27 2/posters-html/01-home.html",
+      "bytes": 1833,
+      "sha256": "90dbbd73f31465afe4df09548a9c9a9790f00f1faa90e2ae4a10cc7fb30ad3db",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27 2/posters-html/02-profit-loss.html",
+      "bytes": 1831,
+      "sha256": "078cd91797c5ad4a95c5a09ea64702a80bbe232967f46e8d3855c10164874161",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27 2/posters-html/03-stock.html",
+      "bytes": 1825,
+      "sha256": "c98d2ac0e91ebec6208c015ceda19a36add60fc894e8ceb97e1c6d3fbf8203c9",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27 2/posters-html/04-recipes.html",
+      "bytes": 1846,
+      "sha256": "b82f2dfa97997e1bac84071afa77743c083d20c4ebf757dd9a068a1b279cc6ec",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27 2/posters-html/05-purchases.html",
+      "bytes": 1838,
+      "sha256": "0c954d504ebc45cb6b3472bfbdb5aee09ee710ae06db2c0fa646d05790152287",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27 2/posters-html/06-payroll.html",
+      "bytes": 1840,
+      "sha256": "8c4c67867a368060496ffa845119739d2985f26c7b41348fe1924407056c81fe",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27 2/posters-html/07-checklist.html",
+      "bytes": 1863,
+      "sha256": "f9b4e5ce06cb5713bca33b451ddd6fda617f4a732646d66d743201ee9550a8ba",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27 2/preview.html",
+      "bytes": 1548,
+      "sha256": "48a2952a8a7e48c15dbffefd2385dc41ad17748c351abc68c9c5f902e6706a59",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27 2/raw-ios/01-home.png",
+      "bytes": 1138410,
+      "sha256": "91040c1fd76b1a1f49a0b3f2b5f0be0af8e456efe5d637c9ff4e84be6f8f6eca",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27 2/raw-ios/02-profit-loss.png",
+      "bytes": 314762,
+      "sha256": "6b503203813525d8bb69d8915066171a05f6581d000ab9911e8d54719301c7de",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27 2/raw-ios/03-stock.png",
+      "bytes": 367785,
+      "sha256": "1002bee110f9d3e8e31ff4e386b336936371628577c31aa14cdaf3932bfdb805",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27 2/raw-ios/04-recipes.png",
+      "bytes": 372423,
+      "sha256": "b97c49831d0ae16097a098cdba2c7da8d2dc1bc0b19b6aa40c0dd26be41c1db2",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27 2/raw-ios/05-purchases.png",
+      "bytes": 1029060,
+      "sha256": "2921941420dfbb45cfc070e7bf8cb81a7d5ba18e86ded88ecd8fceeaeb763ab1",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27 2/raw-ios/06-payroll.png",
+      "bytes": 395315,
+      "sha256": "1a0e62870954f5ad791d0155993e17962c1bdc7211cbb2f034a76ccffd4dbe20",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27 2/raw-ios/07-checklist.png",
+      "bytes": 166411,
+      "sha256": "dc563ba89b705eedde37afb99c003d0e108c908365823706e4e49ef866fa8134",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27-v2 2/README.md",
+      "bytes": 3510,
+      "sha256": "8dccf6cf58b3dcc7bc5d63859a0df78ada5994a3cea2d2e38dd841b5fde8fa92",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27-v2 2/apple-1206x2622/01-home.png",
+      "bytes": 857653,
+      "sha256": "cf2344857b43d188d06e9dd85ab560546a99695e653319664e045963641e5240",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27-v2 2/apple-1206x2622/02-profit-loss.png",
+      "bytes": 599820,
+      "sha256": "7c6ec3641140aeaf63f553c0ff117ea8c69150de93bf61e798c6b5356a4bb88b",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27-v2 2/apple-1206x2622/03-stock.png",
+      "bytes": 719202,
+      "sha256": "cc9586bcf98687a1b728f16dd515d98cda96db18444a33f57fef05a79a482564",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27-v2 2/apple-1206x2622/04-recipes.png",
+      "bytes": 683471,
+      "sha256": "f93ca60dc31ba3312f15ab60ffff6c44b6421c00202741452758ecbcc425a504",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27-v2 2/apple-1206x2622/05-purchases.png",
+      "bytes": 352427,
+      "sha256": "f0444794d2ffb75a7d6a1e077c30973d0bc504eb99a07fbfb859e0aef39c3df3",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27-v2 2/apple-1206x2622/06-payroll.png",
+      "bytes": 802897,
+      "sha256": "d4313935f3bfd120c567bf144ad7cd31e950739fd36f0b6a7aa064f7341d8179",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27-v2 2/apple-1206x2622/07-checklist.png",
+      "bytes": 897245,
+      "sha256": "d7633e7bfc20cf7980bc0c75656242426485dac53a9fe5f62bccd21eb77ae03d",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27-v2 2/apple-1206x2622/08-sales.png",
+      "bytes": 805406,
+      "sha256": "3d661ba51247cc46a388634cfd173cdcb7c6c91a12ea58062e6336147049b2b1",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27-v2 2/apple-1206x2622/09-expenses.png",
+      "bytes": 883211,
+      "sha256": "9824069b541ab7e34fec6c0da75a3235c16d5f89d6735a71c4259b6a10190782",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27-v2 2/captions.json",
+      "bytes": 1900,
+      "sha256": "19a9f6297bded80be07afbd67dd3e52305bbfde4f0e99cd1a285c691f537a36f",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27-v2 2/copy/apple-keywords-ko.txt",
+      "bytes": 94,
+      "sha256": "bebcf0c8c6ce4c803672f5489e3fccb79e59c49b7a4b670a9c8e749b5a0a1e1b",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27-v2 2/copy/apple-promo-ko.txt",
+      "bytes": 229,
+      "sha256": "83b50b333f5a18ed70f8347d6086012a0f1e7cb6bd0bc2c0151a8103c67edcb9",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27-v2 2/copy/apple-subtitle-ko.txt",
+      "bytes": 54,
+      "sha256": "9f205559de3efa39453253eaf0601630077a56331838e0d4f4e6e0057c9d85bf",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27-v2 2/copy/description-ko.txt",
+      "bytes": 2409,
+      "sha256": "131c74476717eefa103d785cbe221c80db8512e3566a61b1bb87adb37c78dce8",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27-v2 2/copy/google-short-ko.txt",
+      "bytes": 135,
+      "sha256": "9720770dc159ba42c5ac34b7cda91da12ff7d10f0f9e99dd04932d493a494d6d",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27-v2 2/copy/title-ko.txt",
+      "bytes": 40,
+      "sha256": "ae405161ce9a63308d3e85679716f6a57e90cb77d72c2b94ecd0439fd6cab712",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27-v2 2/fonts/WantedSans-Bold.ttf",
+      "bytes": 2809488,
+      "sha256": "254e72a4938bb0ee80614c0e59a197f9f8ed317c6030d5941996dfc778ed9896",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27-v2 2/fonts/WantedSans-OFL.txt",
+      "bytes": 4394,
+      "sha256": "db345ad0216d0b73ba5dd3a540507281da6695f234e0a4e70cf2e1a8f30d4331",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27-v2 2/fonts/WantedSans-Regular.ttf",
+      "bytes": 2778504,
+      "sha256": "149bd77509f3b37156ae526288b4a8e26cebc2d710235954cca4e827782443d2",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27-v2 2/manifest.json",
+      "bytes": 3562,
+      "sha256": "c2869feb730c787ea1d5ddbaba350c793bcddca4e9a4db36034cabb1901b6821",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27-v2 2/overview.png",
+      "bytes": 984802,
+      "sha256": "a2956aef4dc6ceea96f4649845ca8c240d95e81821fd13b861dde751762e9b74",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27-v2 2/posters-html/01-home.html",
+      "bytes": 1833,
+      "sha256": "e3d250db61fd234b0a57dc2b2aba6cc0ef7626ed2fc824a2564103d55a76a58b",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27-v2 2/posters-html/02-profit-loss.html",
+      "bytes": 1831,
+      "sha256": "423cdc91550cb5fd4f0cadba4837ee58f6c4a97dfa2b79ba6ba97eb55916da04",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27-v2 2/posters-html/03-stock.html",
+      "bytes": 1825,
+      "sha256": "39852c92b8c880f1c6d524cdd53c9af446bb4bca5f2ca7795b45970f3a74a2d0",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27-v2 2/posters-html/04-recipes.html",
+      "bytes": 1846,
+      "sha256": "d55c8784a8fc5afff26b63f3f4172d218cdd6ff894821e22c81b65eec5c1a205",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27-v2 2/posters-html/05-purchases.html",
+      "bytes": 1838,
+      "sha256": "2b6cffeda50e0e754eded1d278c4d87fb8e98ec9ea8dc5be9bcfa1a67b477e77",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27-v2 2/posters-html/06-payroll.html",
+      "bytes": 1840,
+      "sha256": "45f1088b1ac4c8fb59f3c11b24db2cb59776d67227f5e20d207cc5195afff3ed",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27-v2 2/posters-html/07-checklist.html",
+      "bytes": 1863,
+      "sha256": "b232cda817d973410f5c8e5c1f40e54c44f3f93a7e496e875acfeb5edd5cd8dc",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27-v2 2/posters-html/08-sales.html",
+      "bytes": 1834,
+      "sha256": "40359a0b7222e395c7f844c5d4db1b2639163ae22fefc7365b009e184fc44002",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27-v2 2/posters-html/09-expenses.html",
+      "bytes": 1828,
+      "sha256": "63bc7c5f4547aa283bcb992721e70a8e2583563e2e4082a699e0a80e1f3d1e9b",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27-v2 2/preview.html",
+      "bytes": 1675,
+      "sha256": "c5d9ec288b38782a5782856a09394812c18c9a0640fe13588da5c58ca3b0a242",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27-v2 2/raw-ios/01-home.png",
+      "bytes": 1138400,
+      "sha256": "ba7e5c8af8b09eb156e689889731fdbd7ad7b05f30d33d1b16d6d8257e9d6a6b",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27-v2 2/raw-ios/02-profit-loss.png",
+      "bytes": 518140,
+      "sha256": "ad1517c1d52afde8a54f70221016955a2ff29592da3c778609f4ac325025fc22",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27-v2 2/raw-ios/03-stock.png",
+      "bytes": 851954,
+      "sha256": "cef1bca13a1bc26f5463dd843f37f29b8583267597809f0827e0d5e468d73d9f",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27-v2 2/raw-ios/04-recipes.png",
+      "bytes": 755244,
+      "sha256": "cd9e4acbf67834481fd3bc72b6ab84d866dbd6b38f8aa8dececf60186d67602d",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27-v2 2/raw-ios/05-purchases.png",
+      "bytes": 166133,
+      "sha256": "26d4bff35f34edcbdfdde24296b8da1e117b5069632ccc981c72518db59fe5bc",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27-v2 2/raw-ios/06-payroll.png",
+      "bytes": 962545,
+      "sha256": "8a7e5f20e68111d4fbb20be5cc494aea0478762f065647cee24d96ee5343af3f",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27-v2 2/raw-ios/07-checklist.png",
+      "bytes": 1265020,
+      "sha256": "b9e33cf53a6d68b19ec452044ea31c5f13e32342f3ef28c4740ea524a26ac2ae",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27-v2 2/raw-ios/08-sales.png",
+      "bytes": 966440,
+      "sha256": "fbb57a5b3e028a49b614f43bd7970cd37a462b5c2d74b9d64280fb39b1f8ce6d",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27-v2 2/raw-ios/09-expenses.png",
+      "bytes": 1186168,
+      "sha256": "5c7757f85c3eab279a733014933de3ece4ad7ecf6055ac82778c6545c2b55ebb",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27/README.md",
+      "bytes": 4502,
+      "sha256": "2aad2c28176873ecc38f55c60d541ca603a585208f04dacf38079fa0ed2cf019",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27/apple-1206x2622/01-home.png",
+      "bytes": 858718,
+      "sha256": "319ed69d1cc427493ec255a6477667ad69e8dc8e254b60f506c1bec727299e9a",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27/apple-1206x2622/02-profit-loss.png",
+      "bytes": 512135,
+      "sha256": "36ddaf1c7e56175c17c2cc9628fe1496a71ccdb792aa3dc1cfc292515f60adb4",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27/apple-1206x2622/03-stock.png",
+      "bytes": 469796,
+      "sha256": "acd33127a18136aecf505d1e8a9dfc4c3f1bdd7a44cf70ad3954e0d22bf0da1f",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27/apple-1206x2622/04-recipes.png",
+      "bytes": 484982,
+      "sha256": "74e54836e00ee30f3c82df9e8395a82df864209f19aa3dcae1535d7a45d52d27",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27/apple-1206x2622/05-purchases.png",
+      "bytes": 824304,
+      "sha256": "3dc79e2c07a43b785692134883c454c53666afd48dd5cf533d7a8200aae60862",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27/apple-1206x2622/06-payroll.png",
+      "bytes": 536518,
+      "sha256": "6241d875200d496c3d451d876f74bf9f558896e98d8f3538ff99af8dccbc2594",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27/apple-1206x2622/07-checklist.png",
+      "bytes": 354521,
+      "sha256": "1fa95d99e37d1ca15f070888ae47d530bc8808520aff656f04bb0e97873b2de2",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27/captions.json",
+      "bytes": 1482,
+      "sha256": "12cc8273ef873cf64fc8f4fd53e0c927201d249691e2a3a710b9940a5076e86a",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27/copy/apple-keywords-ko.txt",
+      "bytes": 94,
+      "sha256": "bebcf0c8c6ce4c803672f5489e3fccb79e59c49b7a4b670a9c8e749b5a0a1e1b",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27/copy/apple-promo-ko.txt",
+      "bytes": 229,
+      "sha256": "83b50b333f5a18ed70f8347d6086012a0f1e7cb6bd0bc2c0151a8103c67edcb9",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27/copy/apple-subtitle-ko.txt",
+      "bytes": 54,
+      "sha256": "9f205559de3efa39453253eaf0601630077a56331838e0d4f4e6e0057c9d85bf",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27/copy/description-ko.txt",
+      "bytes": 2441,
+      "sha256": "e1b0ec75ddd61df003549f87224707a050fd0234a7e63c0b391a28ca84ed9010",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27/copy/google-short-ko.txt",
+      "bytes": 135,
+      "sha256": "9720770dc159ba42c5ac34b7cda91da12ff7d10f0f9e99dd04932d493a494d6d",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27/copy/title-ko.txt",
+      "bytes": 40,
+      "sha256": "ae405161ce9a63308d3e85679716f6a57e90cb77d72c2b94ecd0439fd6cab712",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27/fonts/WantedSans-Bold.ttf",
+      "bytes": 2809488,
+      "sha256": "254e72a4938bb0ee80614c0e59a197f9f8ed317c6030d5941996dfc778ed9896",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27/fonts/WantedSans-OFL.txt",
+      "bytes": 4394,
+      "sha256": "db345ad0216d0b73ba5dd3a540507281da6695f234e0a4e70cf2e1a8f30d4331",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27/fonts/WantedSans-Regular.ttf",
+      "bytes": 2778504,
+      "sha256": "149bd77509f3b37156ae526288b4a8e26cebc2d710235954cca4e827782443d2",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27/index.html",
+      "bytes": 2546,
+      "sha256": "b76339a02b0d90758659a7e341ced50692e91848fbf7ac4565fe67f3939a0975",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27/manifest.json",
+      "bytes": 2411,
+      "sha256": "1edb415e567a17da8334fbb58394624cda12baf37ad8bf448f9678f5be3892c3",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27/overview.png",
+      "bytes": 662997,
+      "sha256": "026e2ffb3e9f794cd75fbe2901a513b80223288083413398df6702d1b3b4df8a",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27/posters-html/01-home.html",
+      "bytes": 1833,
+      "sha256": "90dbbd73f31465afe4df09548a9c9a9790f00f1faa90e2ae4a10cc7fb30ad3db",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27/posters-html/02-profit-loss.html",
+      "bytes": 1831,
+      "sha256": "078cd91797c5ad4a95c5a09ea64702a80bbe232967f46e8d3855c10164874161",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27/posters-html/03-stock.html",
+      "bytes": 1825,
+      "sha256": "c98d2ac0e91ebec6208c015ceda19a36add60fc894e8ceb97e1c6d3fbf8203c9",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27/posters-html/04-recipes.html",
+      "bytes": 1846,
+      "sha256": "b82f2dfa97997e1bac84071afa77743c083d20c4ebf757dd9a068a1b279cc6ec",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27/posters-html/05-purchases.html",
+      "bytes": 1838,
+      "sha256": "0c954d504ebc45cb6b3472bfbdb5aee09ee710ae06db2c0fa646d05790152287",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27/posters-html/06-payroll.html",
+      "bytes": 1840,
+      "sha256": "8c4c67867a368060496ffa845119739d2985f26c7b41348fe1924407056c81fe",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27/posters-html/07-checklist.html",
+      "bytes": 1863,
+      "sha256": "f9b4e5ce06cb5713bca33b451ddd6fda617f4a732646d66d743201ee9550a8ba",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27/preview.html",
+      "bytes": 1548,
+      "sha256": "48a2952a8a7e48c15dbffefd2385dc41ad17748c351abc68c9c5f902e6706a59",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27/raw-ios/01-home.png",
+      "bytes": 1138410,
+      "sha256": "91040c1fd76b1a1f49a0b3f2b5f0be0af8e456efe5d637c9ff4e84be6f8f6eca",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27/raw-ios/02-profit-loss.png",
+      "bytes": 314762,
+      "sha256": "6b503203813525d8bb69d8915066171a05f6581d000ab9911e8d54719301c7de",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27/raw-ios/03-stock.png",
+      "bytes": 367785,
+      "sha256": "1002bee110f9d3e8e31ff4e386b336936371628577c31aa14cdaf3932bfdb805",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27/raw-ios/04-recipes.png",
+      "bytes": 372423,
+      "sha256": "b97c49831d0ae16097a098cdba2c7da8d2dc1bc0b19b6aa40c0dd26be41c1db2",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27/raw-ios/05-purchases.png",
+      "bytes": 1029060,
+      "sha256": "2921941420dfbb45cfc070e7bf8cb81a7d5ba18e86ded88ecd8fceeaeb763ab1",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27/raw-ios/06-payroll.png",
+      "bytes": 395315,
+      "sha256": "1a0e62870954f5ad791d0155993e17962c1bdc7211cbb2f034a76ccffd4dbe20",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/2026-10-27/raw-ios/07-checklist.png",
+      "bytes": 166411,
+      "sha256": "dc563ba89b705eedde37afb99c003d0e108c908365823706e4e49ef866fa8134",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/rattle-android-store-kit-2026-10-27.zip",
+      "bytes": 11091730,
+      "sha256": "b9b706b5729151ff24e654f1b20b502ad1e91db262026db4b7c69ba9f638c376",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/rattle-store-kit-2026-10-27-v2.zip",
+      "bytes": 17167317,
+      "sha256": "edd09419bd7b70983b400225bf02b33a8984a3f2b74fb4a3e071a8d996c2799e",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "docs/store-assets/rattle-store-kit-2026-10-27.zip",
+      "bytes": 10279269,
+      "sha256": "8edb711044554494b60a82140278a9a676565f3cde823b871d111070011f7ad4",
+      "reason": "스토어 제출 산출물; 앱 필수 의존성 아님"
+    },
+    {
+      "path": "skills-lock.json",
+      "bytes": 3468,
+      "sha256": "648405d4aa23a3a26cbf26a5e6700492a54561bf9b45a2cfea110e6110a48d90",
+      "reason": "로컬 스킬 설치 변경; 앱 필수 의존성 아님"
+    }
+  ],
+  "notes": [
+    "Hash list excludes its own file. Final baseline SHA is recorded after commit.",
+    "Ignored secrets/private files are neither scanned into this list nor copied.",
+    "Reference image absent in fresh checkout; generated runtime/navigation files and asset processing inputs included."
+  ]
+}

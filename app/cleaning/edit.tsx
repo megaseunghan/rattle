@@ -1,12 +1,16 @@
 import { entityKey } from '../../lib/utils/listKeys';
 import { GlassBackdrop } from '../../lib/components/GlassBackdrop';
 import { getErrorMessage } from '../../lib/utils/error';
-import { useCallback, useEffect, useState, useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
+import { useCallback, useEffect, useState, useMemo, useRef } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, Keyboard } from 'react-native';
+import type { FlatList } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useFocusEffect } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { AppIcon } from '../../lib/icons/AppIcon';
 import DraggableFlatList, { RenderItemParams, ScaleDecorator } from 'react-native-draggable-flatlist';
+import { useQueryScope } from '../../lib/query';
+import { ErrorMessage } from '../../lib/components/ErrorMessage';
+import type { ViewToken } from 'react-native';
 import { Colors } from '../../constants/colors';
 import { useCleaningChecklist } from '../../lib/hooks/useCleaningChecklist';
 import { AppBar, Field, Button } from '../../lib/components/ui';
@@ -21,9 +25,26 @@ const SEGMENTS: { key: CleaningSegment; label: string }[] = [
 const WEEKDAY_LABELS = ['일', '월', '화', '수', '목', '금', '토'];
 
 export default function CleaningEditScreen() {
-  const { items, refetch, addItem, editItem, removeItem, reorder } = useCleaningChecklist();
+  const { items, itemsReady, error, refetch, addItem, editItem, removeItem, reorder } = useCleaningChecklist();
+  const scope = useQueryScope();
+  const addedContext = useRef<{ scope: string; segment: CleaningSegment } | null>(null);
+  const listRef = useRef<FlatList<CleaningItem>>(null);
+  const adding = useRef(false);
+  const scrollTarget = useRef<{ id: string; index: number; retries: number } | null>(null);
+  const scrollRetry = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (scrollRetry.current) clearTimeout(scrollRetry.current); }, []);
+  const onViewableItemsChanged = useCallback(({ viewableItems }: { viewableItems: ViewToken<CleaningItem>[] }) => {
+    if (scrollTarget.current && viewableItems.some(row => row.item.id === scrollTarget.current?.id)) {
+      scrollTarget.current = null;
+      if (scrollRetry.current) clearTimeout(scrollRetry.current);
+      setAddedId(null);
+    }
+  }, []);
+  const [addedId, setAddedId] = useState<string | null>(null);
   const [segment, setSegment] = useState<CleaningSegment>('open');
   const [orderedItems, setOrderedItems] = useState<CleaningItem[]>([]);
+  const orderedItemsRef = useRef(orderedItems);
+  orderedItemsRef.current = orderedItems;
   const [newTitle, setNewTitle] = useState('');
   const [newWeekday, setNewWeekday] = useState(0);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -40,16 +61,46 @@ export default function CleaningEditScreen() {
     );
   }, [items, segment]);
 
+  useEffect(() => {
+    if (!addedId) return;
+    const clearTarget = () => {
+      if (scrollRetry.current) clearTimeout(scrollRetry.current);
+      scrollTarget.current = null;
+      setAddedId(null);
+    };
+    if (addedContext.current?.scope !== scope || addedContext.current?.segment !== segment) {
+      clearTarget();
+      return;
+    }
+    const index = orderedItems.findIndex(item => item.id === addedId);
+    if (index < 0) {
+      // A committed query update may arrive after setAddedId. Wait unless a previously visible target disappeared.
+      if (scrollTarget.current?.id === addedId) clearTarget();
+      return;
+    }
+    if (scrollRetry.current) clearTimeout(scrollRetry.current);
+    scrollTarget.current = { id: addedId, index, retries: 0 };
+    const frame = requestAnimationFrame(() => {
+      listRef.current?.scrollToIndex({ index, animated: true, viewPosition: 0.2 });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [addedId, orderedItems, scope, segment]);
+
   async function handleAdd() {
     const title = newTitle.trim();
-    if (!title) return;
+    if (!title || adding.current) return;
+    adding.current = true;
     setSaving(true);
     try {
-      await addItem(segment, title, segment === 'weekday' ? newWeekday : null);
+      const added = await addItem(segment, title, segment === 'weekday' ? newWeekday : null);
       setNewTitle('');
+      Keyboard.dismiss();
+      addedContext.current = { scope, segment };
+      setAddedId(added.id);
     } catch (e: any) {
       Alert.alert('추가 실패', getErrorMessage(e));
     } finally {
+      adding.current = false;
       setSaving(false);
     }
   }
@@ -100,27 +151,27 @@ export default function CleaningEditScreen() {
               <View style={styles.editInput}>
                 <Field label="항목명" value={editingTitle} onChangeText={setEditingTitle} placeholder="항목명" />
               </View>
-              <TouchableOpacity onPress={handleSaveEdit} hitSlop={8}>
+              <TouchableOpacity onPress={handleSaveEdit} style={styles.textButton} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel="항목명 저장">
                 <Text style={styles.saveText}>저장</Text>
               </TouchableOpacity>
-              <TouchableOpacity onPress={() => setEditingId(null)} hitSlop={8}>
+              <TouchableOpacity onPress={() => setEditingId(null)} style={styles.textButton} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel="항목명 수정 취소">
                 <Text style={styles.cancelText}>취소</Text>
               </TouchableOpacity>
             </View>
           ) : (
             <>
-              <TouchableOpacity onPressIn={drag} disabled={isActive} hitSlop={10} style={styles.dragHandle}>
-                <Ionicons name="reorder-three-outline" size={20} color={Colors.gray300} />
+              <TouchableOpacity onPressIn={drag} disabled={isActive} style={styles.dragHandle} activeOpacity={0.7} accessibilityLabel={`${item.title} 순서 이동`} accessibilityHint="누른 채 위아래로 끌어 순서를 바꿔요" accessibilityState={{ disabled: isActive }}>
+                <AppIcon name="reorder-three-outline" size={20} color={Colors.gray300} />
               </TouchableOpacity>
               <Text style={styles.rowTitle}>{item.title}</Text>
               {segment === 'weekday' && item.weekday != null && (
                 <Text style={styles.rowWeekday}>{WEEKDAY_LABELS[item.weekday]}요일</Text>
               )}
-              <TouchableOpacity onPress={() => startEdit(item.id, item.title)} hitSlop={8} style={styles.iconBtn}>
-                <Ionicons name="pencil" size={15} color={Colors.gray500} />
+              <TouchableOpacity onPress={() => startEdit(item.id, item.title)} style={styles.iconBtn} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel={`${item.title} 수정`}>
+                <AppIcon name="pencil" size={15} color={Colors.gray500} />
               </TouchableOpacity>
-              <TouchableOpacity onPress={() => confirmRemove(item.id, item.title)} hitSlop={8} style={styles.iconBtn}>
-                <Ionicons name="trash-outline" size={15} color={Colors.negative} />
+              <TouchableOpacity onPress={() => confirmRemove(item.id, item.title)} style={styles.iconBtn} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel={`${item.title} 삭제`}>
+                <AppIcon name="trash-outline" size={15} color={Colors.negative} />
               </TouchableOpacity>
             </>
           )}
@@ -139,6 +190,7 @@ export default function CleaningEditScreen() {
             key={s.key}
             style={[styles.segmentTab, segment === s.key && styles.segmentTabActive]}
             onPress={() => setSegment(s.key)}
+            accessibilityRole="tab" accessibilityLabel={s.label} accessibilityState={{ selected: segment === s.key }}
             activeOpacity={0.7}
           >
             <Text style={[styles.segmentText, segment === s.key && styles.segmentTextActive]}>{s.label}</Text>
@@ -146,7 +198,30 @@ export default function CleaningEditScreen() {
         ))}
       </View>
 
+      {error && <ErrorMessage message={error} onRetry={() => void refetch()} />}
       <DraggableFlatList
+        ref={listRef}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="interactive"
+        onViewableItemsChanged={onViewableItemsChanged}
+        onScrollToIndexFailed={({ index, averageItemLength }) => {
+          const target = scrollTarget.current;
+          if (!target || target.index !== index || target.retries >= 3) return;
+          target.retries += 1;
+          listRef.current?.scrollToOffset({ offset: index * averageItemLength, animated: false });
+          if (scrollRetry.current) clearTimeout(scrollRetry.current);
+          scrollRetry.current = setTimeout(() => {
+            if (scrollTarget.current !== target) return;
+            const currentIndex = orderedItemsRef.current.findIndex(item => item.id === target.id);
+            if (currentIndex < 0) {
+              scrollTarget.current = null;
+              setAddedId(null);
+              return;
+            }
+            target.index = currentIndex;
+            listRef.current?.scrollToIndex({ index: currentIndex, animated: true, viewPosition: 0.2 });
+          }, 100);
+        }}
         initialNumToRender={5}
         maxToRenderPerBatch={10}
         windowSize={5}
@@ -162,7 +237,7 @@ export default function CleaningEditScreen() {
         ListHeaderComponent={
           orderedItems.length > 0 ? (
             <View style={styles.hintRow}>
-              <Ionicons name="information-circle-outline" size={13} color={Colors.gray400} />
+              <AppIcon name="information-circle-outline" size={13} color={Colors.gray400} />
               <Text style={styles.hintText}>{reordering ? '순서 저장 중...' : '핸들 아이콘을 눌러서 끌면 순서를 바꿀 수 있어요'}</Text>
             </View>
           ) : null
@@ -176,6 +251,7 @@ export default function CleaningEditScreen() {
                     key={label}
                     style={[styles.weekdayChip, newWeekday === idx && styles.weekdayChipActive]}
                     onPress={() => setNewWeekday(idx)}
+                    activeOpacity={0.7} accessibilityRole="radio" accessibilityLabel={`${label}요일`} accessibilityState={{ checked: newWeekday === idx }}
                   >
                     <Text style={[styles.weekdayChipText, newWeekday === idx && styles.weekdayChipTextActive]}>{label}</Text>
                   </TouchableOpacity>
@@ -189,7 +265,7 @@ export default function CleaningEditScreen() {
               placeholder="예: 바닥 물걸레질"
             />
             <View style={styles.addButtonWrap}>
-              <Button label="추가하기" variant="secondary" onPress={handleAdd} loading={saving} disabled={!newTitle.trim()} />
+              <Button label="추가하기" variant="secondary" onPress={handleAdd} loading={saving} disabled={!newTitle.trim() || !itemsReady} />
             </View>
           </View>
         }
@@ -210,25 +286,26 @@ const styles = StyleSheet.create({
   segmentTextActive: { color: Colors.primary, fontWeight: '700' },
   scroll: { padding: 20, paddingBottom: 40, gap: 8 },
   hintRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 },
-  hintText: { fontSize: 11, fontWeight: '500', color: Colors.gray400 },
+  hintText: { flex: 1, fontSize: 11, fontWeight: '500', color: Colors.gray400 },
   row: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
     borderWidth: 1, borderColor: Colors.homeBorder, borderRadius: 20, padding: 16,
     backgroundColor: Colors.white, marginBottom: 8,
   },
   rowActive: { borderColor: Colors.primary, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 10, elevation: 6 },
-  dragHandle: { marginRight: -4 },
+  dragHandle: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
   rowTitle: { flex: 1, fontSize: 14, fontWeight: '600', color: Colors.black },
   rowWeekday: { fontSize: 11, color: Colors.gray400 },
   iconBtn: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
   editRow: { flex: 1, flexDirection: 'row', alignItems: 'flex-end', gap: 10 },
-  editInput: { flex: 1 },
-  saveText: { fontSize: 13, fontWeight: '700', color: Colors.primary, paddingBottom: 13 },
-  cancelText: { fontSize: 13, fontWeight: '600', color: Colors.gray400, paddingBottom: 13 },
+  editInput: { flex: 1, minWidth: 0 },
+  textButton: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center', marginBottom: 6 },
+  saveText: { fontSize: 13, fontWeight: '700', color: Colors.primary },
+  cancelText: { fontSize: 13, fontWeight: '600', color: Colors.gray400 },
   addSection: { gap: 14, marginTop: 16 },
-  weekdayChipRow: { flexDirection: 'row', gap: 6 },
+  weekdayChipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   weekdayChip: {
-    flex: 1, minHeight: 44, paddingVertical: 8, justifyContent: 'center', borderRadius: 10,
+    flex: 1, minWidth: 44, minHeight: 44, paddingVertical: 8, justifyContent: 'center', borderRadius: 10,
     borderWidth: 1, borderColor: Colors.gray200, alignItems: 'center',
   },
   weekdayChipActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },

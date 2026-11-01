@@ -1,6 +1,7 @@
 import { readAllRows } from './readAllRows';
 import { invalidateCachedStore } from './cacheInvalidation';
 import { supabase } from '../supabase';
+import { UserFacingError } from '../utils/error';
 import { ManualSale } from '../../types';
 
 export async function getManualSalesByMonth(storeId: string, yearMonth: string): Promise<ManualSale[]> {
@@ -18,7 +19,14 @@ export async function getManualSalesByMonth(storeId: string, yearMonth: string):
   return (data ?? []) as ManualSale[];
 }
 
-/** 매장당 하루 1건 — 같은 날짜로 다시 저장하면 그날 값을 덮어쓴다(upsert) */
+/** A missing row and a failed read are distinct. Callers must load before saving. */
+export async function getManualSaleByDate(storeId: string, date: string): Promise<ManualSale | null> {
+  const { data, error } = await supabase.from('manual_sales').select('*').eq('store_id', storeId).eq('date', date).maybeSingle();
+  if (error) throw new Error(error.message);
+  return data as ManualSale | null;
+}
+
+/** Insert new dates; update only the exact values the user reviewed. Never blind-upsert. */
 export async function saveManualSale(input: {
   storeId: string;
   date: string;
@@ -26,32 +34,38 @@ export async function saveManualSale(input: {
   cardAmount: number;
   discountAmount: number;
   memo: string | null;
-}): Promise<ManualSale> {
-  const { data: userData } = await supabase.auth.getUser();
-  const { data, error } = await supabase
-    .from('manual_sales')
-    .upsert(
-      {
-        store_id: input.storeId,
-        date: input.date,
-        cash_amount: input.cashAmount,
-        card_amount: input.cardAmount,
-        discount_amount: input.discountAmount,
-        memo: input.memo,
-        created_by: userData.user?.id ?? null,
-      },
-      { onConflict: 'store_id,date' },
-    )
-    .select()
-    .single();
-  if (error) throw new Error(error.message);
-  await invalidateCachedStore(input.storeId);
-  return data as ManualSale;
+  expected: ManualSale | null;
+}): Promise<ManualSale & { cacheRefreshFailed?: boolean }> {
+  if (![input.cashAmount, input.cardAmount, input.discountAmount].every(n => Number.isSafeInteger(n) && n >= 0 && n < 1e12)) {
+    throw new UserFacingError('매출과 할인액은 1조 원 미만의 0 이상 정수로 입력해주세요.');
+  }
+  const payload = { cash_amount: input.cashAmount, card_amount: input.cardAmount, discount_amount: input.discountAmount, memo: input.memo };
+  let result;
+  if (input.expected) {
+    const old = input.expected;
+    if (old.store_id !== input.storeId || old.date !== input.date) throw new UserFacingError('매장과 날짜를 다시 확인해주세요.');
+    let query = supabase.from('manual_sales').update(payload).eq('id', old.id).eq('store_id', input.storeId).eq('date', input.date)
+      .eq('cash_amount', old.cash_amount).eq('card_amount', old.card_amount).eq('discount_amount', old.discount_amount);
+    query = old.memo === null ? query.is('memo', null) : query.eq('memo', old.memo);
+    result = await query.select().maybeSingle();
+  } else {
+    const { data: userData, error: authError } = await supabase.auth.getUser();
+    if (authError || !userData.user) throw new UserFacingError('로그인을 다시 확인해주세요.');
+    result = await supabase.from('manual_sales').insert({ ...payload, store_id: input.storeId, date: input.date, created_by: userData.user.id }).select().single();
+  }
+  if (result.error?.code === '23505' || (!result.error && !result.data)) {
+    throw new UserFacingError('다른 곳에서 매출이 등록되거나 변경됐어요. 작성한 내용은 유지돼요. 저장된 값을 다시 불러와 확인해주세요.');
+  }
+  if (result.error) throw new Error(result.error.message);
+  try { await invalidateCachedStore(input.storeId); }
+  catch { return { ...result.data, cacheRefreshFailed: true } as ManualSale & { cacheRefreshFailed: true }; }
+  return result.data as ManualSale;
 }
 
 export async function deleteManualSale(id: string): Promise<void> {
-  const { error } = await supabase.from('manual_sales').delete().eq('id', id);
+  const { data, error } = await supabase.from('manual_sales').delete().eq('id', id).select('id').maybeSingle();
   if (error) throw new Error(error.message);
+  if (!data) throw new UserFacingError('삭제 결과를 확인하지 못했어요. 다시 불러와 내역을 확인해주세요.');
   await invalidateCachedStore();
 }
 

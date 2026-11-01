@@ -1,16 +1,16 @@
 import { SheetModal } from './ui/SheetModal';
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import { AppIcon } from '../icons/AppIcon';
 import { useState } from 'react';
 import { Colors } from '../../constants/colors';
 
 export function StoreScopeHeader({ name, onPress }: { name: string; onPress: () => void }) {
   return <SafeAreaView edges={['top']} style={styles.header}>
     <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={`현재 매장 ${name}, 매장 변경`} style={styles.scopeButton}>
-      <Ionicons name="storefront-outline" size={18} color={Colors.deeper} />
+      <AppIcon name="storefront-outline" size={18} color={Colors.deeper} />
       <Text numberOfLines={1} style={styles.scopeName}>{name}</Text>
-      <Ionicons name="chevron-down" size={16} color={Colors.gray600} />
+      <AppIcon name="chevron-down" size={16} color={Colors.gray600} />
     </Pressable>
   </SafeAreaView>;
 }
@@ -27,14 +27,14 @@ export function StoreScopePicker({ visible, stores, selectedId, allSelected, all
     <View style={styles.overlay}>
       <Pressable style={StyleSheet.absoluteFill} onPress={close} accessibilityLabel="매장 선택 취소" disabled={busy} />
       <SafeAreaView edges={['bottom']} style={styles.sheet}>
-        <View style={styles.titleRow}><Text style={styles.title}>매장 선택</Text><Pressable style={styles.close} onPress={close} disabled={busy} accessibilityLabel="매장 선택 닫기"><Ionicons name="close" size={22} color={Colors.gray600} /></Pressable></View>
+        <View style={styles.titleRow}><Text style={styles.title}>매장 선택</Text><Pressable style={styles.close} onPress={close} disabled={busy} accessibilityLabel="매장 선택 닫기"><AppIcon name="close" size={22} color={Colors.gray600} /></Pressable></View>
         <Text style={styles.hint}>{required ? '이 업무를 진행할 매장을 먼저 선택해 주세요.' : '현재 화면에서 확인할 매장을 선택해 주세요.'}</Text>
         <TextInput accessibilityLabel="매장 검색" placeholder="매장 이름 검색" value={search} onChangeText={setSearch} style={styles.search} editable={!busy} autoCorrect={false} />
         {error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
         {busy && <View style={styles.loading}><ActivityIndicator color={Colors.primary} /><Text style={styles.hint}>매장을 바꾸는 중이에요</Text></View>}
         <ScrollView keyboardShouldPersistTaps="handled" style={styles.list}>
-          {allowAll && !required && !search.trim() && <Pressable style={styles.row} disabled={busy} onPress={() => { setSearch(''); onAll(); }} accessibilityRole="button" accessibilityState={{ selected: allSelected }}><Text style={styles.rowName}>전체 매장</Text>{allSelected && <Ionicons name="checkmark-circle" size={22} color={Colors.deeper} />}</Pressable>}
-          {matches.map(store => <Pressable key={store.id} style={styles.row} disabled={busy} onPress={() => onSelect(store.id)} accessibilityRole="button" accessibilityState={{ selected: !allSelected && selectedId === store.id }}><Text style={styles.rowName}>{store.name}</Text>{!allSelected && selectedId === store.id && <Ionicons name="checkmark-circle" size={22} color={Colors.deeper} />}</Pressable>)}
+          {allowAll && !required && !search.trim() && <Pressable style={styles.row} disabled={busy} onPress={() => { setSearch(''); onAll(); }} accessibilityRole="button" accessibilityState={{ selected: allSelected }}><Text style={styles.rowName}>전체 매장</Text>{allSelected && <AppIcon name="checkmark-circle" size={22} color={Colors.deeper} />}</Pressable>}
+          {matches.map(store => <Pressable key={store.id} style={styles.row} disabled={busy} onPress={() => onSelect(store.id)} accessibilityRole="button" accessibilityState={{ selected: !allSelected && selectedId === store.id }}><Text style={styles.rowName}>{store.name}</Text>{!allSelected && selectedId === store.id && <AppIcon name="checkmark-circle" size={22} color={Colors.deeper} />}</Pressable>)}
           {matches.length === 0 && <Text style={styles.empty}>검색 결과가 없어요</Text>}
         </ScrollView>
       </SafeAreaView>

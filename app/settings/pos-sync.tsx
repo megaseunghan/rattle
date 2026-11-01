@@ -6,7 +6,7 @@ import {
   ScrollView, Alert, ActivityIndicator, Clipboard,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import { AppIcon } from '../../lib/icons/AppIcon';
 import { router } from 'expo-router';
 import { Colors } from '../../constants/colors';
 import { useAuth } from '../../lib/contexts/AuthContext';
@@ -82,7 +82,7 @@ export default function PosSyncScreen() {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={leave} style={styles.backBtn} accessibilityRole="button" accessibilityLabel="뒤로가기">
-          <Ionicons name="chevron-back" size={24} color={Colors.black} />
+          <AppIcon name="chevron-back" size={24} color={Colors.black} />
         </TouchableOpacity>
         <Text style={styles.title}>Toss Place POS 연동</Text>
         <View style={{ width: 44 }} />
@@ -95,7 +95,7 @@ export default function PosSyncScreen() {
           /* ── 연동완료 ── */
           <View style={styles.connectedCard}>
             <View style={styles.connectedStatus}>
-              <Ionicons name="checkmark-circle" size={18} color={Colors.success} />
+              <AppIcon name="checkmark-circle" size={18} color={Colors.success} />
               <Text style={styles.connectedStatusText}>연동완료</Text>
             </View>
             <Text style={styles.connectedTitle}>POS 연동이 완료되었습니다</Text>
@@ -105,7 +105,7 @@ export default function PosSyncScreen() {
             </Text>
             <TouchableOpacity style={styles.goToPosBtn} onPress={() => router.push('/pos')}>
               <Text style={styles.goToPosBtnText}>매출 확인</Text>
-              <Ionicons name="arrow-forward" size={16} color={Colors.white} />
+              <AppIcon name="arrow-forward" size={16} color={Colors.white} />
             </TouchableOpacity>
           </View>
         ) : (
@@ -116,7 +116,7 @@ export default function PosSyncScreen() {
               <Text style={styles.codeLabel}>Rattle 서비스코드 · 눌러서 복사</Text>
               <TouchableOpacity style={styles.codeBox} onPress={copyServiceCode} activeOpacity={0.7}>
                 <Text style={styles.codeText}>{SERVICE_CODE}</Text>
-                <Ionicons name="copy-outline" size={18} color={Colors.primary} />
+                <AppIcon name="copy-outline" size={18} color={Colors.primary} />
               </TouchableOpacity>
               <View style={styles.waitingRow}>
                 <ActivityIndicator size="small" color={Colors.gray500} />

@@ -3,7 +3,7 @@ import {
   Modal, View, Text, StyleSheet, TouchableOpacity,
   ScrollView, TextInput, ActivityIndicator,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { AppIcon } from '../icons/AppIcon';
 import { Colors } from '../../constants/colors';
 
 interface BulkCategoryModalProps {
@@ -60,8 +60,8 @@ export function BulkCategoryModal({ visible, items, categories, onConfirm, onClo
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
       <View style={styles.container}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-            <Ionicons name="close" size={20} color={Colors.gray600} />
+          <TouchableOpacity onPress={onClose} style={styles.closeBtn} accessibilityRole="button" accessibilityLabel="일괄 분류 수정 닫기">
+            <AppIcon name="close" size={20} color={Colors.gray600} />
           </TouchableOpacity>
           <View style={styles.headerCenter}>
             <Text style={styles.title}>미분류 일괄 수정</Text>
@@ -96,7 +96,7 @@ export function BulkCategoryModal({ visible, items, categories, onConfirm, onClo
               ]}
               onPress={() => setTargetCategory('__new__')}
             >
-              <Ionicons 
+              <AppIcon
                 name="add-circle-outline" 
                 size={16} 
                 color={isCustom ? Colors.white : Colors.primary} 
@@ -121,9 +121,11 @@ export function BulkCategoryModal({ visible, items, categories, onConfirm, onClo
               {newCategory.length > 0 && (
                 <TouchableOpacity 
                   style={styles.clearInputBtn}
+                  accessibilityRole="button"
+                  accessibilityLabel="새 카테고리 이름 지우기"
                   onPress={() => setNewCategory('')}
                 >
-                  <Ionicons name="close-circle" size={18} color={Colors.gray300} />
+                  <AppIcon name="close-circle" size={18} color={Colors.gray300} />
                 </TouchableOpacity>
               )}
             </View>
@@ -137,10 +139,12 @@ export function BulkCategoryModal({ visible, items, categories, onConfirm, onClo
                 key={item.id}
                 style={[styles.itemRow, checked && styles.itemRowChecked]}
                 onPress={() => toggleItem(item.id)}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked }}
                 activeOpacity={0.7}
               >
                 <View style={[styles.checkbox, checked && styles.checkboxChecked]}>
-                  {checked && <Ionicons name="checkmark" size={13} color={Colors.white} />}
+                  {checked && <AppIcon name="checkmark" size={13} color={Colors.white} />}
                 </View>
                 <Text style={[styles.itemName, checked && styles.itemNameChecked]} numberOfLines={1}>
                   {item.name}
@@ -155,6 +159,9 @@ export function BulkCategoryModal({ visible, items, categories, onConfirm, onClo
             style={[styles.confirmBtn, !canConfirm && styles.confirmBtnDisabled]}
             onPress={handleConfirm}
             disabled={!canConfirm}
+            accessibilityRole="button"
+            accessibilityLabel={`${selectedIds.size}개에 ${finalCategory || '카테고리 선택'} 적용`}
+            accessibilityState={{ disabled: !canConfirm, busy: saving }}
           >
             {saving
               ? <ActivityIndicator size="small" color={Colors.white} />

@@ -1,0 +1,427 @@
+{
+  "raster": [
+    {
+      "file": "business/open-prep.png",
+      "bytes": 737699,
+      "sha256": "9f6979b22851807cb7adfcab7ad0f37ba81a2ce22e1964a4cf4eb3a19adf4427",
+      "width": 1254,
+      "height": 1254,
+      "minAlpha": 0,
+      "maxAlpha": 255,
+      "visibleRatio": 0.3806,
+      "bounds": [
+        166,
+        149,
+        1159,
+        1132
+      ],
+      "minMarginRatio": 0.075
+    },
+    {
+      "file": "business/business-hours.png",
+      "bytes": 781613,
+      "sha256": "b028c970a7da8d3ff28c6c1c662b060e31da07bbcb150116e29ef46104f26da4",
+      "width": 1254,
+      "height": 1254,
+      "minAlpha": 0,
+      "maxAlpha": 255,
+      "visibleRatio": 0.4147,
+      "bounds": [
+        177,
+        216,
+        1114,
+        1114
+      ],
+      "minMarginRatio": 0.1108
+    },
+    {
+      "file": "business/closing.png",
+      "bytes": 754473,
+      "sha256": "bf3c4a05b0f564563f252ec518235220ff479406584ebce25be02972b0c3db86",
+      "width": 1254,
+      "height": 1254,
+      "minAlpha": 0,
+      "maxAlpha": 255,
+      "visibleRatio": 0.4071,
+      "bounds": [
+        190,
+        180,
+        1091,
+        1119
+      ],
+      "minMarginRatio": 0.1069
+    },
+    {
+      "file": "business/inventory.png",
+      "bytes": 753280,
+      "sha256": "8b3d9d8c43b1c759b89154d99a7d05ed19483022a27eb9b4d7ab3bf20ab14380",
+      "width": 1254,
+      "height": 1254,
+      "minAlpha": 0,
+      "maxAlpha": 255,
+      "visibleRatio": 0.3863,
+      "bounds": [
+        155,
+        224,
+        1116,
+        1089
+      ],
+      "minMarginRatio": 0.1093
+    },
+    {
+      "file": "business/purchase.png",
+      "bytes": 864848,
+      "sha256": "46023a1b2fc47528c1fc922e7ef1d4e73feab0db09f0090c0113389a3d13c3dc",
+      "width": 1254,
+      "height": 1254,
+      "minAlpha": 0,
+      "maxAlpha": 255,
+      "visibleRatio": 0.4395,
+      "bounds": [
+        116,
+        151,
+        1151,
+        1183
+      ],
+      "minMarginRatio": 0.0558
+    },
+    {
+      "file": "business/recipe.png",
+      "bytes": 771543,
+      "sha256": "720ca611bdf2d54a01adcedc59ce2287b0e1eef86c9f5c220a15ab1396ab027d",
+      "width": 1254,
+      "height": 1254,
+      "minAlpha": 0,
+      "maxAlpha": 255,
+      "visibleRatio": 0.3847,
+      "bounds": [
+        94,
+        304,
+        1184,
+        1072
+      ],
+      "minMarginRatio": 0.055
+    },
+    {
+      "file": "business/sales.png",
+      "bytes": 567384,
+      "sha256": "353d4e84f3c55f7416a2be0977c01e6b56f58a219f70d4518ec042ac2397665d",
+      "width": 1254,
+      "height": 1254,
+      "minAlpha": 0,
+      "maxAlpha": 255,
+      "visibleRatio": 0.3338,
+      "bounds": [
+        154,
+        224,
+        1113,
+        1088
+      ],
+      "minMarginRatio": 0.1116
+    },
+    {
+      "file": "business/expense.png",
+      "bytes": 612723,
+      "sha256": "561787ea688978f6ed1af3e76cd8cf29668cd3ce0b2280cec0824db79030f14e",
+      "width": 1254,
+      "height": 1254,
+      "minAlpha": 0,
+      "maxAlpha": 255,
+      "visibleRatio": 0.335,
+      "bounds": [
+        204,
+        217,
+        1108,
+        1095
+      ],
+      "minMarginRatio": 0.1156
+    },
+    {
+      "file": "business/staff.png",
+      "bytes": 707025,
+      "sha256": "b18979effc17fa8c3fc4a22417586c660097633a089b3490bef19dc140692086",
+      "width": 1254,
+      "height": 1254,
+      "minAlpha": 0,
+      "maxAlpha": 255,
+      "visibleRatio": 0.396,
+      "bounds": [
+        121,
+        210,
+        1137,
+        1096
+      ],
+      "minMarginRatio": 0.0925
+    },
+    {
+      "file": "business/payroll.png",
+      "bytes": 736037,
+      "sha256": "333e3c35acfe9ab829149b1a1a878ab627d614d669a2deb31a32821d05fc2ca5",
+      "width": 1254,
+      "height": 1254,
+      "minAlpha": 0,
+      "maxAlpha": 255,
+      "visibleRatio": 0.4026,
+      "bounds": [
+        205,
+        152,
+        1076,
+        1113
+      ],
+      "minMarginRatio": 0.1116
+    },
+    {
+      "file": "business/schedule.png",
+      "bytes": 760380,
+      "sha256": "352e36a697492733f617ef27b5d7e7249d0356234fbacf583d5916c77b2e2a0b",
+      "width": 1254,
+      "height": 1254,
+      "minAlpha": 0,
+      "maxAlpha": 255,
+      "visibleRatio": 0.413,
+      "bounds": [
+        153,
+        207,
+        1128,
+        1107
+      ],
+      "minMarginRatio": 0.0997
+    },
+    {
+      "file": "business/profit-loss.png",
+      "bytes": 739938,
+      "sha256": "005a6a1413b422eae762be6c782ad914aa16ef836a0d855ccba3d761475b30f5",
+      "width": 1254,
+      "height": 1254,
+      "minAlpha": 0,
+      "maxAlpha": 255,
+      "visibleRatio": 0.3766,
+      "bounds": [
+        105,
+        267,
+        1180,
+        1055
+      ],
+      "minMarginRatio": 0.0582
+    },
+    {
+      "file": "business/checklist.png",
+      "bytes": 802117,
+      "sha256": "5ed747d403b4c42129ecb752b618b1d8d516dbbbceb4e9b8c7725f43454cad01",
+      "width": 1254,
+      "height": 1254,
+      "minAlpha": 0,
+      "maxAlpha": 255,
+      "visibleRatio": 0.4484,
+      "bounds": [
+        174,
+        137,
+        1060,
+        1158
+      ],
+      "minMarginRatio": 0.0758
+    },
+    {
+      "file": "business/work-time.png",
+      "bytes": 742094,
+      "sha256": "6a4781f4e6db9b8b496bfc023f727d2d3a6a960d7f3941d8c2b0f76dab034009",
+      "width": 1254,
+      "height": 1254,
+      "minAlpha": 0,
+      "maxAlpha": 255,
+      "visibleRatio": 0.3797,
+      "bounds": [
+        196,
+        161,
+        1098,
+        1079
+      ],
+      "minMarginRatio": 0.1236
+    },
+    {
+      "file": "business/store.png",
+      "bytes": 801125,
+      "sha256": "d14a3d9badee65195bcb3c8c66e16276c38e044feee1884743397349454735f1",
+      "width": 1254,
+      "height": 1254,
+      "minAlpha": 0,
+      "maxAlpha": 255,
+      "visibleRatio": 0.4298,
+      "bounds": [
+        143,
+        228,
+        1139,
+        1078
+      ],
+      "minMarginRatio": 0.0909
+    },
+    {
+      "file": "business/pos-connect.png",
+      "bytes": 841641,
+      "sha256": "43abf8de6e5378e61cab405e69d2397a4304dd65ee1154539b5151d3b7662bb6",
+      "width": 1254,
+      "height": 1254,
+      "minAlpha": 0,
+      "maxAlpha": 255,
+      "visibleRatio": 0.4347,
+      "bounds": [
+        153,
+        173,
+        1147,
+        1161
+      ],
+      "minMarginRatio": 0.0734
+    },
+    {
+      "file": "status/empty-data.png",
+      "bytes": 651205,
+      "sha256": "7b562e4773d361d065ccf04665b2f9f3c97e5321866b8822b3c935656ffbc2a4",
+      "width": 1254,
+      "height": 1254,
+      "minAlpha": 0,
+      "maxAlpha": 255,
+      "visibleRatio": 0.3566,
+      "bounds": [
+        91,
+        273,
+        1188,
+        1021
+      ],
+      "minMarginRatio": 0.0518
+    },
+    {
+      "file": "status/empty-search.png",
+      "bytes": 612662,
+      "sha256": "0031d71ffdbf0caacaa6f577af353a73df223ec5d30aa2b81a5102f877eefb53",
+      "width": 1254,
+      "height": 1254,
+      "minAlpha": 0,
+      "maxAlpha": 255,
+      "visibleRatio": 0.3286,
+      "bounds": [
+        167,
+        248,
+        1135,
+        1036
+      ],
+      "minMarginRatio": 0.0941
+    },
+    {
+      "file": "status/completed.png",
+      "bytes": 652692,
+      "sha256": "a1426e384f7e11828c897576fcf5beca13da88719cf15003ad085fcfc701362d",
+      "width": 1254,
+      "height": 1254,
+      "minAlpha": 0,
+      "maxAlpha": 255,
+      "visibleRatio": 0.3328,
+      "bounds": [
+        134,
+        152,
+        1112,
+        1127
+      ],
+      "minMarginRatio": 0.1005
+    },
+    {
+      "file": "status/review-pending.png",
+      "bytes": 713819,
+      "sha256": "ff74c955e594f2bb121ba721a25d32e71d798f50e1d11a54541639676d006cc6",
+      "width": 1254,
+      "height": 1254,
+      "minAlpha": 0,
+      "maxAlpha": 255,
+      "visibleRatio": 0.3893,
+      "bounds": [
+        167,
+        167,
+        1081,
+        1074
+      ],
+      "minMarginRatio": 0.1332
+    },
+    {
+      "file": "status/connection-pending.png",
+      "bytes": 641357,
+      "sha256": "4399abf5c542c5a7192c959f4034a1e421a295fd037f108adfe6f512a0da59a4",
+      "width": 1254,
+      "height": 1254,
+      "minAlpha": 0,
+      "maxAlpha": 255,
+      "visibleRatio": 0.2999,
+      "bounds": [
+        185,
+        243,
+        1124,
+        1072
+      ],
+      "minMarginRatio": 0.1029
+    },
+    {
+      "file": "status/stock-low.png",
+      "bytes": 663543,
+      "sha256": "9bfc8611bec30998378333ec9e34bd3922afea08d1365c86ac51746ec8129ad1",
+      "width": 1254,
+      "height": 1254,
+      "minAlpha": 0,
+      "maxAlpha": 255,
+      "visibleRatio": 0.3627,
+      "bounds": [
+        162,
+        240,
+        1119,
+        1082
+      ],
+      "minMarginRatio": 0.1069
+    },
+    {
+      "file": "status/load-error.png",
+      "bytes": 589542,
+      "sha256": "efaf8a2dad60a6d152bec3cba8bd933549dafe5ac404d1c8ee1888f556b84945",
+      "width": 1254,
+      "height": 1254,
+      "minAlpha": 0,
+      "maxAlpha": 255,
+      "visibleRatio": 0.3155,
+      "bounds": [
+        207,
+        199,
+        1031,
+        1054
+      ],
+      "minMarginRatio": 0.1587
+    },
+    {
+      "file": "status/access-denied.png",
+      "bytes": 650307,
+      "sha256": "0049035db6cb3699853bff3c4ee399d5102f6540d2a5990473c6e31bb167989b",
+      "width": 1254,
+      "height": 1254,
+      "minAlpha": 0,
+      "maxAlpha": 255,
+      "visibleRatio": 0.3611,
+      "bounds": [
+        229,
+        194,
+        1075,
+        1114
+      ],
+      "minMarginRatio": 0.1108
+    }
+  ],
+  "vectorCount": 58,
+  "missing": [],
+  "warnings": [
+    "business/open-prep.png: less than 10% visible margin; visually review",
+    "business/purchase.png: less than 10% visible margin; visually review",
+    "business/recipe.png: less than 10% visible margin; visually review",
+    "business/staff.png: less than 10% visible margin; visually review",
+    "business/schedule.png: less than 10% visible margin; visually review",
+    "business/profit-loss.png: less than 10% visible margin; visually review",
+    "business/checklist.png: less than 10% visible margin; visually review",
+    "business/store.png: less than 10% visible margin; visually review",
+    "business/pos-connect.png: less than 10% visible margin; visually review",
+    "status/empty-data.png: less than 10% visible margin; visually review",
+    "status/empty-search.png: less than 10% visible margin; visually review"
+  ]
+}

@@ -1,4 +1,4 @@
-import { Ionicons } from '@expo/vector-icons';
+import { AppIcon } from '../../icons/AppIcon';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Colors } from '../../../constants/colors';
 import { Spacing, Type } from '../../../constants/designTokens';
@@ -35,13 +35,13 @@ export function AppBar({
   return (
     <View style={[styles.container, transparent && { backgroundColor: 'transparent' }]}>
       {isSubScreen ? (
-        <Pressable accessibilityRole="button" accessibilityLabel="뒤로가기" onPress={onBack} hitSlop={8} style={styles.backButton}>
-          <Ionicons name="chevron-back" size={20} color={Colors.gray700} />
+        <Pressable accessibilityRole="button" accessibilityLabel="뒤로가기" onPress={onBack} style={({ pressed }) => [styles.backButton, pressed && styles.pressed]}>
+          <AppIcon name="chevron-back" size={20} color={Colors.gray700} />
         </Pressable>
       ) : (
         onMenuPress && (
-          <Pressable accessibilityRole="button" accessibilityLabel="더보기" onPress={onMenuPress} hitSlop={8} style={styles.menuButton}>
-            <Ionicons name="menu" size={22} color={Colors.black} />
+          <Pressable accessibilityRole="button" accessibilityLabel="더보기" onPress={onMenuPress} style={({ pressed }) => [styles.menuButton, pressed && styles.pressed]}>
+            <AppIcon name="menu" size={22} color={Colors.black} />
           </Pressable>
         )
       )}
@@ -54,7 +54,7 @@ export function AppBar({
       </View>
 
       {isSubScreen && rightActionLabel ? (
-        <Pressable onPress={onRightActionPress} hitSlop={8} style={styles.actionButton} accessibilityRole="button">
+        <Pressable onPress={onRightActionPress} style={({ pressed }) => [styles.actionButton, pressed && styles.pressed]} accessibilityRole="button">
           <Text style={styles.rightAction}>{rightActionLabel}</Text>
         </Pressable>
       ) : (
@@ -81,9 +81,11 @@ const styles = StyleSheet.create({
     marginRight: -2,
     minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center',
   },
-  actionButton: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 4 },
+  actionButton: { minHeight: 44, minWidth: 44, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 },
+  pressed: { opacity: 0.7 },
   titleWrap: {
     flex: 1,
+    minWidth: 0,
   },
   caption: {
     fontSize: Type.sm,
@@ -104,6 +106,6 @@ const styles = StyleSheet.create({
   rightAction: {
     fontSize: Type.xs + 1,
     fontWeight: '700',
-    color: Colors.primary,
+    color: Colors.action,
   },
 });

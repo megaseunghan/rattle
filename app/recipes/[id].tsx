@@ -1,15 +1,17 @@
-import { getErrorMessage } from '../../lib/utils/error';
-import { useState, useEffect, useCallback } from 'react';
+import { getErrorMessage, UserFacingError } from '../../lib/utils/error';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   Alert, ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router, useFocusEffect } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { AppIcon } from '../../lib/icons/AppIcon';
 import { Colors } from '../../constants/colors';
+import { NumericText } from '../../lib/components/ui/NumericText';
 import { getRecipeById, deleteRecipe } from '../../lib/services/recipes';
 import { useAuth } from '../../lib/contexts/AuthContext';
+import { useStorePermissions } from '../../lib/hooks/useStorePermissions';
 import { LoadingSpinner } from '../../lib/components/LoadingSpinner';
 import { ErrorMessage } from '../../lib/components/ErrorMessage';
 import { RecipeWithIngredients } from '../../lib/services/recipes';
@@ -17,35 +19,47 @@ import { recipeLineCost } from '../../lib/utils/unit';
 
 export default function RecipeDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { currentRole } = useAuth();
+  const { store } = useAuth();
+  const { canReadRecipes, canManageRecipes, isAdmin } = useStorePermissions();
   const [recipe, setRecipe] = useState<RecipeWithIngredients | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
+  const deleteAccess = useRef({ allowed: false, storeId: store?.id, id });
+  deleteAccess.current = { allowed: canManageRecipes && isAdmin, storeId: store?.id, id };
+  const loadRequest = useRef(0);
   const loadRecipe = useCallback(async () => {
+    const request = ++loadRequest.current;
+    if (!canReadRecipes || !store) return;
     try {
       setLoading(true);
+      setError(null);
       const data = await getRecipeById(id);
+      if (request !== loadRequest.current) return;
+      if (data.store_id !== store.id) throw new UserFacingError('현재 매장의 레시피가 아니에요.');
       setRecipe(data);
     } catch (e: any) {
-      setError(getErrorMessage(e));
+      if (request === loadRequest.current) setError(getErrorMessage(e));
     } finally {
-      setLoading(false);
+      if (request === loadRequest.current) setLoading(false);
     }
-  }, [id]);
+  }, [id, store?.id, canReadRecipes]);
 
   useFocusEffect(useCallback(() => {
-    loadRecipe();
+    void loadRecipe();
+    return () => { loadRequest.current += 1; };
   }, [loadRecipe]));
 
   async function handleDelete() {
+    if (!canManageRecipes || !isAdmin || recipe?.store_id !== store?.id) return;
     Alert.alert('레시피 삭제', `"${recipe?.name}" 레시피를 삭제하시겠습니까?`, [
       { text: '취소', style: 'cancel' },
       {
         text: '삭제',
         style: 'destructive',
         onPress: async () => {
+          if (!deleteAccess.current.allowed || deleteAccess.current.id !== id || deleteAccess.current.storeId !== recipe?.store_id) return;
           try {
             setSaving(true);
             await deleteRecipe(id);
@@ -60,6 +74,7 @@ export default function RecipeDetailScreen() {
     ]);
   }
 
+  if (!canReadRecipes) return <ErrorMessage message="매장을 선택한 뒤 레시피를 열어 주세요." />;
   if (loading) return <LoadingSpinner />;
   if (error || !recipe) return <ErrorMessage message={error || '레시피를 찾을 수 없습니다.'} onRetry={loadRecipe} />;
 
@@ -75,15 +90,15 @@ export default function RecipeDetailScreen() {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} accessibilityRole="button" accessibilityLabel="뒤로가기">
-          <Ionicons name="chevron-back" size={24} color={Colors.black} />
+          <AppIcon name="chevron-back" size={24} color={Colors.black} />
         </TouchableOpacity>
         <Text style={styles.title}>레시피 상세</Text>
-        <TouchableOpacity 
+        {canManageRecipes && recipe.store_id === store?.id ? <TouchableOpacity
           onPress={() => router.push({ pathname: '/recipes/new', params: { id } })}
           style={styles.editBtn}
         >
           <Text style={styles.editText}>수정</Text>
-        </TouchableOpacity>
+        </TouchableOpacity> : <View style={styles.editBtn} accessible={false} />}
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll}>
@@ -94,7 +109,7 @@ export default function RecipeDetailScreen() {
               <Text style={styles.recipeCategory}>{recipe.category}</Text>
             </View>
             <View style={styles.priceBadge}>
-              <Text style={styles.priceValue}>{recipe.selling_price.toLocaleString()}원</Text>
+              <NumericText style={styles.priceValue}>{recipe.selling_price.toLocaleString()}원</NumericText>
             </View>
           </View>
 
@@ -103,21 +118,21 @@ export default function RecipeDetailScreen() {
           <View style={styles.statsRow}>
             <View style={styles.statBox}>
               <Text style={styles.statLabel}>원가</Text>
-              <Text style={styles.statValue}>{costKnown ? `${recipe.cost.toLocaleString()}원` : '확인 필요'}</Text>
+              <NumericText style={styles.statValue}>{costKnown ? `${recipe.cost.toLocaleString()}원` : '확인 필요'}</NumericText>
             </View>
             <View style={styles.statBox}>
               <Text style={styles.statLabel}>마진</Text>
-              <Text style={styles.statValue}>{costKnown ? `${(recipe.selling_price - recipe.cost).toLocaleString()}원` : '확인 필요'}</Text>
+              <NumericText style={styles.statValue}>{costKnown ? `${(recipe.selling_price - recipe.cost).toLocaleString()}원` : '확인 필요'}</NumericText>
             </View>
             <View style={styles.statBox}>
               <Text style={styles.statLabel}>마진율</Text>
-              <Text style={[styles.statValue, { color: marginColor }]}>{costKnown && marginRate !== null ? `${marginRate.toFixed(1)}%` : '확인 필요'}</Text>
+              <NumericText style={[styles.statValue, { color: marginColor }]}>{costKnown && marginRate !== null ? `${marginRate.toFixed(1)}%` : '확인 필요'}</NumericText>
             </View>
           </View>
         </View>
 
         <Text style={styles.sectionTitle}>재료 목록</Text>
-        {recipe.recipe_ingredients.length === 0 && <Text style={styles.statLabel}>등록된 재료가 없어 원가와 마진을 계산할 수 없어요. 수정에서 재료를 추가해주세요.</Text>}
+        {recipe.recipe_ingredients.length === 0 && <Text style={styles.statLabel}>{canManageRecipes ? '등록된 재료가 없어 원가와 마진을 계산할 수 없어요. 수정에서 재료를 추가해주세요.' : '등록된 재료가 없어 원가와 마진을 계산할 수 없어요.'}</Text>}
         <View style={styles.ingredientsCard}>
           {recipe.recipe_ingredients.map((ri, idx) => (
             <View key={idx} style={[styles.riRow, idx > 0 && styles.riBorder]}>
@@ -126,15 +141,15 @@ export default function RecipeDetailScreen() {
                 <Text style={styles.riQuantity}>{ri.quantity}{ri.unit}</Text>
               </View>
               <View style={styles.riRight}>
-                <Text style={styles.riCost}>
+                <NumericText style={styles.riCost}>
                   {ri.ingredient && ri.ingredient.last_price != null ? `${recipeLineCost(ri.quantity, ri.unit ?? ri.ingredient.unit, ri.ingredient).toLocaleString(undefined, { maximumFractionDigits: 0 })}원` : '확인 필요'}
-                </Text>
+                </NumericText>
               </View>
             </View>
           ))}
         </View>
 
-        {currentRole === 'admin' && (
+        {isAdmin && canManageRecipes && recipe.store_id === store?.id && (
           <View style={styles.deleteContainer}>
             <TouchableOpacity style={styles.deleteBtn} onPress={handleDelete} disabled={saving}>
               {saving ? <ActivityIndicator size="small" color={Colors.danger} /> : <Text style={styles.deleteBtnText}>레시피 삭제</Text>}
@@ -176,12 +191,12 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.white, borderRadius: 20,
     borderWidth: 1, borderColor: Colors.homeBorder, overflow: 'hidden',
   },
-  riRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16 },
+  riRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 12, padding: 16 },
   riBorder: { borderTopWidth: 1, borderTopColor: Colors.gray100 },
   riLeft: { flex: 1 },
   riName: { fontSize: 15, fontWeight: '600', color: Colors.black, marginBottom: 2 },
-  riQuantity: { fontSize: 13, color: Colors.gray500 },
-  riRight: { alignItems: 'flex-end' },
+  riQuantity: { fontVariant: ['tabular-nums'], fontSize: 13, color: Colors.gray500 },
+  riRight: { flexShrink: 1, alignItems: 'flex-end' },
   riCost: { fontSize: 15, fontWeight: '700', color: Colors.black },
   deleteContainer: { marginTop: 40, alignItems: 'center' },
   deleteBtn: {

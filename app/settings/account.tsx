@@ -4,7 +4,7 @@ import {
   TextInput, ScrollView, ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import { AppIcon } from '../../lib/icons/AppIcon';
 import { router } from 'expo-router';
 import { Colors } from '../../constants/colors';
 import { useAuth } from '../../lib/contexts/AuthContext';
@@ -44,7 +44,7 @@ export default function AccountScreen() {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} accessibilityRole="button" accessibilityLabel="뒤로가기">
-          <Ionicons name="chevron-back" size={24} color={Colors.black} />
+          <AppIcon name="chevron-back" size={24} color={Colors.black} />
         </TouchableOpacity>
         <Text style={styles.title}>내 정보</Text>
         <View style={{ width: 44 }} />

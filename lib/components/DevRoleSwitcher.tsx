@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { AppIcon } from '../icons/AppIcon';
 import { Colors } from '../../constants/colors';
 import { useAuth, DevPreviewMode } from '../contexts/AuthContext';
 import { useEmployees } from '../hooks/useEmployees';
@@ -77,7 +77,7 @@ export function DevRoleSwitcher() {
         onPress={() => setOpen(v => !v)}
         activeOpacity={0.85}
       >
-        <Ionicons name="eye-outline" size={14} color={Colors.white} />
+        <AppIcon name="eye-outline" size={14} color={Colors.white} />
         <Text style={styles.fabText} numberOfLines={1}>{activeLabel}</Text>
       </TouchableOpacity>
     </View>

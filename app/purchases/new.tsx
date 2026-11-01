@@ -19,7 +19,7 @@ import {
   BackHandler,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import { AppIcon } from '../../lib/icons/AppIcon';
 import { router, useLocalSearchParams } from 'expo-router';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Colors } from '../../constants/colors';
@@ -69,6 +69,9 @@ const IngredientPickerRow = memo(function IngredientPickerRow({ item, already, c
         style={[styles.pickerRow, already && styles.pickerRowAdded]}
         onPress={handlePress}
         disabled={already}
+        accessibilityRole="checkbox"
+        accessibilityLabel={`${item.name}, ${item.unit}${already ? ', 이미 추가됨' : ''}`}
+        accessibilityState={{ checked: checked || already, disabled: already }}
       >
         <View style={styles.pickerRowLeft}>
           <Text style={[styles.pickerName, already && styles.pickerNameAdded]}>{item.name}</Text>
@@ -76,7 +79,7 @@ const IngredientPickerRow = memo(function IngredientPickerRow({ item, already, c
         </View>
         <View style={styles.pickerRowRight}>
           <Text style={styles.pickerUnit}>{item.unit}</Text>
-          {checked && !already && <Ionicons name="checkmark" size={16} color={Colors.primary} />}
+          {checked && !already && <AppIcon name="checkmark" size={16} color={Colors.primary} />}
         </View>
       </TouchableOpacity>
   );
@@ -335,7 +338,7 @@ export default function NewPurchaseScreen() {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => { if (saved) leaveSaved(); else if (!submitting && (step > 0 || editingReview) && writeState !== 'unknown') goBackStep(); else if (!submitting) router.back(); }} disabled={submitting} style={styles.backButton} accessibilityRole="button" accessibilityLabel="뒤로">
-          <Ionicons name="chevron-back" size={24} color={Colors.black} />
+          <AppIcon name="chevron-back" size={24} color={Colors.black} />
         </TouchableOpacity>
         <Text style={styles.title}>매입 등록</Text>
         <View style={styles.headerSpacer} />
@@ -368,9 +371,9 @@ export default function NewPurchaseScreen() {
 
           {errors.supplier && <Text style={styles.fieldError}>{errors.supplier}</Text>}
           <Text style={styles.label}>매입일</Text>
-          <TouchableOpacity style={styles.dateInput} onPress={() => setShowDatePicker(p => !p)} activeOpacity={0.7}>
+          <TouchableOpacity style={styles.dateInput} onPress={() => setShowDatePicker(p => !p)} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel={`매입일 ${formatDate(date)}, 변경`} accessibilityState={{ expanded: showDatePicker }}>
             <Text style={styles.dateText}>{formatDate(date)}</Text>
-            <Ionicons name="calendar-outline" size={18} color={Colors.gray500} />
+            <AppIcon name="calendar-outline" size={18} color={Colors.gray500} />
           </TouchableOpacity>
           {showDatePicker && (
             <DateTimePicker
@@ -430,7 +433,7 @@ export default function NewPurchaseScreen() {
                     <Text style={styles.itemCategory}>{item.ingredient.category}</Text>
                   </View>
                   <TouchableOpacity onPress={() => removeItem(item.ingredient.id)} style={styles.actionButton} accessibilityRole="button" accessibilityLabel={`${item.ingredient.name} 품목 삭제`}>
-                    <Ionicons name="close" size={16} color={Colors.gray400} />
+                    <AppIcon name="close" size={16} color={Colors.gray400} />
                   </TouchableOpacity>
                 </View>
                 {(() => {
@@ -444,6 +447,9 @@ export default function NewPurchaseScreen() {
                               key={u}
                               style={[styles.unitToggle, item.unit === u && styles.unitToggleActive]}
                               onPress={() => setItemUnit(item.ingredient.id, u)}
+                              accessibilityRole="radio"
+                              accessibilityLabel={`${item.ingredient.name} 단위 ${u}`}
+                              accessibilityState={{ checked: item.unit === u }}
                             >
                               <Text style={[styles.unitToggleText, item.unit === u && styles.unitToggleTextActive]}>{u}</Text>
                             </TouchableOpacity>
@@ -531,13 +537,15 @@ export default function NewPurchaseScreen() {
               <TouchableOpacity
                 key={name}
                 style={styles.supplierItem}
+                accessibilityRole="button"
+                accessibilityState={{ selected: supplier === name }}
                 onPress={() => {
                   setSupplier(name);
                   setShowSupplierPicker(false);
                 }}
               >
                 <Text style={styles.supplierItemText}>{name}</Text>
-                {supplier === name && <Ionicons name="checkmark" size={18} color={Colors.primary} />}
+                {supplier === name && <AppIcon name="checkmark" size={18} color={Colors.primary} />}
               </TouchableOpacity>
             ))}
           </TouchableOpacity>
@@ -551,18 +559,18 @@ export default function NewPurchaseScreen() {
             <View style={styles.modalHeader}>
               {showQuickAdd ? (
                 <>
-                  <TouchableOpacity onPress={() => setShowQuickAdd(false)} hitSlop={8} style={styles.actionButton} accessibilityRole="button">
+                  <TouchableOpacity onPress={() => setShowQuickAdd(false)} style={styles.actionButton} accessibilityRole="button">
                     <Text style={styles.modalCancel}>취소</Text>
                   </TouchableOpacity>
                   <Text style={styles.modalTitle}>새 품목 등록</Text>
-                  <TouchableOpacity onPress={handleQuickAdd} disabled={quickAdding} hitSlop={8} style={styles.actionButton} accessibilityRole="button">
+                  <TouchableOpacity onPress={handleQuickAdd} disabled={quickAdding} style={styles.actionButton} accessibilityRole="button">
                     <Text style={styles.modalClose}>{quickAdding ? '등록 중...' : '추가'}</Text>
                   </TouchableOpacity>
                 </>
               ) : (
                 <>
                   <Text style={styles.modalTitle}>품목 선택</Text>
-                  <TouchableOpacity onPress={closePicker} hitSlop={8} style={styles.actionButton} accessibilityRole="button">
+                  <TouchableOpacity onPress={closePicker} style={styles.actionButton} accessibilityRole="button">
                     <Text style={styles.modalClose}>닫기</Text>
                   </TouchableOpacity>
                 </>
@@ -588,6 +596,8 @@ export default function NewPurchaseScreen() {
                       key={c}
                       style={[styles.chip, quickCategory === c && styles.chipActive]}
                       onPress={() => setQuickCategory(c)}
+                      accessibilityRole="radio"
+                      accessibilityState={{ checked: quickCategory === c }}
                     >
                       <Text style={[styles.chipText, quickCategory === c && styles.chipTextActive]}>{c}</Text>
                     </TouchableOpacity>
@@ -601,6 +611,8 @@ export default function NewPurchaseScreen() {
                       key={u}
                       style={[styles.chip, quickUnit === u && styles.chipActive]}
                       onPress={() => setQuickUnit(u)}
+                      accessibilityRole="radio"
+                      accessibilityState={{ checked: quickUnit === u }}
                     >
                       <Text style={[styles.chipText, quickUnit === u && styles.chipTextActive]}>{u}</Text>
                     </TouchableOpacity>
@@ -631,6 +643,8 @@ export default function NewPurchaseScreen() {
                       key={cat}
                       style={[styles.filterTab, activeCategory === cat && styles.filterTabActive]}
                       onPress={() => setActiveCategory(cat)}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: activeCategory === cat }}
                     >
                       <Text style={[styles.filterTabText, activeCategory === cat && styles.filterTabTextActive]} numberOfLines={1}>
                         {cat}
@@ -640,9 +654,10 @@ export default function NewPurchaseScreen() {
                   <TouchableOpacity
                     style={styles.filterTabManageBtn}
                     onPress={() => { sheetHandoff.current = 'categories'; setShowPicker(false); }}
-                    hitSlop={8}
+                    accessibilityRole="button"
+                    accessibilityLabel="품목 카테고리 관리"
                   >
-                    <Ionicons name="add" size={16} color={Colors.gray600} />
+                    <AppIcon name="add" size={16} color={Colors.gray600} />
                   </TouchableOpacity>
                 </ScrollView>
 
@@ -754,7 +769,7 @@ const styles = StyleSheet.create({
   },
   bottomTotal: { flex: 1 },
   bottomTotalLabel: { fontSize: 13, color: Colors.white, marginBottom: 2 },
-  bottomTotalValue: { fontFamily: Fonts.spaceGroteskBold, fontSize: 20, fontWeight: '800', color: Colors.white, letterSpacing: -0.3 },
+  bottomTotalValue: { fontFamily: Fonts.spaceGroteskBold, fontVariant: ['tabular-nums'], fontSize: 20, fontWeight: '800', color: Colors.white, letterSpacing: -0.3 },
   bottomSubmit: { backgroundColor: Colors.action, paddingHorizontal: 22, paddingVertical: 14, borderRadius: 14, minHeight: 44, justifyContent: 'center' },
   bottomSubmitDisabled: { opacity: 0.4 },
   bottomSubmitText: { color: Colors.white, fontSize: 15, fontWeight: '700' },
@@ -801,6 +816,7 @@ const styles = StyleSheet.create({
   itemCategory: { fontSize: 13, color: Colors.gray500, marginTop: 2 },
   unitToggleRow: { flexDirection: 'row', gap: 6, marginBottom: 10 },
   unitToggle: {
+    minWidth: 44,
     paddingHorizontal: 14,
     paddingVertical: 6,
     borderRadius: 14,
@@ -814,6 +830,7 @@ const styles = StyleSheet.create({
   inputGroup: { flex: 1 },
   inputLabel: { fontSize: 13, color: Colors.gray500, marginBottom: 4 },
   smallInput: {
+    fontFamily: Fonts.geistRegular, fontVariant: ['tabular-nums'],
     backgroundColor: Colors.gray50,
     borderRadius: 12,
     borderWidth: 1,
@@ -828,6 +845,8 @@ const styles = StyleSheet.create({
 
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: {
+    minWidth: 44,
+    maxWidth: '100%',
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 14,
@@ -883,6 +902,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.gray100, borderWidth: 0.5, borderColor: Colors.gray200,
   },
   pickerRow: {
+    gap: 12,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -951,5 +971,5 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: Colors.gray100,
   },
-  supplierItemText: { fontSize: 15, color: Colors.black },
+  supplierItemText: { flex: 1, marginRight: 12, fontSize: 15, color: Colors.black },
 });

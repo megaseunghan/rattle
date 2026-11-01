@@ -5,7 +5,7 @@ import {
   Modal, TextInput, Alert, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import { AppIcon } from '../../lib/icons/AppIcon';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Colors } from '../../constants/colors';
 import { Fonts } from '../../constants/fonts';
@@ -73,7 +73,7 @@ export default function PurchaseDetailScreen() {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.headerAction} accessibilityRole="button" accessibilityLabel="뒤로">
-          <Ionicons name="chevron-back" size={24} color={Colors.black} />
+          <AppIcon name="chevron-back" size={24} color={Colors.black} />
         </TouchableOpacity>
         <Text style={styles.title}>매입 상세</Text>
         <View style={{ width: 44 }} />
@@ -112,6 +112,8 @@ export default function PurchaseDetailScreen() {
                   style={[styles.itemRow, i < items.length - 1 && styles.rowBorder]}
                   onPress={() => openEdit(it)}
                   activeOpacity={0.7}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${it.name}, ${it.quantity}${it.unit}, 단가 ${it.unit_price.toLocaleString()}원, 소계 ${it.subtotal.toLocaleString()}원, 수정`}
                 >
                   <View style={{ flex: 1 }}>
                     <Text style={styles.itemName}>{it.name}</Text>
@@ -121,7 +123,7 @@ export default function PurchaseDetailScreen() {
                     </Text>
                   </View>
                   <Text style={styles.itemSubtotal}>{it.subtotal.toLocaleString()}원</Text>
-                  <Ionicons name="chevron-forward" size={16} color={Colors.gray300} />
+                  <AppIcon name="chevron-forward" size={16} color={Colors.gray300} />
                 </TouchableOpacity>
               ))}
             </View>
@@ -134,11 +136,11 @@ export default function PurchaseDetailScreen() {
           <View style={styles.modalSheet}>
             <View style={styles.modalHandle} />
             <View style={styles.sheetHeader}>
-              <TouchableOpacity onPress={() => setEditTarget(null)} hitSlop={8} style={styles.headerAction}>
+              <TouchableOpacity onPress={() => setEditTarget(null)} style={styles.headerAction} accessibilityRole="button">
                 <Text style={styles.sheetCancelText}>취소</Text>
               </TouchableOpacity>
               <Text style={styles.sheetHeaderTitle}>{editTarget?.name}</Text>
-              <TouchableOpacity onPress={handleSaveEdit} disabled={saving} hitSlop={8} style={styles.headerAction}>
+              <TouchableOpacity onPress={handleSaveEdit} disabled={saving} style={styles.headerAction} accessibilityRole="button" accessibilityLabel="품목 수정 저장" accessibilityState={{ disabled: saving, busy: saving }}>
                 {saving
                   ? <ActivityIndicator size="small" color={Colors.primary} />
                   : <Text style={styles.sheetSaveText}>저장</Text>}
@@ -198,11 +200,11 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   supplier: { fontSize: 18, fontWeight: '700', color: Colors.black },
-  pillRow: { flexDirection: 'row', gap: 6 },
-  pill: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, backgroundColor: Colors.gray100 },
+  pillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  pill: { maxWidth: '100%', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, backgroundColor: Colors.gray100 },
   pillText: { fontSize: 11, color: Colors.gray500 },
   date: { fontSize: 13, color: Colors.gray500, marginTop: 2 },
-  amount: { fontFamily: Fonts.spaceGroteskBold, fontSize: 26, fontWeight: '800', color: Colors.black, marginTop: 4 },
+  amount: { fontFamily: Fonts.spaceGroteskBold, fontVariant: ['tabular-nums'], fontSize: 26, fontWeight: '800', color: Colors.black, marginTop: 4 },
 
   sectionLabel: { fontSize: 13, fontWeight: '500', color: Colors.gray600,  },
   listCard: { backgroundColor: Colors.white, borderRadius: 20, borderWidth: 1, borderColor: Colors.homeBorder},
@@ -218,19 +220,20 @@ const styles = StyleSheet.create({
   itemRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 13, gap: 10 },
   rowBorder: { borderBottomWidth: 0.5, borderBottomColor: Colors.gray100 },
   itemName: { fontSize: 14, fontWeight: '500', color: Colors.black },
-  itemSub: { fontSize: 13, color: Colors.gray500, marginTop: 2 },
-  itemSubtotal: { fontSize: 14, fontWeight: '600', color: Colors.black },
+  itemSub: { fontVariant: ['tabular-nums'], fontSize: 13, color: Colors.gray500, marginTop: 2 },
+  itemSubtotal: { flexShrink: 1, fontFamily: Fonts.geistSemiBold, fontVariant: ['tabular-nums'], fontSize: 14, fontWeight: '600', color: Colors.black },
 
   modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: Colors.overlay },
   modalSheet: { backgroundColor: Colors.homeCanvas, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20},
   modalHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: Colors.gray200, alignSelf: 'center', marginBottom: 20 },
-  sheetHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, paddingBottom: 12, borderBottomWidth: 0.5, borderBottomColor: Colors.gray100 },
+  sheetHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 16, paddingBottom: 12, borderBottomWidth: 0.5, borderBottomColor: Colors.gray100 },
   sheetHeaderTitle: { fontSize: 16, fontWeight: '700', color: Colors.black, flex: 1, textAlign: 'center' },
   sheetCancelText: { fontSize: 15, fontWeight: '500', color: Colors.gray500 },
   sheetSaveText: { fontSize: 15, fontWeight: '700', color: Colors.primary },
   fieldLabel: { fontSize: 13, fontWeight: '600', color: Colors.gray600, marginBottom: 6, marginTop: 14 },
   input: {
+    fontFamily: Fonts.geistRegular, fontVariant: ['tabular-nums'],
     backgroundColor: Colors.gray50, borderWidth: 1, borderColor: Colors.homeBorder,
     borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: Colors.black, minHeight: 44 },
-  editSubtotal: { fontSize: 14, fontWeight: '600', color: Colors.gray600, marginTop: 20, textAlign: 'right' },
+  editSubtotal: { fontFamily: Fonts.geistSemiBold, fontVariant: ['tabular-nums'], fontSize: 14, fontWeight: '600', color: Colors.gray600, marginTop: 20, textAlign: 'right' },
 });

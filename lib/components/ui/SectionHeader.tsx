@@ -15,7 +15,7 @@ export function SectionHeader({ title, actionLabel, onActionPress, insetHorizont
     <View style={[styles.container, !insetHorizontalPadding && styles.containerNoInset]}>
       <Text style={styles.title}>{title}</Text>
       {actionLabel && (
-        <Pressable onPress={onActionPress} hitSlop={8}>
+        <Pressable accessibilityRole="button" onPress={onActionPress} style={({ pressed }) => [styles.actionButton, pressed && styles.pressed]}>
           <Text style={styles.action}>{actionLabel} ›</Text>
         </Pressable>
       )}
@@ -28,6 +28,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: 12,
     paddingTop: Spacing.sectionTop,
     paddingHorizontal: Spacing.screenX,
     paddingBottom: Spacing.sectionHeaderGap,
@@ -36,13 +37,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 0,
   },
   title: {
+    flex: 1,
     fontSize: Type.md,
     fontWeight: '700',
     color: Colors.black,
   },
+  actionButton: { minHeight: 44, minWidth: 44, alignItems: 'center', justifyContent: 'center', flexShrink: 1 },
+  pressed: { opacity: 0.7 },
   action: {
     fontSize: Type.xs + 1,
     fontWeight: '700',
-    color: Colors.primary,
+    color: Colors.action,
   },
 });

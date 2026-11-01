@@ -19,7 +19,9 @@ export function Button({ label, onPress, variant = 'primary', disabled = false, 
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityLabel={label}
       accessibilityState={{ disabled: isDisabled, busy: loading }}
+      disabled={isDisabled}
       onPress={isDisabled ? undefined : onPress}
       style={({ pressed }) => [
         styles.base,
@@ -29,12 +31,11 @@ export function Button({ label, onPress, variant = 'primary', disabled = false, 
         pressed && !isDisabled && styles.pressed,
       ]}
     >
-      {loading ? (
-        <ActivityIndicator color={loadingIndicatorColor[variant]} />
-      ) : (
-        <Text style={[textStyles[variant], isDisabled && variant === 'primary' && styles.primaryDisabledText]}>
-          {label}
-        </Text>
+      <Text accessible={false} style={[styles.label, textStyles[variant], isDisabled && variant === 'primary' && styles.primaryDisabledText, loading && styles.hiddenLabel]}>
+        {label}
+      </Text>
+      {loading && (
+        <ActivityIndicator style={styles.spinner} color={variant === 'primary' ? Colors.gray500 : loadingIndicatorColor[variant]} />
       )}
     </Pressable>
   );
@@ -43,9 +44,13 @@ export function Button({ label, onPress, variant = 'primary', disabled = false, 
 const styles = StyleSheet.create({
   base: {
     minHeight: 44,
+    minWidth: 44,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  label: { textAlign: 'center', flexShrink: 1 },
+  hiddenLabel: { opacity: 0 },
+  spinner: { position: 'absolute' },
   pressed: {
     opacity: 0.95,
   },

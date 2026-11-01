@@ -1,7 +1,7 @@
 /* Hallmark · genre: modern-minimal · macrostructure: Workbench · design-system: DESIGN.md · designed-as-app */
 import { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, KeyboardAvoidingView, Platform, ScrollView, Keyboard } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { AppIcon } from '../icons/AppIcon';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Crypto from 'expo-crypto';
 import { Colors } from '../../constants/colors';
@@ -94,7 +94,7 @@ export function StoreSetupWizard({ userId, onCreated, onCancel, knownRequestIds 
       {step === 0 && <Field label="매장 이름" value={draft.name} onChangeText={name => change({ name })} placeholder="예: 라틀 연남점" maxLength={80} editable={!busy && !draft.submitted} autoFocus />}
       {step === 1 && <View style={{ gap: 12 }}>{(['now', 'later'] as const).map(value => <Pressable key={value} disabled={busy} accessibilityRole="radio" accessibilityLabel={value === 'now' ? '지금 연결하기' : '나중에 연결하기'} accessibilityState={{ checked: draft.pos === value, disabled: busy }} onPress={() => change({ pos: value })} style={({ pressed }) => [styles.card, styles.choiceRow, draft.pos === value && styles.selected, pressed && styles.pressed]}>
         <View style={styles.choiceBody}><Text style={styles.cardTitle}>{value === 'now' ? '지금 연결하기' : '나중에 연결하기'}</Text>
-        <Text style={styles.description}>{value === 'now' ? '매장 생성 후 POS 연결 안내로 이동해요.' : '먼저 매장을 둘러보고, 준비되면 연결해요.'}</Text></View><Ionicons name={draft.pos === value ? 'radio-button-on' : 'radio-button-off'} size={22} color={draft.pos === value ? Colors.action : Colors.gray500} accessible={false} accessibilityElementsHidden />
+        <Text style={styles.description}>{value === 'now' ? '매장 생성 후 POS 연결 안내로 이동해요.' : '먼저 매장을 둘러보고, 준비되면 연결해요.'}</Text></View><AppIcon name={draft.pos === value ? 'radio-button-on' : 'radio-button-off'} size={22} color={draft.pos === value ? Colors.action : Colors.gray500} accessible={false} accessibilityElementsHidden />
       </Pressable>)}<Text style={styles.note}>연결이 확인되기 전에는 매출 연동 완료로 표시하지 않아요.</Text></View>}
       {step === 2 && <FinancialSharingChoices value={draft.scope} onChange={scope => change({ scope })} disabled={busy} />}
       {step === 3 && <View style={styles.card}>

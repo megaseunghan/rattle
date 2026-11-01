@@ -26,9 +26,9 @@ export function SummaryCard({ label, amount, changeLabel, isNegativeChange, subM
       <View style={styles.headerRow}>
         <Text style={styles.label}>{label}</Text>
         {changeLabel && (
-          <Text style={[styles.changeBadge, isNegativeChange ? styles.negative : styles.positive]}>
+          <NumericText style={[styles.changeBadge, isNegativeChange ? styles.negative : styles.positive]}>
             {changeLabel}
-          </Text>
+          </NumericText>
         )}
       </View>
       <NumericText style={styles.amount} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{amount}</NumericText>
@@ -40,11 +40,11 @@ export function SummaryCard({ label, amount, changeLabel, isNegativeChange, subM
             {subMetrics.map((metric) => (
               <View key={metric.label} style={styles.subMetric}>
                 <Text style={styles.subLabel}>{metric.label}</Text>
-                <NumericText style={styles.subValue}>{metric.value}</NumericText>
+                <NumericText style={styles.subValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{metric.value}</NumericText>
                 {metric.change && (
-                  <Text style={[styles.subChange, metric.isNegativeChange ? styles.negative : styles.positive]}>
+                  <NumericText style={[styles.subChange, metric.isNegativeChange ? styles.negative : styles.positive]}>
                     {metric.change}
-                  </Text>
+                  </NumericText>
                 )}
               </View>
             ))}
@@ -94,9 +94,11 @@ const styles = StyleSheet.create({
   },
   subRow: {
     flexDirection: 'row',
+    gap: 12,
   },
   subMetric: {
     flex: 1,
+    minWidth: 0,
     gap: 2,
   },
   subLabel: {

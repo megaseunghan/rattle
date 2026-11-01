@@ -1,3 +1,6 @@
+import { useStorePermissions } from '../../lib/hooks/useStorePermissions';
+import { AppBar } from '../../lib/components/ui';
+import { ErrorMessage } from '../../lib/components/ErrorMessage';
 import { getErrorMessage } from '../../lib/utils/error';
 import { useState } from 'react';
 import {
@@ -13,8 +16,9 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { AppIcon } from '../../lib/icons/AppIcon';
 import { Colors } from '../../constants/colors';
+import { Fonts } from '../../constants/fonts';
 import { useIngredients } from '../../lib/hooks/useIngredients';
 import { useCategories } from '../../lib/hooks/useCategories';
 import { useAuth } from '../../lib/contexts/AuthContext';
@@ -23,6 +27,16 @@ import { useConfirmLeave } from '../../lib/hooks/useConfirmLeave';
 import { STOCK_UNITS } from '../../lib/utils/unit';
 
 export default function NewIngredientScreen() {
+  const { canManageStock, permissionsReady } = useStorePermissions();
+  const { store } = useAuth();
+  if (!canManageStock) return <SafeAreaView style={styles.container}>
+    <AppBar title="식자재 등록" onBack={() => router.back()} />
+    <ErrorMessage message={permissionsReady ? '식자재 등록 권한이 없어요.' : '매장과 직원 권한을 확인한 뒤 다시 열어 주세요.'} />
+  </SafeAreaView>;
+  return <NewIngredientScreenForm key={store?.id} />;
+}
+
+function NewIngredientScreenForm() {
   const { store } = useAuth();
   const { create } = useIngredients();
   const { categories } = useCategories();
@@ -70,7 +84,7 @@ export default function NewIngredientScreen() {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton} accessibilityRole="button" accessibilityLabel="뒤로">
-          <Ionicons name="chevron-back" size={24} color={Colors.black} />
+          <AppIcon name="chevron-back" size={24} color={Colors.black} />
         </TouchableOpacity>
         <Text style={styles.title}>새 식자재</Text>
         <TouchableOpacity
@@ -98,6 +112,8 @@ export default function NewIngredientScreen() {
             {categories.map(c => (
               <TouchableOpacity
                 key={c}
+                accessibilityRole="button"
+                accessibilityState={{ selected: category === c }}
                 style={[styles.categoryChip, category === c && styles.categoryChipActive]}
                 onPress={() => setCategory(category === c ? '' : c)}
               >
@@ -113,6 +129,8 @@ export default function NewIngredientScreen() {
             {STOCK_UNITS.map(u => (
               <TouchableOpacity
                 key={u}
+                accessibilityRole="radio"
+                accessibilityState={{ checked: unit === u }}
                 style={[styles.unitChip, unit === u && styles.unitChipActive]}
                 onPress={() => setUnit(u)}
               >
@@ -128,7 +146,7 @@ export default function NewIngredientScreen() {
             <View style={styles.halfField}>
               <Text style={styles.label}>개수 (현재 재고)</Text>
               <TextInput
-                style={styles.input}
+                style={[styles.input, styles.numericInput]}
                 value={currentStock}
                 onChangeText={setCurrentStock}
                 keyboardType="numeric"
@@ -139,7 +157,7 @@ export default function NewIngredientScreen() {
             <View style={styles.halfField}>
               <Text style={styles.label}>품절 임박 기준</Text>
               <TextInput
-                style={styles.input}
+                style={[styles.input, styles.numericInput]}
                 value={minStock}
                 onChangeText={setMinStock}
                 keyboardType="numeric"
@@ -151,7 +169,7 @@ export default function NewIngredientScreen() {
 
           <Text style={styles.label}>가격 (1{unit || '개'}당, 원)</Text>
           <TextInput
-            style={styles.input}
+            style={[styles.input, styles.numericInput]}
             value={lastPrice}
             onChangeText={setLastPrice}
             keyboardType="numeric"
@@ -204,6 +222,8 @@ const styles = StyleSheet.create({
     color: Colors.black, minHeight: 44 },
   categoryChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   categoryChip: {
+    minWidth: 44,
+    maxWidth: '100%',
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 14,
@@ -211,10 +231,11 @@ const styles = StyleSheet.create({
     borderColor: Colors.homeBorder,
     backgroundColor: Colors.white, minHeight: 44, justifyContent: 'center' },
   categoryChipActive: { borderColor: Colors.primary, backgroundColor: Colors.bg },
-  categoryChipText: { fontSize: 14, color: Colors.gray600 },
-  categoryChipTextActive: { color: Colors.primary, fontWeight: '700' },
+  categoryChipText: { fontSize: 14, fontWeight: '600', color: Colors.gray600 },
+  categoryChipTextActive: { color: Colors.primary },
   unitPresets: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 },
   unitChip: {
+    minWidth: 44,
     paddingHorizontal: 14,
     paddingVertical: 7,
     borderRadius: 14,
@@ -222,11 +243,12 @@ const styles = StyleSheet.create({
     borderColor: Colors.homeBorder,
     backgroundColor: Colors.white, minHeight: 44, justifyContent: 'center' },
   unitChipActive: { borderColor: Colors.primary, backgroundColor: Colors.bg },
-  unitChipText: { fontSize: 14, color: Colors.gray600 },
-  unitChipTextActive: { color: Colors.primary, fontWeight: '700' },
+  unitChipText: { fontSize: 14, fontWeight: '600', color: Colors.gray600 },
+  unitChipTextActive: { color: Colors.primary },
   unitHelp: { fontSize: 13, color: Colors.gray500, marginTop: 2 },
   row: { flexDirection: 'row', gap: 12 },
-  halfField: { flex: 1 },
+  halfField: { flex: 1, minWidth: 0 },
+  numericInput: { fontFamily: Fonts.geistRegular, fontVariant: ['tabular-nums'] },
   hint: {
     marginTop: 24,
     backgroundColor: Colors.bg,

@@ -8,7 +8,7 @@ const app = resolve(derived, 'Build/Products/Release-iphonesimulator/rattle.app'
 execFileSync('codesign', ['--verify', '--deep', '--strict', app]);
 const log = await open('.qa/rebundle.log', 'w', 0o600);
 try {
-  execFileSync(process.execPath, ['node_modules/expo/bin/cli', 'export:embed', '--entry-file', 'index.ts', '--platform', 'ios', '--dev', 'false', '--minify', 'false', '--bundle-output', '.qa/main.jsbundle', '--assets-dest', app], {
+  execFileSync(process.execPath, ['node_modules/expo/bin/cli', 'export:embed', '--reset-cache', '--entry-file', 'index.ts', '--platform', 'ios', '--dev', 'false', '--minify', 'false', '--bundle-output', '.qa/main.jsbundle', '--assets-dest', app], {
     env: { ...process.env, NODE_ENV: 'production', EXPO_PUBLIC_QA_LOGIN: '1', EXPO_PUBLIC_QA_BROKER_TOKEN: config.brokerToken, EXPO_PUBLIC_SUPABASE_URL: config.projectUrl, EXPO_PUBLIC_SUPABASE_ANON_KEY: config.anonKey },
     stdio: ['ignore', log.fd, log.fd],
   });

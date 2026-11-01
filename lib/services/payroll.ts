@@ -295,11 +295,20 @@ export async function updatePayrollDeductions(
 
 /** 화면 42: 급여 정산 리포트 — 선택한 급여 건들을 정산 완료 처리 */
 export async function settlePayrolls(ids: string[]): Promise<void> {
-  if (ids.length === 0) return;
-  const { error } = await supabase
+  const requested = [...new Set(ids)];
+  if (requested.length === 0) return;
+  const { data, error } = await supabase
     .from('payroll')
     .update({ is_settled: true, settled_at: new Date().toISOString() })
-    .in('id', ids);
+    .in('id', requested)
+    .select('id');
   if (error) throw new Error(error.message);
-  await invalidateCachedStore();
+  const returned = new Set((data ?? []).map((row: { id: string }) => row.id));
+  const complete = returned.size === requested.length && requested.every(id => returned.has(id));
+  try {
+    await invalidateCachedStore();
+  } catch {
+    if (complete) throw new UserFacingError('정산은 저장됐어요. 화면 갱신에 실패했으니 다시 불러와 확인해주세요.');
+  }
+  if (!complete) throw new UserFacingError('일부 급여가 처리되지 않았어요. 처리된 정산은 유지돼요. 목록을 다시 불러와 남은 항목을 확인해주세요.');
 }

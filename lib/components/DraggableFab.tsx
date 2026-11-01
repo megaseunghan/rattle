@@ -5,7 +5,7 @@ import Animated, { cancelAnimation, useAnimatedStyle, useSharedValue, withSpring
 import { scheduleOnRN } from 'react-native-worklets';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Ionicons } from '@expo/vector-icons';
+import { AppIcon } from '../icons/AppIcon';
 import { Colors } from '../../constants/colors';
 
 const FAB_SIZE = 52;
@@ -37,7 +37,7 @@ interface DraggableFabProps {
   visible: boolean;
   onPress: () => void;
   onDragEnd?: (x: number, y: number) => void;
-  iconName: keyof typeof Ionicons.glyphMap;
+  iconName: keyof typeof AppIcon.glyphMap;
   /** 하단 고정 액션 위에 둘 여유 공간. 저장 위치 자체는 변경하지 않는다. */
   bottomInset?: number;
   /** 비용 목록은 하단 전용 공간에 정착해 행의 금액·삭제 버튼을 가리지 않는다. */
@@ -157,7 +157,7 @@ function DraggableFabInner({ onPress, onDragEnd, iconName, bottomInset = 0, dock
       <Animated.View style={[styles.fab, animatedStyle]} accessible accessibilityRole="button"
         accessibilityLabel={iconName === 'close' ? '빠른 등록 닫기' : '빠른 등록 열기'}
         onAccessibilityTap={onPress}>
-        <Ionicons name={iconName} size={24} color={Colors.white} />
+        <AppIcon name={iconName} size={24} color={Colors.white} />
       </Animated.View>
     </GestureDetector>
   );

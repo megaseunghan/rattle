@@ -3,10 +3,11 @@ import { scheduleOnRN } from 'react-native-worklets';
 import { useEffect, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert,
-  Pressable, Dimensions,
+  Pressable, Dimensions, BackHandler,
 } from 'react-native';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import { AppIcon } from '../icons/AppIcon';
 import { router } from 'expo-router';
 import { Colors } from '../../constants/colors';
 import { useAuth } from '../contexts/AuthContext';
@@ -20,13 +21,13 @@ const DRAWER_WIDTH = Math.min(320, Dimensions.get('window').width * 0.82);
 function SettingRow({
   icon, label, onPress, danger, withBorder,
 }: {
-  icon: keyof typeof Ionicons.glyphMap; label: string; onPress: () => void; danger?: boolean; withBorder?: boolean;
+  icon: keyof typeof AppIcon.glyphMap; label: string; onPress: () => void; danger?: boolean; withBorder?: boolean;
 }) {
   return (
     <TouchableOpacity style={[styles.listItem, withBorder && styles.listItemBorder]} onPress={onPress} activeOpacity={0.7}>
-      <Ionicons name={icon} size={19} color={danger ? Colors.negative : Colors.gray600} style={styles.rowIcon} />
+      <AppIcon name={icon} size={19} color={danger ? Colors.negative : Colors.gray600} style={styles.rowIcon} />
       <Text style={[styles.itemName, danger && { color: Colors.negative }]}>{label}</Text>
-      <Ionicons name="chevron-forward" size={15} color={Colors.gray300} />
+      <AppIcon name="chevron-forward" size={15} color={Colors.gray300} />
     </TouchableOpacity>
   );
 }
@@ -44,20 +45,32 @@ function AccordionSection({ title, defaultOpen = true, children }: { title: stri
     <View style={styles.accordion}>
       <TouchableOpacity style={styles.accordionHeader} onPress={toggle} activeOpacity={0.7}>
         <Text style={styles.sectionLabel}>{title}</Text>
-        <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={16} color={Colors.gray400} />
+        <AppIcon name={open ? 'chevron-up' : 'chevron-down'} size={16} color={Colors.gray400} />
       </TouchableOpacity>
       {open && <View style={styles.listBody}>{children}</View>}
     </View>
   );
 }
 
-export function MoreDrawer({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+interface MoreDrawerProps {
+  visible: boolean;
+  onClose: () => void;
+  /** Enables opening from the left edge without taking over normal page swipes. */
+  onOpen?: () => void;
+  allSelected?: boolean;
+  onSelectStore?: (storeId: string) => Promise<void>;
+  onAllStores?: () => void;
+}
+
+export function MoreDrawer({ visible, onClose, onOpen, allSelected = false, onSelectStore, onAllStores }: MoreDrawerProps) {
   const insets = useSafeAreaInsets();
   const { stores, store: currentStore, switchStore, currentRole, user, signOut } = useAuth();
   const [switching, setSwitching] = useState<string | null>(null);
   const [mounted, setMounted] = useState(visible);
   const translateX = useSharedValue(-DRAWER_WIDTH);
   const backdropOpacity = useSharedValue(0);
+  const edgeStart = useSharedValue(-DRAWER_WIDTH);
+  const edgeDragging = useSharedValue(false);
   const generation = useRef(0);
   const visibleRef = useRef(visible);
   visibleRef.current = visible;
@@ -75,17 +88,56 @@ export function MoreDrawer({ visible, onClose }: { visible: boolean; onClose: ()
     return () => { generation.current += 1; cancelAnimation(translateX); cancelAnimation(backdropOpacity); };
   }, [visible, translateX, backdropOpacity]);
 
-  if (!mounted) return null;
+  useEffect(() => {
+    if (!visible) return;
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => { onClose(); return true; });
+    return () => subscription.remove();
+  }, [visible, onClose]);
+
+  function beginEdgeDrag() { generation.current += 1; setMounted(true); }
+  function finishEdgeDrag(open: boolean) {
+    if (open) { onOpen?.(); return; }
+    const version = ++generation.current;
+    backdropOpacity.value = withTiming(0, { duration: 200, reduceMotion: ReduceMotion.System });
+    translateX.value = withTiming(-DRAWER_WIDTH, { duration: 200, reduceMotion: ReduceMotion.System }, finished => {
+      if (finished) scheduleOnRN(finishClose, version);
+    });
+  }
+  const edgeGesture = Gesture.Pan()
+    .withTestId('drawer-open')
+    .enabled(!!onOpen && !visible)
+    .activeOffsetX(10)
+    .failOffsetY([-16, 16])
+    .onStart(() => {
+      cancelAnimation(translateX); cancelAnimation(backdropOpacity);
+      edgeStart.value = translateX.value; edgeDragging.value = true;
+      scheduleOnRN(beginEdgeDrag);
+    })
+    .onUpdate(event => {
+      translateX.value = Math.max(-DRAWER_WIDTH, Math.min(0, edgeStart.value + event.translationX));
+      backdropOpacity.value = 1 + translateX.value / DRAWER_WIDTH;
+    })
+    .onEnd((event, success) => {
+      edgeDragging.value = false;
+      if (!success) { scheduleOnRN(finishEdgeDrag, false); return; }
+      const releasedX = Math.max(-DRAWER_WIDTH, Math.min(0, edgeStart.value + event.translationX));
+      const projected = DRAWER_WIDTH + releasedX + event.velocityX * 0.12;
+      scheduleOnRN(finishEdgeDrag, projected > DRAWER_WIDTH * 0.3);
+    })
+    .onFinalize(() => {
+      if (edgeDragging.value) { edgeDragging.value = false; scheduleOnRN(finishEdgeDrag, false); }
+    });
 
   const isAdmin = currentRole === 'admin';
   const provider = (user?.app_metadata?.provider as string | undefined) ?? 'email';
   const isEmailUser = provider === 'email';
 
   async function handleSwitchStore(storeId: string) {
-    if (storeId === currentStore?.id) return;
+    if (switching || (storeId === currentStore?.id && !allSelected)) return;
     setSwitching(storeId);
     try {
-      await switchStore(storeId);
+      if (onSelectStore) await onSelectStore(storeId);
+      else await switchStore(storeId);
       onClose();
     } catch (e) {
       Alert.alert('매장 전환', getErrorMessage(e, '매장을 바꾸지 못했어요. 다시 시도해주세요.'));
@@ -139,42 +191,55 @@ export function MoreDrawer({ visible, onClose }: { visible: boolean; onClose: ()
   }
 
   return (
-    <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
+    <>
+    {!!onOpen && !visible && <GestureDetector gesture={edgeGesture}>
+      <View testID="drawer-swipe-edge" style={styles.edge} accessible={false} />
+    </GestureDetector>}
+    {mounted && <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
       <Animated.View style={[StyleSheet.absoluteFill, styles.backdrop, backdropMotion]}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
       </Animated.View>
 
-      <Animated.View style={[styles.drawer, { width: DRAWER_WIDTH, paddingTop: insets.top + 12, paddingBottom: insets.bottom + 12 }, drawerMotion]}>
+      <Animated.View accessibilityViewIsModal onAccessibilityEscape={onClose} style={[styles.drawer, { width: DRAWER_WIDTH, paddingTop: insets.top + 12, paddingBottom: insets.bottom + 12 }, drawerMotion]}>
         <View style={styles.drawerHeader}>
           <Text style={styles.drawerTitle}>더보기</Text>
           <TouchableOpacity onPress={onClose} style={styles.closeButton} hitSlop={8} accessibilityRole="button" accessibilityLabel="더보기 닫기">
-            <Ionicons name="close" size={22} color={Colors.gray500} />
+            <AppIcon name="close" size={22} color={Colors.gray500} />
           </TouchableOpacity>
         </View>
 
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
           <TouchableOpacity style={styles.profileRow} onPress={() => go('/mypage')} activeOpacity={0.7}>
             <View style={styles.profileAvatar}>
-              <Ionicons name="person" size={20} color={Colors.primary} />
+              <AppIcon name="person" size={20} color={Colors.primary} />
             </View>
             <View style={styles.itemInfoFlex}>
               <Text style={styles.profileName} numberOfLines={1}>{user?.email ?? '내 계정'}</Text>
               <Text style={styles.profileSub}>마이페이지</Text>
             </View>
-            <Ionicons name="chevron-forward" size={15} color={Colors.gray300} />
+            <AppIcon name="chevron-forward" size={15} color={Colors.gray300} />
           </TouchableOpacity>
 
           <AccordionSection title="매장 관리">
+            {onAllStores && <TouchableOpacity style={styles.listItem} disabled={switching !== null} accessibilityRole="button" accessibilityLabel="전체 매장 대시보드" accessibilityState={{ selected: allSelected }}
+              onPress={() => { onAllStores(); onClose(); }}>
+              <AppIcon name="grid-outline" size={19} color={Colors.gray600} style={styles.rowIcon} /><Text style={styles.itemName}>전체 매장</Text>
+              {allSelected && <AppIcon name="checkmark" size={17} color={Colors.action} />}
+            </TouchableOpacity>}
             {stores.map((s, i) => {
-              const isActive = s.id === currentStore?.id;
+              const isActive = !allSelected && s.id === currentStore?.id;
               return (
                 <TouchableOpacity
                   key={s.id}
-                  style={[styles.listItem, i > 0 && styles.listItemBorder]}
+                  style={[styles.listItem, (i > 0 || !!onAllStores) && styles.listItemBorder]}
                   onPress={() => handleSwitchStore(s.id)}
+                  disabled={switching !== null}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${s.name} 매장으로 전환`}
+                  accessibilityState={{ selected: isActive, disabled: switching !== null }}
                   activeOpacity={0.7}
                 >
-                  <Ionicons name="business-outline" size={19} color={Colors.gray600} style={styles.rowIcon} />
+                  <AppIcon name="business-outline" size={19} color={Colors.gray600} style={styles.rowIcon} />
                   <View style={styles.itemInfoFlex}>
                     <Text style={styles.itemName} numberOfLines={1}>{s.name}</Text>
                     {isActive && <Text style={[styles.itemSub, { color: Colors.primary }]}>현재 선택됨</Text>}
@@ -182,9 +247,9 @@ export function MoreDrawer({ visible, onClose }: { visible: boolean; onClose: ()
                   {switching === s.id ? (
                     <ActivityIndicator size="small" color={Colors.gray400} />
                   ) : isActive ? (
-                    <Ionicons name="checkmark" size={17} color={Colors.primary} />
+                    <AppIcon name="checkmark" size={17} color={Colors.primary} />
                   ) : (
-                    <Ionicons name="chevron-forward" size={15} color={Colors.gray300} />
+                    <AppIcon name="chevron-forward" size={15} color={Colors.gray300} />
                   )}
                 </TouchableOpacity>
               );
@@ -212,11 +277,13 @@ export function MoreDrawer({ visible, onClose }: { visible: boolean; onClose: ()
           </TouchableOpacity>
         </ScrollView>
       </Animated.View>
-    </View>
+    </View>}
+    </>
   );
 }
 
 const styles = StyleSheet.create({
+  edge: { position: 'absolute', top: 0, bottom: 0, left: 0, width: 24 },
   backdrop: { backgroundColor: Colors.overlay },
   drawer: {
     position: 'absolute', top: 0, bottom: 0, left: 0,

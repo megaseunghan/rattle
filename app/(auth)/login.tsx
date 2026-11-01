@@ -122,12 +122,19 @@ export default function LoginScreen() {
           </View>
         </View>}
 
-        <Text style={styles.legal}>
-          계속 진행 시{' '}
-          <Text style={styles.legalEmphasis} onPress={() => router.push('/legal/terms')}>이용약관</Text> 및{' '}
-          <Text style={styles.legalEmphasis} onPress={() => router.push('/legal/privacy')}>개인정보처리방침</Text>
-          {'\n'}에 동의하게 됩니다
-        </Text>
+        <View style={styles.legal}>
+          <Text style={styles.legalText}>계속 진행 시</Text>
+          <View style={styles.legalLinks}>
+            <Pressable accessibilityRole="link" onPress={() => router.push('/legal/terms')} style={({ pressed }) => [styles.legalLink, pressed && styles.pressed]}>
+              <Text style={[styles.legalText, styles.legalEmphasis]}>이용약관</Text>
+            </Pressable>
+            <Text style={styles.legalText}>및</Text>
+            <Pressable accessibilityRole="link" onPress={() => router.push('/legal/privacy')} style={({ pressed }) => [styles.legalLink, pressed && styles.pressed]}>
+              <Text style={[styles.legalText, styles.legalEmphasis]}>개인정보처리방침</Text>
+            </Pressable>
+          </View>
+          <Text style={styles.legalText}>에 동의하게 됩니다</Text>
+        </View>
       </ScrollView>
     </View>
   );
@@ -209,12 +216,17 @@ const styles = StyleSheet.create({
   appleLabel: { fontSize: Type.md, fontWeight: '600', color: Colors.white },
   pressed: { opacity: 0.85 },
   legal: {
+    alignItems: 'center',
+    marginTop: 16,
+  },
+  legalLinks: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', gap: 4 },
+  legalLink: { minWidth: 44, minHeight: 44, paddingHorizontal: 4, justifyContent: 'center', alignItems: 'center' },
+  legalText: {
     fontSize: 12,
     fontWeight: '400',
     color: Colors.gray400,
     textAlign: 'center',
     lineHeight: 18,
-    marginTop: 16,
   },
   legalEmphasis: {
     color: Colors.gray600,

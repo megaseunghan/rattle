@@ -1,12 +1,12 @@
+import { useAuth } from '../../lib/contexts/AuthContext';
 import { entityKey } from '../../lib/utils/listKeys';
-import { GlassBackdrop } from '../../lib/components/GlassBackdrop';
-import { memo, useState, useEffect, useContext, useCallback, useMemo } from 'react';
+import { memo, useState, useEffect, useContext, useCallback, useMemo, useRef } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
   ScrollView, ActivityIndicator, RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import { AppIcon } from '../../lib/icons/AppIcon';
 import { router } from 'expo-router';
 import { Colors } from '../../constants/colors';
 import { useStorePermissions } from '../../lib/hooks/useStorePermissions';
@@ -71,6 +71,7 @@ const IngredientRow = memo(function IngredientRow({ item }: { item: Ingredient }
 // ─── 메인 스크린 ──────────────────────────────────────────────
 export function StockScreen({ active = true }: { active?: boolean }) {
   const scope = useContext(TabPagerContext);
+  const { store } = useAuth();
   const [activeTab, setActiveTabState] = useState<ContentTab>(scope?.viewState?.['stock.section'] === '레시피' ? '레시피' : '재고현황');
   const [activeCategory, setActiveCategoryState] = useState(scope?.viewState?.['stock.category'] ?? '전체');
   const [filterNotice, setFilterNotice] = useState<string | null>(null);
@@ -82,7 +83,9 @@ export function StockScreen({ active = true }: { active?: boolean }) {
     loadingMore, hasMore, loadMore, refetch: refetchIng,
   } = useIngredients();
   const { data: recipes, loading: recLoading, refetch: refetchRec, remove: removeRecipe } = useRecipes();
-  const { canManageRecipes, isAdmin } = useStorePermissions();
+  const { canReadRecipes, canManageRecipes, canManageStock, isAdmin } = useStorePermissions();
+  const recipeWriteAccess = useRef({ allowed: canManageRecipes, storeId: store?.id });
+  recipeWriteAccess.current = { allowed: canManageRecipes, storeId: store?.id };
   const [categoryModalVisible, setCategoryModalVisible] = useState(false);
   const ingredientCategoriesBase = useCategories();
   // 카테고리 이름변경/삭제는 서버의 ingredients.category도 바꾸므로, 캐시된 재고 목록을 즉시 재조회한다
@@ -98,13 +101,13 @@ export function StockScreen({ active = true }: { active?: boolean }) {
     },
   };
 
-  // 파트타이머는 레시피 세그먼트 접근 불가
-  const contentTabs: ContentTab[] = canManageRecipes
+  // 레시피 조회는 PT도 허용하며 관리 행동은 별도로 제한한다.
+  const contentTabs: ContentTab[] = canReadRecipes
     ? ['재고현황', '레시피']
     : ['재고현황'];
   useEffect(() => {
-    if (!canManageRecipes && activeTab === '레시피') setActiveTab('재고현황');
-  }, [canManageRecipes, activeTab]);
+    if (!canReadRecipes && activeTab === '레시피') setActiveTab('재고현황');
+  }, [canReadRecipes, activeTab]);
   useEffect(() => {
     if (ingLoading || ingError || hasMore || ingredientCategoriesBase.loading || ingredientCategoriesBase.error || activeCategory === '전체') return;
     if (!ingredientCategoriesBase.categories.includes(activeCategory) && !ingredients.some(item => item.category === activeCategory)) {
@@ -136,9 +139,10 @@ export function StockScreen({ active = true }: { active?: boolean }) {
     }), [ingredients, activeCategory]);
 
   const handleDeleteRecipe = useCallback((id: string) => {
+    if (!recipeWriteAccess.current.allowed || recipeWriteAccess.current.storeId !== store?.id) return;
     animateListChange();
     void removeRecipe(id);
-  }, [removeRecipe]);
+  }, [removeRecipe, canManageRecipes, store?.id]);
 
   const renderRecipe = useCallback(({ item }: { item: RecipeWithIngredients }) => (
     <RecipeCard recipe={item} onDelete={handleDeleteRecipe} isAdmin={canManageRecipes} />
@@ -151,12 +155,12 @@ export function StockScreen({ active = true }: { active?: boolean }) {
   const isLoading = activeTab === '재고현황' ? ingLoading : recLoading;
 
   return (
-    <SafeAreaView style={styles.container} edges={['left', 'right']}><GlassBackdrop />
+    <SafeAreaView style={styles.container} edges={['left', 'right']}>
       {filterNotice && <Text accessibilityLiveRegion="polite" style={{ paddingHorizontal: 20, paddingVertical: 8, color: Colors.gray700 }}>{filterNotice}</Text>}
       {/* 헤더 */}
       <View style={styles.topBar}>
         <View style={styles.headingRow}>
-          <Text style={styles.title}>{canManageRecipes ? '재고 및 레시피' : '재고'}</Text>
+          <Text style={styles.title}>{canReadRecipes ? '재고 및 레시피' : '재고'}</Text>
           {activeTab === '레시피' && canManageRecipes && (
             <TouchableOpacity
               style={styles.recipeAddButton}
@@ -165,7 +169,7 @@ export function StockScreen({ active = true }: { active?: boolean }) {
               accessibilityLabel="레시피 추가"
               activeOpacity={0.7}
             >
-              <Ionicons name="add" size={18} color={Colors.primary} />
+              <AppIcon name="add" size={18} color={Colors.primary} />
               <Text style={styles.recipeAddText}>레시피 추가</Text>
             </TouchableOpacity>
           )}
@@ -246,12 +250,12 @@ export function StockScreen({ active = true }: { active?: boolean }) {
           onEndReached={hasMore ? loadMore : undefined}
           onEndReachedThreshold={0.5}
           ListEmptyComponent={
-            ingError ? <EmptyState icon="alert-circle-outline" title="재고를 불러오지 못했어요" description="다시 불러온 뒤 확인해 주세요." ctaLabel="다시 시도" onCtaPress={() => { void refetchIng(); }} /> : hasMore ? <EmptyState icon="cube-outline" title="이 분류의 재고를 찾고 있어요" description="아직 불러오지 않은 품목이 있어요." ctaLabel="더 불러오기" onCtaPress={() => { void loadMore(); }} /> : <EmptyState
-              icon="cube-outline"
+            ingError ? <EmptyState illustration="load-error" icon="alert-circle-outline" title="재고를 불러오지 못했어요" description="다시 불러온 뒤 확인해 주세요." ctaLabel="다시 시도" onCtaPress={() => { void refetchIng(); }} /> : hasMore ? <EmptyState illustration={null} icon="cube-outline" title="이 분류의 재고를 찾고 있어요" description="아직 불러오지 않은 품목이 있어요." ctaLabel="더 불러오기" onCtaPress={() => { void loadMore(); }} /> : <EmptyState
+              icon="cube-outline" illustration="inventory"
               title={activeCategory === '전체' ? '등록된 재고가 없어요' : `${activeCategory}에 등록된 재고가 없어요`}
               description="식자재를 등록하고 잔여량과 기준 재고를 확인하세요."
-              ctaLabel="재고 등록"
-              onCtaPress={() => router.push('/stock/new')}
+              ctaLabel={canManageStock ? '재고 등록' : undefined}
+              onCtaPress={canManageStock ? () => router.push('/stock/new') : undefined}
             />
           }
           ListFooterComponent={loadingMore ? <ActivityIndicator style={{ padding: 16 }} color={Colors.primary} /> : null}
@@ -270,11 +274,11 @@ export function StockScreen({ active = true }: { active?: boolean }) {
           renderItem={renderRecipe}
           ListEmptyComponent={
             <EmptyState
-              icon="restaurant-outline"
+              icon="restaurant-outline" illustration="recipe"
               title="등록된 레시피가 없어요"
               description="재료와 판매가를 입력하면 원가를 계산할 수 있어요."
-              ctaLabel="레시피 등록"
-              onCtaPress={() => router.push('/recipes/new')}
+              ctaLabel={canManageRecipes ? '레시피 등록' : undefined}
+              onCtaPress={canManageRecipes ? () => router.push('/recipes/new') : undefined}
             />
           }
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />}
@@ -282,7 +286,7 @@ export function StockScreen({ active = true }: { active?: boolean }) {
       )}
 
       <CategoryManageModal
-        visible={categoryModalVisible}
+        visible={categoryModalVisible && isAdmin}
         onClose={() => setCategoryModalVisible(false)}
         title="재고 카테고리 관리"
         removeConfirmHint="해당 카테고리의 재료는 '기타'로 이동해요."
@@ -297,7 +301,7 @@ export function StockScreen({ active = true }: { active?: boolean }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.homeCanvas },
+  container: { flex: 1, backgroundColor: 'transparent' },
 
   topBar: {
     paddingHorizontal: 20,
@@ -309,13 +313,13 @@ const styles = StyleSheet.create({
   headingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 44, gap: 12 },
   recipeAddButton: { flexDirection: 'row', alignItems: 'center', gap: 4, minHeight: 44, paddingHorizontal: 12, borderRadius: 10, backgroundColor: Colors.tinted },
   recipeAddText: { fontSize: 14, fontWeight: '600', color: Colors.primary },
-  title: { fontSize: 22, fontWeight: '700', color: Colors.black },
+  title: { fontSize: 22, fontWeight: '700', color: Colors.black, flexShrink: 1 },
   summaryRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12, padding: 20, borderRadius: 24, backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.homeBorder },
   summaryLabel: { fontSize: 13, fontWeight: '500', color: Colors.gray500, marginBottom: 2 },
-  summaryValue: { fontSize: 30, fontWeight: '700', color: Colors.black, letterSpacing: -0.5 },
+  summaryValue: { fontSize: 30, fontWeight: '700', fontVariant: ['tabular-nums'], color: Colors.black, letterSpacing: -0.5 },
   summaryLowStock: { fontSize: 13, fontWeight: '600', color: Colors.negative },
 
-  innerTabRow: { flexDirection: 'row', gap: 4, backgroundColor: Colors.gray100, borderRadius: 12, padding: 3 },
+  innerTabRow: { flexDirection: 'row', gap: 4, backgroundColor: Colors.gray100, borderRadius: 14, padding: 4 },
   innerTab: { flex: 1, minHeight: 44, justifyContent: 'center', paddingVertical: 9, borderRadius: 10, alignItems: 'center' },
   innerTabActive: { backgroundColor: Colors.white, shadowColor: Colors.black, shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4, elevation: 2 },
   innerTabText: { fontSize: 14, fontWeight: '500', color: Colors.gray500 },

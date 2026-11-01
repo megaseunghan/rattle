@@ -1,20 +1,22 @@
-import { Ionicons } from '@expo/vector-icons';
+import { AppIcon } from '../../icons/AppIcon';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Illustration, type IllustrationName } from '../../icons/Illustration';
 import { Colors } from '../../../constants/colors';
 
 interface EmptyStateProps {
-  icon: keyof typeof Ionicons.glyphMap;
+  icon: keyof typeof AppIcon.glyphMap;
   title: string;
+  illustration?: IllustrationName | null;
   description?: string;
   ctaLabel?: string;
   onCtaPress?: () => void;
 }
 
-export function EmptyState({ icon, title, description, ctaLabel, onCtaPress }: EmptyStateProps) {
+export function EmptyState({ icon, title, description, ctaLabel, onCtaPress, illustration = 'empty-data' }: EmptyStateProps) {
   return (
     <View style={styles.container}>
       <View style={styles.heading}>
-        <Ionicons name={icon} size={18} color={Colors.gray400} />
+        {illustration ? <Illustration name={illustration} size={72} /> : <AppIcon name={icon} size={18} color={Colors.gray400} />}
         <Text style={styles.title}>{title}</Text>
       </View>
       {description && <Text style={styles.description}>{description}</Text>}
@@ -26,7 +28,7 @@ export function EmptyState({ icon, title, description, ctaLabel, onCtaPress }: E
           style={({ pressed }) => [styles.cta, pressed && styles.ctaPressed]}
         >
           <Text style={styles.ctaText}>{ctaLabel}</Text>
-          <Ionicons name="arrow-forward" size={16} color={Colors.primary} />
+          <AppIcon name="arrow-forward" size={16} color={Colors.primary} />
         </Pressable>
       )}
     </View>

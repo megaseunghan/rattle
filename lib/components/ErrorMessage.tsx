@@ -1,5 +1,5 @@
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { AppIcon } from '../icons/AppIcon';
 import { Colors } from '../../constants/colors';
 
 interface ErrorMessageProps {
@@ -11,12 +11,12 @@ export function ErrorMessage({ message, onRetry }: ErrorMessageProps) {
   return (
     <View style={styles.container}>
       <View style={styles.iconBg}>
-        <Ionicons name="alert-circle-outline" size={28} color={Colors.danger} />
+        <AppIcon name="alert-circle-outline" size={28} color={Colors.danger} />
       </View>
       <Text style={styles.message}>{message}</Text>
       {onRetry && (
         <TouchableOpacity style={styles.retryButton} onPress={onRetry}>
-          <Ionicons name="refresh-outline" size={15} color={Colors.white} />
+          <AppIcon name="refresh-outline" size={15} color={Colors.white} />
           <Text style={styles.retryText}>다시 시도</Text>
         </TouchableOpacity>
       )}

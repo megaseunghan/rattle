@@ -1,4 +1,4 @@
-import { getErrorMessage } from '../../lib/utils/error';
+import { getErrorMessage, UserFacingError } from '../../lib/utils/error';
 import { useState, useEffect } from 'react';
 import {
   View,
@@ -13,8 +13,9 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { AppIcon } from '../../lib/icons/AppIcon';
 import { Colors } from '../../constants/colors';
+import { Fonts } from '../../constants/fonts';
 import { useIngredients } from '../../lib/hooks/useIngredients';
 import { useCategories } from '../../lib/hooks/useCategories';
 import { getIngredientById } from '../../lib/services/ingredients';
@@ -22,11 +23,15 @@ import { Ingredient } from '../../types';
 import { LoadingSpinner } from '../../lib/components/LoadingSpinner';
 import { ErrorMessage } from '../../lib/components/ErrorMessage';
 import { useConfirmLeave } from '../../lib/hooks/useConfirmLeave';
+import { useAuth } from '../../lib/contexts/AuthContext';
+import { useStorePermissions } from '../../lib/hooks/useStorePermissions';
 
 import { STOCK_UNITS } from '../../lib/utils/unit';
 
 export default function EditIngredientScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { store } = useAuth();
+  const { canManageStock, canAdjustStock } = useStorePermissions();
   const { update } = useIngredients();
   const { categories } = useCategories();
 
@@ -43,10 +48,15 @@ export default function EditIngredientScreen() {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    if (!id) return;
+    if (!id || !store) return;
+    let cancelled = false;
+    setIngredient(null);
+    setFetchError(null);
     setFetchLoading(true);
     getIngredientById(id)
       .then((item) => {
+        if (cancelled) return;
+        if (item.store_id !== store.id) throw new UserFacingError('현재 매장의 식자재가 아니에요.');
         setIngredient(item);
         setName(item.name);
         setCategory(item.category);
@@ -55,17 +65,18 @@ export default function EditIngredientScreen() {
         setMinStock(String(item.min_stock));
         setLastPrice(String(item.last_price));
       })
-      .catch((e) => setFetchError(getErrorMessage(e, '식자재를 불러오지 못했습니다.')))
-      .finally(() => setFetchLoading(false));
-  }, [id]);
+      .catch((e) => { if (!cancelled) setFetchError(getErrorMessage(e, '식자재를 불러오지 못했습니다.')); })
+      .finally(() => { if (!cancelled) setFetchLoading(false); });
+    return () => { cancelled = true; };
+  }, [id, store?.id]);
 
   const isDirty = !!ingredient && (
-    name !== ingredient.name
-    || category !== ingredient.category
-    || unit !== ingredient.unit
-    || currentStock !== String(ingredient.current_stock)
-    || minStock !== String(ingredient.min_stock)
-    || lastPrice !== String(ingredient.last_price)
+    currentStock !== String(ingredient.current_stock)
+    || (canManageStock && (name !== ingredient.name
+      || category !== ingredient.category
+      || unit !== ingredient.unit
+      || minStock !== String(ingredient.min_stock)
+      || lastPrice !== String(ingredient.last_price)))
   );
   const bypassLeaveGuard = useConfirmLeave(isDirty, { message: '지금 나가면 수정한 재고 정보가 저장되지 않아요.' });
 
@@ -74,20 +85,21 @@ export default function EditIngredientScreen() {
   if (!ingredient) return <SafeAreaView style={styles.container}><ErrorMessage message="식자재를 찾을 수 없습니다." /></SafeAreaView>;
 
   async function handleSubmit() {
-    if (!name.trim()) {
+    if (!canAdjustStock || !ingredient || ingredient.store_id !== store?.id || ingredient.id !== id) return;
+    if (canManageStock && !name.trim()) {
       Alert.alert('입력 오류', '식자재명을 입력해주세요.');
       return;
     }
     setSubmitting(true);
     try {
-      await update(id!, {
+      await update(id!, canManageStock ? {
         name: name.trim(),
         category: category.trim() || '기타',
         unit,
         current_stock: parseFloat(currentStock) || 0,
         min_stock: parseFloat(minStock) || 0,
         last_price: parseFloat(lastPrice) || 0,
-      });
+      } : { current_stock: parseFloat(currentStock) || 0 });
       bypassLeaveGuard();
       router.back();
     } catch (e: any) {
@@ -101,13 +113,13 @@ export default function EditIngredientScreen() {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton} accessibilityRole="button" accessibilityLabel="뒤로">
-          <Ionicons name="chevron-back" size={24} color={Colors.black} />
+          <AppIcon name="chevron-back" size={24} color={Colors.black} />
         </TouchableOpacity>
-        <Text style={styles.title}>식자재 수정</Text>
+        <Text style={styles.title}>{canManageStock ? '식자재 수정' : '재고 수량 수정'}</Text>
         <TouchableOpacity
           style={[styles.submitBtn, submitting && styles.submitBtnDisabled]}
           onPress={handleSubmit}
-          disabled={submitting}
+          disabled={submitting || !canAdjustStock}
         >
           <Text style={styles.submitText}>{submitting ? '저장 중...' : '저장'}</Text>
         </TouchableOpacity>
@@ -115,10 +127,13 @@ export default function EditIngredientScreen() {
 
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={styles.content}>
+          {!canManageStock && <Text style={styles.unitHelp}>현재 재고 수량만 수정할 수 있어요.</Text>}
           <Text style={styles.label}>식자재명 *</Text>
           <TextInput
             style={styles.input}
             value={name}
+            editable={canManageStock && !submitting}
+            accessibilityLabel="식자재명"
             onChangeText={setName}
             placeholder="예) 원두, 우유, 설탕"
             placeholderTextColor={Colors.gray400}
@@ -129,6 +144,9 @@ export default function EditIngredientScreen() {
             {categories.map(c => (
               <TouchableOpacity
                 key={c}
+                disabled={!canManageStock || submitting}
+                accessibilityRole="button"
+                accessibilityState={{ selected: category === c }}
                 style={[styles.categoryChip, category === c && styles.categoryChipActive]}
                 onPress={() => setCategory(category === c ? '' : c)}
               >
@@ -144,6 +162,9 @@ export default function EditIngredientScreen() {
             {STOCK_UNITS.map(u => (
               <TouchableOpacity
                 key={u}
+                disabled={!canManageStock || submitting}
+                accessibilityRole="radio"
+                accessibilityState={{ checked: unit === u }}
                 style={[styles.unitChip, unit === u && styles.unitChipActive]}
                 onPress={() => setUnit(u)}
               >
@@ -157,8 +178,10 @@ export default function EditIngredientScreen() {
             <View style={styles.halfField}>
               <Text style={styles.label}>개수 (현재 재고)</Text>
               <TextInput
-                style={styles.input}
+                style={[styles.input, styles.numericInput]}
                 value={currentStock}
+                editable={canAdjustStock && !submitting}
+                accessibilityLabel="현재 재고 수량"
                 onChangeText={setCurrentStock}
                 keyboardType="numeric"
                 placeholder="0"
@@ -168,8 +191,10 @@ export default function EditIngredientScreen() {
             <View style={styles.halfField}>
               <Text style={styles.label}>품절 임박 기준</Text>
               <TextInput
-                style={styles.input}
+                style={[styles.input, styles.numericInput]}
                 value={minStock}
+                editable={canManageStock && !submitting}
+                accessibilityLabel="품절 임박 기준"
                 onChangeText={setMinStock}
                 keyboardType="numeric"
                 placeholder="0"
@@ -180,8 +205,10 @@ export default function EditIngredientScreen() {
 
           <Text style={styles.label}>가격 (1{unit || '개'}당, 원)</Text>
           <TextInput
-            style={styles.input}
+            style={[styles.input, styles.numericInput]}
             value={lastPrice}
+            editable={canManageStock && !submitting}
+            accessibilityLabel="식자재 단가"
             onChangeText={setLastPrice}
             keyboardType="numeric"
             placeholder="0"
@@ -228,6 +255,8 @@ const styles = StyleSheet.create({
     color: Colors.black, minHeight: 44 },
   categoryChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   categoryChip: {
+    minWidth: 44,
+    maxWidth: '100%',
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 14,
@@ -235,10 +264,11 @@ const styles = StyleSheet.create({
     borderColor: Colors.homeBorder,
     backgroundColor: Colors.white, minHeight: 44, justifyContent: 'center' },
   categoryChipActive: { borderColor: Colors.primary, backgroundColor: Colors.bg },
-  categoryChipText: { fontSize: 14, color: Colors.gray600 },
-  categoryChipTextActive: { color: Colors.primary, fontWeight: '700' },
+  categoryChipText: { fontSize: 14, fontWeight: '600', color: Colors.gray600 },
+  categoryChipTextActive: { color: Colors.primary },
   unitPresets: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 },
   unitChip: {
+    minWidth: 44,
     paddingHorizontal: 14,
     paddingVertical: 7,
     borderRadius: 14,
@@ -246,9 +276,10 @@ const styles = StyleSheet.create({
     borderColor: Colors.homeBorder,
     backgroundColor: Colors.white, minHeight: 44, justifyContent: 'center' },
   unitChipActive: { borderColor: Colors.primary, backgroundColor: Colors.bg },
-  unitChipText: { fontSize: 14, color: Colors.gray600 },
-  unitChipTextActive: { color: Colors.primary, fontWeight: '700' },
+  unitChipText: { fontSize: 14, fontWeight: '600', color: Colors.gray600 },
+  unitChipTextActive: { color: Colors.primary },
   unitHelp: { fontSize: 13, color: Colors.gray500, marginTop: 2 },
   row: { flexDirection: 'row', gap: 12 },
-  halfField: { flex: 1 },
+  halfField: { flex: 1, minWidth: 0 },
+  numericInput: { fontFamily: Fonts.geistRegular, fontVariant: ['tabular-nums'] },
 });

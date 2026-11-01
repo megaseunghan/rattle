@@ -7,13 +7,14 @@ import { Spacing } from '../../constants/designTokens';
 import { useNotificationSettings } from '../../lib/hooks/useNotificationSettings';
 import { NOTIFICATION_SETTING_DEFS, NotificationSettingDef } from '../../lib/services/notifications';
 import { AppBar } from '../../lib/components/ui';
+import { ErrorMessage } from '../../lib/components/ErrorMessage';
 
 const GROUPS: NotificationSettingDef['group'][] = ['재고', '매출·손익'];
 
 export default function NotificationSettingsScreen() {
-  const { settings, loading, refetch, toggle } = useNotificationSettings();
+  const { settings, loading, ready, error, savingKey, refetch, toggle } = useNotificationSettings();
 
-  useEffect(() => { refetch(); }, [refetch]);
+  useEffect(() => { void refetch(); }, [refetch]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -21,8 +22,15 @@ export default function NotificationSettingsScreen() {
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         {loading ? (
           <ActivityIndicator color={Colors.primary} style={{ marginTop: 24 }} />
+        ) : error ? (
+          <ErrorMessage message={error} onRetry={() => { void refetch(); }} />
+        ) : !ready ? (
+          <Text style={styles.footnote}>로그인과 선택한 매장을 확인해주세요.</Text>
         ) : (
           <>
+            {savingKey !== null && <Text accessibilityRole="alert" style={styles.footnote}>
+              {NOTIFICATION_SETTING_DEFS.find(def => def.key === savingKey)?.label ?? '알림 설정'} 저장 중이에요.
+            </Text>}
             {GROUPS.map(group => (
               <View key={group} style={styles.group}>
                 <Text style={styles.groupTitle}>{group}</Text>
@@ -34,8 +42,13 @@ export default function NotificationSettingsScreen() {
                         <Text style={styles.rowDesc}>{def.description}</Text>
                       </View>
                       <Switch
+                        accessibilityLabel={def.label}
+                        accessibilityHint={def.description}
+                        hitSlop={{ top: 7, bottom: 7 }}
+                        disabled={!ready || savingKey !== null}
+                        accessibilityState={{ disabled: !ready || savingKey !== null, busy: savingKey === def.key }}
                         value={settings[def.key] ?? def.default}
-                        onValueChange={v => toggle(def.key, v)}
+                        onValueChange={v => { void toggle(def.key, v); }}
                         trackColor={{ false: Colors.gray200, true: Colors.primary }}
                         thumbColor={Colors.white}
                       />
@@ -64,7 +77,7 @@ const styles = StyleSheet.create({
   rowBorder: { borderTopWidth: 0.5, borderTopColor: Colors.homeBorder },
   rowText: { flex: 1, gap: 3 },
   rowLabel: { fontSize: 14, fontWeight: '600', color: Colors.black },
-  rowDesc: { fontSize: 11, fontWeight: '400', color: Colors.gray400 },
+  rowDesc: { fontSize: 12, lineHeight: 18, fontWeight: '400', color: Colors.gray600 },
 
-  footnote: { fontSize: 11, fontWeight: '400', color: Colors.gray400, lineHeight: 16 },
+  footnote: { fontSize: 12, fontWeight: '400', color: Colors.gray600, lineHeight: 18 },
 });

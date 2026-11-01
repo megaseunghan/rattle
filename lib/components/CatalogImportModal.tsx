@@ -3,7 +3,7 @@ import {
   Modal, View, Text, StyleSheet,
   TouchableOpacity, ScrollView, ActivityIndicator,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { AppIcon } from '../icons/AppIcon';
 import { Colors } from '../../constants/colors';
 import { TossCatalogItem } from '../../types';
 
@@ -71,8 +71,8 @@ export function CatalogImportModal({ visible, items, onConfirm, onClose }: Catal
       <View style={styles.container}>
         {/* 헤더 */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-            <Ionicons name="close" size={20} color={Colors.gray600} />
+          <TouchableOpacity onPress={onClose} style={styles.closeBtn} accessibilityRole="button" accessibilityLabel="레시피 가져오기 닫기">
+            <AppIcon name="close" size={20} color={Colors.gray600} />
           </TouchableOpacity>
           <View style={styles.headerCenter}>
             <Text style={styles.title}>레시피로 가져오기</Text>
@@ -93,7 +93,7 @@ export function CatalogImportModal({ visible, items, onConfirm, onClose }: Catal
           {grouped.length === 0 ? (
             <View style={styles.emptyState}>
               <View style={styles.emptyIconBg}>
-                <Ionicons name="restaurant-outline" size={26} color={Colors.gray400} />
+                <AppIcon name="restaurant-outline" size={26} color={Colors.gray400} />
               </View>
               <Text style={styles.emptyText}>가져올 항목이 없습니다.</Text>
             </View>
@@ -108,10 +108,12 @@ export function CatalogImportModal({ visible, items, onConfirm, onClose }: Catal
                       key={item.itemId}
                       style={[styles.itemRow, checked && styles.itemRowChecked]}
                       onPress={() => toggleItem(item.itemId)}
+                      accessibilityRole="checkbox"
+                      accessibilityState={{ checked }}
                       activeOpacity={0.7}
                     >
                       <View style={[styles.checkbox, checked && styles.checkboxChecked]}>
-                        {checked && <Ionicons name="checkmark" size={13} color={Colors.white} />}
+                        {checked && <AppIcon name="checkmark" size={13} color={Colors.white} />}
                       </View>
                       <View style={styles.itemInfo}>
                         <Text style={[styles.itemName, checked && styles.itemNameChecked]}>
@@ -135,12 +137,15 @@ export function CatalogImportModal({ visible, items, onConfirm, onClose }: Catal
             style={[styles.confirmBtn, (importing || selectedIds.size === 0) && styles.confirmBtnDisabled]}
             onPress={handleConfirm}
             disabled={importing || selectedIds.size === 0}
+            accessibilityRole="button"
+            accessibilityLabel={`선택한 ${selectedIds.size}개 품목 가져오기`}
+            accessibilityState={{ disabled: importing || selectedIds.size === 0, busy: importing }}
           >
             {importing
               ? <ActivityIndicator size="small" color={Colors.white} />
               : (
                 <>
-                  <Ionicons name="checkmark-circle-outline" size={18} color={Colors.white} />
+                  <AppIcon name="checkmark-circle-outline" size={18} color={Colors.white} />
                   <Text style={styles.confirmBtnText}>가져오기 ({selectedIds.size}개)</Text>
                 </>
               )

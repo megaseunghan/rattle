@@ -1,4 +1,5 @@
-import { GlassBackdrop } from '../../lib/components/GlassBackdrop';
+import { usePayrollDeductionDraft, PayrollDeductionDraft } from '../../lib/hooks/usePayrollDeductionDraft';
+import { useConfirmLeave } from '../../lib/hooks/useConfirmLeave';
 import { SheetModal } from '../../lib/components/ui/SheetModal';
 /* Hallmark · genre: modern-minimal · macrostructure: Workbench · design-system: DESIGN.md · designed-as-app */
 import { getErrorMessage } from '../../lib/utils/error';
@@ -10,7 +11,7 @@ import {
   ActivityIndicator, RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import { AppIcon } from '../../lib/icons/AppIcon';
 import { Colors } from '../../constants/colors';
 import { CardStyle } from '../../constants/designTokens';
 import { Fonts } from '../../constants/fonts';
@@ -51,8 +52,6 @@ function toYearMonth(year: number, month: number) {
   return `${year}-${String(month).padStart(2, '0')}`;
 }
 
-type DeductionDraft = Record<keyof PayrollDeductions, string>;
-
 function moneyInput(value: number): string {
   return value > 0 ? value.toLocaleString() : '';
 }
@@ -78,6 +77,7 @@ function DeductionInputLine({
       <View style={[styles.deductionInputWrap, !editable && styles.deductionInputWrapDisabled]}>
         <Text style={styles.deductionMinus}>−</Text>
         <TextInput
+          accessibilityLabel={`${label} 공제액, 원`}
           value={value}
           onChangeText={text => onChange(moneyInput(parseMoneyInput(text)))}
           editable={editable}
@@ -93,7 +93,7 @@ function DeductionInputLine({
   );
 }
 
-function EmployeeCard({
+export function EmployeeCard({
   employee,
   payroll,
   accruedGross,
@@ -109,7 +109,13 @@ function EmployeeCard({
   canCalculate,
   onWorkMinutes,
   onRemovePayroll,
+  onDirtyChange,
+  draftCache,
+  draftKey,
 }: {
+  draftCache?: Map<string, PayrollDeductionDraft>;
+  draftKey?: string;
+  onDirtyChange?: (id: string, dirty: boolean) => void;
   employee: Employee;
   payroll: ReturnType<typeof usePayroll>['payrolls'][0] | undefined;
   accruedGross: number | null;
@@ -130,37 +136,12 @@ function EmployeeCard({
   const insurance = isInsuranceApplicable(employee);
   const isPart = employee.employment_type === 'part_time';
   const [expanded, setExpanded] = useState(false);
-  const [deductionDraft, setDeductionDraft] = useState<DeductionDraft>({
-    national_pension: '',
-    health_insurance: '',
-    long_term_care: '',
-    employment_insurance: '',
-    income_tax: '',
-    local_income_tax: '',
-    withholding_tax: '',
-  });
-
+  const draft = usePayrollDeductionDraft(payroll, draftCache, draftKey);
+  const saveLock = useRef(false);
   useEffect(() => {
-    if (!payroll) return;
-    setDeductionDraft({
-      national_pension: moneyInput(payroll.national_pension),
-      health_insurance: moneyInput(payroll.health_insurance),
-      long_term_care: moneyInput(payroll.long_term_care),
-      employment_insurance: moneyInput(payroll.employment_insurance),
-      income_tax: moneyInput(payroll.income_tax),
-      local_income_tax: moneyInput(payroll.local_income_tax),
-      withholding_tax: moneyInput(payroll.withholding_tax),
-    });
-  }, [
-    payroll?.id,
-    payroll?.national_pension,
-    payroll?.health_insurance,
-    payroll?.long_term_care,
-    payroll?.employment_insurance,
-    payroll?.income_tax,
-    payroll?.local_income_tax,
-    payroll?.withholding_tax,
-  ]);
+    onDirtyChange?.(employee.id, draft.dirty);
+    return () => onDirtyChange?.(employee.id, false);
+  }, [employee.id, draft.dirty, onDirtyChange]);
 
   function toggleExpanded() {
     animateListChange();
@@ -172,16 +153,22 @@ function EmployeeCard({
     ? (employee.hourly_wage != null ? `${Number(employee.hourly_wage).toLocaleString()}원` : '—')
     : `${employee.base_salary.toLocaleString()}원`;
   const summaryNetPay = payroll ? payroll.net_pay : null;
-  const summaryNetLabel = payroll?.is_settled ? '확정 실수령액' : '월 예상 지급액';
-  const deductions = Object.fromEntries(
-    Object.entries(deductionDraft).map(([key, value]) => [key, parseMoneyInput(value)]),
-  ) as unknown as PayrollDeductions;
+  const summaryNetLabel = payroll?.is_settled ? '저장된 확정 실수령액' : '저장된 실수령액';
+  const deductions = draft.values;
+  const deductionDraft = Object.fromEntries(Object.entries(deductions).map(([key, value]) => [key, moneyInput(value)])) as Record<keyof PayrollDeductions, string>;
   const deductionTotal = Object.values(deductions).reduce((sum, value) => sum + value, 0);
-  const previewNetPay = payroll ? Math.max(0, payroll.gross - deductionTotal) : 0;
-  const deductionsInvalid = payroll ? deductionTotal > payroll.gross : false;
+  const previewNetPay = payroll ? payroll.gross - deductionTotal : 0;
+  const deductionsInvalid = payroll ? deductionTotal > payroll.gross || Object.values(deductions).some(value => !Number.isSafeInteger(value) || value < 0) : false;
 
   function updateDeduction(key: keyof PayrollDeductions, value: string) {
-    setDeductionDraft(current => ({ ...current, [key]: value }));
+    draft.update(key, parseMoneyInput(value));
+  }
+  async function saveDraft() {
+    if (saveLock.current || !draft.dirty || draft.changedOnServer || deductionsInvalid) return;
+    saveLock.current = true;
+    try { await onSaveDeductions(deductions); draft.reset(); }
+    catch { /* The caller displays the failure; retain the draft for retry. */ }
+    finally { saveLock.current = false; }
   }
 
   return (
@@ -203,16 +190,16 @@ function EmployeeCard({
         </View>
         <View style={styles.headerActions}>
           <TouchableOpacity onPress={onShowHistory} style={styles.histBtn} accessibilityRole="button" accessibilityLabel="급여 조건 이력">
-            <Ionicons name="time-outline" size={16} color={Colors.gray400} />
+            <AppIcon name="time-outline" size={16} color={Colors.gray400} />
           </TouchableOpacity>
           {onEdit && <TouchableOpacity onPress={onEdit} style={styles.editBtn} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel="직원 정보 수정">
-            <Ionicons name="create-outline" size={16} color={Colors.gray500} />
+            <AppIcon name="create-outline" size={16} color={Colors.gray500} />
           </TouchableOpacity>}
         </View>
       </View>
 
       {onWageCondition && <TouchableOpacity onPress={onWageCondition} style={{ minHeight: 44, justifyContent: 'center', paddingHorizontal: 10, borderRadius: 10, backgroundColor: Colors.white }} accessibilityRole="button"><Text style={{ color: Colors.action, fontWeight: '600' }}>급여 변경 →</Text></TouchableOpacity>}
-      <TouchableOpacity style={styles.salaryRow} onPress={toggleExpanded} activeOpacity={0.7}>
+      <TouchableOpacity style={styles.salaryRow} onPress={toggleExpanded} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel={`${employee.name} 급여 상세`} accessibilityState={{ expanded }}>
         <View>
           <Text style={styles.salaryLabel}>{baseLabel}</Text>
           <Text style={styles.salaryValue}>{baseValue}</Text>
@@ -224,10 +211,16 @@ function EmployeeCard({
               <Text style={styles.summaryNetValue}>{summaryNetPay.toLocaleString()}원</Text>
             </View>
           )}
-          <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={18} color={Colors.gray400} />
+          <AppIcon name={expanded ? 'chevron-up' : 'chevron-down'} size={18} color={Colors.gray400} />
         </View>
       </TouchableOpacity>
 
+      {!payroll && draft.dirty && <View>
+        <Text style={styles.deductionHint}>공제 입력값을 보관하고 있어요. 급여 조회가 끝난 뒤 확인해주세요.</Text>
+        <TouchableOpacity onPress={draft.reset} accessibilityRole="button" style={styles.recalcBtn}>
+          <Text style={styles.recalcBtnText}>공제 입력 버리기</Text>
+        </TouchableOpacity>
+      </View>}
       {isPart && <View style={styles.payrollRow}>
         <Text style={styles.payrollLabel}>급여 작성 근무</Text>
         <Text style={styles.payrollDeduct}>{formatWorkedMinutes(payroll?.worked_minutes)}</Text>
@@ -260,7 +253,7 @@ function EmployeeCard({
             <Text style={styles.payrollDeductLabel}>월 급여 기준액</Text>
             <Text style={styles.payrollDeduct}>{payroll.gross.toLocaleString()}원</Text>
           </View>
-          <Text style={styles.deductionHint}>자동 계산값이 채워져 있어요. 급여 지급 전 실제 고지액으로 수정해주세요.</Text>
+          <Text style={styles.deductionHint}>저장된 공제액이에요. 수정한 내용은 저장 후 반영돼요.</Text>
           {insurance ? (
             <>
               <DeductionInputLine label="국민연금" value={deductionDraft.national_pension} editable={canEditDeductions && !isSavingDeductions} onChange={value => updateDeduction('national_pension', value)} />
@@ -276,11 +269,23 @@ function EmployeeCard({
           {deductionsInvalid && <Text style={styles.deductionError}>공제 합계가 세전 급여보다 큽니다.</Text>}
           <View style={styles.receiptTotalLine} />
           <View style={styles.receiptNetRow}>
-            <Text style={styles.receiptNetLabel}>{payroll.is_settled ? '확정 실수령액' : '예상 실수령액'}</Text>
-            <Text style={styles.receiptNetValue}>{previewNetPay.toLocaleString()}원</Text>
+            <Text style={styles.receiptNetLabel}>{payroll.is_settled ? '저장된 확정 실수령액' : '저장된 실수령액'}</Text>
+            <Text style={styles.receiptNetValue}>{payroll.net_pay.toLocaleString()}원</Text>
           </View>
+          {draft.dirty && <>
+            <View style={styles.receiptNetRow}>
+              <Text style={styles.receiptNetLabel}>편집 중 예상 실수령액 · 미저장</Text>
+              <Text style={styles.receiptNetValue}>{deductionsInvalid ? '확인 필요' : `${previewNetPay.toLocaleString()}원`}</Text>
+            </View>
+            <Text style={styles.deductionHint}>{draft.changedOnServer
+              ? '저장된 급여가 변경됐어요. 입력값은 보관했어요. 저장된 값으로 되돌린 후 다시 확인해주세요.'
+              : payroll.is_settled ? '공제액을 저장하면 정산 확정이 해제돼요. 검토 후 다시 확정해주세요.' : '아직 저장하지 않은 예상액이에요.'}</Text>
+            <TouchableOpacity onPress={draft.reset} disabled={isSavingDeductions} accessibilityRole="button" style={styles.recalcBtn}>
+              <Text style={styles.recalcBtnText}>저장된 값으로 되돌리기</Text>
+            </TouchableOpacity>
+          </>}
           <View style={styles.payrollActions}>
-            {canCalculate && <TouchableOpacity style={styles.recalcBtn} onPress={onCalculate} disabled={isCalculating}>
+            {canCalculate && <TouchableOpacity style={styles.recalcBtn} onPress={() => { if (draft.dirty) Alert.alert('공제 입력 중이에요', '저장하거나 저장된 값으로 되돌린 후 다시 계산해주세요.'); else onCalculate(); }} disabled={isCalculating || isSavingDeductions}>
               {isCalculating
                 ? <ActivityIndicator size="small" color={Colors.gray500} />
                 : <Text style={styles.recalcBtnText}>자동 계산값 다시 불러오기</Text>
@@ -288,9 +293,9 @@ function EmployeeCard({
             </TouchableOpacity>}
             {canEditDeductions && (
               <TouchableOpacity
-                style={[styles.saveDeductionBtn, (isSavingDeductions || deductionsInvalid) && styles.saveDeductionBtnDisabled]}
-                onPress={() => onSaveDeductions(deductions)}
-                disabled={isSavingDeductions || deductionsInvalid}
+                style={[styles.saveDeductionBtn, (isSavingDeductions || deductionsInvalid || !draft.dirty || draft.changedOnServer) && styles.saveDeductionBtnDisabled]}
+                onPress={() => { void saveDraft(); }}
+                disabled={isSavingDeductions || deductionsInvalid || !draft.dirty || draft.changedOnServer}
                 activeOpacity={0.8}
               >
                 {isSavingDeductions
@@ -307,7 +312,7 @@ function EmployeeCard({
             </View>
           )}
         </View>
-      ) : canCalculate ? (
+      ) : canCalculate && !draft.dirty ? (
         <TouchableOpacity
           style={[styles.calcBtn, isCalculating && { opacity: 0.5 }]}
           onPress={onCalculate}
@@ -315,7 +320,7 @@ function EmployeeCard({
         >
           {isCalculating
             ? <ActivityIndicator size="small" color={Colors.white} />
-            : <><Ionicons name="calculator-outline" size={14} color={Colors.white} /><Text style={styles.calcBtnText}>급여 계산</Text></>
+            : <><AppIcon name="calculator-outline" size={14} color={Colors.white} /><Text style={styles.calcBtnText}>급여 계산</Text></>
           }
         </TouchableOpacity>
       ) : null}
@@ -363,9 +368,18 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
     remove: removePayroll,
   } = usePayroll(yearMonth);
 
-  const { store, currentRole } = useAuth();
+  const { store, currentRole, user } = useAuth();
   const isAdmin = currentRole === 'admin';
-  const workScope = `${store?.id}:${yearMonth}`;
+  const workScope = `${user?.id}:${currentRole}:${store?.id}:${yearMonth}`;
+  const deductionDraftCache = useRef(new Map<string, PayrollDeductionDraft>());
+  const [dirtyDeductions, setDirtyDeductions] = useState<Record<string, boolean>>({});
+  const onDeductionDirtyChange = useCallback((id: string, dirty: boolean) => {
+    setDirtyDeductions(current => current[id] === dirty ? current : { ...current, [id]: dirty });
+  }, []);
+  const hasDeductionDraft = Object.values(dirtyDeductions).some(Boolean) || deductionDraftCache.current.size > 0;
+  useConfirmLeave(hasDeductionDraft || savingDeductions !== null, { blockLeave: savingDeductions !== null });
+  const monthPrompt = useRef(false);
+
   const workScopeRef = useRef(workScope);
   workScopeRef.current = workScope;
   useEffect(() => () => { workScopeRef.current = ''; }, []);
@@ -414,8 +428,20 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
     finally { setRefreshing(false); }
   }
 
-  function prevMonth() { const date = new Date(year, month - 2, 1); setYearMonth(toYearMonth(date.getFullYear(), date.getMonth() + 1)); }
-  function nextMonth() { const date = new Date(year, month, 1); setYearMonth(toYearMonth(date.getFullYear(), date.getMonth() + 1)); }
+  function changeMonth(offset: number) {
+    if (savingDeductions !== null) { Alert.alert('저장 중이에요', '공제 저장이 끝난 뒤 이동해주세요.'); return; }
+    const next = new Date(year, month - 1 + offset, 1);
+    const change = () => setYearMonth(toYearMonth(next.getFullYear(), next.getMonth() + 1));
+    if (!hasDeductionDraft) { change(); return; }
+    if (monthPrompt.current) return;
+    monthPrompt.current = true;
+    Alert.alert('공제 입력을 버리고 이동할까요?', '저장하지 않은 공제액은 반영되지 않아요.', [
+      { text: '계속 작성', style: 'cancel', onPress: () => { monthPrompt.current = false; } },
+      { text: '이동', style: 'destructive', onPress: () => { monthPrompt.current = false; if (workScopeRef.current !== workScope) return; for (const key of deductionDraftCache.current.keys()) { if (key.startsWith(`${workScope}:`)) deductionDraftCache.current.delete(key); } change(); } },
+    ]);
+  }
+  function prevMonth() { changeMonth(-1); }
+  function nextMonth() { changeMonth(1); }
 
   function openAdd() {
     if (!isAdmin) return;
@@ -544,7 +570,7 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
   ));
 
   return (
-    <SafeAreaView style={styles.container} edges={['left', 'right']}><GlassBackdrop />
+    <SafeAreaView style={styles.container} edges={['left', 'right']}>
       <View style={styles.topBar}>
         <Text style={styles.title}>{isAdmin ? '직원관리' : '내 급여'}</Text>
         <View style={styles.topBarRight}>
@@ -554,7 +580,7 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
               onPress={() => router.push({ pathname: '/payroll/settlement', params: { yearMonth } })}
               activeOpacity={0.7}
             >
-              <Ionicons name="document-text-outline" size={14} color={Colors.primary} />
+              <AppIcon name="document-text-outline" size={14} color={Colors.primary} />
               <Text style={styles.settlementBtnText}>정산 리포트</Text>
             </TouchableOpacity>
           )}
@@ -577,11 +603,11 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
         {/* 월 네비게이션 */}
         <View style={styles.monthNav}>
           <TouchableOpacity onPress={prevMonth} style={styles.navBtn} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel="이전 달">
-            <Ionicons name="chevron-back" size={20} color={Colors.gray600} />
+            <AppIcon name="chevron-back" size={20} color={Colors.gray600} />
           </TouchableOpacity>
           <Text style={styles.monthLabel}>{monthLabel}</Text>
           <TouchableOpacity onPress={nextMonth} style={styles.navBtn} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel="다음 달">
-            <Ionicons name="chevron-forward" size={20} color={Colors.gray600} />
+            <AppIcon name="chevron-forward" size={20} color={Colors.gray600} />
           </TouchableOpacity>
         </View>
 
@@ -613,7 +639,7 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
           </View>
         </View>
 
-        <Text style={styles.netPayNotice}>세후 금액은 요율로 계산한 예상액이며, 실제 지급액과 다를 수 있어요.</Text>
+        <Text style={styles.netPayNotice}>작성된 급여 지급액은 저장된 명세 기준이에요. 편집 중 공제액은 저장 전까지 합계에 반영되지 않아요.</Text>
 
         {employeeError && <ErrorMessage message={employeeError} onRetry={() => refetchEmp(true)} />}
         {histError && <ErrorMessage message="급여 조건 이력을 불러오지 못했어요." onRetry={refetchHist} />}
@@ -635,7 +661,7 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
           <ActivityIndicator color={Colors.primary} />
         ) : employeeError ? null : employees.length === 0 ? (
           <EmptyState
-            icon="people-outline"
+            icon="people-outline" illustration="staff"
             title="아직 직원이 없어요"
             description="직원을 추가하면 4대보험과 실수령액이 자동으로 계산됩니다"
           />
@@ -646,13 +672,16 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
             const elapsed = Math.round(factor * daysInMonth);
             return (
             <EmployeeCard
-              key={emp.id}
+              key={`${workScope}:${emp.id}`}
+              onDirtyChange={onDeductionDirtyChange}
+              draftCache={deductionDraftCache.current}
+              draftKey={`${workScope}:${emp.id}`}
               employee={emp}
               payroll={monthPayrolls.find(p => p.employee_id === emp.id)}
               accruedGross={accruedForEmployee(emp)}
               accrualLabel={`${month}월 ${elapsed}/${daysInMonth}일 · ${monthPayrolls.find(p => p.employee_id === emp.id) ? '일할 누적' : '급여 이력 기준'}`}
               onShowHistory={() => setHistTarget(emp)}
-              canCalculate={isAdmin}
+              canCalculate={isAdmin && !payLoading && !payrollError}
               isCalculating={calculating === emp.id}
               onCalculate={() => { if (!isAdmin) { Alert.alert('관리자 확인 필요', '급여 작성은 관리자에게 요청해주세요.'); return; } setWorkSubmission(undefined); emp.employment_type === 'part_time' ? setWorkTarget(emp) : calculate(emp).catch(e => Alert.alert('계산 실패', getErrorMessage(e))); }}
               onWorkMinutes={isAdmin && !payLoading && !payrollError && emp.employment_type === 'part_time' ? () => { setWorkSubmission(undefined); setWorkTarget(emp); } : undefined}
@@ -660,11 +689,11 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
                 const payroll = monthPayrolls.find(p => p.employee_id === emp.id);
                 if (!payroll) return Promise.resolve();
                 return saveDeductions(payroll, deductions)
-                  .then(() => { Alert.alert('저장 완료', '실제 공제 내역과 예상 실수령액을 반영했습니다.'); })
-                  .catch(e => { Alert.alert('저장 실패', getErrorMessage(e)); throw e; });
+                  .then(() => { if (workScopeRef.current === workScope) Alert.alert('저장 완료', '공제 내역과 실수령액을 저장했어요. 검토 후 정산을 확정해주세요.'); })
+                  .catch(e => { if (workScopeRef.current === workScope) Alert.alert('저장 실패', getErrorMessage(e)); throw e; });
               }}
-              isSavingDeductions={savingDeductions === emp.id}
-              canEditDeductions={isAdmin}
+              isSavingDeductions={savingDeductions !== null}
+              canEditDeductions={isAdmin && !payLoading && !payrollError}
               onWageCondition={isAdmin ? () => router.push({ pathname: '/payroll/wage-condition', params: { storeId: store!.id, employeeId: emp.id, targetMonth: yearMonth, returnScope: pager?.returnScope ?? 'store' } }) : undefined}
               onEdit={isAdmin ? () => openEdit(emp) : undefined}
               onRemovePayroll={isAdmin ? () => {
@@ -904,7 +933,7 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.homeCanvas },
+  container: { flex: 1, backgroundColor: 'transparent' },
   topBar: {
     flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: 12,
     paddingHorizontal: 20, paddingTop: 16, paddingBottom: 14,
@@ -918,15 +947,15 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.tinted,
   },
   settlementBtnText: { fontSize: 12, fontWeight: '700', color: Colors.action },
-  monthPill: { fontSize: 12, color: Colors.gray500, backgroundColor: Colors.gray100, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
+  monthPill: { fontVariant: ['tabular-nums'], fontSize: 12, color: Colors.gray500, backgroundColor: Colors.gray100, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
   scroll: { padding: 20, paddingTop: 8, gap: 18, paddingBottom: 112 },
   monthNav: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   navBtn: { width: 44, height: 44, justifyContent: 'center', alignItems: 'center', borderRadius: 12, backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.homeBorder },
-  monthLabel: { fontSize: 15, fontWeight: '600', color: Colors.black },
+  monthLabel: { fontVariant: ['tabular-nums'], fontSize: 15, fontWeight: '600', color: Colors.black },
   summaryRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   summaryCard: { flex: 1, minWidth: 140, backgroundColor: Colors.white, borderRadius: 24, borderWidth: 1, borderColor: Colors.homeBorder, padding: 16 },
   summaryLabel: { fontSize: 13, fontWeight: '500', color: Colors.gray600, marginBottom: 10 },
-  summaryValue: { fontSize: 22, fontFamily: Fonts.spaceGroteskBold, fontWeight: '700', color: Colors.black, marginBottom: 6, letterSpacing: -0.5 },
+  summaryValue: { fontVariant: ['tabular-nums'], fontSize: 22, fontFamily: Fonts.spaceGroteskBold, fontWeight: '700', color: Colors.black, marginBottom: 6, letterSpacing: -0.5 },
   summaryLoader: { height: 24, marginBottom: 2 },
   netPayNotice: { fontSize: 12, lineHeight: 18, color: Colors.gray600 },
   summarySub: { fontSize: 11, lineHeight: 17, color: Colors.gray500 },
@@ -945,8 +974,8 @@ const styles = StyleSheet.create({
   confirmCard: { width: '100%', backgroundColor: Colors.white, borderRadius: 20, padding: 22 },
   confirmTitle: { fontSize: 16, fontWeight: '700', color: Colors.black, marginBottom: 14 },
   confirmAmountRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' },
-  confirmOld: { fontSize: 15, color: Colors.gray400, textDecorationLine: 'line-through' },
-  confirmNew: { fontSize: 17, fontWeight: '800' },
+  confirmOld: { fontVariant: ['tabular-nums'], fontSize: 15, color: Colors.gray400, textDecorationLine: 'line-through' },
+  confirmNew: { fontVariant: ['tabular-nums'], fontSize: 17, fontWeight: '800' },
   confirmUp: { color: Colors.action },
   confirmDown: { color: '#DC2626' },
   confirmTag: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8 },
@@ -957,7 +986,7 @@ const styles = StyleSheet.create({
   histRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12 },
   histRowBorder: { borderBottomWidth: 0.5, borderBottomColor: Colors.gray100 },
   histLeft: { gap: 2 },
-  histDate: { fontSize: 14, fontWeight: '600', color: Colors.black },
+  histDate: { fontVariant: ['tabular-nums'], fontSize: 14, fontWeight: '600', color: Colors.black },
   histMemo: { fontSize: 12, color: Colors.gray400 },
   histAmount: { fontFamily: Fonts.geistBold, fontVariant: ['tabular-nums'], fontSize: 14, fontWeight: '700', color: Colors.gray700 },
   histEmpty: { fontSize: 13, color: Colors.gray400, textAlign: 'center', paddingVertical: 32 },
@@ -991,7 +1020,7 @@ const styles = StyleSheet.create({
   },
   deductionInputWrapDisabled: { backgroundColor: Colors.gray50, borderColor: Colors.gray100 },
   deductionMinus: { fontSize: 13, color: Colors.gray400, marginRight: 2 },
-  deductionInput: { minWidth: 72, paddingVertical: 0, fontSize: 13, fontWeight: '600', color: Colors.gray700, textAlign: 'right' },
+  deductionInput: { fontVariant: ['tabular-nums'], minWidth: 72, paddingVertical: 0, fontSize: 13, fontWeight: '600', color: Colors.gray700, textAlign: 'right' },
   deductionWon: { fontSize: 12, color: Colors.gray500, marginLeft: 2 },
   deductionError: { fontSize: 11, color: Colors.negative, marginTop: 8, textAlign: 'right' },
   receiptTotalLine: { borderTopWidth: 2, borderTopColor: Colors.gray300, borderStyle: 'dashed', marginTop: 12 },

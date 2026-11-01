@@ -5,11 +5,12 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { Ionicons } from '@expo/vector-icons';
+import { AppIcon } from '../../lib/icons/AppIcon';
 import { router } from 'expo-router';
 import { getStoreInviteCode, submitJoinOnboarding } from '../../lib/services/storeMembers';
 import { useAuth } from '../../lib/contexts/AuthContext';
 import { Colors } from '../../constants/colors';
+import { Fonts } from '../../constants/fonts';
 import { Radius, Spacing, Type } from '../../constants/designTokens';
 import { getErrorMessage } from '../../lib/utils/error';
 import { useConfirmLeave } from '../../lib/hooks/useConfirmLeave';
@@ -179,7 +180,7 @@ export default function JoinStoreScreen() {
   if (completedStore) return <SafeAreaView style={styles.container}>
     <AppBar title="신청 완료" />
     <View style={styles.success}>
-      <Ionicons name="checkmark-circle-outline" size={44} color={Colors.primary} />
+      <AppIcon name="checkmark-circle-outline" size={44} color={Colors.primary} />
       <Text accessibilityRole="header" style={styles.title}>관리자 확인을 기다려주세요</Text>
       <Text style={styles.description}>{completedStore}에 신청 정보를 전달했어요. 관리자가 내용을 확인하고 최종 합류를 승인하면 매장에 접속할 수 있어요.</Text>
     </View>
@@ -216,7 +217,7 @@ export default function JoinStoreScreen() {
           {steps.filter((id): id is JoinQuestion => id !== 'review').map(id => <Pressable
             key={id} onPress={() => edit(id)} disabled={loading} accessibilityRole="button" accessibilityLabel={`${QUESTIONS[id].label}, ${answer(id)}, 수정`}
             style={({ pressed }) => [styles.reviewRow, pressed && styles.pressed]}>
-            <View style={styles.reviewText}><Text style={styles.reviewLabel}>{QUESTIONS[id].label}</Text><Text style={styles.answer}>{answer(id)}</Text></View>
+            <View style={styles.reviewText}><Text style={styles.reviewLabel}>{QUESTIONS[id].label}</Text><Text style={[styles.answer, MONEY.has(id) && styles.numericAnswer]}>{answer(id)}</Text></View>
             <Text style={styles.editLabel}>수정</Text>
           </Pressable>)}
         </View> : step === 'employmentType' ? <View style={styles.choices}>
@@ -225,14 +226,14 @@ export default function JoinStoreScreen() {
             onPress={() => { setError(null); setEmployment(option.key); setDraft(current => ({ ...current, employmentType: option.key })); }}
             style={({ pressed }) => [styles.choice, employment === option.key && styles.choiceSelected, pressed && styles.pressed]}>
             <View style={styles.reviewText}><Text style={styles.answer}>{option.title}</Text><Text style={styles.choiceHelp}>{option.caption}</Text></View>
-            <Ionicons name={employment === option.key ? 'radio-button-on' : 'radio-button-off'} size={22} color={employment === option.key ? Colors.primary : Colors.gray300} />
+            <AppIcon name={employment === option.key ? 'radio-button-on' : 'radio-button-off'} size={22} color={employment === option.key ? Colors.primary : Colors.gray300} />
           </Pressable>)}
         </View> : question && <>
           {step === 'bankName' && <View>
             <View style={styles.banks}>{BANKS.map(bank => bankOption(bank))}</View>
-            <Pressable accessibilityRole="button" accessibilityState={{ expanded: moreBanks }} onPress={() => setMoreBanks(current => !current)} style={styles.bankToggle}>
+            <Pressable accessibilityRole="button" accessibilityState={{ expanded: moreBanks }} onPress={() => setMoreBanks(current => !current)} style={({ pressed }) => [styles.bankToggle, pressed && styles.pressed]}>
               <Text style={styles.editLabel}>{moreBanks ? '다른 은행 접기' : '다른 은행·금융기관 보기'}</Text>
-              <Ionicons name={moreBanks ? 'chevron-up' : 'chevron-down'} size={18} color={Colors.primary} />
+              <AppIcon name={moreBanks ? 'chevron-up' : 'chevron-down'} size={18} color={Colors.primary} />
             </Pressable>
             {moreBanks && OTHER_BANK_GROUPS.map(group => <View key={group.title}>
               <Text style={styles.bankGroup}>{group.title}</Text>
@@ -244,11 +245,11 @@ export default function JoinStoreScreen() {
             value={valueOf(step as JoinQuestion)} onChangeText={value => change(step as JoinQuestion, value)}
             placeholder={question.placeholder} maxLength={question.maxLength} keyboardType={question.keyboard} autoCorrect={false}
             editable={!loading}
-            rightSlot={step === 'joinedAt' ? <Pressable accessibilityRole="button" accessibilityLabel="입사일 달력 열기" hitSlop={12} onPress={() => {
+            rightSlot={step === 'joinedAt' ? <Pressable accessibilityRole="button" accessibilityLabel="입사일 달력 열기" style={({ pressed }) => [styles.calendarButton, pressed && styles.pressed]} onPress={() => {
               Keyboard.dismiss();
               if (!draft.joinedAt) change('joinedAt', localDate(new Date()));
               setPickerVisible(true);
-            }}><Ionicons name="calendar-outline" size={22} color={Colors.primary} /></Pressable> : undefined} />
+            }}><AppIcon name="calendar-outline" size={22} color={Colors.primary} /></Pressable> : undefined} />
           {step === 'joinedAt' && pickerVisible && <DateTimePicker mode="date" display={Platform.OS === 'ios' ? 'spinner' : 'default'}
             value={Number.isFinite(pickerDate.getTime()) ? pickerDate : new Date()} minimumDate={new Date(1900, 0, 1)} maximumDate={new Date(2100, 11, 31)}
             locale="ko-KR" themeVariant="light" onChange={(_, date) => { if (Platform.OS !== 'ios') setPickerVisible(false); if (date) change('joinedAt', localDate(date)); }} />}
@@ -267,7 +268,7 @@ export default function JoinStoreScreen() {
 const styles = StyleSheet.create({
   flex: { flex: 1 }, container: { flex: 1, backgroundColor: Colors.white },
   progressWrap: { paddingHorizontal: Spacing.screenX, paddingTop: 16, gap: 8 },
-  progressText: { fontSize: Type.sm, color: Colors.gray500 },
+  progressText: { fontVariant: ['tabular-nums'], fontSize: Type.sm, color: Colors.gray500 },
   track: { height: 3, backgroundColor: Colors.gray100, borderRadius: Radius.sm, overflow: 'hidden' },
   progress: { height: '100%', backgroundColor: Colors.primary },
   content: { padding: Spacing.screenX, paddingTop: 28, paddingBottom: 24, flexGrow: 1 },
@@ -285,13 +286,15 @@ const styles = StyleSheet.create({
   bankToggle: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
   bankGroup: { fontSize: Type.sm, color: Colors.gray500, marginBottom: 10 },
   bankHelp: { fontSize: Type.sm, color: Colors.gray500, lineHeight: 20, marginBottom: 20 },
-  bank: { minHeight: 44, justifyContent: 'center', borderWidth: 1, borderColor: Colors.gray200, borderRadius: Radius.md, paddingHorizontal: 14, paddingVertical: 12 },
+  bank: { maxWidth: '100%', minHeight: 44, justifyContent: 'center', borderWidth: 1, borderColor: Colors.gray200, borderRadius: Radius.md, paddingHorizontal: 14, paddingVertical: 12 },
   bankText: { fontSize: Type.base, color: Colors.gray700 },
+  calendarButton: { width: 44, height: 44, marginVertical: -11, alignItems: 'center', justifyContent: 'center' },
   reviewCard: { borderWidth: 1, borderColor: Colors.gray100, borderRadius: Radius.lg, overflow: 'hidden' },
   reviewRow: { padding: Spacing.cardPadding, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: Colors.gray100, flexDirection: 'row', alignItems: 'center', gap: 16, minHeight: 68 },
   reviewText: { flex: 1 },
   reviewLabel: { fontSize: Type.sm, color: Colors.gray500, marginBottom: 4 },
   answer: { fontSize: Type.md, color: Colors.black, fontWeight: '600', lineHeight: 22 },
+  numericAnswer: { fontFamily: Fonts.geistSemiBold, fontVariant: ['tabular-nums'] },
   editLabel: { fontSize: Type.sm, color: Colors.primary },
   error: { color: Colors.negative, fontSize: Type.sm, lineHeight: 20, marginTop: 14 },
   success: { flex: 1, justifyContent: 'center', padding: Spacing.screenX, gap: 16 },

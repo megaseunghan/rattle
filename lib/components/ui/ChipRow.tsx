@@ -21,8 +21,10 @@ export function ChipRow({ options, selectedKey, onSelect }: ChipRowProps) {
         return (
           <Pressable
             key={option.key}
+            accessibilityRole="button"
+            accessibilityState={{ selected }}
             onPress={() => onSelect(option.key)}
-            style={[styles.chip, selected ? styles.chipSelected : styles.chipUnselected]}
+            style={({ pressed }) => [styles.chip, selected ? styles.chipSelected : styles.chipUnselected, pressed && styles.pressed]}
           >
             <Text style={selected ? styles.textSelected : styles.textUnselected}>{option.label}</Text>
           </Pressable>
@@ -39,17 +41,23 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   chip: {
+    minHeight: 44,
+    minWidth: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
     paddingVertical: 8,
     paddingHorizontal: 16,
     borderRadius: Radius.pill,
   },
   chipSelected: {
+    borderColor: Colors.black,
     backgroundColor: Colors.black,
   },
   chipUnselected: {
-    borderWidth: 1,
     borderColor: Colors.gray200,
   },
+  pressed: { opacity: 0.7 },
   textSelected: {
     fontSize: Type.sm,
     fontWeight: '600',
@@ -57,7 +65,7 @@ const styles = StyleSheet.create({
   },
   textUnselected: {
     fontSize: Type.sm,
-    fontWeight: '500',
+    fontWeight: '600',
     color: Colors.gray600,
   },
 });

@@ -7,7 +7,7 @@ import {
   Alert, ActivityIndicator, RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import { AppIcon } from '../../lib/icons/AppIcon';
 import { router, useFocusEffect } from 'expo-router';
 import { Colors } from '../../constants/colors';
 import { useTabPager } from '../../lib/contexts/TabPagerContext';
@@ -17,7 +17,6 @@ import { useExpenses } from '../../lib/hooks/useExpenses';
 import { getPurchaseItemCounts } from '../../lib/services/purchases';
 import { animateListChange } from '../../lib/utils/layoutAnimation';
 import { ExpensesPanel } from '../../lib/components/ExpensesPanel';
-import { GlassBackdrop } from '../../lib/components/GlassBackdrop';
 import { GlassCard } from '../../lib/components/GlassCard';
 import { LedgerHeader } from '../../lib/components/LedgerHeader';
 import { LedgerFilters } from '../../lib/components/LedgerFilters';
@@ -51,11 +50,11 @@ function MonthNav({ year, month, onPrev, onNext }: { year: number; month: number
   return (
     <View style={styles.monthNav}>
       <TouchableOpacity accessibilityRole="button" accessibilityLabel="이전 달" onPress={onPrev} style={styles.navBtn} activeOpacity={0.7}>
-        <Ionicons name="chevron-back" size={20} color={Colors.gray600} />
+        <AppIcon name="chevron-back" size={20} color={Colors.gray600} />
       </TouchableOpacity>
       <Text style={styles.monthLabel}>{year}년 {month + 1}월</Text>
       <TouchableOpacity accessibilityRole="button" accessibilityLabel="다음 달" onPress={onNext} style={styles.navBtn} activeOpacity={0.7}>
-        <Ionicons name="chevron-forward" size={20} color={Colors.gray600} />
+        <AppIcon name="chevron-forward" size={20} color={Colors.gray600} />
       </TouchableOpacity>
     </View>
   );
@@ -209,7 +208,7 @@ function PurchasesView({ active }: { active: boolean }) {
                     </View>
                     <NumericText style={styles.purchaseAmount} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>{p.amount.toLocaleString()}원</NumericText>
                     <TouchableOpacity onPress={() => confirmDeletePurchase(p.id)} accessibilityRole="button" accessibilityLabel={`${p.supplier} 매입 삭제`} hitSlop={8} style={styles.deleteIconBtn}>
-                      <Ionicons name="trash-outline" size={16} color={Colors.gray300} />
+                      <AppIcon name="trash-outline" size={16} color={Colors.gray300} />
                     </TouchableOpacity>
                   </TouchableOpacity>
                 ))
@@ -260,7 +259,7 @@ export function PurchasesScreen({ active = true }: { active?: boolean }) {
   const monthExpenseCount = expenses.length;
 
   return (
-    <SafeAreaView style={styles.container} edges={['left', 'right']}><GlassBackdrop />
+    <SafeAreaView style={styles.container} edges={['left', 'right']}>
       <View style={styles.topBar}>
         <View style={styles.titleRow}>
           <Text style={styles.title}>매입 및 비용</Text>
@@ -288,7 +287,7 @@ export function PurchasesScreen({ active = true }: { active?: boolean }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.homeCanvas },
+  container: { flex: 1, backgroundColor: 'transparent' },
   fabShelf: { height: 68, backgroundColor: 'transparent' },
   topBar: {
     paddingHorizontal: 20, paddingTop: 14, paddingBottom: 12,
@@ -296,8 +295,8 @@ const styles = StyleSheet.create({
   },
   titleRow: { marginBottom: 12 },
   title: { fontSize: 22, fontWeight: '700', color: Colors.black },
-  titleSummary: { fontSize: 13, lineHeight: 19, color: Colors.gray500, marginTop: 6 },
-  innerTabRow: { flexDirection: 'row', gap: 4, backgroundColor: Colors.gray100, borderRadius: 12, padding: 3 },
+  titleSummary: { fontVariant: ['tabular-nums'], fontSize: 13, lineHeight: 19, color: Colors.gray500, marginTop: 6 },
+  innerTabRow: { flexDirection: 'row', gap: 4, backgroundColor: Colors.gray100, borderRadius: 14, padding: 4 },
   innerTab: { flex: 1, minHeight: 44, justifyContent: 'center', paddingVertical: 9, borderRadius: 10, alignItems: 'center' },
   innerTabActive: { backgroundColor: Colors.white, shadowColor: Colors.black, shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4, elevation: 2 },
   innerTabText: { fontSize: 14, fontWeight: '500', color: Colors.gray500 },
@@ -309,12 +308,12 @@ const styles = StyleSheet.create({
   subTabActive: { backgroundColor: Colors.action, borderColor: Colors.primary },
   subTabText: { fontSize: 13, color: Colors.gray500 },
   subTabTextActive: { color: Colors.white, fontWeight: '500' },
-  monthTotalRight: { marginLeft: 'auto', fontSize: 13, fontWeight: '600', color: Colors.black },
+  monthTotalRight: { fontVariant: ['tabular-nums'], marginLeft: 'auto', fontSize: 13, fontWeight: '600', color: Colors.black },
 
   scroll: { padding: 20, gap: 16, paddingBottom: 48 },
   monthNav: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   navBtn: { width: 44, height: 44, justifyContent: 'center', alignItems: 'center', borderRadius: 14, backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.homeBorder },
-  monthLabel: { fontSize: 15, fontWeight: '600', color: Colors.black },
+  monthLabel: { fontVariant: ['tabular-nums'], fontSize: 15, fontWeight: '600', color: Colors.black },
 
   calendarCard: { backgroundColor: Colors.white, borderRadius: 24, borderWidth: 1, borderColor: Colors.homeBorder, paddingHorizontal: 8, paddingVertical: 16 },
   weekRow: { flexDirection: 'row', marginBottom: 4 },
@@ -326,7 +325,7 @@ const styles = StyleSheet.create({
   dayInner: { width: 34, height: 34, borderRadius: 17, justifyContent: 'center', alignItems: 'center' },
   daySelected: { backgroundColor: Colors.action },
   dayToday: { borderWidth: 1.5, borderColor: Colors.primary },
-  dayText: { fontSize: 14, color: Colors.black },
+  dayText: { fontVariant: ['tabular-nums'], fontSize: 14, color: Colors.black },
   dayTextSelected: { color: Colors.white, fontWeight: '600' },
   dayTextToday: { color: Colors.action, fontWeight: '600' },
   dot: { width: 4, height: 4, borderRadius: 2, backgroundColor: Colors.action },

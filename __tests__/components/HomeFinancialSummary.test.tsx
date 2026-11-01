@@ -141,20 +141,14 @@ it.each([0, -120_000])('영업이익 %s원을 누락 없이 표시한다', profi
   expect(screen.getByText(`매출 대비 이익률 ${profit === 0 ? '0' : '-0.3'}%`)).toBeTruthy();
 });
 
-it('관리자 상세 손익과 통합 대시보드, 공통 메뉴 연결을 유지한다', () => {
+it('관리자 상세 손익 연결은 유지하고 공통 상단바는 탭 셸에서 제공한다', () => {
   mockRole = 'admin';
   render(<HomeScreen />);
   fireEvent.press(screen.getByRole('button', { name: '월별 손익 요약' }));
   fireEvent.press(screen.getByText('손익 정산'));
   expect(router.push).toHaveBeenCalledWith('/profit-loss');
-  fireEvent.press(screen.getByRole('button', { name: '더보기' }));
-  expect(mockGoToTab).toHaveBeenCalledWith('more');
-  fireEvent.press(screen.getByRole('button', { name: '알림' }));
-  expect(router.push).toHaveBeenCalledWith('/notifications');
-  fireEvent.press(screen.getByRole('button', { name: '마이페이지' }));
-  expect(router.push).toHaveBeenCalledWith('/mypage');
-  fireEvent.press(screen.getByRole('button', { name: '매장 전환' }));
-  expect(mockOpenStorePicker).toHaveBeenCalledTimes(1);
+  expect(screen.queryByRole('button', { name: '더보기' })).toBeNull();
+  expect(screen.queryByRole('button', { name: '매장 전환' })).toBeNull();
 });
 
 it('공유하지 않는 직원은 금액·추세·매입/비용 바로가기를 보지 않고 업무 홈을 본다', () => {

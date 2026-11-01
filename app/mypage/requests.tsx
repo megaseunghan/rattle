@@ -6,6 +6,7 @@ import { Colors } from '../../constants/colors';
 import { Spacing } from '../../constants/designTokens';
 import { useRequestApprovals } from '../../lib/hooks/useRequestApprovals';
 import { ScheduleRequest } from '../../types';
+import { ErrorMessage } from '../../lib/components/ErrorMessage';
 import { AppBar, EmptyState } from '../../lib/components/ui';
 
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
@@ -15,10 +16,10 @@ function ApproveButtons({ onApprove, onReject, disabled }: {
 }) {
   return (
     <View style={styles.actionRow}>
-      <TouchableOpacity style={styles.rejectBtn} onPress={onReject} disabled={disabled} activeOpacity={0.7}>
+      <TouchableOpacity style={[styles.rejectBtn, disabled && styles.actionDisabled]} onPress={onReject} disabled={disabled} accessibilityRole="button" accessibilityLabel="스케줄 변경 요청 거절" accessibilityState={{ disabled, busy: disabled }} activeOpacity={0.7}>
         <Text style={styles.rejectBtnText}>거절</Text>
       </TouchableOpacity>
-      <TouchableOpacity style={styles.approveBtn} onPress={onApprove} disabled={disabled} activeOpacity={0.7}>
+      <TouchableOpacity style={[styles.approveBtn, disabled && styles.actionDisabled]} onPress={onApprove} disabled={disabled} accessibilityRole="button" accessibilityLabel="스케줄 변경 요청 승인" accessibilityState={{ disabled, busy: disabled }} activeOpacity={0.7}>
         <Text style={styles.approveBtnText}>승인</Text>
       </TouchableOpacity>
     </View>
@@ -27,23 +28,24 @@ function ApproveButtons({ onApprove, onReject, disabled }: {
 
 export default function RequestApprovalsScreen() {
   const {
-    scheduleRequests, loading, reviewingId, totalPending,
+    scheduleRequests, loading, refreshing, ready, error, actionError, reviewingId, totalPending,
     refetch, reviewSchedule,
   } = useRequestApprovals();
 
-  useEffect(() => { refetch(); }, [refetch]);
+  useEffect(() => { void refetch(); }, [refetch]);
 
   function handleScheduleReview(request: ScheduleRequest & { employee_name: string }, approve: boolean) {
-    reviewSchedule(request, approve).catch(() => {});
+    void reviewSchedule(request, approve);
   }
 
   return (
     <SafeAreaView style={styles.container}>
       <AppBar title="요청함" onBack={() => router.back()} />
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        {loading ? (
+        {(error || actionError) && <ErrorMessage message={error || actionError!} onRetry={() => { void refetch(); }} />}
+        {loading || refreshing ? (
           <ActivityIndicator color={Colors.primary} style={{ marginTop: 32 }} />
-        ) : totalPending === 0 ? (
+        ) : !ready && scheduleRequests.length === 0 ? null : totalPending === 0 ? (
           <EmptyState icon="checkmark-done-outline" title="대기 중인 요청이 없어요" description="스케줄 변경 요청이 오면 여기에 표시돼요" />
         ) : (
           <>
@@ -61,7 +63,7 @@ export default function RequestApprovalsScreen() {
                       ))}
                     </View>
                     <ApproveButtons
-                      disabled={reviewingId === req.id}
+                      disabled={reviewingId !== null || !!error || !!actionError}
                       onApprove={() => handleScheduleReview(req, true)}
                       onReject={() => handleScheduleReview(req, false)}
                     />
@@ -90,9 +92,10 @@ const styles = StyleSheet.create({
   },
   cardName: { fontSize: 14, fontWeight: '700', color: Colors.black },
   dayList: { gap: 2 },
-  dayLine: { fontSize: 13, fontWeight: '500', color: Colors.gray600 },
+  dayLine: { fontVariant: ['tabular-nums'], fontSize: 13, fontWeight: '500', color: Colors.gray600 },
   reasonText: { fontSize: 12, fontWeight: '400', color: Colors.gray400, lineHeight: 17 },
 
+  actionDisabled: { opacity: 0.5 },
   actionRow: { flexDirection: 'row', gap: 8, marginTop: 6 },
   rejectBtn: { flex: 1, minHeight: 44, justifyContent: 'center', alignItems: 'center', paddingVertical: 10, borderRadius: 10, borderWidth: 1, borderColor: Colors.gray200 },
   rejectBtnText: { fontSize: 13, fontWeight: '600', color: Colors.gray500 },

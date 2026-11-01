@@ -1,11 +1,11 @@
 import { SheetModal } from '../../lib/components/ui/SheetModal';
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
   Modal, Pressable, ActivityIndicator, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import { AppIcon } from '../../lib/icons/AppIcon';
 import { router } from 'expo-router';
 import { Colors } from '../../constants/colors';
 import { useAuth } from '../../lib/contexts/AuthContext';
@@ -39,12 +39,18 @@ function formatLabel(hour24: number): string {
 const HOURS_12 = Array.from({ length: 12 }, (_, i) => i + 1); // 1~12
 
 export default function SalesSettingsScreen() {
-  const { store, refreshStore } = useAuth();
+  const { store, user, refreshStore } = useAuth();
   const initialHour = parseHour24(store?.closing_time as string | null | undefined);
 
   const [meridiem, setMeridiem] = useState<Meridiem>(to12h(initialHour).meridiem);
   const [hour12, setHour12] = useState<number>(to12h(initialHour).hour12);
   const [saving, setSaving] = useState(false);
+  const savingLock = useRef(false);
+  const scope = useMemo(() => ({}), [store?.id, user?.id]);
+  const currentScope = useRef<object | null>(scope);
+  currentScope.current = scope;
+  useEffect(() => { currentScope.current = scope; return () => { currentScope.current = null; }; }, [scope]);
+  const [savedNeedsRefresh, setSavedNeedsRefresh] = useState(false);
   const [picker, setPicker] = useState<null | 'meridiem' | 'hour'>(null);
 
   useEffect(() => {
@@ -57,8 +63,11 @@ export default function SalesSettingsScreen() {
   const dirty = selectedHour24 !== initialHour;
   const label = useMemo(() => formatLabel(selectedHour24), [selectedHour24]);
 
+  useEffect(() => { setSavedNeedsRefresh(false); }, [scope]);
+
   async function handleSave() {
-    if (!store) return;
+    if (!store || savingLock.current || savedNeedsRefresh) return;
+    savingLock.current = true;
     setSaving(true);
     try {
       const closing = `${String(selectedHour24).padStart(2, '0')}:00`;
@@ -67,38 +76,60 @@ export default function SalesSettingsScreen() {
         .update({ closing_time: closing })
         .eq('id', store.id);
       if (error) throw error;
-      await refreshStore();
+      if (currentScope.current !== scope) return;
+      setSavedNeedsRefresh(true);
+      try {
+        await refreshStore();
+        if (currentScope.current !== scope) return;
+        setSavedNeedsRefresh(false);
+      } catch {
+        if (currentScope.current !== scope) return;
+        Alert.alert('저장 완료 · 새로고침 필요', '내용은 저장됐어요. 화면을 다시 불러와 확인해주세요.');
+        return;
+      }
       Alert.alert('저장 완료', '하루 매출 사이클이 변경되었어요.');
       router.back();
     } catch (e: unknown) {
+      if (currentScope.current !== scope) return;
       Alert.alert('저장 실패', getErrorMessage(e));
     } finally {
+      savingLock.current = false;
       setSaving(false);
     }
+  }
+
+  async function retryRefresh() {
+    if (savingLock.current) return;
+    savingLock.current = true;
+    setSaving(true);
+    try { await refreshStore(); if (currentScope.current === scope) setSavedNeedsRefresh(false); }
+    catch { if (currentScope.current !== scope) return; Alert.alert('새로고침 실패', '저장된 내용은 유지돼요. 잠시 후 다시 불러와 주세요.'); }
+    finally { savingLock.current = false; setSaving(false); }
   }
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} accessibilityRole="button" accessibilityLabel="뒤로가기">
-          <Ionicons name="chevron-back" size={24} color={Colors.black} />
+          <AppIcon name="chevron-back" size={24} color={Colors.black} />
         </TouchableOpacity>
         <Text style={styles.title}>매출 마감 시각</Text>
         <TouchableOpacity
-          style={[styles.saveBtn, (!dirty || saving) && styles.saveBtnDisabled]}
+          style={[styles.saveBtn, (!dirty || saving || savedNeedsRefresh) && styles.saveBtnDisabled]}
           onPress={handleSave}
-          disabled={!dirty || saving}
+          disabled={!dirty || saving || savedNeedsRefresh}
         >
           {saving ? <ActivityIndicator size="small" color={Colors.white} /> : <Text style={styles.saveBtnText}>저장</Text>}
         </TouchableOpacity>
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+        {savedNeedsRefresh && <TouchableOpacity accessibilityRole="button" disabled={saving} onPress={() => void retryRefresh()} style={styles.rangeSummary}><Text>저장된 정보 다시 불러오기</Text></TouchableOpacity>}
         <Text style={styles.fieldLabel}>하루 매출을 나누는 시각</Text>
         <Text style={styles.fieldDescription}>자정을 지나 영업한다면 실제 마감 시각에 맞춰 주세요.</Text>
         <View style={styles.selectRow}>
-          <SelectField value={meridiem} onPress={() => setPicker('meridiem')} flex={1} />
-          <SelectField value={`${hour12}시`} onPress={() => setPicker('hour')} flex={1.2} />
+          <SelectField value={meridiem} onPress={() => { if (!saving && !savedNeedsRefresh) setPicker('meridiem'); }} flex={1} />
+          <SelectField value={`${hour12}시`} onPress={() => { if (!saving && !savedNeedsRefresh) setPicker('hour'); }} flex={1.2} />
         </View>
 
         <View style={styles.rangeSummary}>
@@ -143,18 +174,18 @@ export default function SalesSettingsScreen() {
 
 function SelectField({ value, onPress, flex }: { value: string; onPress: () => void; flex: number }) {
   return (
-    <TouchableOpacity style={[styles.selectField, { flex }]} onPress={onPress} activeOpacity={0.7}>
+    <TouchableOpacity style={[styles.selectField, { flex }]} onPress={onPress} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel={`${value}, 변경`}>
       <Text style={styles.selectValue}>{value}</Text>
-      <Ionicons name="chevron-down" size={18} color={Colors.gray400} />
+      <AppIcon name="chevron-down" size={18} color={Colors.gray400} />
     </TouchableOpacity>
   );
 }
 
 function SelectOption({ label, selected, onPress }: { label: string; selected: boolean; onPress: () => void }) {
   return (
-    <TouchableOpacity style={styles.optionItem} onPress={onPress} activeOpacity={0.7}>
+    <TouchableOpacity style={styles.optionItem} onPress={onPress} activeOpacity={0.7} accessibilityRole="radio" accessibilityState={{ checked: selected }}>
       <Text style={[styles.optionItemText, selected && styles.optionItemTextActive]}>{label}</Text>
-      {selected && <Ionicons name="checkmark" size={18} color={Colors.primary} />}
+      {selected && <AppIcon name="checkmark" size={18} color={Colors.primary} />}
     </TouchableOpacity>
   );
 }
@@ -178,7 +209,7 @@ const styles = StyleSheet.create({
   fieldDescription: { fontSize: 14, color: Colors.gray600, lineHeight: 22, marginTop: 8 },
   rangeSummary: { marginTop: 24, paddingTop: 24, borderTopWidth: 1, borderTopColor: Colors.gray200, gap: 8 },
   rangeLabel: { fontSize: 13, color: Colors.gray500 },
-  rangeValue: { fontSize: 17, fontWeight: '600', color: Colors.black },
+  rangeValue: { fontVariant: ['tabular-nums'], fontSize: 17, fontWeight: '600', color: Colors.black },
   guideText: { fontSize: 13, color: Colors.gray600, lineHeight: 20 },
 
   selectRow: { flexDirection: 'row', gap: 10, marginTop: 20 },
@@ -187,7 +218,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.gray200,
     borderRadius: 14, paddingHorizontal: 16, paddingVertical: 16,
   },
-  selectValue: { fontSize: 16, color: Colors.black, fontWeight: '600' },
+  selectValue: { flexShrink: 1, fontVariant: ['tabular-nums'], fontSize: 16, color: Colors.black, fontWeight: '600' },
 
   modalOverlay: { flex: 1, backgroundColor: Colors.overlay, justifyContent: 'flex-end' },
   modalSheet: {
@@ -196,9 +227,10 @@ const styles = StyleSheet.create({
   },
   modalTitle: { fontSize: 16, fontWeight: '700', color: Colors.black, marginBottom: 12 },
   optionItem: {
+    minHeight: 44,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingVertical: 14, borderBottomWidth: 0.5, borderBottomColor: Colors.homeBorder,
   },
-  optionItemText: { fontSize: 16, color: Colors.gray700 },
+  optionItemText: { flexShrink: 1, fontVariant: ['tabular-nums'], fontSize: 16, color: Colors.gray700 },
   optionItemTextActive: { color: Colors.primary, fontWeight: '700' },
 });

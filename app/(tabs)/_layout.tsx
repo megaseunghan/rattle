@@ -6,7 +6,7 @@ import { useNotifications } from '../../lib/hooks/useNotifications';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, useWindowDimensions } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { AppIcon } from '../../lib/icons/AppIcon';
 import PagerView from 'react-native-pager-view';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { GlassCard } from '../../lib/components/GlassCard';
@@ -26,7 +26,7 @@ import { PayrollScreen } from './payroll';
 import { AdminDashboardScreen } from '../admin/index';
 import { PosScreen } from '../pos/index';
 
-type QuickAddAction = { key: string; label: string; icon: keyof typeof Ionicons.glyphMap; route: string } | { key: string; label: string; icon: keyof typeof Ionicons.glyphMap; tab: TabName };
+type QuickAddAction = { key: string; label: string; icon: keyof typeof AppIcon.glyphMap; route: string } | { key: string; label: string; icon: keyof typeof AppIcon.glyphMap; tab: TabName };
 
 const QUICK_ADD_ITEMS: QuickAddAction[] = [
   { key: 'sales', label: '매출 등록', icon: 'stats-chart-outline', route: '/pos/new' },
@@ -68,12 +68,12 @@ function QuickAddMenu({
       <View style={[styles.menuBox, { left: menuLeft, top: menuTop }]}>
         {QUICK_ADD_ITEMS.filter(item => item.key !== 'employee' || currentRole === 'admin').map((item) => (
           <Pressable key={item.key} style={({ pressed }) => [styles.menuItem, pressed && { backgroundColor: Colors.focusBg }]} accessibilityRole="button" accessibilityLabel={item.label} onPress={() => handleSelect(item)}>
-            <Ionicons name={item.icon} size={16} color={Colors.primary} accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" />
+            <AppIcon name={item.icon} size={16} color={Colors.primary} accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" />
             <Text style={styles.menuItemText}>{item.label}</Text>
           </Pressable>
         ))}
         <Pressable style={({ pressed }) => [styles.menuItem, pressed && { backgroundColor: Colors.focusBg }]} accessibilityRole="button" accessibilityLabel="버튼 위치 초기화" onPress={() => { onResetPosition(); onClose(); }}>
-          <Ionicons name="refresh-outline" size={16} color={Colors.gray600} accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" />
+          <AppIcon name="refresh-outline" size={16} color={Colors.gray600} accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" />
           <Text style={styles.menuItemText}>버튼 위치 초기화</Text>
         </Pressable>
       </View>
@@ -81,7 +81,7 @@ function QuickAddMenu({
   );
 }
 
-const TAB_CONFIG: Record<TabName, { label: string; icon: keyof typeof Ionicons.glyphMap; iconActive: keyof typeof Ionicons.glyphMap }> = {
+const TAB_CONFIG: Record<TabName, { label: string; icon: keyof typeof AppIcon.glyphMap; iconActive: keyof typeof AppIcon.glyphMap }> = {
   home:      { label: '홈',   icon: 'home-outline',        iconActive: 'home' },
   stock:     { label: '재고', icon: 'cube-outline',         iconActive: 'cube' },
   purchases: { label: '매입', icon: 'cart-outline',         iconActive: 'cart' },
@@ -96,7 +96,7 @@ function TabIcon({ tab, focused, badge }: { tab: TabName; focused: boolean; badg
   return (
     <View style={styles.iconWrap}>
       {focused && <View style={styles.indicator} />}
-      <Ionicons name={focused ? cfg.iconActive : cfg.icon} size={22} color={focused ? Colors.primary : Colors.gray400} />
+      <AppIcon name={focused ? cfg.iconActive : cfg.icon} size={22} color={focused ? Colors.primary : Colors.gray400} />
       <View style={styles.labelRow}>
         <Text style={[styles.label, focused && styles.labelActive]} numberOfLines={1} adjustsFontSizeToFit>{cfg.label}</Text>
         {showBadge && (
@@ -257,22 +257,22 @@ export default function TabsLayout() {
 
   return (
     <TabPagerContext.Provider value={pagerValue}>
-      <View style={styles.flex} onLayout={event => setContainerHeight(event.nativeEvent.layout.height)}>
+      <View style={styles.shell} onLayout={event => setContainerHeight(event.nativeEvent.layout.height)}>
         <GlassBackdrop />
+        <View style={{ paddingTop: insets.top + 6, paddingBottom: 8 }}>
+          <StoreAppBar name={effectiveHomeMode === 'dashboard' ? '전체 매장' : store?.name ?? '매장 선택'} unreadCount={unreadCount}
+            onMenu={() => { setQuickAddVisible(false); setMoreOpen(true); }}
+            onNotifications={() => tabRouter.push('/notifications')} />
+        </View>
         <PagerView
           ref={pagerRef}
           style={styles.flex}
           initialPage={0}
-          scrollEnabled={effectiveHomeMode !== 'dashboard' && !switching}
+          scrollEnabled={effectiveHomeMode !== 'dashboard' && !switching && !moreOpen}
           onPageSelected={e => handlePageSelected(e.nativeEvent.position)}
         >
           {tabs.map((tab, idx) => (
             <View key={tab} style={styles.flex}>
-              {tab !== 'home' && <View accessibilityElementsHidden={activeIndex !== idx} importantForAccessibility={activeIndex !== idx ? 'no-hide-descendants' : 'auto'}>
-                <StoreAppBar includeTopInset name={store?.name ?? '매장 선택'} unreadCount={unreadCount}
-                  onMenu={() => goToTab('more')} onStore={() => openStorePicker()}
-                  onNotifications={() => tabRouter.push('/notifications')} onProfile={() => tabRouter.push('/mypage')} />
-              </View>}
               {visited.has(idx) ? <TabPage key={store?.id} tab={tab} active={activeIndex === idx} reserveFab={!isPartTime && canReadFinancials} /> : null}
             </View>
           ))}
@@ -287,8 +287,6 @@ export default function TabsLayout() {
           ))}
         </GlassCard>
         </View>
-
-        <MoreDrawer visible={moreOpen} onClose={() => setMoreOpen(false)} />
 
         <StoreScopePicker key={pickerVisible ? 'open' : 'closed'} visible={pickerVisible} stores={stores} selectedId={store?.id} allSelected={effectiveHomeMode === 'dashboard'} allowAll={isOwnerAdminSelf} required={!!pendingTab || !!pendingRoute} busy={switching} error={switchError}
           onSelect={id => { void selectStoreScope(id).catch(() => {}); }}
@@ -311,6 +309,10 @@ export default function TabsLayout() {
             />
           </>
         )}
+        <MoreDrawer visible={moreOpen} onOpen={pickerVisible || quickAddVisible ? undefined : () => setMoreOpen(true)} onClose={() => setMoreOpen(false)}
+          allSelected={effectiveHomeMode === 'dashboard'}
+          onSelectStore={id => selectStoreScope(id)}
+          onAllStores={isOwnerAdminSelf ? () => { setHomeMode('dashboard'); goToTab('home'); } : undefined} />
       </View>
     </TabPagerContext.Provider>
   );
@@ -319,7 +321,7 @@ export default function TabsLayout() {
 function TabPage({ tab, active, reserveFab }: { tab: TabName; active: boolean; reserveFab: boolean }) {
   const { homeMode } = useTabPager();
   switch (tab) {
-    case 'home': return homeMode === 'dashboard' ? <AdminDashboardScreen /> : <HomeScreen active={active} />;
+    case 'home': return homeMode === 'dashboard' ? <AdminDashboardScreen embedded /> : <HomeScreen active={active} />;
     case 'stock': return <StockScreen active={active} />;
     case 'purchases': return <PurchasesScreen active={active} />;
     case 'payroll': return <PayrollScreen active={active} />;
@@ -329,6 +331,7 @@ function TabPage({ tab, active, reserveFab }: { tab: TabName; active: boolean; r
 }
 
 const styles = StyleSheet.create({
+  shell: { flex: 1, backgroundColor: Colors.homeCanvas },
   flex: { flex: 1 },
   tabBar: { flexDirection: 'row', height: 60, padding: 0, paddingTop: 6 },
   tabBarItem: { flex: 1, alignItems: 'center', justifyContent: 'center' },

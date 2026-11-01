@@ -1,7 +1,7 @@
 import { SheetModal } from './ui/SheetModal';
 import { useRef, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Modal, TextInput, Alert, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { AppIcon } from '../icons/AppIcon';
 import { Colors } from '../../constants/colors';
 import { animateListChange } from '../utils/layoutAnimation';
 import { getErrorMessage } from '../utils/error';
@@ -120,12 +120,12 @@ export function CategoryManageModal({
                     <Text style={styles.categoryRowText}>{c}</Text>
                   )}
                   <View style={styles.categoryRowActions}>
-                    <TouchableOpacity onPress={() => renameTarget === c ? handleRename() : openRename(c)} hitSlop={8} disabled={saving} style={styles.actionButton}
+                    <TouchableOpacity onPress={() => renameTarget === c ? handleRename() : openRename(c)} disabled={saving} style={styles.actionButton}
                       accessibilityRole="button" accessibilityLabel={`${c} ${renameTarget === c ? '이름 저장' : '이름 변경'}`}>
-                      <Ionicons name={renameTarget === c ? 'checkmark' : 'create-outline'} size={18} color={Colors.gray400} />
+                      <AppIcon name={renameTarget === c ? 'checkmark' : 'create-outline'} size={18} color={Colors.gray400} />
                     </TouchableOpacity>
-                    {remove && <TouchableOpacity onPress={() => handleRemove(c)} disabled={saving} hitSlop={8} style={styles.actionButton} accessibilityRole="button" accessibilityLabel={`${c} 삭제`}>
-                      <Ionicons name="trash-outline" size={18} color={Colors.gray400} />
+                    {remove && <TouchableOpacity onPress={() => handleRemove(c)} disabled={saving} style={styles.actionButton} accessibilityRole="button" accessibilityLabel={`${c} 삭제`}>
+                      <AppIcon name="trash-outline" size={18} color={Colors.gray400} />
                     </TouchableOpacity>}
                   </View>
                 </View>
@@ -143,7 +143,7 @@ export function CategoryManageModal({
               onSubmitEditing={handleAdd}
             />
             <TouchableOpacity style={styles.categoryAddBtn} onPress={handleAdd} disabled={saving || loading} accessibilityRole="button" accessibilityLabel={`${noun} 추가`}>
-              {saving ? <ActivityIndicator size="small" color={Colors.white} /> : <Ionicons name="add" size={20} color={Colors.white} />}
+              {saving ? <ActivityIndicator size="small" color={Colors.white} /> : <AppIcon name="add" size={20} color={Colors.white} />}
             </TouchableOpacity>
           </View>
         </View>

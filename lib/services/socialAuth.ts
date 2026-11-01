@@ -72,7 +72,12 @@ export async function signInWithSocialProvider(provider: SocialProvider): Promis
   });
   if (error) throw error;
   if (!data.url) throw new UserFacingError('로그인을 시작하지 못했어요. 다시 시도해주세요.');
-  const result = await WebBrowser.openAuthSessionAsync(data.url, redirectUrl);
+  // iOS는 도메인 확인창을 생략하도록 Safari 쿠키를 공유하지 않는 인증 세션을 요청한다.
+  const result = await WebBrowser.openAuthSessionAsync(
+    data.url,
+    redirectUrl,
+    Platform.OS === 'ios' ? { preferEphemeralSession: true } : {},
+  );
   if (result.type === 'cancel' || result.type === 'dismiss') return false;
   if (result.type !== 'success' || !await completeAuthCallback(result.url, redirectUrl)) {
     throw new UserFacingError('로그인을 완료하지 못했어요. 다시 시도해주세요.');

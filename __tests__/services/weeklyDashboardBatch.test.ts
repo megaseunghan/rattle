@@ -52,7 +52,7 @@ it('weekly schedules read all working weekdays with names once and preserve grou
 it('schedule approval invalidates once even if status update fails after schedule commit', async () => {
   mockFrom.mockImplementation(table => table === 'employee_schedules'
     ? { upsert: async () => ({ error: null }) }
-    : { update: () => ({ eq: async () => ({ error: { message: 'status failed' } }) }) });
+    : { update: () => ({ eq: () => ({ select: () => ({ maybeSingle: async () => ({ data: null, error: { message: 'status failed' } }) }) }) }) });
   const request = { id:'request',store_id:'a',employee_id:'employee',days:[] } as unknown as ScheduleRequest;
   await expect(reviewScheduleRequest(request,true)).rejects.toThrow('status failed');
   expect(mockInvalidate).toHaveBeenCalledTimes(1); expect(mockInvalidate).toHaveBeenCalledWith('a', ['schedule', 'notifications']);

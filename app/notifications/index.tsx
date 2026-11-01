@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import { AppIcon } from '../../lib/icons/AppIcon';
 import { router } from 'expo-router';
 import { Colors } from '../../constants/colors';
 import { Spacing } from '../../constants/designTokens';
@@ -19,7 +19,7 @@ const FILTERS: { key: FilterKey; label: string }[] = [
   { key: 'sales', label: '매출' },
 ];
 
-const CATEGORY_ICON: Record<NotificationCategory, keyof typeof Ionicons.glyphMap> = {
+const CATEGORY_ICON: Record<NotificationCategory, keyof typeof AppIcon.glyphMap> = {
   attendance: 'time-outline',
   stock: 'cube-outline',
   sales: 'stats-chart-outline',
@@ -56,9 +56,11 @@ function NotificationRow({ item, onPress }: { item: AppNotification; onPress: ()
       style={[styles.row, !item.is_read && styles.rowUnread]}
       onPress={onPress}
       activeOpacity={0.7}
+      accessibilityRole="button"
+      accessibilityLabel={`${item.is_read ? '읽음' : '읽지 않음'}, ${item.message}, ${relativeTime(item.created_at)}`}
     >
       <View style={[styles.iconWrap, { backgroundColor: iconBg(item) }]}>
-        <Ionicons name={CATEGORY_ICON[item.category]} size={17} color={iconColor(item)} />
+        <AppIcon name={CATEGORY_ICON[item.category]} size={17} color={iconColor(item)} />
       </View>
       <View style={styles.rowBody}>
         <Text style={[styles.rowTitle, !item.is_read && styles.rowTitleUnread]} numberOfLines={2}>{item.message}</Text>
@@ -98,6 +100,8 @@ export default function NotificationsScreen() {
             style={[styles.chip, filter === f.key && styles.chipActive]}
             onPress={() => setFilter(f.key)}
             activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityState={{ selected: filter === f.key }}
           >
             <Text style={[styles.chipText, filter === f.key && styles.chipTextActive]}>{f.label}</Text>
           </TouchableOpacity>
@@ -120,7 +124,7 @@ export default function NotificationsScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.homeCanvas },
-  chipRow: { flexDirection: 'row', gap: 8, paddingHorizontal: Spacing.screenX, paddingTop: 12 },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingHorizontal: Spacing.screenX, paddingTop: 12 },
   chip: { minHeight: 44, justifyContent: 'center', backgroundColor: Colors.white, paddingVertical: 7, paddingHorizontal: 14, borderRadius: 18, borderWidth: 1, borderColor: Colors.gray200 },
   chipActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
   chipText: { fontSize: 12, fontWeight: '500', color: Colors.gray600 },
@@ -137,6 +141,6 @@ const styles = StyleSheet.create({
   rowBody: { flex: 1, gap: 2 },
   rowTitle: { fontSize: 13, fontWeight: '500', color: Colors.gray600, lineHeight: 18 },
   rowTitleUnread: { fontWeight: '600', color: Colors.black },
-  rowTime: { fontSize: 11, fontWeight: '400', color: Colors.gray400 },
+  rowTime: { fontVariant: ['tabular-nums'], fontSize: 11, fontWeight: '400', color: Colors.gray400 },
   unreadDot: { width: 7, height: 7, borderRadius: 3.5, backgroundColor: Colors.primary },
 });

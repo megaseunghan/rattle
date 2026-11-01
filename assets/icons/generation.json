@@ -1,0 +1,181 @@
+{
+  "created": "2026-10-30",
+  "reference": "reference/style-options-2-and-3.png",
+  "selectedStyle": "lower panel: 안 3",
+  "commonStylePrompt": "Use case: stylized-concept. Produce ONE independent production PNG asset for Rattle restaurant operations mobile app, NOT a board. Reference image 1: only its LOWER panel labelled 안 3 is the chosen style. Ignore upper 안 2 and ignore all backgrounds/captions/labels. Reference image 2 is the already generated inventory asset: use its satin material, light and render finish, NOT its box contents or subject. Maintain one coherent family: softly rounded but precise forms, opaque white and light-gray satin, cobalt #3182F6 accents with very restrained warm cream/tan or muted plant colors when appropriate, soft upper-left lighting, slightly elevated consistent three-quarter camera. Professional, friendly, calm; not a toy/game asset.\nComposition: whole single subject centered on TRUE TRANSPARENT background, square canvas, about 15% clear safety margin each side, consistent roughly 70% silhouette occupancy. Only object self shading. NO floor, NO ground plane, NO cast shadow outside object, NO pedestal, NO background badge. No background scene. One main object with at most one supporting semantic element except grouped contents naturally belonging to the main object.\nNO TEXT, NO LETTERS, NO DIGITS, NO CURRENCY, NO LABELS, NO LOGOS, NO WATERMARK. Abstract rules/blocks instead of writing. Avoid glass, chrome, neon, strong reflections, tiny ornaments, excessive gloss. Crisp at a 64px UI display size.\nSubject: ",
+  "inventoryPrompt": "Use case: stylized-concept. Production asset for Rattle restaurant operations mobile app. Create ONE inventory icon, not a board.\nReference image: use ONLY the LOWER panel labelled 안 3 as the style reference. Ignore the upper 안 2 panel. Match its refined soft satin 3D render, round but precise edges, white/light-gray objects, cobalt #3182F6 accents, muted warm paper/cardboard colors, soft top-left light, slightly elevated three-quarter camera, quiet professional friendly appearance. Do not copy any text, captions, panel background, graphic board or labels.\nSubject: one warm tan open storage box containing a white jar with a blue lid, one small cream package with blue tape and one simple white carton. Large clear silhouette, restrained details as in the lower panel inventory icon.\nComposition: isolated centered whole object on TRUE TRANSPARENT background, square canvas, consistent 15% clear margin on every side, subject occupies roughly 70% of canvas. Soft self shading only; NO floor, NO ground plane, NO cast shadow outside the object. No base or pedestal. Entire object fully visible.\nNO text, NO letters, NO numbers, NO currency, NO logos, NO watermark, NO extra symbol or badge. Opaque satin material, not glass, chrome or shiny plastic. Deliver a single transparent PNG suitable for a 64px UI illustration.",
+  "assets": [
+    {
+      "id": "open-prep",
+      "file": "business/open-prep.png",
+      "sourceImage": "exec-21e836f3-4e33-4d04-81e1-be33ab7a37ed.png",
+      "method": "built-in image_gen; one asset per call",
+      "subject": "A rounded clipboard with a few blue check marks and one small muted warm sun peeking beside it."
+    },
+    {
+      "id": "business-hours",
+      "file": "business/business-hours.png",
+      "sourceImage": "exec-386b3ef7-6749-4d94-978a-b6a6b43a14df.png",
+      "method": "built-in image_gen; one asset per call",
+      "subject": "A simple open neighborhood storefront with a blue awning, no sign or lettering."
+    },
+    {
+      "id": "closing",
+      "file": "business/closing.png",
+      "sourceImage": "exec-e80a2aff-efe4-4c72-8dae-6a3b7f4a37f8.png",
+      "method": "built-in image_gen; one asset per call",
+      "subject": "A neatly completed checklist clipboard with blue check marks and one small muted crescent moon beside it."
+    },
+    {
+      "id": "inventory",
+      "file": "business/inventory.png",
+      "sourceImage": "exec-f8823687-0ce4-4b84-9f88-d932863a10d9.png",
+      "method": "built-in image_gen; one asset per call",
+      "subject": "An open light-gray storage box holding three simple food-supply containers with subtle blue accents."
+    },
+    {
+      "id": "purchase",
+      "file": "business/purchase.png",
+      "sourceImage": "exec-ee408d56-fcd2-4315-be0d-14a790a76a8a.png",
+      "method": "built-in image_gen; one asset per call",
+      "subject": "A rounded shopping basket with a blue handle containing two simple grocery packages."
+    },
+    {
+      "id": "recipe",
+      "file": "business/recipe.png",
+      "sourceImage": "exec-6163c82a-c454-42c3-9fbe-d645078b764c.png",
+      "method": "built-in image_gen; one asset per call",
+      "subject": "An open white recipe book with a blue cover and simple non-text ingredient marks on the pages."
+    },
+    {
+      "id": "sales",
+      "file": "business/sales.png",
+      "sourceImage": "exec-8d6f2734-9614-4225-bf23-20be123d1035.png",
+      "method": "built-in image_gen; one asset per call",
+      "subject": "A compact white sales display panel with three rounded blue vertical bars of different heights, no axes or numbers."
+    },
+    {
+      "id": "expense",
+      "file": "business/expense.png",
+      "sourceImage": "exec-c3148c73-005a-4705-9ed9-f67676ab0eed.png",
+      "method": "built-in image_gen; one asset per call",
+      "subject": "A single white expense receipt with a folded corner, blue rules instead of text, no numbers or currency symbols."
+    },
+    {
+      "id": "staff",
+      "file": "business/staff.png",
+      "sourceImage": "exec-52e58790-e81e-4e74-9a08-5f60d8ccdc09.png",
+      "method": "built-in image_gen; one asset per call",
+      "subject": "Two overlapping white staff identity cards, each showing one simple anonymous blue person silhouette, no personal details."
+    },
+    {
+      "id": "payroll",
+      "file": "business/payroll.png",
+      "sourceImage": "exec-cb55556b-7739-4be8-a48d-4fdeaa377801.png",
+      "method": "built-in image_gen; one asset per call",
+      "subject": "A white payroll statement with abstract blue rules partly emerging from a rounded white payment envelope with a blue flap."
+    },
+    {
+      "id": "schedule",
+      "file": "business/schedule.png",
+      "sourceImage": "exec-5275e14d-73ec-454d-90e8-6e4c12f59870.png",
+      "method": "built-in image_gen; one asset per call",
+      "subject": "A compact white desk calendar with blue binding and a clean abstract date grid without numbers or letters."
+    },
+    {
+      "id": "profit-loss",
+      "file": "business/profit-loss.png",
+      "sourceImage": "exec-9511ce8d-fcb0-4300-84d7-946e3ec8ff6c.png",
+      "method": "built-in image_gen; one asset per call",
+      "subject": "An open white financial ledger with a blue spine and two clear columns of abstract marks representing income and expenses, no text, digits, currency or rising arrow."
+    },
+    {
+      "id": "checklist",
+      "file": "business/checklist.png",
+      "sourceImage": "exec-a423c424-1fd6-4247-b8dd-30bffbbcc450.png",
+      "method": "built-in image_gen; one asset per call",
+      "subject": "A single rounded white clipboard with three clear blue tick boxes and abstract rules, no extra object."
+    },
+    {
+      "id": "work-time",
+      "file": "business/work-time.png",
+      "sourceImage": "exec-3421f250-8264-4df8-923c-ce24f643e77b.png",
+      "method": "built-in image_gen; one asset per call",
+      "subject": "A rounded white work record sheet with blue abstract rules and one small blue-and-white clock, no digits, no attendance punch terminal or location pin."
+    },
+    {
+      "id": "store",
+      "file": "business/store.png",
+      "sourceImage": "exec-68bbdfa4-accc-411a-bf36-a820f1cbdc3c.png",
+      "method": "built-in image_gen; one asset per call",
+      "subject": "A single tidy small shop facade with a soft blue awning and a simple centered doorway, no sign, no text, use same architectural language as business-hours."
+    },
+    {
+      "id": "pos-connect",
+      "file": "business/pos-connect.png",
+      "sourceImage": "exec-c8b0d486-faea-4b72-bcf2-fdb63c91f08c.png",
+      "method": "built-in image_gen; one asset per call",
+      "subject": "A rounded white POS touchscreen terminal with an abstract blue screen and one small blue chain link beside it, no logo, no letters or digits."
+    },
+    {
+      "id": "empty-data",
+      "file": "status/empty-data.png",
+      "sourceImage": "exec-dd7749ed-5598-4046-8d57-0c7edc3b1832.png",
+      "method": "built-in image_gen; one asset per call",
+      "subject": "A single open white ledger with mostly blank pages and a blue spine; calm neutral empty state, no warning symbol."
+    },
+    {
+      "id": "empty-search",
+      "file": "status/empty-search.png",
+      "sourceImage": "exec-292e6208-9469-466e-9bb8-88bf9ad5077a.png",
+      "method": "built-in image_gen; one asset per call",
+      "subject": "A simple blue-and-white magnifying glass over one white list sheet with only a couple of pale abstract rules; no text."
+    },
+    {
+      "id": "completed",
+      "file": "status/completed.png",
+      "sourceImage": "exec-2050d3ab-a885-4641-a42e-6ec88b696c64.png",
+      "method": "built-in image_gen; one asset per call",
+      "subject": "A substantial rounded blue check mark in a simple white circular confirmation ring, no confetti, no text, ring is the subject itself not a background badge."
+    },
+    {
+      "id": "review-pending",
+      "file": "status/review-pending.png",
+      "sourceImage": "exec-e66a8ba7-09df-46bc-80a6-6c10d7e1f72e.png",
+      "method": "built-in image_gen; one asset per call",
+      "subject": "One white document with pale blue abstract rules and a small blue-and-white clock beside it; pending review, no check mark, no digits."
+    },
+    {
+      "id": "connection-pending",
+      "file": "status/connection-pending.png",
+      "sourceImage": "exec-f6d1d45f-6f48-48f3-86fa-7cfd4035b608.png",
+      "method": "built-in image_gen; one asset per call",
+      "subject": "A small white POS terminal with a muted blue screen and one disconnected chain link element beside it with a visible gap; no check mark, no wireless status text."
+    },
+    {
+      "id": "stock-low",
+      "file": "status/stock-low.png",
+      "sourceImage": "exec-d01b28f1-1eae-4a6c-b3a6-bee4df1c1a53.png",
+      "method": "built-in image_gen; one asset per call",
+      "subject": "An open white storage box containing just one small muted blue supply package, visibly sparse but tidy, no arrows or lettering."
+    },
+    {
+      "id": "load-error",
+      "file": "status/load-error.png",
+      "sourceImage": "exec-69ebf918-598f-4e9f-a982-d43d78323693.png",
+      "method": "built-in image_gen; one asset per call",
+      "subject": "One white document with a small muted amber warning triangle beside it, clean exclamation stroke without any word, no red alarm effects."
+    },
+    {
+      "id": "access-denied",
+      "file": "status/access-denied.png",
+      "sourceImage": "exec-64e4b692-c9a0-46d2-b0e0-b8df8bb3170f.png",
+      "method": "built-in image_gen; one asset per call",
+      "subject": "One white document with a small closed blue-and-white padlock in front, no letters or numbers, calm permission state."
+    }
+  ],
+  "discardedAttempt": {
+    "asset": "business-hours",
+    "reason": "Imagegen boundary-edit attempt was not used; original generation retained before conservative local alpha cleanup."
+  }
+}

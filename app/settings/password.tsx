@@ -4,7 +4,7 @@ import {
   TextInput, ScrollView, ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import { AppIcon } from '../../lib/icons/AppIcon';
 import { router } from 'expo-router';
 import { Colors } from '../../constants/colors';
 import { useAuth } from '../../lib/contexts/AuthContext';
@@ -49,7 +49,7 @@ export default function PasswordScreen() {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} accessibilityRole="button" accessibilityLabel="뒤로가기">
-          <Ionicons name="chevron-back" size={24} color={Colors.black} />
+          <AppIcon name="chevron-back" size={24} color={Colors.black} />
         </TouchableOpacity>
         <Text style={styles.title}>비밀번호 변경</Text>
         <View style={{ width: 44 }} />
@@ -90,7 +90,7 @@ export default function PasswordScreen() {
           </>
         ) : (
           <View style={styles.socialNotice}>
-            <Ionicons name="information-circle-outline" size={18} color={Colors.gray400} />
+            <AppIcon name="information-circle-outline" size={18} color={Colors.gray400} />
             <Text style={styles.socialNoticeText}>
               소셜 로그인 계정은 비밀번호가 없어 변경할 수 없어요.
             </Text>
