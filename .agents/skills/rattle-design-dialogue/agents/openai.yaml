@@ -1,0 +1,4 @@
+interface:
+  display_name: "Rattle 디자인 대화"
+  short_description: "작은 질문과 실제 시안 비교로 Rattle 모바일 디자인을 확정합니다"
+  default_prompt: "$rattle-design-dialogue로 현재 Rattle 화면을 확인하고 작은 질문 하나부터 디자인을 함께 다듬어줘."
