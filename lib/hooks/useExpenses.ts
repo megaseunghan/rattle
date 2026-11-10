@@ -1,15 +1,18 @@
 import { getErrorMessage, UserFacingError } from '../utils/error';
 import { useState, useCallback, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { getExpensesByMonth, getEffectiveFixedExpenses, createExpense, updateExpense, deleteExpense } from '../services/expenses';
-import { Expense, ExpenseCategory } from '../../types';
+import { getExpensesByMonth, getEffectiveFixedExpenses, getLegacyEffectiveFixedExpenses, createExpense, updateExpense, deleteExpense, copyFixedExpensesWithDates } from '../services/expenses';
+import { ExpenseCategory } from '../../types';
+import { DatedExpense as Expense } from '../types/expenses';
 
 export function useExpenses(yearMonth: string) {
-  const { store } = useAuth();
-  const identity = `${store?.id ?? ''}:${yearMonth}`;
+  const { store, user, currentRole, devPreviewMode } = useAuth();
+  const identity = `${user?.id ?? ''}:${store?.id ?? ''}:${currentRole}:${devPreviewMode}:${yearMonth}`;
   const currentIdentity = useRef(identity);
   currentIdentity.current = identity;
   const requestVersion = useRef(0);
+  const [dataIdentity, setDataIdentity] = useState('');
+  const mutationBusy = useRef(false);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [carriedFixedExpenses, setCarriedFixedExpenses] = useState<Expense[]>([]);
   const [loading, setLoading] = useState(false);
@@ -24,17 +27,12 @@ export function useExpenses(yearMonth: string) {
     try {
       const result = await getExpensesByMonth(store.id, yearMonth);
       if (!current()) return;
+      const carried = result.some(e => e.category === '고정비') ? [] :
+        (await (currentRole === 'admin' ? getEffectiveFixedExpenses : getLegacyEffectiveFixedExpenses)(store.id, yearMonth)).filter(e => e.year_month !== yearMonth);
+      if (!current()) return;
       setExpenses(result);
-
-      // 이번 달에 직접 등록된 고정비가 없으면, 손익계산서에 반영 중인
-      // 이전 달 고정비(carry-forward)를 참고용으로 함께 보여준다.
-      const hasOwnFixed = result.some(e => e.category === '고정비');
-      if (hasOwnFixed) {
-        setCarriedFixedExpenses([]);
-      } else {
-        const carried = await getEffectiveFixedExpenses(store.id, yearMonth);
-        if (current()) setCarriedFixedExpenses(carried.filter(e => e.year_month !== yearMonth));
-      }
+      setCarriedFixedExpenses(carried);
+      setDataIdentity(identity);
     } catch (e: any) {
       if (current()) setError(getErrorMessage(e));
     } finally {
@@ -46,36 +44,56 @@ export function useExpenses(yearMonth: string) {
     category: ExpenseCategory;
     name: string;
     amount: number;
+    occurred_on: string;
   }) => {
     if (!store) throw new UserFacingError('매장 정보가 없습니다');
-    const created = await createExpense({ ...data, store_id: store.id, year_month: yearMonth });
-    setExpenses(prev => [...prev, created]);
-    if (data.category === '고정비') setCarriedFixedExpenses([]);
-    return created;
-  }, [store, yearMonth]);
+    if (mutationBusy.current) throw new UserFacingError('저장 중입니다. 잠시 기다려주세요.');
+    mutationBusy.current = true;
+    try {
+      const created = await createExpense({ ...data, store_id: store.id, year_month: data.occurred_on.slice(0, 7) });
+      if (currentIdentity.current !== identity) return created;
+      ++requestVersion.current;
+      setExpenses(prev => created.year_month === yearMonth ? [...prev.filter(e => e.id !== created.id), created] : prev);
+      void refetch();
+      return created;
+    } finally { mutationBusy.current = false; }
+  }, [store, yearMonth, identity, refetch]);
 
-  const update = useCallback(async (id: string, data: { name: string; amount: number }) => {
-    const updated = await updateExpense(id, data);
-    setExpenses(prev => prev.map(e => (e.id === id ? updated : e)));
-    return updated;
-  }, []);
+  const update = useCallback(async (id: string, data: { name: string; amount: number; occurred_on?: string }) => {
+    if (mutationBusy.current) throw new UserFacingError('저장 중입니다. 잠시 기다려주세요.');
+    mutationBusy.current = true;
+    try {
+      const updated = await updateExpense(id, data);
+      if (currentIdentity.current !== identity) return updated;
+      ++requestVersion.current;
+      setExpenses(prev => prev.map(e => (e.id === id ? updated : e)).filter(e => e.year_month === yearMonth));
+      void refetch();
+      return updated;
+    } finally { mutationBusy.current = false; }
+  }, [identity, yearMonth, refetch]);
 
   const remove = useCallback(async (id: string) => {
-    await deleteExpense(id);
-    setExpenses(prev => prev.filter(e => e.id !== id));
-  }, []);
+    if (mutationBusy.current) throw new UserFacingError('저장 중입니다. 잠시 기다려주세요.');
+    mutationBusy.current = true;
+    try {
+      await deleteExpense(id);
+      if (currentIdentity.current !== identity) return;
+      ++requestVersion.current;
+      setExpenses(prev => prev.filter(e => e.id !== id));
+      void refetch();
+    } finally { mutationBusy.current = false; }
+  }, [identity, yearMonth, refetch]);
 
-  // 이어받은 고정비를 이번 달 항목으로 그대로 등록(복사)한다.
-  const copyCarriedFixedExpenses = useCallback(async () => {
-    if (!store || carriedFixedExpenses.length === 0) return;
-    const created = await Promise.all(
-      carriedFixedExpenses.map(e =>
-        createExpense({ store_id: store.id, year_month: yearMonth, category: e.category, name: e.name, amount: e.amount }),
-      ),
-    );
-    setExpenses(prev => [...prev, ...created]);
-    setCarriedFixedExpenses([]);
-  }, [store, yearMonth, carriedFixedExpenses]);
+  const copyCarriedFixedExpenses = useCallback(async (dates: { id: string; occurred_on: string }[]) => {
+    if (!store) throw new UserFacingError('매장 정보가 없습니다');
+    if (mutationBusy.current) throw new UserFacingError('저장 중입니다. 잠시 기다려주세요.');
+    mutationBusy.current = true;
+    try {
+      await copyFixedExpensesWithDates(store.id, yearMonth, dates);
+      if (currentIdentity.current === identity) { ++requestVersion.current; void refetch(); }
+    } finally { mutationBusy.current = false; }
+  }, [store, yearMonth, identity, refetch]);
 
-  return { expenses, carriedFixedExpenses, loading, error, refetch, add, update, remove, copyCarriedFixedExpenses };
+
+  return { expenses: dataIdentity === identity ? expenses : [], carriedFixedExpenses: dataIdentity === identity ? carriedFixedExpenses : [], loading, error, refetch, add, update, remove, copyCarriedFixedExpenses };
 }
