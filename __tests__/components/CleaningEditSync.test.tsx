@@ -44,9 +44,10 @@ it('요일 선택 후 한 번 추가하면 재진입 없이 행을 표시하고 
   render(<CleaningEditScreen />);
   await waitFor(() => expect(mockList).toHaveBeenCalled());
   fireEvent.press(screen.getByLabelText('요일별'));
+  fireEvent.press(screen.getByLabelText('항목 추가 열기'));
   fireEvent.press(screen.getByLabelText('수요일'));
   fireEvent.changeText(screen.getByLabelText('새 항목'), 'QA-수요일 청소');
-  fireEvent.press(screen.getByText('추가하기'));
+  fireEvent.press(screen.getByLabelText('항목 추가'));
   await waitFor(() => expect(screen.getByText('QA-수요일 청소')).toBeTruthy());
   expect(screen.getByText('수요일')).toBeTruthy();
   await waitFor(() => expect(mockScroll).toHaveBeenCalledWith({ index: 0, animated: true, viewPosition: 0.2 }));
@@ -59,8 +60,9 @@ it('미측정 행으로 스크롤이 실패하면 근사 위치로 간 뒤 대�
   render(<CleaningEditScreen />);
   await waitFor(() => expect(mockList).toHaveBeenCalled());
   fireEvent.press(screen.getByLabelText('요일별'));
+  fireEvent.press(screen.getByLabelText('항목 추가 열기'));
   fireEvent.changeText(screen.getByLabelText('새 항목'), 'QA-새 항목');
-  fireEvent.press(screen.getByText('추가하기'));
+  fireEvent.press(screen.getByLabelText('항목 추가'));
   await waitFor(() => expect(screen.getByText('QA-새 항목')).toBeTruthy());
   await waitFor(() => expect(mockScroll).toHaveBeenCalledTimes(2));
   expect(mockOffset).toHaveBeenCalledWith({ offset: 0, animated: false });
@@ -71,8 +73,9 @@ it('재시도 대기 중 구분을 바꾸면 이전 목록의 index로 스크롤
   render(<CleaningEditScreen />);
   await waitFor(() => expect(mockList).toHaveBeenCalled());
   fireEvent.press(screen.getByLabelText('요일별'));
+  fireEvent.press(screen.getByLabelText('항목 추가 열기'));
   fireEvent.changeText(screen.getByLabelText('새 항목'), 'QA-전환 전 항목');
-  fireEvent.press(screen.getByText('추가하기'));
+  fireEvent.press(screen.getByLabelText('항목 추가'));
   await waitFor(() => expect(mockOffset).toHaveBeenCalled());
   fireEvent.press(screen.getByLabelText('오픈'));
   await act(async () => { await new Promise(resolve => setTimeout(resolve, 150)); });
