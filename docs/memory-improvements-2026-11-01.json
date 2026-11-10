@@ -102,212 +102,344 @@
     {
       "id": "U01",
       "priority": "P1",
-      "status": "기존 구현",
+      "status": "구현 있음 / 남은 검증",
       "screens": "S26",
       "title": "수기 매출 기존값 보호",
       "files": "app/pos/new.tsx;lib/services/manualSales.ts",
-      "finding": "기존값 조회·변경 확인·조건부 update/insert가 이미 존재. 새 테스트 포함.",
-      "acceptance": "현금·할인·메모 보존, 충돌·중복·조회 실패 검증"
+      "finding": "기존값 조회·변경 확인·expected 기반 조건부 저장 구현. 현재 mock 회귀 통과.",
+      "acceptance": "현금·할인·메모 보존, 충돌·중복·조회 실패 검증",
+      "execution_group": "W17",
+      "phase": "verification_pending",
+      "evidence": {
+        "source": [
+          "app/pos/new.tsx",
+          "lib/services/manualSales.ts"
+        ],
+        "tests": [
+          "__tests__/components/ManualSaleDraft.test.tsx",
+          "__tests__/services/manualSaleWrite.test.ts"
+        ],
+        "tested_this_pass": true
+      },
+      "remaining_work": "기존 수용 기준의 실제 계정·기기 확인. 미충족 조건이 재현될 때만 추가 수정."
     },
     {
       "id": "U02",
       "priority": "P1",
-      "status": "이번 수정",
+      "status": "구현 있음 / 남은 검증",
       "screens": "S16",
       "title": "급여명세 월·계정·매장 응답 격리",
       "files": "app/mypage/payslip.tsx",
-      "finding": "조회 scope/이전 effect 무효화, 로딩·실패·미작성·직원 미연결 분리.",
-      "acceptance": "역순 월 응답, 매장 전환, 동일 월 재시도"
+      "finding": "계정/매장/직원/월 scope와 역순 응답 보호 구현. 현재 mock 회귀 통과.",
+      "acceptance": "역순 월 응답, 매장 전환, 동일 월 재시도",
+      "execution_group": "W17",
+      "phase": "verification_pending",
+      "evidence": {
+        "source": [
+          "app/mypage/payslip.tsx"
+        ],
+        "tests": [
+          "__tests__/components/PayslipRecovery.test.tsx",
+          "__tests__/components/PayslipScope.test.tsx"
+        ],
+        "tested_this_pass": true
+      },
+      "remaining_work": "기존 수용 기준의 실제 계정·기기 확인. 미충족 조건이 재현될 때만 추가 수정."
     },
     {
       "id": "U03",
       "priority": "P1",
-      "status": "이번 수정",
+      "status": "구현 있음 / 남은 검증",
       "screens": "S16",
       "title": "과거 명세에 현재 직원 조건 사용 금지",
       "files": "app/mypage/payslip.tsx",
-      "finding": "현재 고용형태·비과세로 지급/공제 분기하지 않고 저장된 총액·과세 기준·공제 항목 표시.",
-      "acceptance": "현재 직원 조건을 바꿔도 명세 표시가 변하지 않음"
+      "finding": "저장된 명세로 지급/과세 기준 설명. 현재 직원 조건 변경에 과거 명세를 다시 계산하지 않음. 현재 mock 회귀 통과.",
+      "acceptance": "현재 직원 조건을 바꿔도 명세 표시가 변하지 않음",
+      "execution_group": "W17",
+      "phase": "verification_pending",
+      "evidence": {
+        "source": [
+          "app/mypage/payslip.tsx"
+        ],
+        "tests": [
+          "__tests__/components/PayslipScope.test.tsx"
+        ],
+        "tested_this_pass": true
+      },
+      "remaining_work": "기존 수용 기준의 실제 계정·기기 확인. 미충족 조건이 재현될 때만 추가 수정."
     },
     {
       "id": "U04",
       "priority": "P1",
-      "status": "로컬 구현·회귀 통과 / 실제 업무 미검증",
+      "status": "구현 있음 / 남은 검증",
       "screens": "S05/M04",
       "title": "저장된 확정액과 미저장 공제 예상액 구분",
       "files": "app/(tabs)/payroll.tsx",
-      "finding": "저장된 확정액/미저장 예상액 분리, 초안·월 이동 보호 존재. 후속 공제 저장/재조회 겹침의 직원 누락도 수정하고 2명 합계 회귀 확인.",
-      "acceptance": "저장 확정액 별도 표시, 초안 보호·정산 해제 안내"
+      "finding": "저장 확정액/미저장 예상액·초안/월 이동 보호 구현. 재조회와 공제 저장 중 다른 직원 누락도 baseline에서 수정. 현재 mock 회귀 통과.",
+      "acceptance": "저장 확정액 별도 표시, 초안 보호·정산 해제 안내",
+      "execution_group": "W17",
+      "phase": "verification_pending",
+      "evidence": {
+        "source": [
+          "app/(tabs)/payroll.tsx",
+          "lib/hooks/usePayrollDeductionDraft.ts",
+          "lib/hooks/usePayroll.ts"
+        ],
+        "tests": [
+          "__tests__/components/PayrollDeductionDraft.test.tsx",
+          "__tests__/hooks/usePayrollDeductions.test.ts"
+        ],
+        "tested_this_pass": true
+      },
+      "remaining_work": "기존 수용 기준의 실제 계정·기기 확인. 미충족 조건이 재현될 때만 추가 수정."
     },
     {
       "id": "U05",
       "priority": "P1",
-      "status": "이번 수정",
+      "status": "구현 있음 / 남은 검증",
       "screens": "S21",
       "title": "알림 설정 저장 실패·응답 역전 복구",
       "files": "lib/hooks/useNotificationSettings.ts;app/notifications/settings.tsx",
-      "finding": "scope·조회 순번·동기 쓰기 잠금, 실패 시 이전값 복구/재조회 요구, 저장중 비활성.",
-      "acceptance": "조회 실패·저장 실패·연타·오래된 매장 응답 검사"
+      "finding": "실패 rollback/재조회 요구·scope·저장중 잠금 구현. 현재 mock 회귀 통과.",
+      "acceptance": "조회 실패·저장 실패·연타·오래된 매장 응답 검사",
+      "execution_group": "W17",
+      "phase": "verification_pending",
+      "evidence": {
+        "source": [
+          "lib/hooks/useNotificationSettings.ts",
+          "app/notifications/settings.tsx"
+        ],
+        "tests": [
+          "__tests__/components/NotificationSettingsRecovery.test.tsx",
+          "__tests__/hooks/useNotificationSettingsRecovery.test.ts"
+        ],
+        "tested_this_pass": true
+      },
+      "remaining_work": "기존 수용 기준의 실제 계정·기기 확인. 미충족 조건이 재현될 때만 추가 수정."
     },
     {
       "id": "U06",
       "priority": "P1",
-      "status": "로컬 구현·회귀 통과 / 실제 업무 미검증",
+      "status": "구현 있음 / 남은 검증",
       "screens": "S11/S17/S25",
       "title": "실패와 빈 목록 분리",
       "files": "lib/hooks/useCleaningChecklist.ts;app/mypage/requests.tsx;lib/hooks/useManualSales.ts",
-      "finding": "청소·요청함·수기매출의 읽기 오류와 빈 상태 분리, 쓰기 결과 불명 후 재조회 보호 구현 및 관련 mock 회귀 존재.",
-      "acceptance": "요청함·수기매출 조회/쓰기 실패 안내, 청소 회귀 검사"
+      "finding": "청소/요청함/수기매출 실패와 빈 목록 분리, 결과 불명 쓰기의 반복 방지 구현. 현재 mock 회귀 통과.",
+      "acceptance": "요청함·수기매출 조회/쓰기 실패 안내, 청소 회귀 검사",
+      "execution_group": "W17",
+      "phase": "verification_pending",
+      "evidence": {
+        "source": [
+          "lib/hooks/useCleaningChecklist.ts",
+          "lib/hooks/useRequestApprovals.ts",
+          "lib/hooks/useManualSales.ts"
+        ],
+        "tests": [
+          "__tests__/components/OperationsEmptyState.test.tsx",
+          "__tests__/hooks/OperationsReadRecovery.test.ts"
+        ],
+        "tested_this_pass": true
+      },
+      "remaining_work": "기존 수용 기준의 실제 계정·기기 확인. 미충족 조건이 재현될 때만 추가 수정."
     },
     {
       "id": "U07",
       "priority": "P1",
-      "status": "미적용 확인",
+      "status": "수정 필요",
       "screens": "S29/S32",
       "title": "전체 식자재 검색·페이지 선택",
       "files": "app/purchases/new.tsx;app/recipes/new.tsx;lib/hooks/useIngredients.ts",
       "finding": "매입 startsWith·로드된 품목 기준, 레시피 선택기 페이지 계약 누락이 남음.",
-      "acceptance": "빈 캐시 21번째 이후 중간 단어 검색·선택·실패 복구"
+      "acceptance": "빈 캐시 21번째 이후 중간 단어 검색·선택·실패 복구",
+      "execution_group": "W03",
+      "phase": "implementation_pending"
     },
     {
       "id": "U08",
       "priority": "P1",
-      "status": "기존 구현",
+      "status": "구현 있음 / 남은 검증",
       "screens": "S30",
       "title": "레시피 재시도 후 오류 해제",
       "files": "app/recipes/[id].tsx",
-      "finding": "setError(null)과 요청 순번 보호 이미 존재.",
-      "acceptance": "실패→재시도 성공 행동 테스트·실제 화면은 별도"
+      "finding": "loadRecipe 시작 setError(null), 요청 순번 보호, ErrorMessage onRetry 연결 존재. 이번 동작 회귀는 미실행; 코드 존재를 네이티브 통과로 보지 않음.",
+      "acceptance": "실패→재시도 성공 행동 테스트·실제 화면은 별도",
+      "execution_group": "W17",
+      "phase": "verification_pending",
+      "evidence": {
+        "source": [
+          "app/recipes/[id].tsx"
+        ],
+        "tests": [],
+        "tested_this_pass": false
+      },
+      "remaining_work": "실패→같은 경로 재시도 성공 동작 테스트 및 실제 화면 확인."
     },
     {
       "id": "U09",
       "priority": "P1",
-      "status": "이번 수정",
+      "status": "구현 있음 / 남은 검증",
       "screens": "S38/S39",
       "title": "저장 완료와 후속 조회 실패 분리",
       "files": "app/settings/sales.tsx;app/settings/store.tsx",
-      "finding": "쓰기 성공을 유지하고 읽기만 재시도. 재저장 잠금·매장 전환 후 오래된 결과 억제.",
-      "acceptance": "두 설정 화면의 쓰기/읽기 분리 테스트"
+      "finding": "savedNeedsRefresh로 쓰기 성공과 조회 실패 분리, 읽기만 재시도. 현재 mock 회귀 통과.",
+      "acceptance": "두 설정 화면의 쓰기/읽기 분리 테스트",
+      "execution_group": "W17",
+      "phase": "verification_pending",
+      "evidence": {
+        "source": [
+          "app/settings/store.tsx",
+          "app/settings/sales.tsx"
+        ],
+        "tests": [
+          "__tests__/components/StoreSettingsRecovery.test.tsx"
+        ],
+        "tested_this_pass": true
+      },
+      "remaining_work": "기존 수용 기준의 실제 계정·기기 확인. 미충족 조건이 재현될 때만 추가 수정."
     },
     {
       "id": "U10",
       "priority": "P2",
-      "status": "결정 충돌",
+      "status": "결정 필요",
       "screens": "S01",
       "title": "Apple 로그인 제공 범위",
       "files": "app/(auth)/login.tsx;__tests__/components/LoginScreen.test.tsx",
       "finding": "AGENTS iOS 한정과 현재 Android Apple 노출 기대 테스트가 충돌. 무조건 옛 범위로 회귀 금지.",
-      "acceptance": "최신 사용자 결정/원문 확인 후 화면·서비스·테스트 동시 정합화"
+      "acceptance": "최신 사용자 결정/원문 확인 후 화면·서비스·테스트 동시 정합화",
+      "execution_group": "W16",
+      "phase": "decision_pending"
     },
     {
       "id": "U11",
       "priority": "P2",
-      "status": "미적용 확인",
+      "status": "수정 필요",
       "screens": "S05",
       "title": "과거 월 퇴사자 명세 조회",
       "files": "app/(tabs)/payroll.tsx",
       "finding": "is_active !== false 필터가 남음.",
-      "acceptance": "선택 월 명세가 있는 퇴사자 포함, 총액 구성원 추적"
+      "acceptance": "선택 월 명세가 있는 퇴사자 포함, 총액 구성원 추적",
+      "execution_group": "W05",
+      "phase": "implementation_pending"
     },
     {
       "id": "U12",
       "priority": "P2",
-      "status": "미적용 확인",
+      "status": "수정 필요",
       "screens": "S05",
       "title": "직원 삭제·퇴사 용어 구분",
       "files": "app/(tabs)/payroll.tsx",
       "finding": "deactivate 동작의 직원 삭제 문구가 남음.",
-      "acceptance": "퇴사 처리로 명명하고 급여 보존·계정 접근 영향 안내"
+      "acceptance": "퇴사 처리로 명명하고 급여 보존·계정 접근 영향 안내",
+      "execution_group": "W05",
+      "phase": "implementation_pending"
     },
     {
       "id": "U13",
       "priority": "P2",
-      "status": "부분 적용",
+      "status": "일부 구현 / 남은 화면 확인",
       "screens": "S05/S18/S26/S33/S35/S36/S38/S39/M06",
       "title": "작성값·이탈 보호",
       "files": "app/pos/new.tsx;app/mypage/schedule.tsx;lib/components/MemberApprovalModal.tsx",
-      "finding": "수기매출은 기존 보호 확인. 나머지 폼별 dirty/취소/월 이동 상태는 재확인 필요.",
-      "acceptance": "공통 useConfirmLeave 적용 범위표·쓰는 중 뒤로/취소·초안 보존"
+      "finding": "수기 매출 날짜 변경/이탈, 급여 공제 초안·월 이동 보호는 구현됨. 스케줄·승인·일반 설정 등 남은 화면만 별도 확인. U24/U34와 겹치는 저장중 닫기는 해당 ID에서 한 번 추적.",
+      "acceptance": "공통 useConfirmLeave 적용 범위표·쓰는 중 뒤로/취소·초안 보존",
+      "execution_group": "W09",
+      "phase": "partial"
     },
     {
       "id": "U14",
       "priority": "P2",
-      "status": "재확인 필요",
+      "status": "재현·범위 확인 필요",
       "screens": "S17/S18",
       "title": "스케줄 확정과 요청의 전후 비교",
       "files": "app/mypage/schedule.tsx;app/mypage/requests.tsx",
       "finding": "기존 감사 지적. 현재 업무 행동 재현은 미실행.",
-      "acceptance": "확정/승인대기/작성 분리·이전→요청 시간"
+      "acceptance": "확정/승인대기/작성 분리·이전→요청 시간",
+      "execution_group": "W08",
+      "phase": "review_pending"
     },
     {
       "id": "U15",
       "priority": "P2",
-      "status": "미적용 확인",
+      "status": "수정 필요",
       "screens": "S15/S18",
       "title": "스케줄 로딩·미연결·조회 실패 분리",
       "files": "lib/hooks/useSchedule.ts",
       "finding": "현재 반환값에 error 없음.",
-      "acceptance": "직원과 스케줄 각각 로딩/실패/미연결/미설정 분리"
+      "acceptance": "직원과 스케줄 각각 로딩/실패/미연결/미설정 분리",
+      "execution_group": "W08",
+      "phase": "implementation_pending"
     },
     {
       "id": "U16",
       "priority": "P2",
-      "status": "미적용 확인",
+      "status": "수정 필요",
       "screens": "S19/M05",
       "title": "날짜 선택·시간/분 입력·필드 오류",
       "files": "lib/components/DailyWorkPanel.tsx",
       "finding": "YYYY-MM-DD 문자열과 분 직접 입력·공통 메시지 유지.",
-      "acceptance": "날짜 선택기·시간/분→총분 환산·필드 오류"
+      "acceptance": "날짜 선택기·시간/분→총분 환산·필드 오류",
+      "execution_group": "W06",
+      "phase": "implementation_pending"
     },
     {
       "id": "U17",
       "priority": "P2",
-      "status": "미적용 확인",
+      "status": "수정 필요",
       "screens": "S19/M05",
       "title": "일별 근무 검토 압축·반영 불가 이유",
       "files": "lib/components/DailyWorkPanel.tsx",
       "finding": "모든 일별 카드 반복, disabled 조건·이력에 변경자/시각/사유 설명 부족.",
-      "acceptance": "확인 대기 필터·선택 상세·반영 불가 원인·전체 이력 맥락"
+      "acceptance": "확인 대기 필터·선택 상세·반영 불가 원인·전체 이력 맥락",
+      "execution_group": "W06",
+      "phase": "implementation_pending"
     },
     {
       "id": "U18",
       "priority": "P2",
-      "status": "재확인 필요",
+      "status": "재현·범위 확인 필요",
       "screens": "S22",
       "title": "정산 누락 직원 바로가기·전체 완료",
       "files": "app/payroll/settlement.tsx",
       "finding": "서비스 결과 건수 검사는 이미 추가. 화면의 누락 대상·완료 UX는 별도.",
-      "acceptance": "누락 직원/항목 표시·전체 정산 완료와 새 확정 행동 구분"
+      "acceptance": "누락 직원/항목 표시·전체 정산 완료와 새 확정 행동 구분",
+      "execution_group": "W07",
+      "phase": "review_pending"
     },
     {
       "id": "U19",
       "priority": "P1",
-      "status": "부분 적용",
+      "status": "수정 필요",
       "screens": "S07/S31",
       "title": "레시피 두 목록 페이지·오류 일치",
       "files": "app/(tabs)/stock.tsx;app/recipes/index.tsx",
       "finding": "독립 목록은 loadMore/error 사용, 재고 탭은 useRecipes 일부 반환값만 사용.",
-      "acceptance": "전체 기준 검색/정렬/개수 또는 로드 자료 명시, 두 목록 비교"
+      "acceptance": "전체 기준 검색/정렬/개수 또는 로드 자료 명시, 두 목록 비교",
+      "execution_group": "W03",
+      "phase": "implementation_pending"
     },
     {
       "id": "U20",
       "priority": "P1",
-      "status": "미적용 확인",
+      "status": "수정 필요",
       "screens": "S40/S41",
       "title": "재고 숫자·단위 입력 검증",
       "files": "app/stock/new.tsx;app/stock/[id].tsx",
       "finding": "parseFloat 또는 0 경로 유지.",
-      "acceptance": "빈값/0/음수/Infinity/접미사/쉼표 정규화·단위 라벨·범위 검증"
+      "acceptance": "빈값/0/음수/Infinity/접미사/쉼표 정규화·단위 라벨·범위 검증",
+      "execution_group": "W02",
+      "phase": "implementation_pending"
     },
     {
       "id": "U21",
       "priority": "P1",
-      "status": "재확인 필요",
+      "status": "수정 필요",
       "screens": "S32",
       "title": "레시피 재료별 양수·유한수 검증",
       "files": "app/recipes/new.tsx",
-      "finding": "기존 감사의 행별 수량 검증 지적은 별도 재현 필요.",
-      "acceptance": "행별 오류·포커스·저장 수량과 원가 미리보기 일치"
+      "finding": "현재 handleSubmit은 재료별 양수·유한수 검증 없이 quantity를 parseFloat(...) || 0으로 저장 경로에 전달. 서비스/DB 거절 여부와 별도로 폼 검증 보완 필요.",
+      "acceptance": "행별 오류·포커스·저장 수량과 원가 미리보기 일치",
+      "execution_group": "W02",
+      "phase": "implementation_pending"
     },
     {
       "id": "U22",
@@ -317,107 +449,129 @@
       "title": "0원 단가 신규·수정 규칙 통일",
       "files": "app/purchases/[id].tsx;app/purchases/new.tsx",
       "finding": "상세는 0 거부, 신규/서버 허용. 추천은 무상 품목 0 허용 일치.",
-      "acceptance": "정책 확정 후 신규→수량 수정→0원 유지 저장"
+      "acceptance": "정책 확정 후 신규→수량 수정→0원 유지 저장",
+      "execution_group": "W20",
+      "phase": "decision_pending"
     },
     {
       "id": "U23",
       "priority": "P1",
-      "status": "미적용 확인",
+      "status": "수정 필요",
       "screens": "S28/S40",
       "title": "매입·재고 상세 조회 재시도",
       "files": "app/purchases/[id].tsx;app/stock/[id].tsx",
       "finding": "매입 오류 텍스트만, 재고 ErrorMessage onRetry 없음.",
-      "acceptance": "같은 경로에서 재시도·뒤로 유지·성공 후 오류 해제"
+      "acceptance": "같은 경로에서 재시도·뒤로 유지·성공 후 오류 해제",
+      "execution_group": "W04",
+      "phase": "implementation_pending"
     },
     {
       "id": "U24",
       "priority": "P2",
-      "status": "재확인 필요",
+      "status": "재현·범위 확인 필요",
       "screens": "S12/S28",
       "title": "저장 중 취소·닫기 계약",
       "files": "lib/components/ExpensesPanel.tsx;app/purchases/[id].tsx",
       "finding": "기존 감사 지적. 실제 요청 중 닫기 재현 미실행.",
-      "acceptance": "요청 중 닫기 차단 또는 처리 결과 추적·취소 오인 방지"
+      "acceptance": "요청 중 닫기 차단 또는 처리 결과 추적·취소 오인 방지",
+      "execution_group": "W09",
+      "phase": "review_pending"
     },
     {
       "id": "U25",
       "priority": "P2",
-      "status": "재확인 필요",
+      "status": "재현·범위 확인 필요",
       "screens": "S12",
       "title": "등록 비용·이월 고정비·손익 반영액 구분",
       "files": "lib/components/ExpensesPanel.tsx",
       "finding": "기존 감사의 서로 다른 합계 기준 안내 보완 제안.",
-      "acceptance": "직접 등록 + 이월 적용 = 손익 반영 관계 표시"
+      "acceptance": "직접 등록 + 이월 적용 = 손익 반영 관계 표시",
+      "execution_group": "W13",
+      "phase": "review_pending"
     },
     {
       "id": "U26",
       "priority": "P2",
-      "status": "미적용 확인",
+      "status": "수정 필요",
       "screens": "S20",
       "title": "알림에서 대상 업무로 이동",
       "files": "app/notifications/index.tsx",
       "finding": "members 카테고리만 이동.",
-      "acceptance": "대상 매장·날짜·권한을 보존한 목적지, 읽음과 해결 구분"
+      "acceptance": "대상 매장·날짜·권한을 보존한 목적지, 읽음과 해결 구분",
+      "execution_group": "W10",
+      "phase": "implementation_pending"
     },
     {
       "id": "U27",
       "priority": "P2",
-      "status": "미적용 확인",
+      "status": "수정 필요",
       "screens": "S04",
       "title": "읽음 실패와 업무 진입 분리",
       "files": "lib/components/HomeAlertsPanel.tsx",
       "finding": "markRead 성공/현재 scope 확인 후에만 이동. 읽음 체크 아이콘 유지.",
-      "acceptance": "읽기 저장 실패에도 안전한 현재 매장 업무 진입·읽음 의미 안내"
+      "acceptance": "읽기 저장 실패에도 안전한 현재 매장 업무 진입·읽음 의미 안내",
+      "execution_group": "W10",
+      "phase": "implementation_pending"
     },
     {
       "id": "U28",
       "priority": "P2",
-      "status": "부분 적용",
+      "status": "수정 필요",
       "screens": "S10",
       "title": "청소 순서 저장 실패 복원·행 저장 보호",
       "files": "app/cleaning/edit.tsx",
       "finding": "기존 조회 동기화 hotfix와 reordering 표시는 있음. handleDragEnd catch는 경고뿐.",
-      "acceptance": "실패 시 이전 순서 복원/미저장 안내·입력 유지·동시 드래그 잠금"
+      "acceptance": "실패 시 이전 순서 복원/미저장 안내·입력 유지·동시 드래그 잠금",
+      "execution_group": "W11",
+      "phase": "implementation_pending"
     },
     {
       "id": "U29",
       "priority": "P2",
-      "status": "부분 적용",
+      "status": "수정 필요",
       "screens": "S37",
       "title": "POS 연결 장기 대기 복구",
       "files": "app/settings/pos-sync.tsx",
       "finding": "초기 조회 실패 재확인 있음. 대기 중 마지막 확인·명시적 수동 재확인/문의는 부족.",
-      "acceptance": "상태별 수동 재확인·마지막 시각·지원 경로"
+      "acceptance": "상태별 수동 재확인·마지막 시각·지원 경로",
+      "execution_group": "W12",
+      "phase": "implementation_pending"
     },
     {
       "id": "U30",
       "priority": "P2",
-      "status": "미적용 확인",
+      "status": "수정 필요",
       "screens": "S13/S14",
       "title": "약관·개인정보 문의와 보존 안내 일치",
       "files": "app/legal/terms.tsx;app/legal/privacy.tsx",
       "finding": "개인정보는 실제 이메일, 약관은 일반 표현. 보존 설명 차이 유지.",
-      "acceptance": "지원 이메일 행동·계정 삭제와 매장 공용자료 보존 문구 통일; 법률 검토 별도"
+      "acceptance": "지원 이메일 행동·계정 삭제와 매장 공용자료 보존 문구 통일; 법률 검토 별도",
+      "execution_group": "W15",
+      "phase": "implementation_pending"
     },
     {
       "id": "U31",
       "priority": "P2",
-      "status": "미적용 확인",
+      "status": "수정 필요",
       "screens": "S27",
       "title": "수수료 추정·이월·원천징수 산정 근거",
       "files": "app/profit-loss/index.tsx;lib/services/profitLoss.ts",
       "finding": "카드 수수료와 원천징수 하위 항목 설명 보완 필요.",
-      "acceptance": "추정 기준·이월 출처·원천징수는 세전 인건비 내 참고항목 명시"
+      "acceptance": "추정 기준·이월 출처·원천징수는 세전 인건비 내 참고항목 명시",
+      "execution_group": "W13",
+      "phase": "implementation_pending"
     },
     {
       "id": "U32",
       "priority": "P2",
-      "status": "미적용 확인",
+      "status": "수정 필요",
       "screens": "S04/S27",
       "title": "홈 선택 월로 손익계산서 이동",
       "files": "app/(tabs)/index.tsx",
       "finding": "손익 정산 라벨과 파라미터 없는 /profit-loss 이동 유지.",
-      "acceptance": "손익계산서 보기 명칭·yearMonth 전달·이전 연도 월 유지"
+      "acceptance": "손익계산서 보기 명칭·yearMonth 전달·이전 연도 월 유지",
+      "execution_group": "W14",
+      "phase": "implementation_pending"
     },
     {
       "id": "U33",
@@ -427,17 +581,21 @@
       "title": "관리자 연간/월간 손익 진입 계약",
       "files": "app/admin/index.tsx;app/profit-loss/index.tsx",
       "finding": "관리자는 period 전달, 상세는 yearMonth만 읽음.",
-      "acceptance": "연간 진입 시 연간 화면/월 선택 등 의도 확정·매장명과 기간 일치"
+      "acceptance": "연간 진입 시 연간 화면/월 선택 등 의도 확정·매장명과 기간 일치",
+      "execution_group": "W14",
+      "phase": "decision_pending"
     },
     {
       "id": "U34",
       "priority": "P2",
-      "status": "재확인 필요",
+      "status": "재현·범위 확인 필요",
       "screens": "M07",
       "title": "분류·가져오기 요청 대상·선택 고정",
       "files": "lib/components/CatalogImportModal.tsx;lib/components/BulkCategoryModal.tsx",
       "finding": "기존 감사 지적. 현재 부모 처리 포함 실제 취소/부분 실패 검증 필요.",
-      "acceptance": "저장중 선택 고정·닫기 계약·대상 매장/개수/부분 실패 표시"
+      "acceptance": "저장중 선택 고정·닫기 계약·대상 매장/개수/부분 실패 표시",
+      "execution_group": "W09",
+      "phase": "review_pending"
     }
   ],
   "visual_proposals": [
@@ -494,72 +652,91 @@
     {
       "id": "DB-01/05",
       "status": "기존 로컬 수정 존재",
-      "acceptance": "`20261101011000_part_time_catalog_write_guards.sql`, 권한 훅·UI·테스트 이미 추가. PT 레시피 조회/재고 수량만 변경 계약. 현재 원격 적용은 이번 세션 미조회이므로 미적용 확정 금지. 실제 정규직/PT/타매장/대기 JWT·전체 정책 누적 검사 남음"
+      "acceptance": "`20261101011000_part_time_catalog_write_guards.sql`, 권한 훅·UI·테스트 이미 추가. PT 레시피 조회/재고 수량만 변경 계약. 현재 원격 적용은 이번 세션 미조회이므로 미적용 확정 금지. 실제 정규직/PT/타매장/대기 JWT·전체 정책 누적 검사 남음",
+      "execution_group": "W01"
     },
     {
       "id": "DB-02",
-      "status": "U22와 중복",
-      "acceptance": "0원 단가 정책·클라이언트/서버 일치로 묶음"
+      "status": "U22에 통합 / 별도 작업 없음",
+      "acceptance": "0원 단가 정책·클라이언트/서버 일치로 묶음",
+      "execution_group": "W20",
+      "canonical_id": "U22"
     },
     {
       "id": "DB-03",
-      "status": "기존 로컬 수정 존재",
-      "acceptance": "settlePayrolls가 반환 ID set과 기대 ID를 비교. 관련 payrollSettlementResult 테스트 존재. 실제 권한 회수/삭제/혼합 ID E2E는 별도"
+      "status": "구현 있음 / 실제 부분처리 검증",
+      "acceptance": "settlePayrolls가 반환 ID set과 기대 ID를 비교. 관련 payrollSettlementResult 테스트 존재. 실제 권한 회수/삭제/혼합 ID E2E는 별도",
+      "execution_group": "W07",
+      "canonical_id": "U18",
+      "implementation_rework": false
     },
     {
       "id": "DB-04",
       "status": "제품 제외·점검 필요",
-      "acceptance": "발주 화면을 새로 만들지 않음. 레거시 deliver_order RPC 노출·멱등성은 서버 보안 점검 후보"
+      "acceptance": "발주 화면을 새로 만들지 않음. 레거시 deliver_order RPC 노출·멱등성은 서버 보안 점검 후보",
+      "execution_group": "W01"
     },
     {
       "id": "DB-06",
       "status": "검증 필요",
-      "acceptance": "financial RPC 후속 재정의·migration 순서의 권한 가드 유지. 전체 체인 격리 검사와 실제 JWT 거절 검증"
+      "acceptance": "financial RPC 후속 재정의·migration 순서의 권한 가드 유지. 전체 체인 격리 검사와 실제 JWT 거절 검증",
+      "execution_group": "W01"
     },
     {
       "id": "DB-07",
       "status": "기존 로컬 수정 존재",
-      "acceptance": "`20261101010000_revoke_client_truncate.sql`이 잔여 TRUNCATE ACL 회수 준비. 실제 원격 적용/ACL은 새 조회 전 불명. 삭제 명령으로 검증하지 않음"
+      "acceptance": "`20261101010000_revoke_client_truncate.sql`이 잔여 TRUNCATE ACL 회수 준비. 실제 원격 적용/ACL은 새 조회 전 불명. 삭제 명령으로 검증하지 않음",
+      "execution_group": "W01"
     },
     {
       "id": "DB-08",
-      "status": "서버 대조 기록 있음",
-      "acceptance": "11/1 문서에 급여·일별 함수 11/11 본문 일치. 당시 '미적용' 메모리는 과거 사실. migration 이력 부재와 객체 부재를 혼동하지 않음. 과거 보정 DML/실제 업무 검증은 남음"
+      "status": "서버 대조 완료 기록 / 업무·DML 검증 남음",
+      "acceptance": "11/1 문서에 급여·일별 함수 11/11 본문 일치. 당시 '미적용' 메모리는 과거 사실. migration 이력 부재와 객체 부재를 혼동하지 않음. 과거 보정 DML/실제 업무 검증은 남음",
+      "execution_group": "W06",
+      "implementation_rework": false
     },
     {
       "id": "AUTH-01",
       "status": "설계·제품 결정 필요",
-      "acceptance": "동일 이메일 소셜 계정을 명시 연결 전 분리하려던 과거 요청. 현 문서는 Provider 정책에 따름. 최신 요구 확인 후 계정 이동·급여 연결 보존을 포함한 설계, 자동 계정 분리/새 자격증명 생성 금지"
+      "acceptance": "동일 이메일 소셜 계정을 명시 연결 전 분리하려던 과거 요청. 현 문서는 Provider 정책에 따름. 최신 요구 확인 후 계정 이동·급여 연결 보존을 포함한 설계, 자동 계정 분리/새 자격증명 생성 금지",
+      "execution_group": "W16"
     },
     {
       "id": "AUTH-02",
       "status": "검증 필요",
-      "acceptance": "Apple/카카오 로그인·탈퇴·연결 해제, 세션 만료·권한 변경·실제 소유권. Google 탈퇴 성공 기록으로 다른 Provider 통과 추정 금지"
+      "acceptance": "Apple/카카오 로그인·탈퇴·연결 해제, 세션 만료·권한 변경·실제 소유권. Google 탈퇴 성공 기록으로 다른 Provider 통과 추정 금지",
+      "execution_group": "W16"
     },
     {
       "id": "JOIN-01",
       "status": "결정 이력 대조 필요",
-      "acceptance": "현재 16자리 참여코드와 과거 사업자번호 기반 신청 차이. 최신 결정/최초 설정 무번호 정책과 대조 후 요구 확정. 기존 흐름 무단 회귀 금지"
+      "acceptance": "현재 16자리 참여코드와 과거 사업자번호 기반 신청 차이. 최신 결정/최초 설정 무번호 정책과 대조 후 요구 확정. 기존 흐름 무단 회귀 금지",
+      "execution_group": "W16"
     },
     {
       "id": "POS-01",
       "status": "후순위·미완성",
-      "acceptance": "서비스코드만으로 사업자번호 없는 신규 매장을 안전하게 자동 연결하는 절차. 현재 안내형 연결을 성공으로 부르지 않음"
+      "acceptance": "서비스코드만으로 사업자번호 없는 신규 매장을 안전하게 자동 연결하는 절차. 현재 안내형 연결을 성공으로 부르지 않음",
+      "execution_group": "W12",
+      "deferred": true
     },
     {
       "id": "RELEASE-01",
       "status": "검증 필요",
-      "acceptance": "최종 소스 해시/빌드/런타임/채널/스토어 승인·OTA 수신/오프라인 재실행·복구 연결. 과거 발행 완료 기록은 유지"
+      "acceptance": "최종 소스 해시/빌드/런타임/채널/스토어 승인·OTA 수신/오프라인 재실행·복구 연결. 과거 발행 완료 기록은 유지",
+      "execution_group": "W18"
     },
     {
       "id": "RELEASE-02",
       "status": "과거 경고·재확인",
-      "acceptance": "iOS framework dSYM 누락 경고와 crash symbolication 가능 범위를 최종 배포 산출물에서 확인"
+      "acceptance": "iOS framework dSYM 누락 경고와 crash symbolication 가능 범위를 최종 배포 산출물에서 확인",
+      "execution_group": "W18"
     },
     {
       "id": "BUILD-01",
       "status": "재현 필요",
-      "acceptance": "Android 클린 의존성 설치 후 Gradle/Foojay 지속 설정 확인. 과거 오류 때문에 현재 빌드 실패로 단정하지 않음"
+      "acceptance": "Android 클린 의존성 설치 후 Gradle/Foojay 지속 설정 확인. 과거 오류 때문에 현재 빌드 실패로 단정하지 않음",
+      "execution_group": "W18"
     }
   ],
   "verified_source_sha256": {
@@ -583,5 +760,596 @@
     "remote": false,
     "device": false,
     "note": "Historical verification above is preserved. New baseline commit SHA is in workspaces/creation-record.json after creation."
+  },
+  "execution_groups": [
+    {
+      "id": "W20",
+      "title": "0원 매입 단가 정책",
+      "owner": "03 재고·레시피·매입",
+      "source_ids": [
+        "U22",
+        "DB-02"
+      ],
+      "remaining": "같은 정책 항목을 U22에 통합. 무상 품목 신규/수정 허용 범위를 결정한 뒤 한 번만 반영. W02 숫자 유효성 검증과 별도 완료 기준."
+    },
+    {
+      "id": "W01",
+      "title": "서버 권한 검증",
+      "owner": "06 서버 권한·인증",
+      "source_ids": [
+        "DB-01/05",
+        "DB-06",
+        "DB-07",
+        "DB-04"
+      ],
+      "remaining": "기존 제한 SQL·권한 훅 재작성 제외. 전체 로컬 정책과 실제 역할별 JWT 검증을 분리. DB-04는 발주 개발 없이 기존 RPC 보안 점검만. 원격 변경 별도 승인."
+    },
+    {
+      "id": "W02",
+      "title": "재고·레시피 숫자 검증",
+      "owner": "03 재고·레시피·매입",
+      "source_ids": [
+        "U20",
+        "U21"
+      ],
+      "remaining": "parseFloat 및 잘못된 입력의 0 대체 경로를 보완. 빈값/0/음수/무한수/접미사/쉼표·단위·행별 오류. U22의 0원 단가 정책과 분리."
+    },
+    {
+      "id": "W03",
+      "title": "전체 품목 검색·목록 페이지",
+      "owner": "03 재고·레시피·매입",
+      "source_ids": [
+        "U07",
+        "U19"
+      ],
+      "remaining": "선택기와 두 레시피 목록의 전체 검색/페이지/개수/오류를 하나의 조회 계약으로 정리. 서로 다른 화면의 수용 기준은 유지."
+    },
+    {
+      "id": "W04",
+      "title": "매입·재고 상세 재시도",
+      "owner": "03 재고·레시피·매입",
+      "source_ids": [
+        "U23"
+      ],
+      "remaining": "매입/재고 상세의 같은 경로 재시도 추가. 이미 오류 해제 코드가 있는 레시피 U08을 다시 구현하지 않음."
+    },
+    {
+      "id": "W05",
+      "title": "퇴사자 과거 명세·표현",
+      "owner": "02 급여·근무",
+      "source_ids": [
+        "U11",
+        "U12"
+      ],
+      "remaining": "선택 월 명세 보존과 실제 퇴사 동작의 문구 정리. 현 직원 목록 필터와 삭제 문구는 아직 남음."
+    },
+    {
+      "id": "W06",
+      "title": "일별 근무 입력·검토",
+      "owner": "02 급여·근무",
+      "source_ids": [
+        "U16",
+        "U17",
+        "DB-08"
+      ],
+      "remaining": "입력/검토 UX 개선과 실제 급여 반영·이력 보존 검증. DB-08의 11개 함수 대조를 재실행·재적용 작업으로 등록하지 않음."
+    },
+    {
+      "id": "W07",
+      "title": "정산 누락·완료 상태",
+      "owner": "02 급여·근무",
+      "source_ids": [
+        "U18",
+        "DB-03"
+      ],
+      "remaining": "DB-03 반환 ID 대조는 기존 구현. 누락 직원 바로가기/전체 완료 UX 재현과 실제 부분 처리 검증만 남김."
+    },
+    {
+      "id": "W08",
+      "title": "스케줄 상태·변경 비교",
+      "owner": "04 운영·알림·스케줄",
+      "source_ids": [
+        "U14",
+        "U15"
+      ],
+      "remaining": "확정/요청/작성 분리와 로딩·실패·미연결 대응. U06 요청함의 오류 복구를 중복 구현하지 않음."
+    },
+    {
+      "id": "W09",
+      "title": "남은 폼 이탈·처리중 행동",
+      "owner": "각 화면 소유자; 00 조정",
+      "source_ids": [
+        "U13",
+        "U24",
+        "U34"
+      ],
+      "remaining": "U13 중 수기매출/급여 공제 초안은 기존 구현. 남은 폼만 화면별 체크. 비용·매입·분류/가져오기 저장중 닫기는 U24/U34로 추적하며 한 번만 구현."
+    },
+    {
+      "id": "W10",
+      "title": "알림 업무 이동",
+      "owner": "04 운영·알림·스케줄",
+      "source_ids": [
+        "U26",
+        "U27"
+      ],
+      "remaining": "알림 목록/홈 알림의 매장·날짜·권한 이동 계약 통일. 읽음 저장과 업무 해결은 구분."
+    },
+    {
+      "id": "W11",
+      "title": "청소 순서 저장 복구",
+      "owner": "04 운영·알림·스케줄",
+      "source_ids": [
+        "U28"
+      ],
+      "remaining": "추가 직후 동기화 hotfix는 완료 기록. 드래그 순서 실패 복원/동시 입력 보호는 다른 문제로 남김."
+    },
+    {
+      "id": "W12",
+      "title": "POS 대기 복구",
+      "owner": "05 손익·매출·설정",
+      "source_ids": [
+        "U29"
+      ],
+      "remaining": "대기 중 수동 재확인·마지막 시각·문의 안내. POS-01 무번호 자동 연결 구현은 후순위 별도 정책."
+    },
+    {
+      "id": "W13",
+      "title": "비용·손익 산정 설명",
+      "owner": "05 손익·매출·설정",
+      "source_ids": [
+        "U25",
+        "U31"
+      ],
+      "remaining": "등록 비용/이월/반영액과 수수료 추정·원천징수 참고를 연결. U25는 실제 화면 재확인 후 변경 범위 확정."
+    },
+    {
+      "id": "W14",
+      "title": "손익 진입 기간",
+      "owner": "05 손익·매출·설정",
+      "source_ids": [
+        "U32",
+        "U33"
+      ],
+      "remaining": "U32 홈 월 전달은 확인된 수정 대상. U33 연간 진입 의도는 별도 결정 후 처리. 하나를 끝내도 다른 하나 자동 완료 금지."
+    },
+    {
+      "id": "W15",
+      "title": "문의·보존 안내",
+      "owner": "05 손익·매출·설정",
+      "source_ids": [
+        "U30"
+      ],
+      "remaining": "약관/개인정보 지원·공용자료 보존 문구 정합화. 법률 검토 완료를 뜻하지 않음."
+    },
+    {
+      "id": "W16",
+      "title": "인증·합류 정책과 검증",
+      "owner": "06 서버 권한·인증",
+      "source_ids": [
+        "U10",
+        "AUTH-01",
+        "AUTH-02",
+        "JOIN-01"
+      ],
+      "remaining": "Apple 제공 범위·계정 연결·참여코드 이력 결정과 Provider 검증을 분리. 기존 합류·OAuth 구현을 재개발하지 않음."
+    },
+    {
+      "id": "W17",
+      "title": "기존 구현 수용 검증",
+      "owner": "각 도메인; 00 QA 조정",
+      "source_ids": [
+        "U01",
+        "U02",
+        "U03",
+        "U04",
+        "U05",
+        "U06",
+        "U08",
+        "U09"
+      ],
+      "remaining": "이미 구현된 8개는 신규 수정 목록에서 제외. U08은 코드 확인만으로 테스트 완료 처리하지 않음. 실제 계정/기기 검증과 관련 미충족 기준은 남김."
+    },
+    {
+      "id": "W18",
+      "title": "빌드·설치본·업데이트 대조",
+      "owner": "00 통합·검증",
+      "source_ids": [
+        "BUILD-01",
+        "RELEASE-01",
+        "RELEASE-02"
+      ],
+      "remaining": "baseline commit/작업소 생성과 기존 배포는 이미 있음. 현재 배포본 포함 여부·수신·클린 빌드·dSYM 검증만 남김."
+    },
+    {
+      "id": "W19",
+      "title": "시각·접근성 후속 제안",
+      "owner": "01 디자인·공통 UI 및 화면 소유자",
+      "source_ids": [
+        "V01",
+        "V02",
+        "V03",
+        "V04",
+        "V05",
+        "V06",
+        "V07"
+      ],
+      "remaining": "글래스/아이콘/목록 최적화/모션 재적용 제외. 남은 정보 위계·큰 글자/VoiceOver·실제 성능 검증을 기존 제안별로 확인. 전면 리디자인 승인 아님."
+    }
+  ],
+  "deduplication": {
+    "at": "2026-11-02T11:04:36.573682+09:00",
+    "baseline_commit": "010541dfd7f8ff0e576f35fa92a3add1709ad67a",
+    "scope": "코드/테스트·기존 기록 대조",
+    "counts_u34": {
+      "verification_pending": 8,
+      "implementation_pending": 17,
+      "decision_pending": 3,
+      "partial": 1,
+      "review_pending": 5
+    },
+    "implementation_present_ids": [
+      "U01",
+      "U02",
+      "U03",
+      "U04",
+      "U05",
+      "U06",
+      "U08",
+      "U09"
+    ],
+    "regression": {
+      "suites": 12,
+      "tests": 92,
+      "status": "passed",
+      "log": "/private/tmp/rattle-dedup-verification-20261102.log"
+    },
+    "remote_checked": false,
+    "device_executed": false,
+    "next_recommended": "W02",
+    "note": "8개는 구현 존재 판정이며 전체 완료 8건이 아니다. 실행 그룹은 기존 ID를 묶은 관리 단위로 결함 수와 비교하지 않는다. 과거 verification 필드는 당시 결과로 보존한다."
+  },
+  "worktree_plan_index": {
+    "at": "2026-11-02",
+    "status_source": "docs/workspaces/01~06 role Markdown files",
+    "assignment": {
+      "U13": {
+        "worktree": "01",
+        "document": "/Users/cookhan/orca/workspaces/rattle/01-디자인-공통-UI/docs/workspaces/01-design-system.md",
+        "stage": 1,
+        "state": "일부 구현 / 남은 화면 확인"
+      },
+      "V01": {
+        "worktree": "01",
+        "document": "/Users/cookhan/orca/workspaces/rattle/01-디자인-공통-UI/docs/workspaces/01-design-system.md",
+        "stage": 6,
+        "state": "제안/검증 대기"
+      },
+      "V02": {
+        "worktree": "01",
+        "document": "/Users/cookhan/orca/workspaces/rattle/01-디자인-공통-UI/docs/workspaces/01-design-system.md",
+        "stage": 6,
+        "state": "제안/검증 대기"
+      },
+      "V03": {
+        "worktree": "01",
+        "document": "/Users/cookhan/orca/workspaces/rattle/01-디자인-공통-UI/docs/workspaces/01-design-system.md",
+        "stage": 6,
+        "state": "제안/검증 대기"
+      },
+      "V04": {
+        "worktree": "01",
+        "document": "/Users/cookhan/orca/workspaces/rattle/01-디자인-공통-UI/docs/workspaces/01-design-system.md",
+        "stage": 6,
+        "state": "제안/검증 대기"
+      },
+      "V05": {
+        "worktree": "01",
+        "document": "/Users/cookhan/orca/workspaces/rattle/01-디자인-공통-UI/docs/workspaces/01-design-system.md",
+        "stage": 6,
+        "state": "제안/검증 대기"
+      },
+      "V06": {
+        "worktree": "01",
+        "document": "/Users/cookhan/orca/workspaces/rattle/01-디자인-공통-UI/docs/workspaces/01-design-system.md",
+        "stage": 6,
+        "state": "제안/검증 대기"
+      },
+      "V07": {
+        "worktree": "01",
+        "document": "/Users/cookhan/orca/workspaces/rattle/01-디자인-공통-UI/docs/workspaces/01-design-system.md",
+        "stage": 6,
+        "state": "제안/검증 대기"
+      },
+      "U11": {
+        "worktree": "02",
+        "document": "/Users/cookhan/orca/workspaces/rattle/02-급여-근무/docs/workspaces/02-payroll.md",
+        "stage": 3,
+        "state": "수정 필요"
+      },
+      "U12": {
+        "worktree": "02",
+        "document": "/Users/cookhan/orca/workspaces/rattle/02-급여-근무/docs/workspaces/02-payroll.md",
+        "stage": 3,
+        "state": "수정 필요"
+      },
+      "U16": {
+        "worktree": "02",
+        "document": "/Users/cookhan/orca/workspaces/rattle/02-급여-근무/docs/workspaces/02-payroll.md",
+        "stage": 4,
+        "state": "수정 필요"
+      },
+      "U17": {
+        "worktree": "02",
+        "document": "/Users/cookhan/orca/workspaces/rattle/02-급여-근무/docs/workspaces/02-payroll.md",
+        "stage": 4,
+        "state": "수정 필요"
+      },
+      "U18": {
+        "worktree": "02",
+        "document": "/Users/cookhan/orca/workspaces/rattle/02-급여-근무/docs/workspaces/02-payroll.md",
+        "stage": 4,
+        "state": "재현·범위 확인 필요"
+      },
+      "U02": {
+        "worktree": "02",
+        "document": "/Users/cookhan/orca/workspaces/rattle/02-급여-근무/docs/workspaces/02-payroll.md",
+        "stage": 6,
+        "state": "구현 있음 / 남은 검증"
+      },
+      "U03": {
+        "worktree": "02",
+        "document": "/Users/cookhan/orca/workspaces/rattle/02-급여-근무/docs/workspaces/02-payroll.md",
+        "stage": 6,
+        "state": "구현 있음 / 남은 검증"
+      },
+      "U04": {
+        "worktree": "02",
+        "document": "/Users/cookhan/orca/workspaces/rattle/02-급여-근무/docs/workspaces/02-payroll.md",
+        "stage": 6,
+        "state": "구현 있음 / 남은 검증"
+      },
+      "DB-03": {
+        "worktree": "02",
+        "document": "/Users/cookhan/orca/workspaces/rattle/02-급여-근무/docs/workspaces/02-payroll.md",
+        "stage": 6,
+        "state": "구현 있음 / 실제 부분처리 검증"
+      },
+      "DB-08": {
+        "worktree": "02",
+        "document": "/Users/cookhan/orca/workspaces/rattle/02-급여-근무/docs/workspaces/02-payroll.md",
+        "stage": 6,
+        "state": "서버 대조 완료 기록 / 업무·DML 검증 남음"
+      },
+      "U20": {
+        "worktree": "03",
+        "document": "/Users/cookhan/orca/workspaces/rattle/03-재고-레시피-매입/docs/workspaces/03-inventory.md",
+        "stage": 2,
+        "state": "수정 필요"
+      },
+      "U21": {
+        "worktree": "03",
+        "document": "/Users/cookhan/orca/workspaces/rattle/03-재고-레시피-매입/docs/workspaces/03-inventory.md",
+        "stage": 2,
+        "state": "수정 필요"
+      },
+      "U07": {
+        "worktree": "03",
+        "document": "/Users/cookhan/orca/workspaces/rattle/03-재고-레시피-매입/docs/workspaces/03-inventory.md",
+        "stage": 3,
+        "state": "수정 필요"
+      },
+      "U19": {
+        "worktree": "03",
+        "document": "/Users/cookhan/orca/workspaces/rattle/03-재고-레시피-매입/docs/workspaces/03-inventory.md",
+        "stage": 3,
+        "state": "수정 필요"
+      },
+      "U23": {
+        "worktree": "03",
+        "document": "/Users/cookhan/orca/workspaces/rattle/03-재고-레시피-매입/docs/workspaces/03-inventory.md",
+        "stage": 3,
+        "state": "수정 필요"
+      },
+      "U22": {
+        "worktree": "03",
+        "document": "/Users/cookhan/orca/workspaces/rattle/03-재고-레시피-매입/docs/workspaces/03-inventory.md",
+        "stage": 5,
+        "state": "결정 필요"
+      },
+      "U34": {
+        "worktree": "03",
+        "document": "/Users/cookhan/orca/workspaces/rattle/03-재고-레시피-매입/docs/workspaces/03-inventory.md",
+        "stage": 5,
+        "state": "재현·범위 확인 필요"
+      },
+      "U08": {
+        "worktree": "03",
+        "document": "/Users/cookhan/orca/workspaces/rattle/03-재고-레시피-매입/docs/workspaces/03-inventory.md",
+        "stage": 6,
+        "state": "구현 있음 / 남은 검증"
+      },
+      "DB-02": {
+        "worktree": "03",
+        "document": "/Users/cookhan/orca/workspaces/rattle/03-재고-레시피-매입/docs/workspaces/03-inventory.md",
+        "stage": "결정/후순위",
+        "state": "U22에 통합 / 별도 작업 없음"
+      },
+      "U14": {
+        "worktree": "04",
+        "document": "/Users/cookhan/orca/workspaces/rattle/04-운영-알림-스케줄/docs/workspaces/04-operations.md",
+        "stage": 4,
+        "state": "재현·범위 확인 필요"
+      },
+      "U15": {
+        "worktree": "04",
+        "document": "/Users/cookhan/orca/workspaces/rattle/04-운영-알림-스케줄/docs/workspaces/04-operations.md",
+        "stage": 4,
+        "state": "수정 필요"
+      },
+      "U28": {
+        "worktree": "04",
+        "document": "/Users/cookhan/orca/workspaces/rattle/04-운영-알림-스케줄/docs/workspaces/04-operations.md",
+        "stage": 4,
+        "state": "수정 필요"
+      },
+      "U26": {
+        "worktree": "04",
+        "document": "/Users/cookhan/orca/workspaces/rattle/04-운영-알림-스케줄/docs/workspaces/04-operations.md",
+        "stage": 5,
+        "state": "수정 필요"
+      },
+      "U27": {
+        "worktree": "04",
+        "document": "/Users/cookhan/orca/workspaces/rattle/04-운영-알림-스케줄/docs/workspaces/04-operations.md",
+        "stage": 5,
+        "state": "수정 필요"
+      },
+      "U05": {
+        "worktree": "04",
+        "document": "/Users/cookhan/orca/workspaces/rattle/04-운영-알림-스케줄/docs/workspaces/04-operations.md",
+        "stage": 6,
+        "state": "구현 있음 / 남은 검증"
+      },
+      "U06": {
+        "worktree": "04",
+        "document": "/Users/cookhan/orca/workspaces/rattle/04-운영-알림-스케줄/docs/workspaces/04-operations.md",
+        "stage": 6,
+        "state": "구현 있음 / 남은 검증"
+      },
+      "U24": {
+        "worktree": "05",
+        "document": "/Users/cookhan/orca/workspaces/rattle/05-손익-매출-설정/docs/workspaces/05-finance-settings.md",
+        "stage": 5,
+        "state": "재현·범위 확인 필요"
+      },
+      "U25": {
+        "worktree": "05",
+        "document": "/Users/cookhan/orca/workspaces/rattle/05-손익-매출-설정/docs/workspaces/05-finance-settings.md",
+        "stage": 5,
+        "state": "재현·범위 확인 필요"
+      },
+      "U29": {
+        "worktree": "05",
+        "document": "/Users/cookhan/orca/workspaces/rattle/05-손익-매출-설정/docs/workspaces/05-finance-settings.md",
+        "stage": 5,
+        "state": "수정 필요"
+      },
+      "U30": {
+        "worktree": "05",
+        "document": "/Users/cookhan/orca/workspaces/rattle/05-손익-매출-설정/docs/workspaces/05-finance-settings.md",
+        "stage": 5,
+        "state": "수정 필요"
+      },
+      "U31": {
+        "worktree": "05",
+        "document": "/Users/cookhan/orca/workspaces/rattle/05-손익-매출-설정/docs/workspaces/05-finance-settings.md",
+        "stage": 5,
+        "state": "수정 필요"
+      },
+      "U32": {
+        "worktree": "05",
+        "document": "/Users/cookhan/orca/workspaces/rattle/05-손익-매출-설정/docs/workspaces/05-finance-settings.md",
+        "stage": 5,
+        "state": "수정 필요"
+      },
+      "U33": {
+        "worktree": "05",
+        "document": "/Users/cookhan/orca/workspaces/rattle/05-손익-매출-설정/docs/workspaces/05-finance-settings.md",
+        "stage": 5,
+        "state": "결정 필요"
+      },
+      "U01": {
+        "worktree": "05",
+        "document": "/Users/cookhan/orca/workspaces/rattle/05-손익-매출-설정/docs/workspaces/05-finance-settings.md",
+        "stage": 6,
+        "state": "구현 있음 / 남은 검증"
+      },
+      "U09": {
+        "worktree": "05",
+        "document": "/Users/cookhan/orca/workspaces/rattle/05-손익-매출-설정/docs/workspaces/05-finance-settings.md",
+        "stage": 6,
+        "state": "구현 있음 / 남은 검증"
+      },
+      "POS-01": {
+        "worktree": "05",
+        "document": "/Users/cookhan/orca/workspaces/rattle/05-손익-매출-설정/docs/workspaces/05-finance-settings.md",
+        "stage": "결정/후순위",
+        "state": "후순위·미완성"
+      },
+      "U10": {
+        "worktree": "06",
+        "document": "/Users/cookhan/orca/workspaces/rattle/06-서버-권한-인증/docs/workspaces/06-security-auth.md",
+        "stage": 1,
+        "state": "결정 필요"
+      },
+      "DB-01/05": {
+        "worktree": "06",
+        "document": "/Users/cookhan/orca/workspaces/rattle/06-서버-권한-인증/docs/workspaces/06-security-auth.md",
+        "stage": 1,
+        "state": "기존 로컬 수정 존재"
+      },
+      "DB-04": {
+        "worktree": "06",
+        "document": "/Users/cookhan/orca/workspaces/rattle/06-서버-권한-인증/docs/workspaces/06-security-auth.md",
+        "stage": 1,
+        "state": "제품 제외·점검 필요"
+      },
+      "DB-06": {
+        "worktree": "06",
+        "document": "/Users/cookhan/orca/workspaces/rattle/06-서버-권한-인증/docs/workspaces/06-security-auth.md",
+        "stage": 1,
+        "state": "검증 필요"
+      },
+      "DB-07": {
+        "worktree": "06",
+        "document": "/Users/cookhan/orca/workspaces/rattle/06-서버-권한-인증/docs/workspaces/06-security-auth.md",
+        "stage": 1,
+        "state": "기존 로컬 수정 존재"
+      },
+      "AUTH-01": {
+        "worktree": "06",
+        "document": "/Users/cookhan/orca/workspaces/rattle/06-서버-권한-인증/docs/workspaces/06-security-auth.md",
+        "stage": 6,
+        "state": "설계·제품 결정 필요"
+      },
+      "AUTH-02": {
+        "worktree": "06",
+        "document": "/Users/cookhan/orca/workspaces/rattle/06-서버-권한-인증/docs/workspaces/06-security-auth.md",
+        "stage": 6,
+        "state": "검증 필요"
+      },
+      "JOIN-01": {
+        "worktree": "06",
+        "document": "/Users/cookhan/orca/workspaces/rattle/06-서버-권한-인증/docs/workspaces/06-security-auth.md",
+        "stage": "결정/후순위",
+        "state": "결정 이력 대조 필요"
+      },
+      "BUILD-01": {
+        "worktree": "06",
+        "document": "/Users/cookhan/orca/workspaces/rattle/06-서버-권한-인증/docs/workspaces/06-security-auth.md",
+        "stage": 6,
+        "state": "재현 필요"
+      },
+      "RELEASE-01": {
+        "worktree": "06",
+        "document": "/Users/cookhan/orca/workspaces/rattle/06-서버-권한-인증/docs/workspaces/06-security-auth.md",
+        "stage": 6,
+        "state": "검증 필요"
+      },
+      "RELEASE-02": {
+        "worktree": "06",
+        "document": "/Users/cookhan/orca/workspaces/rattle/06-서버-권한-인증/docs/workspaces/06-security-auth.md",
+        "stage": 6,
+        "state": "과거 경고·재확인"
+      }
+    },
+    "note": "진행 원본은 각 Orca 전문 작업소 담당 MD 한 개. 중앙 중복 배포용 MD 6개와 과거 통합계획/진행표 4개 삭제. 중앙 공통 명세·설정·검증 기록 유지.",
+    "deleted_duplicate_plans": [
+      "docs/archive/2026-11/workspaces-current-status-2026-11-02.md",
+      "docs/archive/2026-11/남은작업-우선순위-보고-2026-11-01.md",
+      "docs/archive/2026-11/메모리-미적용개선-통합계획-2026-11-01.md",
+      "docs/archive/2026-11/진행작업-통합목록-2026-11-02.md"
+    ]
   }
 }
