@@ -1,4 +1,4 @@
-import { recipeLineCost, recipeUnitOptionsFor, convertQuantity } from '../../lib/utils/unit';
+import { STOCK_UNITS, recipeLineCost, recipeUnitOptionsFor, convertQuantity } from '../../lib/utils/unit';
 
 describe('convertQuantity', () => {
   test('g를 kg로 환산한다', () => {
@@ -39,3 +39,22 @@ describe('recipeLineCost', () => {
     expect(recipeLineCost(200, 'g', ing)).toBeCloseTo(2000);
   });
 });
+
+
+describe('확장 재고 단위', () => {
+  test('g 재고는 kg 사용량을 환산한다', () => {
+    expect(recipeLineCost(0.2, 'kg', { unit: 'g', last_price: 10 })).toBeCloseTo(2000);
+  });
+  test.each(['ml', 'mL'])('%s 재고는 L 사용량을 환산한다', unit => {
+    expect(recipeLineCost(0.5, 'L', { unit, last_price: 2 })).toBeCloseTo(1000);
+    expect(recipeUnitOptionsFor({ unit })).toEqual([unit, 'L']);
+  });
+  test('무게 온스는 g와 양방향 환산한다', () => {
+    expect(convertQuantity(1, 'oz', 'g')).toBeCloseTo(28.349523125);
+    expect(convertQuantity(28.349523125, 'g', 'oz')).toBeCloseTo(1);
+    expect(recipeLineCost(28.349523125, 'g', { unit: 'oz', last_price: 500 })).toBeCloseTo(500);
+    expect(recipeUnitOptionsFor({ unit: 'oz' })).toEqual(['oz', 'g', 'kg']);
+  });
+});
+
+test('재고 단위 선택에 g/ml/oz가 포함된다', () => { expect(STOCK_UNITS).toEqual(expect.arrayContaining(['g', 'ml', 'oz'])); });

@@ -140,7 +140,7 @@ function NewIngredientScreenForm() {
               </TouchableOpacity>
             ))}
           </View>
-          <Text style={styles.unitHelp}>레시피에서는 g·mL 등으로 입력하면 자동 환산돼요</Text>
+          <Text style={styles.unitHelp}>레시피에서는 같은 종류의 단위로 자동 환산돼요. oz는 무게 온스(약 28.35g)예요.</Text>
 
           <View style={styles.row}>
             <View style={styles.halfField}>

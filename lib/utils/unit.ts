@@ -1,7 +1,7 @@
 import { Ingredient } from '../../types';
 
-// 재고 기준 단위 (3종 고정)
-export const STOCK_UNITS = ['kg', 'L', '개'] as const;
+// 재고 기준 단위. oz는 무게 온스(avoirdupois)이며 액량 온스가 아니다.
+export const STOCK_UNITS = ['kg', 'g', 'L', 'ml', 'oz', '개'] as const;
 export type StockUnit = (typeof STOCK_UNITS)[number];
 
 // 각 단위를 기준량(kg / L / 개)으로 환산하는 계수
@@ -9,6 +9,7 @@ const UNIT_TO_BASE: Record<string, number> = {
   mg: 0.000001,
   g: 0.001,
   kg: 1,
+  oz: 0.028349523125,
   ml: 0.001,
   mL: 0.001,
   L: 1,
@@ -24,7 +25,10 @@ const UNIT_TO_BASE: Record<string, number> = {
  */
 export function recipeUnitOptions(stockUnit: string): string[] {
   if (stockUnit === 'kg') return ['g', 'kg'];
-  if (stockUnit === 'L') return ['mL', 'L'];
+  if (stockUnit === 'g') return ['g', 'kg'];
+  if (stockUnit === 'oz') return ['oz', 'g', 'kg'];
+  if (stockUnit === 'ml') return ['ml', 'L'];
+  if (['L', 'l', 'mL'].includes(stockUnit)) return ['mL', 'L'];
   return ['개'];
 }
 
