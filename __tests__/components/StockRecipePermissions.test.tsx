@@ -122,3 +122,22 @@ it('PT 미확인 상태에서는 재고 수량 저장도 막는다', async () =>
   fireEvent.press(screen.getByText('저장'));
   expect(mockUpdate).not.toHaveBeenCalled();
 });
+it('레시피 상세는 첫 조회 실패 뒤 재시도 성공 시 오류를 지운다', async () => {
+ const read=require('../../lib/services/recipes').getRecipeById as jest.Mock;
+ read.mockRejectedValueOnce(new Error('offline')); render(<RecipeDetail />);
+ await waitFor(()=>expect(screen.getByText('다시 시도')).toBeTruthy()); fireEvent.press(screen.getByText('다시 시도'));
+ await waitFor(()=>expect(screen.getByText('레시피 상세')).toBeTruthy()); expect(screen.queryByText('다시 시도')).toBeNull();
+});
+it('재고 상세는 첫 조회 실패를 읽기 재시도만으로 복구한다', async () => {
+ const read=require('../../lib/services/ingredients').getIngredientById as jest.Mock;
+ read.mockRejectedValueOnce(new Error('offline')); render(<StockDetail />);
+ await waitFor(()=>expect(screen.getByText('다시 시도')).toBeTruthy()); fireEvent.press(screen.getByText('다시 시도'));
+ await waitFor(()=>expect(screen.getByLabelText('현재 재고 수량')).toBeTruthy()); expect(mockUpdate).not.toHaveBeenCalled();
+});
+it('재고 저장 뒤 캐시 갱신 실패는 재저장을 막고 읽기로 복구한다', async () => {
+ mockUpdate.mockResolvedValueOnce({...mockIngredient(),cacheRefreshFailed:true}); render(<StockDetail />);
+ await waitFor(()=>expect(screen.getByLabelText('현재 재고 수량')).toBeTruthy()); fireEvent.changeText(screen.getByLabelText('현재 재고 수량'),'25'); fireEvent.press(screen.getByText('저장'));
+ await waitFor(()=>expect(screen.getByText('저장된 재고 다시 불러오기')).toBeTruthy()); fireEvent.press(screen.getByText('저장')); expect(mockUpdate).toHaveBeenCalledTimes(1);
+ fireEvent.press(screen.getByText('저장된 재고 다시 불러오기'));
+ await waitFor(()=>expect(screen.queryByText('저장된 재고 다시 불러오기')).toBeNull()); expect(mockUpdate).toHaveBeenCalledTimes(1);
+});

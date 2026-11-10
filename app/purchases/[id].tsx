@@ -1,5 +1,5 @@
 import { SheetModal } from '../../lib/components/ui/SheetModal';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator,
   Modal, TextInput, Alert, KeyboardAvoidingView, Platform,
@@ -12,59 +12,85 @@ import { Fonts } from '../../constants/fonts';
 import { getPurchaseById, getPurchaseItems, updatePurchaseItem } from '../../lib/services/purchases';
 import { Purchase, PurchaseItem } from '../../types';
 import { getErrorMessage } from '../../lib/utils/error';
+import { useAuth } from '../../lib/contexts/AuthContext';
+import { ErrorMessage } from '../../lib/components/ErrorMessage';
 import { animateListChange } from '../../lib/utils/layoutAnimation';
 
 export default function PurchaseDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const [purchase, setPurchase] = useState<Purchase | null>(null);
-  const [items, setItems] = useState<PurchaseItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { store, user } = useAuth();
+  const scope = useMemo(() => ({}), [id, store?.id, user?.id]);
+  const active = useRef<object | null>(scope); active.current = scope;
+  const request = useRef(0), saveLock = useRef(false);
+  const [result, setResult] = useState<{ scope: object; purchase: Purchase | null; items: PurchaseItem[]; error: string | null } | null>(null);
+  const [fetching, setFetching] = useState(false);
+  const [savedNeedsRefresh, setSavedNeedsRefresh] = useState(false);
+  const purchase = result?.scope === scope ? result.purchase : null;
+  const items = result?.scope === scope ? result.items : [];
+  const error = result?.scope === scope ? result.error : null;
+  const loading = fetching || result?.scope !== scope;
 
   const [editTarget, setEditTarget] = useState<PurchaseItem | null>(null);
   const [editQuantity, setEditQuantity] = useState('');
   const [editUnitPrice, setEditUnitPrice] = useState('');
   const [saving, setSaving] = useState(false);
 
-  async function load() {
-    if (!id) return;
-    setLoading(true);
-    setError(null);
+  const load = useCallback(async () => {
+    const call = ++request.current;
+    const current = () => active.current === scope && call === request.current;
+    if (!id || !store) {
+      setFetching(false);
+      setResult({ scope, purchase: null, items: [], error: '매장과 매입 내역을 확인해주세요.' });
+      return false;
+    }
+    setFetching(true);
     try {
       const [p, its] = await Promise.all([getPurchaseById(id), getPurchaseItems(id)]);
-      setPurchase(p);
-      setItems(its);
-    } catch (e: any) {
-      setError(getErrorMessage(e));
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => { load(); }, [id]);
+      if (!current()) return false;
+      if (p.store_id !== store.id) throw new Error('PURCHASE_STORE_MISMATCH');
+      setResult({ scope, purchase: p, items: its, error: null });
+      setSavedNeedsRefresh(false);
+      return true;
+    } catch (e) {
+      if (current()) setResult(previous => ({ scope, purchase: previous?.scope === scope ? previous.purchase : null, items: previous?.scope === scope ? previous.items : [], error: getErrorMessage(e) }));
+      return false;
+    } finally { if (current()) setFetching(false); }
+  }, [id, scope, store?.id]);
+  useEffect(() => {
+    active.current = scope; setEditTarget(null); setSavedNeedsRefresh(false);
+    void load();
+    return () => { active.current = null; request.current += 1; };
+  }, [load, scope]);
 
   function openEdit(item: PurchaseItem) {
+    if (savedNeedsRefresh || saving || error) return;
     setEditTarget(item);
     setEditQuantity(String(item.quantity));
     setEditUnitPrice(String(item.unit_price));
   }
 
   async function handleSaveEdit() {
-    if (!editTarget) return;
+    if (!editTarget || saveLock.current || savedNeedsRefresh) return;
     const qty = Number(editQuantity.replace(/,/g, ''));
     const price = Number(editUnitPrice.replace(/,/g, ''));
-    if (!qty || qty <= 0) { Alert.alert('입력 오류', '수량을 올바르게 입력해주세요.'); return; }
-    if (!price || price <= 0) { Alert.alert('입력 오류', '단가를 올바르게 입력해주세요.'); return; }
+    if (!Number.isFinite(qty) || qty <= 0) { Alert.alert('입력 오류', '수량을 올바르게 입력해주세요.'); return; }
+    if (!Number.isFinite(price) || price <= 0) { Alert.alert('입력 오류', '단가를 올바르게 입력해주세요.'); return; }
 
+    saveLock.current = true;
     setSaving(true);
     try {
       await updatePurchaseItem(editTarget.id, qty, price);
+      if (active.current !== scope) return;
+      setSavedNeedsRefresh(true);
       animateListChange();
       setEditTarget(null);
-      await load();
+      const refreshed = await load();
+      if (!refreshed && active.current === scope) Alert.alert('저장 완료 · 새로고침 필요', '품목 수정은 저장됐어요. 다시 불러오기로 현재 내역을 확인해주세요.');
     } catch (e: unknown) {
+      if (active.current !== scope) return;
       Alert.alert('저장 실패', getErrorMessage(e));
     } finally {
+      saveLock.current = false;
       setSaving(false);
     }
   }
@@ -79,13 +105,14 @@ export default function PurchaseDetailScreen() {
         <View style={{ width: 44 }} />
       </View>
 
+      {savedNeedsRefresh && result?.scope === scope && <Text accessibilityRole="alert" style={styles.errorText}>품목 수정은 저장됐어요. 현재 내역을 다시 불러와 확인해주세요.</Text>}
       {loading ? (
         <View style={styles.center}>
           <ActivityIndicator size="large" color={Colors.primary} />
         </View>
       ) : error ? (
         <View style={styles.center}>
-          <Text style={styles.errorText}>{error}</Text>
+          <ErrorMessage message={error} onRetry={() => { void load(); }} />
         </View>
       ) : purchase ? (
         <ScrollView contentContainerStyle={styles.scroll}>
@@ -131,12 +158,12 @@ export default function PurchaseDetailScreen() {
         </ScrollView>
       ) : null}
 
-      <SheetModal visible={editTarget != null} onRequestClose={() => setEditTarget(null)}>
+      <SheetModal visible={editTarget != null} onRequestClose={() => { if (!saving) setEditTarget(null); }}>
         <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <View style={styles.modalSheet}>
             <View style={styles.modalHandle} />
             <View style={styles.sheetHeader}>
-              <TouchableOpacity onPress={() => setEditTarget(null)} style={styles.headerAction} accessibilityRole="button">
+              <TouchableOpacity disabled={saving} onPress={() => setEditTarget(null)} style={styles.headerAction} accessibilityRole="button">
                 <Text style={styles.sheetCancelText}>취소</Text>
               </TouchableOpacity>
               <Text style={styles.sheetHeaderTitle}>{editTarget?.name}</Text>
@@ -150,6 +177,8 @@ export default function PurchaseDetailScreen() {
             <Text style={styles.fieldLabel}>수량 ({editTarget?.unit})</Text>
             <TextInput
               style={styles.input}
+              accessibilityLabel="매입 품목 수량"
+              editable={!saving}
               value={editQuantity}
               onChangeText={setEditQuantity}
               keyboardType="numeric"
@@ -160,6 +189,8 @@ export default function PurchaseDetailScreen() {
             <Text style={styles.fieldLabel}>단가 (원/{editTarget?.unit})</Text>
             <TextInput
               style={styles.input}
+              accessibilityLabel="매입 품목 단가"
+              editable={!saving}
               value={editUnitPrice}
               onChangeText={setEditUnitPrice}
               keyboardType="numeric"

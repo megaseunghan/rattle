@@ -98,14 +98,15 @@ export async function updatePurchaseItem(
   itemId: string,
   quantity: number,
   unitPrice: number,
-): Promise<void> {
+): Promise<{ refreshFailed: boolean }> {
   const { error } = await supabase.rpc('update_purchase_item', {
     p_item_id: itemId,
     p_quantity: quantity,
     p_unit_price: unitPrice,
   });
   if (error) throw new Error(error.message);
-  await invalidateCachedStore();
+  try { await invalidateCachedStore(); return { refreshFailed: false }; }
+  catch { return { refreshFailed: true }; }
 }
 
 export async function getPurchasesByMonth(

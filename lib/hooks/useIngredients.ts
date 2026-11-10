@@ -25,7 +25,7 @@ interface UseIngredientsResult {
   refetch: (force?: boolean) => Promise<void>;
   loadMore: () => Promise<void>;
   create: (data: Omit<Ingredient, 'id' | 'updated_at' | 'created_at'>) => Promise<Ingredient>;
-  update: (id: string, data: Partial<Pick<Ingredient, 'name' | 'category' | 'current_stock' | 'unit' | 'min_stock' | 'last_price'>>) => Promise<void>;
+  update: (id: string, data: Partial<Pick<Ingredient, 'name' | 'category' | 'current_stock' | 'unit' | 'min_stock' | 'last_price'>>) => Promise<Ingredient & { cacheRefreshFailed?: boolean }>;
   remove: (id: string) => Promise<void>;
   bulkCreate: (items: Omit<Ingredient, 'id' | 'updated_at' | 'created_at'>[]) => Promise<number>;
   bulkUpdateCategory: (ids: string[], category: string) => Promise<void>;
@@ -82,8 +82,9 @@ export function useIngredients(): UseIngredientsResult {
   }
 
   async function update(id: string, ingredientData: Partial<Pick<Ingredient, 'name' | 'category' | 'current_stock' | 'unit' | 'min_stock' | 'last_price'>>) {
-    await updateIngredient(id, ingredientData);
+    const saved = await updateIngredient(id, ingredientData);
     if (active.current === identity) setMutationError(null);
+    return saved;
   }
 
   async function remove(id: string) {

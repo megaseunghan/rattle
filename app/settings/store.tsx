@@ -19,6 +19,8 @@ export default function StoreInfoScreen() {
   const [address, setAddress] = useState(store?.address ?? '');
   const [saving, setSaving] = useState(false);
   const savingLock = useRef(false);
+  const reconcile = useRef(false);
+  const [reconcileVersion, setReconcileVersion] = useState(0);
   const scope = useMemo(() => ({}), [store?.id, user?.id]);
   const currentScope = useRef<object | null>(scope);
   currentScope.current = scope;
@@ -30,9 +32,15 @@ export default function StoreInfoScreen() {
     if (!store) return;
     setName(store.name ?? '');
     setAddress(store.address ?? '');
-  }, [store?.id]);
+  }, [scope]);
 
-  useEffect(() => { setSavedNeedsRefresh(false); }, [scope]);
+  useEffect(() => {
+    if (!reconcile.current || saving || savedNeedsRefresh || !store) return;
+    setName(store.name ?? ''); setAddress(store.address ?? '');
+    reconcile.current = false;
+  }, [store, saving, savedNeedsRefresh, reconcileVersion]);
+
+  useEffect(() => { setSavedNeedsRefresh(false); reconcile.current = false; }, [scope]);
 
   async function handleSave() {
     if (!store || savingLock.current || savedNeedsRefresh) return;
@@ -45,9 +53,11 @@ export default function StoreInfoScreen() {
       if (currentScope.current !== scope) return;
       setSavedNeedsRefresh(true);
       try {
+        reconcile.current = true;
         await refreshStore();
         if (currentScope.current !== scope) return;
         setSavedNeedsRefresh(false);
+        setReconcileVersion(n => n + 1);
       } catch {
         if (currentScope.current !== scope) return;
         Alert.alert('저장 완료 · 새로고침 필요', '내용은 저장됐어요. 화면을 다시 불러와 확인해주세요.');
@@ -96,7 +106,7 @@ export default function StoreInfoScreen() {
     if (savingLock.current) return;
     savingLock.current = true;
     setSaving(true);
-    try { await refreshStore(); if (currentScope.current === scope) setSavedNeedsRefresh(false); }
+    try { reconcile.current = true; await refreshStore(); if (currentScope.current === scope) { setSavedNeedsRefresh(false); setReconcileVersion(n => n + 1); } }
     catch { if (currentScope.current !== scope) return; Alert.alert('새로고침 실패', '저장된 내용은 유지돼요. 잠시 후 다시 불러와 주세요.'); }
     finally { savingLock.current = false; setSaving(false); }
   }

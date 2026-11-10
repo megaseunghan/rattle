@@ -52,7 +52,7 @@ export async function createIngredient(
 export async function updateIngredient(
   id: string,
   data: Partial<Pick<Ingredient, 'name' | 'category' | 'current_stock' | 'unit' | 'min_stock' | 'last_price' | 'unit_volume' | 'unit_volume_unit'>>
-): Promise<Ingredient> {
+): Promise<Ingredient & { cacheRefreshFailed?: boolean }> {
   const { data: result, error } = await supabase
     .from('ingredients')
     .update({ ...data, updated_at: new Date().toISOString() })
@@ -75,7 +75,8 @@ export async function updateIngredient(
     }).catch(() => {});
   }
 
-  await invalidateCachedStore();
+  try { await invalidateCachedStore(); }
+  catch { return { ...ingredient, cacheRefreshFailed: true }; }
   return ingredient;
 }
 

@@ -1,5 +1,5 @@
 import { getErrorMessage, UserFacingError } from '../../lib/utils/error';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -31,6 +31,9 @@ import { STOCK_UNITS } from '../../lib/utils/unit';
 export default function EditIngredientScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { store } = useAuth();
+  const scope = useMemo(() => ({}), [id, store?.id]);
+  const active = useRef<object | null>(scope); active.current = scope;
+  useEffect(() => { active.current = scope; return () => { active.current = null; }; }, [scope]);
   const { canManageStock, canAdjustStock } = useStorePermissions();
   const { update } = useIngredients();
   const { categories } = useCategories();
@@ -45,10 +48,14 @@ export default function EditIngredientScreen() {
   const [currentStock, setCurrentStock] = useState('0');
   const [minStock, setMinStock] = useState('0');
   const [lastPrice, setLastPrice] = useState('0');
+  const [reload, setReload] = useState(0);
+  const [savedNeedsRefresh, setSavedNeedsRefresh] = useState(false);
+  const savingLock = useRef(false);
   const [submitting, setSubmitting] = useState(false);
+  useEffect(() => { setSavedNeedsRefresh(false); }, [scope]);
 
   useEffect(() => {
-    if (!id || !store) return;
+    if (!id || !store) { setIngredient(null); setFetchError('매장과 식자재를 확인해주세요.'); setFetchLoading(false); return; }
     let cancelled = false;
     setIngredient(null);
     setFetchError(null);
@@ -57,6 +64,7 @@ export default function EditIngredientScreen() {
       .then((item) => {
         if (cancelled) return;
         if (item.store_id !== store.id) throw new UserFacingError('현재 매장의 식자재가 아니에요.');
+        setSavedNeedsRefresh(false);
         setIngredient(item);
         setName(item.name);
         setCategory(item.category);
@@ -68,7 +76,7 @@ export default function EditIngredientScreen() {
       .catch((e) => { if (!cancelled) setFetchError(getErrorMessage(e, '식자재를 불러오지 못했습니다.')); })
       .finally(() => { if (!cancelled) setFetchLoading(false); });
     return () => { cancelled = true; };
-  }, [id, store?.id]);
+  }, [id, store?.id, reload]);
 
   const isDirty = !!ingredient && (
     currentStock !== String(ingredient.current_stock)
@@ -78,21 +86,22 @@ export default function EditIngredientScreen() {
       || minStock !== String(ingredient.min_stock)
       || lastPrice !== String(ingredient.last_price)))
   );
-  const bypassLeaveGuard = useConfirmLeave(isDirty, { message: '지금 나가면 수정한 재고 정보가 저장되지 않아요.' });
+  const bypassLeaveGuard = useConfirmLeave(isDirty && !savedNeedsRefresh, { blockLeave: submitting, message: '지금 나가면 수정한 재고 정보가 저장되지 않아요.' });
 
   if (fetchLoading) return <SafeAreaView style={styles.container}><LoadingSpinner /></SafeAreaView>;
-  if (fetchError) return <SafeAreaView style={styles.container}><ErrorMessage message={fetchError} /></SafeAreaView>;
+  if (fetchError) return <SafeAreaView style={styles.container}>{savedNeedsRefresh && <Text>재고는 저장됐어요. 저장된 정보를 다시 불러와 확인해주세요.</Text>}<ErrorMessage message={fetchError} onRetry={() => setReload(n => n + 1)} /></SafeAreaView>;
   if (!ingredient) return <SafeAreaView style={styles.container}><ErrorMessage message="식자재를 찾을 수 없습니다." /></SafeAreaView>;
 
   async function handleSubmit() {
-    if (!canAdjustStock || !ingredient || ingredient.store_id !== store?.id || ingredient.id !== id) return;
+    if (savingLock.current || savedNeedsRefresh || !canAdjustStock || !ingredient || ingredient.store_id !== store?.id || ingredient.id !== id) return;
     if (canManageStock && !name.trim()) {
       Alert.alert('입력 오류', '식자재명을 입력해주세요.');
       return;
     }
+    savingLock.current = true;
     setSubmitting(true);
     try {
-      await update(id!, canManageStock ? {
+      const saved = await update(id!, canManageStock ? {
         name: name.trim(),
         category: category.trim() || '기타',
         unit,
@@ -100,11 +109,19 @@ export default function EditIngredientScreen() {
         min_stock: parseFloat(minStock) || 0,
         last_price: parseFloat(lastPrice) || 0,
       } : { current_stock: parseFloat(currentStock) || 0 });
+      if (active.current !== scope) return;
+      if (saved?.cacheRefreshFailed) {
+        setSavedNeedsRefresh(true);
+        Alert.alert('저장 완료 · 새로고침 필요', '재고는 저장됐어요. 저장된 정보 다시 불러오기를 눌러 확인해주세요.');
+        return;
+      }
       bypassLeaveGuard();
       router.back();
     } catch (e: any) {
+      if (active.current !== scope) return;
       Alert.alert('오류', getErrorMessage(e, '수정에 실패했습니다.'));
     } finally {
+      savingLock.current = false;
       setSubmitting(false);
     }
   }
@@ -119,7 +136,7 @@ export default function EditIngredientScreen() {
         <TouchableOpacity
           style={[styles.submitBtn, submitting && styles.submitBtnDisabled]}
           onPress={handleSubmit}
-          disabled={submitting || !canAdjustStock}
+          disabled={submitting || savedNeedsRefresh || !canAdjustStock}
         >
           <Text style={styles.submitText}>{submitting ? '저장 중...' : '저장'}</Text>
         </TouchableOpacity>
@@ -127,12 +144,13 @@ export default function EditIngredientScreen() {
 
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={styles.content}>
+          {savedNeedsRefresh && <TouchableOpacity accessibilityRole="button" onPress={() => setReload(n => n + 1)}><Text style={styles.unitHelp}>저장된 재고 다시 불러오기</Text></TouchableOpacity>}
           {!canManageStock && <Text style={styles.unitHelp}>현재 재고 수량만 수정할 수 있어요.</Text>}
           <Text style={styles.label}>식자재명 *</Text>
           <TextInput
             style={styles.input}
             value={name}
-            editable={canManageStock && !submitting}
+            editable={canManageStock && !submitting && !savedNeedsRefresh}
             accessibilityLabel="식자재명"
             onChangeText={setName}
             placeholder="예) 원두, 우유, 설탕"
@@ -144,7 +162,7 @@ export default function EditIngredientScreen() {
             {categories.map(c => (
               <TouchableOpacity
                 key={c}
-                disabled={!canManageStock || submitting}
+                disabled={!canManageStock || submitting || savedNeedsRefresh}
                 accessibilityRole="button"
                 accessibilityState={{ selected: category === c }}
                 style={[styles.categoryChip, category === c && styles.categoryChipActive]}
@@ -162,7 +180,7 @@ export default function EditIngredientScreen() {
             {STOCK_UNITS.map(u => (
               <TouchableOpacity
                 key={u}
-                disabled={!canManageStock || submitting}
+                disabled={!canManageStock || submitting || savedNeedsRefresh}
                 accessibilityRole="radio"
                 accessibilityState={{ checked: unit === u }}
                 style={[styles.unitChip, unit === u && styles.unitChipActive]}
@@ -172,7 +190,7 @@ export default function EditIngredientScreen() {
               </TouchableOpacity>
             ))}
           </View>
-          <Text style={styles.unitHelp}>레시피에서는 g·mL 등으로 입력하면 자동 환산돼요</Text>
+          <Text style={styles.unitHelp}>레시피에서는 같은 종류의 단위로 자동 환산돼요. oz는 무게 온스(약 28.35g)예요.</Text>
 
           <View style={styles.row}>
             <View style={styles.halfField}>
@@ -180,7 +198,7 @@ export default function EditIngredientScreen() {
               <TextInput
                 style={[styles.input, styles.numericInput]}
                 value={currentStock}
-                editable={canAdjustStock && !submitting}
+                editable={canAdjustStock && !submitting && !savedNeedsRefresh}
                 accessibilityLabel="현재 재고 수량"
                 onChangeText={setCurrentStock}
                 keyboardType="numeric"
@@ -193,7 +211,7 @@ export default function EditIngredientScreen() {
               <TextInput
                 style={[styles.input, styles.numericInput]}
                 value={minStock}
-                editable={canManageStock && !submitting}
+                editable={canManageStock && !submitting && !savedNeedsRefresh}
                 accessibilityLabel="품절 임박 기준"
                 onChangeText={setMinStock}
                 keyboardType="numeric"
@@ -207,7 +225,7 @@ export default function EditIngredientScreen() {
           <TextInput
             style={[styles.input, styles.numericInput]}
             value={lastPrice}
-            editable={canManageStock && !submitting}
+            editable={canManageStock && !submitting && !savedNeedsRefresh}
             accessibilityLabel="식자재 단가"
             onChangeText={setLastPrice}
             keyboardType="numeric"
