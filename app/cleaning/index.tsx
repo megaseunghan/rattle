@@ -5,6 +5,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { AppIcon } from '../../lib/icons/AppIcon';
 import { Colors } from '../../constants/colors';
+import { Fonts } from '../../constants/fonts';
+import { ChecklistProgress } from '../../lib/components/ChecklistProgress';
 import { useAuth } from '../../lib/contexts/AuthContext';
 import { resolveSelfEmployee } from '../../lib/utils/resolveSelfEmployee';
 import { useEmployees } from '../../lib/hooks/useEmployees';
@@ -23,7 +25,8 @@ const SEGMENTS: { key: CleaningSegment; label: string }[] = [
 const WEEKDAY_LABELS = ['일', '월', '화', '수', '목', '금', '토'];
 
 function formatCheckedTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+  const date = new Date(iso);
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
 }
 
 export default function CleaningScreen() {
@@ -87,6 +90,9 @@ export default function CleaningScreen() {
           />
         ) : (
           <View style={styles.list}>
+            <View style={styles.progress}>
+              <ChecklistProgress done={segmentItems.filter(item => logByItem.has(item.id)).length} total={segmentItems.length} scopeKey={`${user?.id}:${store.id}:${segment}`} />
+            </View>
             {segmentItems.map((item: CleaningItem) => {
               const log = logByItem.get(item.id);
               const checked = !!log;
@@ -94,10 +100,11 @@ export default function CleaningScreen() {
               return (
                 <TouchableOpacity
                   key={item.id}
-                  style={[styles.row, checked ? styles.rowChecked : styles.rowUnchecked]}
+                  testID={`cleaning-row-${item.id}`}
+                  style={styles.row}
                   onPress={() => { void toggle(item, myName).catch(e => Alert.alert('체크 결과 확인 필요', getErrorMessage(e), [{ text: '다시 불러오기', onPress: () => { void refetch(); } }])); }}
                   disabled={checkingId !== null}
-                  accessibilityRole="checkbox" accessibilityLabel={item.title}
+                  accessibilityRole="checkbox" accessibilityLabel={checked && log ? `${item.title}, ${log.checked_by_name} · ${formatCheckedTime(log.checked_at)} 체크` : item.title}
                   accessibilityState={{ checked, disabled: checkingId !== null, busy }}
                   activeOpacity={0.7}
                 >
@@ -108,13 +115,14 @@ export default function CleaningScreen() {
                     }
                   </View>
                   <View style={styles.rowTextWrap}>
-                    <Text style={styles.rowTitle}>{item.title}</Text>
-                    {checked && log && (
-                      <Text style={styles.rowMeta}>{log.checked_by_name} · {formatCheckedTime(log.checked_at)} 체크</Text>
-                    )}
+                    <Text style={[styles.rowTitle, checked && styles.rowTitleChecked]}>{item.title}</Text>
                     {segment === 'weekday' && item.weekday != null && (
                       <Text style={styles.rowMeta}>{WEEKDAY_LABELS[item.weekday]}요일</Text>
                     )}
+                  </View>
+                  <View testID={`cleaning-meta-${item.id}`} style={[styles.completionMeta, !checked && styles.hiddenMeta]} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+                    <Text numberOfLines={1} ellipsizeMode="tail" style={styles.completionName}>{log?.checked_by_name ?? ' '}</Text>
+                    <Text style={styles.completionTime}> · {log ? formatCheckedTime(log.checked_at) : '00:00'}</Text>
                   </View>
                 </TouchableOpacity>
               );
@@ -135,23 +143,27 @@ const styles = StyleSheet.create({
   },
   segmentTab: { flex: 1, minHeight: 44, paddingVertical: 7, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   segmentTabActive: { backgroundColor: Colors.white },
-  segmentText: { fontSize: 14, fontWeight: '500', color: Colors.gray400 },
-  segmentTextActive: { color: Colors.primary, fontWeight: '700' },
+  segmentText: { fontSize: 14, fontFamily: Fonts.wantedMedium, color: Colors.gray600 },
+  segmentTextActive: { color: Colors.action, fontFamily: Fonts.wantedMedium },
   scroll: { padding: 20, paddingBottom: 40 },
-  list: { gap: 8 },
+  list: { gap: 0 },
+  progress: { minHeight: 34, justifyContent: 'center', marginBottom: 12 },
   row: {
-    flexDirection: 'row', alignItems: 'center', gap: 12,
-    borderRadius: 20, padding: 16,
+    flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 76,
+    paddingVertical: 10, paddingHorizontal: 4, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: Colors.homeBorder,
   },
-  rowChecked: { borderWidth: 1, borderColor: Colors.homeBorder, backgroundColor: Colors.white },
-  rowUnchecked: { borderWidth: 1, borderColor: Colors.homeBorder, backgroundColor: Colors.white },
   checkbox: {
     width: 22, height: 22, borderRadius: 7,
     borderWidth: 1.5, borderColor: Colors.gray300,
     justifyContent: 'center', alignItems: 'center',
   },
-  checkboxChecked: { backgroundColor: Colors.primary, borderColor: Colors.primary },
-  rowTextWrap: { flex: 1, gap: 2 },
-  rowTitle: { fontSize: 14, fontWeight: '600', color: Colors.black },
-  rowMeta: { fontVariant: ['tabular-nums'], fontSize: 11, fontWeight: '400', color: Colors.gray400 },
+  checkboxChecked: { backgroundColor: Colors.action, borderColor: Colors.action },
+  rowTextWrap: { flex: 1, minWidth: 0, gap: 2 },
+  rowTitle: { fontSize: 13, lineHeight: 19, fontFamily: Fonts.wantedMedium, color: Colors.black },
+  rowTitleChecked: { color: Colors.gray600 },
+  rowMeta: { fontVariant: ['tabular-nums'], fontFamily: Fonts.wantedRegular, fontSize: 11, color: Colors.gray600 },
+  completionMeta: { width: 104, flexShrink: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end' },
+  completionName: { flexShrink: 1, fontFamily: Fonts.wantedRegular, fontSize: 11, lineHeight: 17, color: Colors.gray600 },
+  completionTime: { flexShrink: 0, fontFamily: Fonts.wantedRegular, fontVariant: ['tabular-nums'], fontSize: 11, lineHeight: 17, color: Colors.gray600 },
+  hiddenMeta: { opacity: 0 },
 });
