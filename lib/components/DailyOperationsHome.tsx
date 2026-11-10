@@ -1,10 +1,13 @@
-import { memo } from 'react';
+import { memo, useEffect, useState } from 'react';
 /* design-system: DESIGN.md — a store day, from opening to closing */
-import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { ActivityIndicator, View, Text, Pressable, StyleSheet } from 'react-native';
 import { AppIcon } from '../icons/AppIcon';
+import { Illustration } from '../icons/Illustration';
+import { homeActionIllustrations } from '../icons/homeActionIllustrations';
 import { router } from 'expo-router';
 import { Colors } from '../../constants/colors';
 import { Fonts } from '../../constants/fonts';
+import { useAuth } from '../contexts/AuthContext';
 import { useTabPager } from '../contexts/TabPagerContext';
 import { useDailyChecklistSummary } from '../hooks/useDailyChecklistSummary';
 import { GlassCard } from './GlassCard';
@@ -13,13 +16,22 @@ import { homeWorkflowLoadMessage } from '../services/homeWorkflow';
 import { DEFAULT_HOME_WORKFLOW, HOME_ACTIONS } from '../utils/homeWorkflow';
 import { HomeActionId, HomePhase } from '../../types';
 import { ErrorMessage } from './ErrorMessage';
-import { Illustration, type IllustrationName } from '../icons/Illustration';
+import { HomeWorkflowEditor } from './HomeWorkflowEditor';
+import { ChecklistProgress } from './ChecklistProgress';
 
+const PHASES: { id: HomePhase; label: string }[] = [
+  { id: 'open', label: '오픈' }, { id: 'business', label: '영업 중' }, { id: 'close', label: '마감' },
+];
 type Action = { label: string; icon: keyof typeof AppIcon.glyphMap; onPress: () => void };
 export const DailyOperationsHome = memo(function DailyOperationsHome({ active, refreshKey, canUseFinancialTabs, isPartTime, isAdmin }: {
   active: boolean; refreshKey: number; canUseFinancialTabs: boolean; isPartTime: boolean; isAdmin: boolean;
 }) {
   const { goToTab } = useTabPager();
+  const { user, store, currentRole, devPreviewMode } = useAuth();
+  const [phase, setPhase] = useState<HomePhase>('open');
+  const [editorVisible, setEditorVisible] = useState(false);
+  const canEdit = isAdmin && currentRole === 'admin' && devPreviewMode === 'self';
+  useEffect(() => { setPhase('open'); setEditorVisible(false); }, [user?.id, store?.id, currentRole, devPreviewMode]);
   const query = useDailyChecklistSummary(active, refreshKey);
   const workflow = useHomeWorkflow(active);
   const configuration = workflow.data ?? DEFAULT_HOME_WORKFLOW;
@@ -28,7 +40,7 @@ export const DailyOperationsHome = memo(function DailyOperationsHome({ active, r
     if (query.isError) return '확인 필요';
     const count = query.data?.[segment];
     if (!count) return '불러오는 중';
-    return count.total ? `${count.done}/${count.total} 체크` : '체크 항목을 추가해요';
+    return count.total ? `${Math.round(count.done / count.total * 100)}% 완료` : '체크 항목을 추가해요';
   };
   const actions: Record<HomeActionId, Action> = {
     open_check: { label: '오픈 체크리스트', icon: 'checkbox-outline', onPress: () => checklist('open') },
@@ -42,74 +54,66 @@ export const DailyOperationsHome = memo(function DailyOperationsHome({ active, r
     sales: { label: '매출 확인', icon: 'stats-chart-outline', onPress: () => goToTab('sales') },
     expenses: { label: '비용 기록', icon: 'receipt-outline', onPress: () => router.push('/expenses') },
   };
-  const phaseInfo: { id: HomePhase; title: string; subtitle: string; illustration: IllustrationName }[] = [
-    { id: 'open', title: '오픈 준비', subtitle: '손님을 맞이하기 전에', illustration: 'open-prep' },
-    { id: 'business', title: '영업 중', subtitle: '영업 중 필요한 일을 챙겨요', illustration: 'business-hours' },
-    { id: 'close', title: '마감 정리', subtitle: '오늘 기록을 확인하고 내일을 준비해요', illustration: 'closing' },
+  const ids = configuration[phase].filter(id => canUseFinancialTabs || !HOME_ACTIONS.find(a => a.id === id)?.financial);
+  const shortcuts = ids.map(id => ({ ...actions[id], id, status: id === 'open_check' ? status('open') : id === 'close_check' ? status('close') : undefined }));
+  const hasChecklist = ids.includes('open_check') || ids.includes('close_check');
+  const personalActions: (Action & { id: string })[] = [
+    { id: 'payroll', label: isAdmin ? '직원·급여' : '내 급여', icon: 'people-outline', onPress: () => isAdmin ? goToTab('payroll') : router.push('/mypage/payslip') },
+    ...(isPartTime ? [{ id: 'work_minutes', label: '근무시간 제출', icon: 'time-outline' as const, onPress: () => router.push('/mypage/work-minutes') }] : []),
   ];
-  const phases = phaseInfo.map(phase => {
-    const selected = configuration[phase.id].filter(id => canUseFinancialTabs || !HOME_ACTIONS.find(a => a.id === id)?.financial);
-    return { ...phase, actions: selected.map(id => actions[id]), progress: selected.includes('open_check') ? status('open') : selected.includes('close_check') ? status('close') : undefined };
-  }).filter(phase => phase.actions.length > 0);
   return <View style={styles.root}>
-    <View style={styles.intro}>
-      <Text style={styles.eyebrow}>오늘의 매장</Text>
-      <Text style={styles.title}>오픈부터 마감까지</Text>
-      <Text style={styles.description}>하루의 흐름을 따라 필요한 일을 챙겨요.</Text>
+    <View style={styles.header}>
+      <Text style={styles.title}>바로가기</Text>
+      {canEdit && <Pressable accessibilityRole="button" accessibilityLabel="매장 바로가기 구성 수정" style={styles.edit} onPress={() => setEditorVisible(true)}>
+        <AppIcon name="options-outline" size={18} color={Colors.action} /><Text style={styles.editLabel}>편집</Text>
+      </Pressable>}
     </View>
-    {isAdmin && <Pressable accessibilityRole="button" accessibilityLabel="매장 홈 구성" style={styles.action} onPress={() => router.push('/settings/home-workflow')}>
-      <AppIcon name="options-outline" size={20} color={Colors.action} />
-      <Text style={styles.actionText}>{workflow.isSuccess && !workflow.data ? '우리 매장의 하루 업무 설정하기' : '매장 홈 구성 수정'}</Text>
-      <AppIcon name="chevron-forward" size={16} color={Colors.gray600} />
-    </Pressable>}
-    {workflow.isError && <ErrorMessage message={`${homeWorkflowLoadMessage(workflow.error)} 기본 구성을 보여드려요.`} onRetry={() => { void workflow.refetch(); }} />}
-    {workflow.isSuccess && !workflow.data && !isAdmin && <Text style={styles.description}>관리자가 매장 홈을 설정하기 전까지 기본 업무를 보여드려요.</Text>}
-    {query.isError && <ErrorMessage message="체크 현황을 불러오지 못했어요." onRetry={() => { void query.refetch(); }} />}
-    {phases.map((phase, index) => <View key={phase.title} style={styles.phase}>
-      <View style={styles.rail}>
-        <View style={styles.step}><Text style={styles.stepText}>{String(index + 1).padStart(2, '0')}</Text></View>
-        {index < phases.length - 1 && <View style={styles.line} />}
-      </View>
-      <GlassCard style={styles.card} contentStyle={styles.content}>
-        <View style={styles.heading}>
-          <Illustration name={phase.illustration} size={64} />
-          <Text style={styles.phaseTitle}>{phase.title}</Text>
-        </View>
-        <Text style={styles.description}>{phase.subtitle}</Text>
-        {phase.progress && <Text style={styles.progress}>{phase.progress}</Text>}
-        <View style={styles.actions}>
-          {phase.actions.map(action => <Pressable key={action.label} onPress={action.onPress} accessibilityRole="button" accessibilityLabel={action.label}
-            style={({ pressed }) => [styles.action, pressed && styles.pressed]}>
-            <AppIcon name={action.icon} size={18} color={Colors.gray700} accessible={false} />
-            <Text style={styles.actionText}>{action.label}</Text>
-            <AppIcon name="chevron-forward" size={15} color={Colors.gray600} accessible={false} />
-          </Pressable>)}
-        </View>
-      </GlassCard>
-    </View>)}
-    <GlassCard contentStyle={styles.personal}>
-      <View style={styles.heading}><Illustration name={isAdmin ? 'staff' : 'payroll'} size={56} /><Text style={styles.phaseTitle}>{isAdmin ? '직원·급여 관리' : '나의 근무·급여'}</Text></View>
-      <Text style={styles.description}>매일의 마감과 월별 급여를 구분해서 확인해요.</Text>
-      <Pressable style={styles.action} accessibilityRole="button" onPress={() => isAdmin ? goToTab('payroll') : router.push('/mypage/payslip')}>
-        <Text style={styles.actionText}>{isAdmin ? '직원과 급여 보기' : '내 급여 명세 보기'}</Text><AppIcon name="chevron-forward" size={16} color={Colors.gray600} />
-      </Pressable>
-      {isPartTime && <Pressable style={styles.action} accessibilityRole="button" onPress={() => router.push('/mypage/work-minutes')}><Text style={styles.actionText}>월 실근무 시간 제출</Text><AppIcon name="chevron-forward" size={16} color={Colors.gray600} /></Pressable>}
-    </GlassCard>
+    <View style={styles.phases} accessibilityRole="tablist" accessibilityLabel="업무 구간">
+      {PHASES.map(item => <Pressable key={item.id} accessibilityRole="tab" accessibilityLabel={item.label} accessibilityState={{ selected: phase === item.id }} onPress={() => setPhase(item.id)}
+        style={({ pressed }) => [styles.phase, phase === item.id && styles.phaseSelected, pressed && styles.pressed]}>
+        <Text style={[styles.phaseLabel, phase === item.id && styles.phaseLabelSelected]}>{item.label}</Text>
+      </Pressable>)}
+    </View>
+    {workflow.isError && <ErrorMessage message={`${homeWorkflowLoadMessage(workflow.error)} ${workflow.data ? '이전 구성을 유지해요.' : '기본 구성을 보여드려요.'}`} onRetry={() => { void workflow.refetch(); }} />}
+    {query.isError && hasChecklist && <ErrorMessage message="체크 현황을 불러오지 못했어요." onRetry={() => { void query.refetch(); }} />}
+    {workflow.isPending && !workflow.data ? <View style={styles.loading} accessibilityRole="progressbar" accessibilityLabel="바로가기 불러오는 중"><ActivityIndicator color={Colors.action} /></View> : shortcuts.length ? <View style={styles.list}>
+      {shortcuts.map(action => <GlassCard key={action.id} contentStyle={styles.cardContent} style={styles.card}>
+        <Pressable onPress={action.onPress} accessibilityRole="button" accessibilityLabel={`${action.label}${action.status ? `, ${action.status}` : ''}`}
+          style={({ pressed }) => [styles.shortcut, pressed && styles.pressed]}>
+          <Illustration name={homeActionIllustrations[action.id]} size={48} />
+          <View style={styles.actionText}><Text style={styles.label}>{action.label}</Text>{action.status && (() => {
+            const count = action.id === 'open_check' ? query.data?.open : action.id === 'close_check' ? query.data?.close : undefined;
+            const key = JSON.stringify([user?.id, store?.id, currentRole, devPreviewMode, action.id]);
+            return !query.isError && count && count.total > 0
+              ? <ChecklistProgress key={key} scopeKey={key} done={count.done} total={count.total} compact />
+              : <Text style={styles.status}>{action.status}</Text>;
+          })()}</View>
+          <AppIcon name="chevron-forward" size={16} color={Colors.gray600} accessible={false} />
+        </Pressable>
+      </GlassCard>)}
+    </View> : <View style={styles.empty}><Text style={styles.emptyText}>이 구간에 표시할 기능이 없어요.</Text>{canEdit && <Pressable accessibilityRole="button" onPress={() => setEditorVisible(true)} style={styles.edit}><Text style={styles.editLabel}>구성 편집</Text></Pressable>}</View>}
+    <View style={styles.personal}>
+      {personalActions.map(action => <Pressable key={action.id} onPress={action.onPress} accessibilityRole="button" accessibilityLabel={action.label}
+        style={({ pressed }) => [styles.personalAction, pressed && styles.pressed]}>
+        <AppIcon name={action.icon} size={17} color={Colors.gray600} accessible={false} /><Text style={styles.personalLabel}>{action.label}</Text><AppIcon name="chevron-forward" size={13} color={Colors.gray600} accessible={false} />
+      </Pressable>)}
+    </View>
+    {canEdit && <HomeWorkflowEditor visible={editorVisible} initialPhase={phase} onClose={() => setEditorVisible(false)} />}
   </View>;
 });
 const styles = StyleSheet.create({
-  root: { gap: 16 }, intro: { paddingTop: 8, paddingBottom: 12, gap: 8 },
-  eyebrow: { color: Colors.action, fontFamily: Fonts.wantedSemiBold, fontSize: 13 },
-  title: { fontFamily: Fonts.wantedBold, fontSize: 28, lineHeight: 36, color: Colors.black, letterSpacing: -0.8 },
-  description: { color: Colors.gray600, fontSize: 13, lineHeight: 20 },
-  phase: { flexDirection: 'row', gap: 10 }, rail: { width: 28, alignItems: 'center' },
-  step: { width: 28, height: 28, borderRadius: 14, backgroundColor: Colors.white, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: Colors.homeBorder },
-  stepText: { fontFamily: Fonts.geistSemiBold, fontSize: 11, color: Colors.action },
-  line: { flex: 1, width: 1, marginTop: 10, marginBottom: -8, backgroundColor: Colors.taskBorder },
-  card: { flex: 1 }, content: { padding: 16, gap: 7 }, heading: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  phaseTitle: { flexShrink: 1, color: Colors.black, fontFamily: Fonts.wantedBold, fontSize: 18, lineHeight: 25 },
-  progress: { color: Colors.action, fontSize: 12, fontFamily: Fonts.wantedSemiBold },
-  actions: { marginTop: 5, gap: 6 }, action: { minHeight: 46, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 12, backgroundColor: Colors.glass.background, flexDirection: 'row', gap: 8, alignItems: 'center' },
-  actionText: { flex: 1, color: Colors.gray800, fontSize: 14, fontFamily: Fonts.wantedMedium },
-  pressed: { backgroundColor: Colors.pale }, personal: { padding: 18, gap: 9 },
+  root: { gap: 12 }, header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  title: { fontFamily: Fonts.wantedBold, fontSize: 20, color: Colors.black },
+  edit: { minHeight: 44, paddingHorizontal: 10, flexDirection: 'row', alignItems: 'center', gap: 5 },
+  editLabel: { fontSize: 13, color: Colors.action, fontFamily: Fonts.wantedMedium },
+  phases: { flexDirection: 'row', padding: 4, gap: 4, backgroundColor: Colors.glass.background, borderColor: Colors.glass.border, borderWidth: 1, borderRadius: 15 },
+  phase: { flex: 1, minHeight: 44, paddingHorizontal: 8, alignItems: 'center', justifyContent: 'center', borderRadius: 11 },
+  phaseSelected: { backgroundColor: Colors.white }, phaseLabel: { fontFamily: Fonts.wantedMedium, fontSize: 14, color: Colors.gray600 },
+  phaseLabelSelected: { fontFamily: Fonts.wantedSemiBold, color: Colors.action }, list: { gap: 8 }, cardContent: { padding: 0 }, card: { shadowOpacity: 0.025, shadowRadius: 7, shadowOffset: { width: 0, height: 3 } },
+  shortcut: { minHeight: 58, paddingVertical: 4, paddingLeft: 8, paddingRight: 14, flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 15 },
+  actionText: { flex: 1, gap: 3 }, label: { color: Colors.gray800, fontFamily: Fonts.wantedMedium, fontSize: 13, lineHeight: 19 },
+  status: { color: Colors.gray600, fontSize: 11, lineHeight: 16 }, loading: { minHeight: 120, alignItems: 'center', justifyContent: 'center' },
+  empty: { paddingVertical: 24, alignItems: 'center', gap: 6 }, emptyText: { fontSize: 14, color: Colors.gray600 },
+  personal: { flexDirection: 'row', flexWrap: 'wrap', columnGap: 16, paddingTop: 2 }, personalAction: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 10, paddingHorizontal: 3 },
+  personalLabel: { fontFamily: Fonts.wantedMedium, fontSize: 12, color: Colors.gray600 }, pressed: { opacity: 0.7 },
 });
