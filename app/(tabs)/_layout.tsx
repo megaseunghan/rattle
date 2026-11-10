@@ -4,7 +4,7 @@ import { isQaLoginEnabled } from '../../lib/services/qaLogin';
 import { useNotifications } from '../../lib/hooks/useNotifications';
 /* Hallmark · genre: modern-minimal · macrostructure: Workbench · design-system: DESIGN.md · designed-as-app */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, useWindowDimensions } from 'react-native';
+import { View, Text, StyleSheet, Pressable, useWindowDimensions, AppState } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { AppIcon } from '../../lib/icons/AppIcon';
 import PagerView from 'react-native-pager-view';
@@ -150,6 +150,24 @@ export default function TabsLayout() {
   const [employeeRegistration, setEmployeeRegistration] = useState<{ storeId: string; id: number }>();
   const [containerHeight, setContainerHeight] = useState<number>();
   const [switching, setSwitching] = useState(false);
+  const [innerGestureActive, setInnerGestureActive] = useState(false);
+  const gestureOwners = useRef(new Set<string>());
+  const pagerCanScroll = effectiveHomeMode !== 'dashboard' && !switching && !moreOpen;
+  const pagerCanScrollRef = useRef(pagerCanScroll); pagerCanScrollRef.current = pagerCanScroll;
+  const setPagerGestureActive = useCallback((owner: string, active: boolean, allTouchesEnded = false) => {
+    if (allTouchesEnded) gestureOwners.current.clear();
+    else if (active) gestureOwners.current.add(owner);
+    else gestureOwners.current.delete(owner);
+    const locked = gestureOwners.current.size > 0;
+    // Stop native page capture immediately, without waiting for a React render.
+    pagerRef.current?.setScrollEnabled(!locked && pagerCanScrollRef.current);
+    setInnerGestureActive(locked);
+  }, []);
+  useEffect(() => {
+    const listener = AppState.addEventListener('change', state => { if (state !== 'active') setPagerGestureActive('', false, true); });
+    return () => listener.remove();
+  }, [setPagerGestureActive]);
+  useEffect(() => { setPagerGestureActive('', false, true); }, [store?.id, currentRole, setPagerGestureActive]);
   const [switchError, setSwitchError] = useState<string | null>(null);
   const [returnScope, setReturnScope] = useState<'all' | 'store'>('store');
   const [viewState, setViewStateData] = useState<Record<string, string>>({});
@@ -252,14 +270,14 @@ export default function TabsLayout() {
 
   const activeTab = tabs[activeIndex] ?? 'home';
   const consumeEmployeeRegistration = useCallback(() => setEmployeeRegistration(undefined), []);
-  const pagerValue = useMemo(() => ({ activeTab, goToTab, homeMode: effectiveHomeMode, setHomeMode, openStorePicker, selectStoreScope, selectedMonth, setSelectedMonth, returnScope, viewState, setViewState, employeeRegistration, consumeEmployeeRegistration }), [activeTab, goToTab, effectiveHomeMode, setHomeMode, openStorePicker, selectStoreScope, selectedMonth, returnScope, viewState, setViewState, employeeRegistration, consumeEmployeeRegistration]);
+  const pagerValue = useMemo(() => ({ activeTab, goToTab, homeMode: effectiveHomeMode, setHomeMode, openStorePicker, selectStoreScope, selectedMonth, setSelectedMonth, returnScope, viewState, setViewState, employeeRegistration, consumeEmployeeRegistration, innerGestureActive, setPagerGestureActive, setAlertGestureActive: setPagerGestureActive }), [activeTab, goToTab, effectiveHomeMode, setHomeMode, openStorePicker, selectStoreScope, selectedMonth, returnScope, viewState, setViewState, employeeRegistration, consumeEmployeeRegistration, innerGestureActive, setPagerGestureActive]);
   const costShelf = activeTab === 'purchases' && viewState['purchase.section'] === '비용';
 
   return (
     <TabPagerContext.Provider value={pagerValue}>
-      <View style={styles.shell} onLayout={event => setContainerHeight(event.nativeEvent.layout.height)}>
+      <View style={styles.shell} testID="tab-shell" onLayout={event => setContainerHeight(event.nativeEvent.layout.height)}>
         <GlassBackdrop />
-        <View style={{ paddingTop: insets.top + 6, paddingBottom: 8 }}>
+        <View style={{ paddingTop: insets.top }}>
           <StoreAppBar name={effectiveHomeMode === 'dashboard' ? '전체 매장' : store?.name ?? '매장 선택'} unreadCount={unreadCount}
             onMenu={() => { setQuickAddVisible(false); setMoreOpen(true); }}
             onNotifications={() => tabRouter.push('/notifications')} />
@@ -268,7 +286,7 @@ export default function TabsLayout() {
           ref={pagerRef}
           style={styles.flex}
           initialPage={0}
-          scrollEnabled={effectiveHomeMode !== 'dashboard' && !switching && !moreOpen}
+          scrollEnabled={pagerCanScroll && !innerGestureActive}
           onPageSelected={e => handlePageSelected(e.nativeEvent.position)}
         >
           {tabs.map((tab, idx) => (

@@ -23,7 +23,7 @@ const mockSetParams = jest.fn();
 const mockRouter = { push: mockPush, setParams: mockSetParams };
 let mockPagerContext: unknown;
 const mockRefetch = jest.fn();
-const mockPager = { setPage: jest.fn(), setPageWithoutAnimation: jest.fn() };
+const mockPager = { setPage: jest.fn(), setPageWithoutAnimation: jest.fn(), setScrollEnabled: jest.fn() };
 let mockRouteParams: Record<string, string | undefined> = {};
 const mockStores = [{ id: 'a', name: '가매장' }, { id: 'b', name: '나매장' }];
 jest.mock('../../lib/contexts/AuthContext', () => ({ useAuth: () => ({ user: { id: 'owner' }, store: mockStores[0], stores: mockStores, switchStore: mockSwitchStore, currentRole: 'admin', realRole: 'admin', canReadFinancials: true, devPreviewMode: 'self' }) }));
@@ -180,7 +180,7 @@ it('탭을 바꿔도 상단바는 하나이며 매장 전환과 마이페이지�
   const view = renderTabs();
   for (const name of ['재고', '매입', '인건비', '홈']) {
     fireEvent.press(view.getByRole('tab', { name }));
-    expect(view.getAllByLabelText('Rattle')).toHaveLength(1);
+    expect(view.getAllByLabelText(/^Rattle, /)).toHaveLength(1);
     expect(view.getAllByLabelText('더보기')).toHaveLength(1);
     expect(view.queryByLabelText('매장 전환')).toBeNull();
     expect(view.queryByLabelText('마이페이지')).toBeNull();
@@ -215,4 +215,18 @@ it('빠른 등록을 열어도 업무 범위가 같으면 컨텍스트 참조를
   expect(mockPagerContext).toBe(previous);
   fireEvent.press(view.getByRole('tab', { name: '재고' }));
   expect(mockPagerContext).not.toBe(previous);
+});
+
+it('그래프/알림 내부 제스처가 끝날 때까지 Pager 가로 전환을 잠그고 마지막 종료에서 복구한다', () => {
+  mockRouteParams = {};
+  const view = renderTabs();
+  const context = mockPagerContext as { setPagerGestureActive?: (owner: string, active: boolean) => void; setAlertGestureActive?: (owner: string, active: boolean) => void };
+  act(() => context.setPagerGestureActive?.('chart', true));
+  expect(mockPager.setScrollEnabled).toHaveBeenLastCalledWith(false);
+  expect(view.getByTestId('pager').props.scrollEnabled).toBe(false);
+  act(() => context.setAlertGestureActive?.('alert', true));
+  act(() => context.setPagerGestureActive?.('chart', false));
+  expect(view.getByTestId('pager').props.scrollEnabled).toBe(false);
+  act(() => context.setAlertGestureActive?.('alert', false));
+  expect(view.getByTestId('pager').props.scrollEnabled).toBe(true);
 });

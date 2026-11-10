@@ -19,6 +19,11 @@ interface TabPagerContextValue {
   setViewState?: (key: string, value: string) => void;
   employeeRegistration?: { storeId: string; id: number };
   consumeEmployeeRegistration?: () => void;
+  /** Inner horizontal interaction owns a lock until all fingers end or its view unmounts. */
+  innerGestureActive?: boolean;
+  setPagerGestureActive?: (owner: string, active: boolean, allTouchesEnded?: boolean) => void;
+  /** Compatible alias for the reviewed notification swipe implementation. */
+  setAlertGestureActive?: (owner: string, active: boolean, allTouchesEnded?: boolean) => void;
 }
 
 export const TabPagerContext = createContext<TabPagerContextValue | null>(null);

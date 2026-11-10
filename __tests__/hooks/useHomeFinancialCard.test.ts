@@ -1,0 +1,17 @@
+import { act, renderHook, waitFor } from '@testing-library/react-native';
+import { notifyManager } from '@tanstack/react-query';
+import { useHomeFinancialCard } from '../../lib/hooks/useHomeFinancialCard';
+import { clearQueryData } from '../../lib/query/client';
+const mockBatch = jest.fn(), mockTimeline = jest.fn();
+let mockRole = 'admin', mockCanRead = true;
+jest.mock('../../lib/contexts/AuthContext', () => ({ useAuth: () => ({ store:{id:'store',closing_time:'23:00'}, user:{id:'u'}, currentRole:mockRole, realRole:mockRole, canReadFinancials:mockCanRead }) }));
+jest.mock('../../lib/services/homeFinancialSummary', () => ({ getFinancialSummaries: (...args:unknown[]) => mockBatch(...args) }));
+jest.mock('../../lib/services/homeFinancialTimeline', () => ({ getHomeFinancialTimeline: (...args:unknown[]) => mockTimeline(...args) }));
+beforeAll(()=>notifyManager.setNotifyFunction(fn=>act(()=>fn())));
+afterAll(()=>notifyManager.setNotifyFunction(fn=>fn()));
+beforeEach(async()=>{await clearQueryData();mockRole='admin';mockCanRead=true;mockBatch.mockReset().mockImplementation((ids,months)=>Promise.resolve([{storeId:ids[0],yearMonth:months[0],revenue:1000,purchaseCost:200,laborCost:300,fixedExpense:100,variableExpense:100,operatingProfit:300}]));mockTimeline.mockReset().mockResolvedValue({current:[{day:1,hasRecords:true,values:{revenue:500,purchase:100,profit:null,labor:null,expense:null}}],previous:[]});});
+afterEach(async()=>{await act(async()=>{await clearQueryData();});});
+it('월 합계는 일별 누적 금액으로 덮지 않는다',async()=>{const {result}=renderHook(()=>useHomeFinancialCard(true));await waitFor(()=>expect(result.current.data?.current.length).toBe(1));expect(result.current.data?.totals.revenue).toBe(1000);expect(result.current.data?.totals.profit).toBe(300);});
+it('공유 구성원은 월 RPC만 읽고 관리자 일별 자료를 읽지 않는다',async()=>{mockRole='member';const {result}=renderHook(()=>useHomeFinancialCard(true));await waitFor(()=>expect(result.current.data).not.toBeNull());expect(result.current.data?.current).toEqual([]);expect(mockTimeline).not.toHaveBeenCalled();});
+it('갱신 실패에는 자료를 남기고 권한 거절이면 숨긴다',async()=>{const {result}=renderHook(()=>useHomeFinancialCard(true));await waitFor(()=>expect(result.current.data).not.toBeNull());mockBatch.mockRejectedValue(new Error('offline'));await act(async()=>{await result.current.refetch();});await waitFor(()=>expect(result.current.error).toBe(true));expect(result.current.data?.totals.revenue).toBe(1000);mockBatch.mockRejectedValue({code:'42501',message:'permission denied'});await act(async()=>{await result.current.refetch();});await waitFor(()=>expect(result.current.data).toBeNull());});
+it('공유 해제 시 즉시 숨기고 재조회도 차단한다',async()=>{const {result,rerender}=renderHook(()=>useHomeFinancialCard(true));await waitFor(()=>expect(result.current.data).not.toBeNull());mockCanRead=false;rerender({});expect(result.current.data).toBeNull();const calls=mockBatch.mock.calls.length;await act(async()=>{await result.current.refetch();});expect(mockBatch).toHaveBeenCalledTimes(calls);});
