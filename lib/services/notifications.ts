@@ -16,24 +16,53 @@ export const NOTIFICATION_SETTING_DEFS: NotificationSettingDef[] = [
   { key: 'sales_margin_drop', group: '매출·손익', label: '마진율 급락 알림', description: '전월 대비 마진율이 5%p 이상 떨어졌을 때', default: false },
 ];
 
+type NotificationError = { code?: string; message?: string; details?: string; hint?: string };
+const DISMISSAL_UPDATE_MESSAGE = '알림 삭제를 위한 서버 업데이트가 필요해요.';
+
+function missingDismissals(error: NotificationError): boolean {
+  const description = [error.message, error.details, error.hint].filter(Boolean).join(' ');
+  if (!description.includes('notification_dismissals')) return false;
+  return error.code === '42P01' || error.code === 'PGRST205'
+    || (error.code === 'PGRST200' && description.includes('notifications'));
+}
+
 export async function getNotifications(storeId: string, category?: NotificationCategory, allowFinancial = true): Promise<AppNotification[]> {
-  let query = supabase.from('notifications').select('*').eq('store_id', storeId).neq('category', 'attendance').order('created_at', { ascending: false });
-  if (!allowFinancial) query = query.neq('category', 'sales').neq('category', 'profit');
-  if (category) query = query.eq('category', category);
-  const { data, error } = await query;
-  if (error) throw new Error(error.message);
-  return (data ?? []) as AppNotification[];
+  const load = (includeDismissals: boolean) => {
+    let query = supabase.from('notifications')
+      .select(includeDismissals ? '*, notification_dismissals(notification_id)' : '*')
+      .eq('store_id', storeId).neq('category', 'attendance').order('created_at', { ascending: false });
+    if (!allowFinancial) query = query.neq('category', 'sales').neq('category', 'profit');
+    if (category) query = query.eq('category', category);
+    return query;
+  };
+  let result = await load(true);
+  // An older server keeps its readable list until the additive migration is applied.
+  // Permission and transport failures must never use this compatibility path.
+  if (result.error && missingDismissals(result.error)) result = await load(false);
+  if (result.error) throw new Error(result.error.message);
+  const rows = (result.data ?? []) as unknown as (AppNotification & { notification_dismissals?: { notification_id: string }[] })[];
+  return rows.filter(row => !row.notification_dismissals?.length).map(({ notification_dismissals: _dismissals, ...notification }) => notification);
+}
+
+/** Permanently hides an event for the authenticated user; the shared event is preserved. */
+export async function dismissNotification(storeId: string, userId: string, notificationId: string): Promise<void> {
+  if (!storeId || !userId || !notificationId) throw new Error('삭제할 알림과 매장 정보를 확인해 주세요.');
+  const { data: identity, error: identityError } = await supabase.auth.getUser();
+  if (identityError) throw new Error(identityError.message);
+  if (identity.user?.id !== userId) throw new Error('계정이 변경됐어요. 알림을 다시 확인해 주세요.');
+  const { error } = await supabase.from('notification_dismissals').upsert({
+    store_id: storeId, user_id: userId, notification_id: notificationId,
+  }, { onConflict: 'user_id,notification_id', ignoreDuplicates: true });
+  if (error) throw new Error(missingDismissals(error) ? DISMISSAL_UPDATE_MESSAGE : error.message);
+  // Confirm both a new insert and an idempotent duplicate before removing cached UI.
+  const confirmed = await supabase.from('notification_dismissals').select('notification_id')
+    .eq('store_id', storeId).eq('user_id', userId).eq('notification_id', notificationId).maybeSingle();
+  if (confirmed.error) throw new Error(confirmed.error.message);
+  if (!confirmed.data) throw new Error('알림 삭제 결과를 확인하지 못했어요. 목록을 다시 확인해 주세요.');
 }
 
 export async function getUnreadCount(storeId: string): Promise<number> {
-  const { count, error } = await supabase
-    .from('notifications')
-    .select('*', { count: 'exact', head: true })
-    .eq('store_id', storeId)
-    .eq('is_read', false)
-    .neq('category', 'attendance');
-  if (error) throw new Error(error.message);
-  return count ?? 0;
+  return (await getNotifications(storeId)).filter(notification => !notification.is_read).length;
 }
 
 export async function markNotificationRead(id: string): Promise<void> {

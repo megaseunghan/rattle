@@ -1,20 +1,24 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { AppState } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { useAuth } from '../contexts/AuthContext';
-import { getNotifications, markAllNotificationsRead, markNotificationRead } from '../services/notifications';
+import { dismissNotification, getNotifications, markAllNotificationsRead, markNotificationRead } from '../services/notifications';
 import { AppNotification, NotificationCategory } from '../../types';
 import { queryClient, queryKeys, useQueryScope, isAccessDenied } from '../query';
+import { getErrorMessage } from '../utils/error';
 import { subscribeNotificationPolling } from '../query/notificationPolling';
 
 export function useNotifications() {
-  const { store, user, currentRole, canReadFinancials } = useAuth();
+  const { store, user, currentRole, canReadFinancials, devPreviewMode } = useAuth();
   const scope = useQueryScope();
   const storeId = store?.id;
   const scopeId = `${scope}:${storeId ?? ''}`;
   const scopeRef = useRef(scopeId);
   scopeRef.current = scopeId;
+  useEffect(() => () => { scopeRef.current = ''; }, []);
+  const removing = useRef(new Set<string>());
+  const [deleting, setDeleting] = useState<{ scope: string; id: string } | null>(null);
   const [writeError, setWriteError] = useState<{ scope: string; message: string } | null>(null);
   const options = {
     queryKey: queryKeys.store(scope, storeId ?? '', 'notifications'),
@@ -57,11 +61,35 @@ export function useNotifications() {
       if (scopeRef.current === scopeId) setWriteError({ scope: scopeId, message: '알림을 읽음으로 바꾸지 못했어요. 다시 시도해주세요.' });
     }
   }, [scope, scopeId, storeId, user?.id]);
+  const dismiss = useCallback(async (id: string) => {
+    if (!storeId || !user || devPreviewMode !== 'self' || scopeRef.current !== scopeId) return false;
+    const notice = queryClient.getQueryData<AppNotification[]>(queryKeys.store(scope, storeId, 'notifications'))?.find(n => n.id === id);
+    if (!notice || (notice.category === 'members' && currentRole !== 'admin') || (!canReadFinancials && ['sales', 'profit'].includes(notice.category))) return false;
+    const request = `${scopeId}:${id}`;
+    if (removing.current.has(request)) return false;
+    removing.current.add(request); setDeleting({ scope: scopeId, id });
+    try {
+      await dismissNotification(storeId, user.id, id);
+      if (scopeRef.current !== scopeId) return false;
+      const key = queryKeys.store(scope, storeId, 'notifications');
+      await queryClient.cancelQueries({ queryKey: key, exact: true });
+      if (scopeRef.current !== scopeId) return false;
+      queryClient.setQueryData<AppNotification[]>(key, items => items?.filter(n => n.id !== id));
+      setWriteError(null); return true;
+    } catch (error) {
+      if (scopeRef.current === scopeId) setWriteError({ scope: scopeId, message: getErrorMessage(error, '알림을 삭제하지 못했어요. 목록은 유지했어요.') });
+      return false;
+    } finally {
+      removing.current.delete(request);
+      if (scopeRef.current === scopeId) setDeleting(null);
+    }
+  }, [scope, scopeId, storeId, user?.id, currentRole, canReadFinancials, devPreviewMode]);
   const markRead = useCallback((id: string) => changeRead(id), [changeRead]);
   const markAllRead = useCallback(() => changeRead(), [changeRead]);
   const notifications = !storeId || !user || isAccessDenied(query.error) ? []
     : (query.data ?? []).filter(n => (n.category !== 'members' || currentRole === 'admin') && (canReadFinancials || !['sales', 'profit'].includes(n.category)));
   return { notifications, loading: query.isFetching,
     error: writeError?.scope === scopeId ? writeError.message : query.error ? '알림을 불러오지 못했어요. 다시 시도해주세요.' : null,
+    dismiss, deletingId: deleting?.scope === scopeId ? deleting.id : null,
     unreadCount: notifications.filter(n => !n.is_read).length, refetch, markRead, markAllRead };
 }
