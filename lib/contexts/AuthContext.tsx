@@ -10,6 +10,7 @@ import { UserFacingError } from '../utils/error';
 import { clearQueryData } from '../query/client';
 import { clearPosSyncCoordinator } from '../services/posSyncCoordinator';
 import { clearLegacyPosCache } from '../query/legacyPosCache';
+import { setExpenseCategorySession } from '../utils/expenseCategorySession';
 
 const LAST_STORE_ID_KEY = 'LAST_STORE_ID';
 const STORE_ACCESS_REFRESH_MS = 5 * 60_000;
@@ -167,6 +168,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await clearLegacyPosCache().catch(() => {});
     await AsyncStorage.removeItem(LAST_STORE_ID_KEY);
     await supabase.auth.signOut();
+    setExpenseCategorySession(null);
     setUser(null);
     setSession(null);
     setStore(null);
@@ -203,6 +205,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         if (session?.user) {
           const user = session.user;
+          setExpenseCategorySession(user.id);
           setSession(session);
           setUser(user);
           // onAuthStateChange 콜백 안에서 Supabase 쿼리를 직접 호출하면
@@ -219,6 +222,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             }
           }, 0);
         } else {
+          setExpenseCategorySession(null);
           resetQueryIdentity('signed-out');
           setSession(null);
           setUser(null);

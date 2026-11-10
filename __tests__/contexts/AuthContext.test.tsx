@@ -5,6 +5,7 @@ import { act, renderHook, waitFor } from '@testing-library/react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AuthProvider, useAuth } from '../../lib/contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
+import { getExpenseCategories, setExpenseCategorySession, toggleExpenseCategory } from '../../lib/utils/expenseCategorySession';
 
 jest.mock('@react-native-async-storage/async-storage', () => ({
   getItem: jest.fn(), setItem: jest.fn(), removeItem: jest.fn(),
@@ -31,6 +32,7 @@ async function login() {
   return hook;
 }
 beforeEach(() => {
+  setExpenseCategorySession(null);
   queryClient.clear();
   jest.clearAllMocks();
   (AsyncStorage.getItem as jest.Mock).mockResolvedValue('a');
@@ -42,6 +44,19 @@ beforeEach(() => {
     return { data: { subscription: { unsubscribe: jest.fn() } } };
   });
   queries();
+});
+
+it('비용 분류 펼침은 인증 갱신에 유지되고 로그아웃 후 새 로그인에서 초기화된다', async () => {
+  const { result } = await login();
+  toggleExpenseCategory('user', 'a', '고정비');
+  act(() => notify('TOKEN_REFRESHED', { user: { id: 'user' } }));
+  await waitFor(() => expect(result.current.loading).toBe(false));
+  expect(getExpenseCategories('user', 'a').고정비).toBe(true);
+  await act(async () => { await result.current.signOut(); });
+  expect(getExpenseCategories('user', 'a')).toEqual({});
+  act(() => notify('SIGNED_IN', { user: { id: 'user' } }));
+  await waitFor(() => expect(result.current.loading).toBe(false));
+  expect(getExpenseCategories('user', 'a')).toEqual({});
 });
 
 it('매장 선택은 서버 재조회를 기다리지 않고 불러온 목록으로 전환한다', async () => {
