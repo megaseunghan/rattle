@@ -35,6 +35,12 @@ export async function updateStoreInfo(
   if (error) throw new Error(error.message);
 }
 
+/** Whole-hour closing boundary; existing stores update contract. */
+export async function updateStoreClosingTime(storeId: string, closingTime: string): Promise<void> {
+  const { error } = await supabase.from('stores').update({ closing_time: closingTime }).eq('id', storeId);
+  if (error) throw error;
+}
+
 /** Only a sole owner of a store without operational records can remove it. */
 export async function deleteEmptyOwnedStore(storeId: string): Promise<void> {
   const { error } = await supabase.rpc('delete_empty_owned_store', { p_store_id: storeId });

@@ -1,15 +1,18 @@
-import { SheetModal } from '../../lib/components/ui/SheetModal';
 import { useState, useEffect, useMemo, useRef } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
-  Modal, Pressable, ActivityIndicator, Alert,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { AppIcon } from '../../lib/icons/AppIcon';
+import { Fonts } from '../../constants/fonts';
+import { AppBar, Button } from '../../lib/components/ui';
+import { GlassBackdrop } from '../../lib/components/GlassBackdrop';
+import { ClosingTimeWheel } from '../../lib/components/ClosingTimeWheel';
 import { router } from 'expo-router';
 import { Colors } from '../../constants/colors';
 import { useAuth } from '../../lib/contexts/AuthContext';
-import { supabase } from '../../lib/supabase';
+import { updateStoreClosingTime } from '../../lib/services/stores';
+import { useConfirmLeave } from '../../lib/hooks/useConfirmLeave';
 import { getErrorMessage } from '../../lib/utils/error';
 
 type Meridiem = '오전' | '오후';
@@ -39,7 +42,7 @@ function formatLabel(hour24: number): string {
 const HOURS_12 = Array.from({ length: 12 }, (_, i) => i + 1); // 1~12
 
 export default function SalesSettingsScreen() {
-  const { store, user, refreshStore } = useAuth();
+  const { store, user, currentRole, refreshStore } = useAuth();
   const initialHour = parseHour24(store?.closing_time as string | null | undefined);
 
   const [meridiem, setMeridiem] = useState<Meridiem>(to12h(initialHour).meridiem);
@@ -53,7 +56,9 @@ export default function SalesSettingsScreen() {
   currentScope.current = scope;
   useEffect(() => { currentScope.current = scope; return () => { currentScope.current = null; }; }, [scope]);
   const [savedNeedsRefresh, setSavedNeedsRefresh] = useState(false);
-  const [picker, setPicker] = useState<null | 'meridiem' | 'hour'>(null);
+  const [periodMoving, setPeriodMoving] = useState(false);
+  const [hourMoving, setHourMoving] = useState(false);
+  const isAdmin = currentRole === 'admin';
 
   useEffect(() => {
     const h = parseHour24(store?.closing_time as string | null | undefined);
@@ -69,21 +74,18 @@ export default function SalesSettingsScreen() {
 
   const selectedHour24 = to24h(meridiem, hour12);
   const dirty = selectedHour24 !== initialHour;
+  const allowLeave = useConfirmLeave(dirty || saving, { blockLeave: saving });
   const label = useMemo(() => formatLabel(selectedHour24), [selectedHour24]);
 
   useEffect(() => { setSavedNeedsRefresh(false); reconcile.current = false; }, [scope]);
 
   async function handleSave() {
-    if (!store || savingLock.current || savedNeedsRefresh) return;
+    if (!store || !isAdmin || !dirty || periodMoving || hourMoving || savingLock.current || savedNeedsRefresh) return;
     savingLock.current = true;
     setSaving(true);
     try {
       const closing = `${String(selectedHour24).padStart(2, '0')}:00`;
-      const { error } = await supabase
-        .from('stores')
-        .update({ closing_time: closing })
-        .eq('id', store.id);
-      if (error) throw error;
+      await updateStoreClosingTime(store.id, closing);
       if (currentScope.current !== scope) return;
       setSavedNeedsRefresh(true);
       try {
@@ -98,6 +100,7 @@ export default function SalesSettingsScreen() {
         return;
       }
       Alert.alert('저장 완료', '하루 매출 사이클이 변경되었어요.');
+      allowLeave();
       router.back();
     } catch (e: unknown) {
       if (currentScope.current !== scope) return;
@@ -119,128 +122,47 @@ export default function SalesSettingsScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} accessibilityRole="button" accessibilityLabel="뒤로가기">
-          <AppIcon name="chevron-back" size={24} color={Colors.black} />
-        </TouchableOpacity>
-        <Text style={styles.title}>매출 마감 시각</Text>
-        <TouchableOpacity
-          style={[styles.saveBtn, (!dirty || saving || savedNeedsRefresh) && styles.saveBtnDisabled]}
-          onPress={handleSave}
-          disabled={!dirty || saving || savedNeedsRefresh}
-        >
-          {saving ? <ActivityIndicator size="small" color={Colors.white} /> : <Text style={styles.saveBtnText}>저장</Text>}
-        </TouchableOpacity>
-      </View>
-
+      <GlassBackdrop />
+      <AppBar transparent title="일 정산 시간" onBack={() => { if (!savingLock.current) router.back(); }} />
+      {!isAdmin ? <Text style={styles.permission}>일 정산 시간은 관리자만 수정할 수 있어요.</Text> :
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        {savedNeedsRefresh && <TouchableOpacity accessibilityRole="button" disabled={saving} onPress={() => void retryRefresh()} style={styles.rangeSummary}><Text>저장된 정보 다시 불러오기</Text></TouchableOpacity>}
-        <Text style={styles.fieldLabel}>하루 매출을 나누는 시각</Text>
-        <Text style={styles.fieldDescription}>자정을 지나 영업한다면 실제 마감 시각에 맞춰 주세요.</Text>
-        <View style={styles.selectRow}>
-          <SelectField value={meridiem} onPress={() => { if (!saving && !savedNeedsRefresh) setPicker('meridiem'); }} flex={1} />
-          <SelectField value={`${hour12}시`} onPress={() => { if (!saving && !savedNeedsRefresh) setPicker('hour'); }} flex={1.2} />
+        <View>
+          <Text style={styles.rangeLabel}>하루 집계 범위</Text>
+          <Text style={styles.rangeValue} accessibilityLiveRegion="polite">{label} → 다음 날 {label}</Text>
+          <Text style={styles.guideText}>이 시간 사이의 매출을 하루로 집계해요.</Text>
+          <View style={styles.wheels}>
+            <View pointerEvents="none" style={styles.selection} />
+            <ClosingTimeWheel key={`period-${store?.id}-${user?.id}`} label="오전 오후" options={['오전', '오후']}
+              index={meridiem === '오전' ? 0 : 1} disabled={saving || savedNeedsRefresh}
+              onChange={i => setMeridiem(i === 0 ? '오전' : '오후')} onMoving={setPeriodMoving} />
+            <ClosingTimeWheel key={`hour-${store?.id}-${user?.id}`} label="시간" options={HOURS_12.map(h => `${h}시`)}
+              index={hour12 - 1} disabled={saving || savedNeedsRefresh}
+              onChange={i => setHour12(i + 1)} onMoving={setHourMoving} />
+          </View>
         </View>
-
-        <View style={styles.rangeSummary}>
-          <Text style={styles.rangeLabel}>집계 범위</Text>
-          <Text style={styles.rangeValue}>{label} → 익일 {label}</Text>
-          <Text style={styles.guideText}>
-            이 시간 사이의 주문을 하루 매출로 집계합니다.
-          </Text>
+        <View style={styles.footer}>
+          {savedNeedsRefresh && <TouchableOpacity accessibilityRole="button" disabled={saving} onPress={() => void retryRefresh()} style={styles.retry}>
+            <Text style={styles.retryText}>저장된 정보 다시 불러오기</Text>
+          </TouchableOpacity>}
+          <Button label={saving ? '저장 중...' : '저장하기'} loading={saving} onPress={() => void handleSave()}
+            disabled={!dirty || savedNeedsRefresh || periodMoving || hourMoving} />
         </View>
-      </ScrollView>
-
-      {/* 셀렉트 모달 */}
-      <SheetModal visible={picker !== null} onRequestClose={() => setPicker(null)}>
-        <Pressable style={styles.modalOverlay} onPress={() => setPicker(null)}>
-          <Pressable style={styles.modalSheet} onPress={() => {}}>
-            <Text style={styles.modalTitle}>{picker === 'meridiem' ? '오전 / 오후' : '시간 선택'}</Text>
-            <ScrollView style={{ maxHeight: 320 }}>
-              {picker === 'meridiem'
-                ? (['오전', '오후'] as Meridiem[]).map(opt => (
-                    <SelectOption
-                      key={opt}
-                      label={opt}
-                      selected={meridiem === opt}
-                      onPress={() => { setMeridiem(opt); setPicker(null); }}
-                    />
-                  ))
-                : HOURS_12.map(h => (
-                    <SelectOption
-                      key={h}
-                      label={`${h}시`}
-                      selected={hour12 === h}
-                      onPress={() => { setHour12(h); setPicker(null); }}
-                    />
-                  ))}
-            </ScrollView>
-          </Pressable>
-        </Pressable>
-      </SheetModal>
+      </ScrollView>}
     </SafeAreaView>
-  );
-}
-
-function SelectField({ value, onPress, flex }: { value: string; onPress: () => void; flex: number }) {
-  return (
-    <TouchableOpacity style={[styles.selectField, { flex }]} onPress={onPress} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel={`${value}, 변경`}>
-      <Text style={styles.selectValue}>{value}</Text>
-      <AppIcon name="chevron-down" size={18} color={Colors.gray400} />
-    </TouchableOpacity>
-  );
-}
-
-function SelectOption({ label, selected, onPress }: { label: string; selected: boolean; onPress: () => void }) {
-  return (
-    <TouchableOpacity style={styles.optionItem} onPress={onPress} activeOpacity={0.7} accessibilityRole="radio" accessibilityState={{ checked: selected }}>
-      <Text style={[styles.optionItemText, selected && styles.optionItemTextActive]}>{label}</Text>
-      {selected && <AppIcon name="checkmark" size={18} color={Colors.primary} />}
-    </TouchableOpacity>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.homeCanvas },
-  header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 20, paddingVertical: 12, backgroundColor: Colors.homeCanvas,
-    borderBottomWidth: 0.5, borderBottomColor: Colors.homeBorder,
-  },
-  backBtn: { width: 44, height: 44, justifyContent: 'center' },
-  title: { flexShrink: 1, fontSize: 22, fontWeight: '700', color: Colors.black },
-  saveBtn: { backgroundColor: Colors.primary, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 12, minHeight: 44, justifyContent: 'center' },
-  saveBtnDisabled: { opacity: 0.4 },
-  saveBtnText: { color: Colors.white, fontSize: 14, fontWeight: '700' },
-
-  scroll: { padding: 20, paddingBottom: 48 },
-
-  fieldLabel: { fontSize: 17, fontWeight: '700', color: Colors.black },
-  fieldDescription: { fontSize: 14, color: Colors.gray600, lineHeight: 22, marginTop: 8 },
-  rangeSummary: { marginTop: 24, paddingTop: 24, borderTopWidth: 1, borderTopColor: Colors.gray200, gap: 8 },
-  rangeLabel: { fontSize: 13, color: Colors.gray500 },
-  rangeValue: { fontVariant: ['tabular-nums'], fontSize: 17, fontWeight: '600', color: Colors.black },
-  guideText: { fontSize: 13, color: Colors.gray600, lineHeight: 20 },
-
-  selectRow: { flexDirection: 'row', gap: 10, marginTop: 20 },
-  selectField: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.gray200,
-    borderRadius: 14, paddingHorizontal: 16, paddingVertical: 16,
-  },
-  selectValue: { flexShrink: 1, fontVariant: ['tabular-nums'], fontSize: 16, color: Colors.black, fontWeight: '600' },
-
-  modalOverlay: { flex: 1, backgroundColor: Colors.overlay, justifyContent: 'flex-end' },
-  modalSheet: {
-    backgroundColor: Colors.white, borderTopLeftRadius: 24, borderTopRightRadius: 24,
-    padding: 20, paddingBottom: 36,
-  },
-  modalTitle: { fontSize: 16, fontWeight: '700', color: Colors.black, marginBottom: 12 },
-  optionItem: {
-    minHeight: 44,
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingVertical: 14, borderBottomWidth: 0.5, borderBottomColor: Colors.homeBorder,
-  },
-  optionItemText: { flexShrink: 1, fontVariant: ['tabular-nums'], fontSize: 16, color: Colors.gray700 },
-  optionItemTextActive: { color: Colors.primary, fontWeight: '700' },
+  scroll: { flexGrow: 1, paddingHorizontal: 22, paddingTop: 32, paddingBottom: 20, justifyContent: 'space-between' },
+  rangeLabel: { fontFamily: Fonts.wantedRegular, fontSize: 12, color: Colors.gray500 },
+  rangeValue: { fontFamily: Fonts.wantedSemiBold, fontSize: 18, lineHeight: 29, color: Colors.black, marginTop: 8, marginBottom: 6 },
+  guideText: { fontFamily: Fonts.wantedRegular, fontSize: 13, color: Colors.gray500, lineHeight: 22 },
+  wheels: { flexDirection: 'row', gap: 12, marginTop: 28, paddingHorizontal: 22 },
+  selection: { position: 'absolute', left: 0, right: 0, top: 68, height: 44, borderRadius: 12,
+    backgroundColor: Colors.bg, borderTopWidth: 1, borderBottomWidth: 1, borderColor: Colors.homeBorder },
+  footer: { paddingTop: 34 },
+  retry: { minHeight: 44, justifyContent: 'center', marginBottom: 10 },
+  retryText: { fontFamily: Fonts.wantedRegular, fontSize: 13, color: Colors.action },
+  permission: { margin: 22, fontFamily: Fonts.wantedRegular, fontSize: 13, color: Colors.gray500 },
 });
