@@ -7,6 +7,7 @@ import {
 } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { MoreDrawerIcon, type MoreDrawerIconName } from '../icons/MoreDrawerIcon';
 import { AppIcon } from '../icons/AppIcon';
 import { router } from 'expo-router';
 import { Colors } from '../../constants/colors';
@@ -21,11 +22,11 @@ const DRAWER_WIDTH = Math.min(320, Dimensions.get('window').width * 0.82);
 function SettingRow({
   icon, label, onPress, danger, withBorder,
 }: {
-  icon: keyof typeof AppIcon.glyphMap; label: string; onPress: () => void; danger?: boolean; withBorder?: boolean;
+  icon?: MoreDrawerIconName; label: string; onPress: () => void; danger?: boolean; withBorder?: boolean;
 }) {
   return (
-    <TouchableOpacity style={[styles.listItem, withBorder && styles.listItemBorder]} onPress={onPress} activeOpacity={0.7}>
-      <AppIcon name={icon} size={19} color={danger ? Colors.negative : Colors.gray600} style={styles.rowIcon} />
+    <TouchableOpacity accessibilityRole="button" style={[styles.listItem, withBorder && styles.listItemBorder]} onPress={onPress} activeOpacity={0.7}>
+      {icon && <MoreDrawerIcon name={icon} />}
       <Text style={[styles.itemName, danger && { color: Colors.negative }]}>{label}</Text>
       <AppIcon name="chevron-forward" size={15} color={Colors.gray300} />
     </TouchableOpacity>
@@ -43,7 +44,7 @@ function AccordionSection({ title, defaultOpen = true, children }: { title: stri
 
   return (
     <View style={styles.accordion}>
-      <TouchableOpacity style={styles.accordionHeader} onPress={toggle} activeOpacity={0.7}>
+      <TouchableOpacity accessibilityRole="button" accessibilityState={{ expanded: open }} style={styles.accordionHeader} onPress={toggle} activeOpacity={0.7}>
         <Text style={styles.sectionLabel}>{title}</Text>
         <AppIcon name={open ? 'chevron-up' : 'chevron-down'} size={16} color={Colors.gray400} />
       </TouchableOpacity>
@@ -210,9 +211,7 @@ export function MoreDrawer({ visible, onClose, onOpen, allSelected = false, onSe
 
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
           <TouchableOpacity style={styles.profileRow} onPress={() => go('/mypage')} activeOpacity={0.7}>
-            <View style={styles.profileAvatar}>
-              <AppIcon name="person" size={20} color={Colors.primary} />
-            </View>
+            <MoreDrawerIcon name="staff" />
             <View style={styles.itemInfoFlex}>
               <Text style={styles.profileName} numberOfLines={1}>{user?.email ?? '내 계정'}</Text>
               <Text style={styles.profileSub}>마이페이지</Text>
@@ -223,7 +222,7 @@ export function MoreDrawer({ visible, onClose, onOpen, allSelected = false, onSe
           <AccordionSection title="매장 관리">
             {onAllStores && <TouchableOpacity style={styles.listItem} disabled={switching !== null} accessibilityRole="button" accessibilityLabel="전체 매장 대시보드" accessibilityState={{ selected: allSelected }}
               onPress={() => { onAllStores(); onClose(); }}>
-              <AppIcon name="grid-outline" size={19} color={Colors.gray600} style={styles.rowIcon} /><Text style={styles.itemName}>전체 매장</Text>
+              <MoreDrawerIcon name="store-overview" /><Text style={styles.itemName}>전체 매장</Text>
               {allSelected && <AppIcon name="checkmark" size={17} color={Colors.action} />}
             </TouchableOpacity>}
             {stores.map((s, i) => {
@@ -239,11 +238,8 @@ export function MoreDrawer({ visible, onClose, onOpen, allSelected = false, onSe
                   accessibilityState={{ selected: isActive, disabled: switching !== null }}
                   activeOpacity={0.7}
                 >
-                  <AppIcon name="business-outline" size={19} color={Colors.gray600} style={styles.rowIcon} />
-                  <View style={styles.itemInfoFlex}>
-                    <Text style={styles.itemName} numberOfLines={1}>{s.name}</Text>
-                    {isActive && <Text style={[styles.itemSub, { color: Colors.primary }]}>현재 선택됨</Text>}
-                  </View>
+                  <MoreDrawerIcon name="store" />
+                  <Text style={styles.itemName} numberOfLines={1}>{s.name}</Text>
                   {switching === s.id ? (
                     <ActivityIndicator size="small" color={Colors.gray400} />
                   ) : isActive ? (
@@ -256,20 +252,20 @@ export function MoreDrawer({ visible, onClose, onOpen, allSelected = false, onSe
             })}
           </AccordionSection>
 
-          <SettingRow icon="add-circle-outline" label="매장 추가·참여" onPress={() => go('/(auth)/select-store')} />
+          <SettingRow icon="store-add" label="매장 추가·참여" onPress={() => go('/(auth)/select-store')} />
           <AccordionSection title="설정">
-            {isAdmin && <SettingRow icon="storefront-outline" label="매장 정보" onPress={() => go('/settings/store')} />}
-            {isAdmin && currentStore?.owner_id === user?.id && <SettingRow icon="pie-chart-outline" label="손익 공유" withBorder onPress={() => go('/settings/financial-sharing')} />}
-            {isAdmin && <SettingRow icon="people-outline" label="멤버 관리" withBorder onPress={() => go('/settings/members')} />}
-            {isAdmin && <SettingRow icon="card-outline" label="TossPos 연동" withBorder onPress={() => go('/settings/pos-sync')} />}
-            {isAdmin && <SettingRow icon="notifications-outline" label="알림 설정" withBorder onPress={() => go('/notifications/settings')} />}
-            <SettingRow icon="checkmark-done-outline" label="청소 체크리스트" withBorder={isAdmin} onPress={() => go('/cleaning')} />
+            {isAdmin && <SettingRow icon="store-settings" label="매장 정보" onPress={() => go('/settings/store')} />}
+            {isAdmin && currentStore?.owner_id === user?.id && <SettingRow icon="profit-loss" label="손익 공유" withBorder onPress={() => go('/settings/financial-sharing')} />}
+            {isAdmin && <SettingRow icon="staff" label="멤버 관리" withBorder onPress={() => go('/settings/members')} />}
+            {isAdmin && <SettingRow icon="pos-connect" label="TossPos 연동" withBorder onPress={() => go('/settings/pos-sync')} />}
+            {isAdmin && <SettingRow icon="review-pending" label="알림 설정" withBorder onPress={() => go('/notifications/settings')} />}
+            <SettingRow icon="checklist" label="청소 체크리스트" withBorder={isAdmin} onPress={() => go('/cleaning')} />
             {isEmailUser && (
-              <SettingRow icon="lock-closed-outline" label="비밀번호 변경" withBorder onPress={() => go('/settings/password')} />
+              <SettingRow icon="access-denied" label="비밀번호 변경" withBorder onPress={() => go('/settings/password')} />
             )}
-            <SettingRow icon="document-text-outline" label="이용약관" withBorder onPress={() => go('/legal/terms')} />
-            <SettingRow icon="shield-checkmark-outline" label="개인정보처리방침" withBorder onPress={() => go('/legal/privacy')} />
-            <SettingRow icon="log-out-outline" label="로그아웃" withBorder onPress={handleSignOut} />
+            <SettingRow icon="payroll" label="이용약관" withBorder onPress={() => go('/legal/terms')} />
+            <SettingRow icon="access-denied" label="개인정보처리방침" withBorder onPress={() => go('/legal/privacy')} />
+            <SettingRow label="로그아웃" withBorder onPress={handleSignOut} />
           </AccordionSection>
 
           <TouchableOpacity style={styles.dangerTextRow} onPress={handleDeleteAccount} activeOpacity={0.7}>
@@ -300,8 +296,7 @@ const styles = StyleSheet.create({
   scroll: { paddingBottom: 40 },
   profileRow: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
-    padding: 14, marginBottom: 16, backgroundColor: Colors.white,
-    borderRadius: 20, borderWidth: 1, borderColor: Colors.homeBorder,
+    paddingVertical: 10, paddingBottom: 24, marginBottom: 4,
   },
   profileAvatar: {
     width: 42, height: 42, borderRadius: 21,
@@ -316,13 +311,12 @@ const styles = StyleSheet.create({
   dangerTextRow: { alignItems: 'center', paddingVertical: 16 },
   dangerText: { fontSize: 14, fontWeight: '600', color: Colors.negative },
   sectionLabel: {
-    fontSize: 13, fontWeight: '700', color: Colors.gray600,
+    fontSize: 12, fontWeight: '500', color: Colors.gray600,
   },
-  listBody: { backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.homeBorder, borderRadius: 20, paddingHorizontal: 14, overflow: 'hidden' },
-  listItem: { flexDirection: 'row', alignItems: 'center', minHeight: 50, paddingVertical: 10, gap: 14 },
+  listBody: {},
+  listItem: { flexDirection: 'row', alignItems: 'center', minHeight: 58, paddingVertical: 8, gap: 10 },
   listItemBorder: { borderTopWidth: 0.5, borderTopColor: Colors.homeBorder },
   rowIcon: { width: 22 },
   itemInfoFlex: { flex: 1 },
-  itemName: { flex: 1, fontSize: 14, fontWeight: '500', color: Colors.black },
-  itemSub: { fontSize: 12, marginTop: 1 },
+  itemName: { flex: 1, fontSize: 13, fontWeight: '500', color: Colors.black },
 });
