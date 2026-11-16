@@ -158,65 +158,6 @@ paths:
         default:
           description: Toss Place API가 반환한 그 외 상태 코드가 그대로 전달됨
 
-  /submit-toss-application:
-    post:
-      operationId: submitTossPlaceApplication
-      tags: [toss-place]
-      summary: Toss Place 가맹점 연동 신청
-      description: |
-        매장의 Toss Place 연동을 신청하는 Google Forms를 서버에서 대신
-        제출한다 (`lib/services/tossPlaceForm.ts`). 신청 내용은 Toss Place
-        운영팀이 검토 후 가맹점 대표자 동의(녹취) 절차를 거쳐 실제
-        연동한다.
-      security:
-        - bearerAuth: []
-          apiKeyAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [name, address, businessNumber, ownerPhone]
-              properties:
-                name:
-                  type: string
-                  description: 매장명
-                address:
-                  type: string
-                  description: 매장 주소
-                businessNumber:
-                  type: string
-                  description: 사업자등록번호
-                ownerPhone:
-                  type: string
-                  description: 대표자 연락처
-      responses:
-        "200":
-          description: 신청 폼 제출 완료
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    enum: [true]
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "500":
-          description: 서버 환경변수 미설정(TOSS_CONTACT_EMAIL/PHONE)
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "502":
-          description: Google Forms 제출 실패
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-
   /toss-webhook:
     post:
       operationId: receiveTossWebhook
