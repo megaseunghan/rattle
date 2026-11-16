@@ -12,7 +12,8 @@ import { Illustration } from '../../lib/icons/Illustration';
 import { Spacing } from '../../constants/designTokens';
 import { useAuth } from '../../lib/contexts/AuthContext';
 import { getErrorMessage } from '../../lib/utils/error';
-import { deleteEmptyOwnedStore, updateStoreInfo } from '../../lib/services/stores';
+import { deleteOwnedStore, updateStoreInfo } from '../../lib/services/stores';
+import { formatRestoreDeadline } from '../../lib/utils/storeDeletion';
 import { GlassBackdrop } from '../../lib/components/GlassBackdrop';
 import { AppBar, Button, Field } from '../../lib/components/ui';
 
@@ -105,11 +106,14 @@ export default function StoreInfoScreen() {
     setDeleting(true);
     Keyboard.dismiss();
     try {
-      await deleteEmptyOwnedStore(target.id);
+      const result = await deleteOwnedStore(target.id);
       if (currentScope.current !== target.scope) return;
       setDeleteTarget(null);
       setDeletePhrase('');
       try { await refreshStore(); } catch { /* The list screen can retry refresh after a successful delete. */ }
+      if (result.mode === 'scheduled') {
+        Alert.alert('매장을 삭제했어요', `${formatRestoreDeadline(result.purgeAfter)}까지 매장 선택 화면에서 복구할 수 있어요.`);
+      }
       if (screenActive.current && currentUserId.current === target.userId) router.replace('/(auth)/select-store');
     } catch (e: unknown) {
       if (currentScope.current === target.scope) Alert.alert('삭제 실패', getErrorMessage(e));
@@ -167,8 +171,8 @@ export default function StoreInfoScreen() {
           <Pressable style={StyleSheet.absoluteFill} onPress={closeDelete} accessible={false} />
           <View style={styles.dialog} accessibilityViewIsModal onAccessibilityEscape={closeDelete}>
             <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.dialogContent}>
-              <Text accessibilityRole="header" style={styles.dialogTitle}>빈 매장 삭제</Text>
-              <Text style={styles.help}>‘{deleteTarget?.name}’ 매장을 삭제할까요? 다른 멤버, 운영 기록 또는 POS 연결이 있으면 삭제되지 않아요. 삭제한 매장은 복구할 수 없어요.</Text>
+              <Text accessibilityRole="header" style={styles.dialogTitle}>매장 삭제</Text>
+              <Text style={styles.help}>‘{deleteTarget?.name}’ 매장을 삭제할까요? 모든 구성원이 바로 이 매장을 볼 수 없게 돼요. 7일 동안은 매장 선택 화면에서 복구할 수 있고, 그 뒤에는 직원·급여·매출 등 모든 기록이 완전히 삭제돼요. POS가 연결된 매장은 연결을 먼저 해제해야 해요.</Text>
               <Field label={`“${expectedPhrase}”를 입력해주세요.`} accessibilityLabel="삭제 확인 문구" value={deletePhrase} onChangeText={setDeletePhrase} editable={!deleting} autoCapitalize="none" autoCorrect={false} />
               <View style={styles.dialogActions}>
                 <View style={styles.action}><Button label="취소" variant="text" onPress={closeDelete} disabled={deleting} /></View>

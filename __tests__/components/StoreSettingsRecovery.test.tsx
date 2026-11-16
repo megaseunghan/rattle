@@ -6,7 +6,7 @@ const mockSave = jest.fn(), mockRefresh = jest.fn(), mockUpdate = jest.fn();
 let mockRole = 'admin', mockUser = 'owner';
 let mockStore = { id: 's', name: '매장', address: '', owner_id: 'owner', closing_time: '23:00' };
 jest.mock('../../lib/contexts/AuthContext', () => ({ useAuth: () => ({ store: mockStore, user: { id: mockUser }, currentRole: mockRole, refreshStore: mockRefresh }) }));
-jest.mock('../../lib/services/stores', () => ({ updateStoreInfo: (...args: unknown[]) => mockSave(...args), updateStoreClosingTime: async (id: string, time: string) => { mockUpdate({ closing_time: time }); const result = await mockSave('id', id); if (result?.error) throw result.error; }, deleteEmptyOwnedStore: jest.fn() }));
+jest.mock('../../lib/services/stores', () => ({ updateStoreInfo: (...args: unknown[]) => mockSave(...args), updateStoreClosingTime: async (id: string, time: string) => { mockUpdate({ closing_time: time }); const result = await mockSave('id', id); if (result?.error) throw result.error; }, deleteOwnedStore: jest.fn() }));
 jest.mock('../../lib/supabase', () => ({ supabase: { from: () => ({ update: (...args: unknown[]) => { mockUpdate(...args); return { eq: mockSave }; } }) } }));
 jest.mock('../../lib/icons/AppIcon', () => ({ AppIcon: () => null }));
 jest.mock('expo-router', () => ({ useNavigation: () => ({ addListener: () => () => {}, dispatch: jest.fn() }), useFocusEffect: (callback: any) => require('react').useEffect(callback, [callback]), router: { back: jest.fn(), replace: jest.fn(), push: jest.fn() } }));
@@ -15,7 +15,7 @@ jest.mock('../../lib/components/ui', () => {
   const { Text, TextInput, Pressable } = require('react-native');
   return { AppBar: () => null, Field: ({ label, ...props }: any) => <TextInput accessibilityLabel={label} {...props} />, Button: ({ label, onPress, disabled, loading }: any) => <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ disabled: !!(disabled || loading) }} disabled={disabled || loading} onPress={onPress}><Text>{label}</Text></Pressable> };
 });
-beforeEach(() => { jest.clearAllMocks(); mockRole = 'admin'; mockUser = 'owner'; require('../../lib/services/stores').deleteEmptyOwnedStore.mockReset().mockResolvedValue({ mode: 'deleted', purgeAfter: null }); mockStore = { id: 's', name: '매장', address: '', owner_id: 'owner', closing_time: '23:00' }; mockSave.mockReset().mockResolvedValue({ error: null }); mockRefresh.mockReset().mockResolvedValue(undefined); jest.spyOn(Alert, 'alert').mockImplementation(() => {}); });
+beforeEach(() => { jest.clearAllMocks(); mockRole = 'admin'; mockUser = 'owner'; require('../../lib/services/stores').deleteOwnedStore.mockReset().mockResolvedValue({ mode: 'deleted', purgeAfter: null }); mockStore = { id: 's', name: '매장', address: '', owner_id: 'owner', closing_time: '23:00' }; mockSave.mockReset().mockResolvedValue({ error: null }); mockRefresh.mockReset().mockResolvedValue(undefined); jest.spyOn(Alert, 'alert').mockImplementation(() => {}); });
 afterEach(() => jest.restoreAllMocks());
 function editClosingTime() { fireEvent(screen.getByLabelText('오전 오후'), 'accessibilityAction', { nativeEvent: { actionName: 'decrement' } }); }
 it('매장 정보 저장 후 조회만 실패하면 저장 완료 안내와 읽기 전용 재시도를 제공한다', async () => {
@@ -78,7 +78,7 @@ it('동일 객체를 유지하는 새로고침 성공 뒤 백그라운드 갱신
 
 
 it('삭제는 저장된 이름의 정확한 문구만 허용하고 연타를 막는다', async () => {
-  const remove = require('../../lib/services/stores').deleteEmptyOwnedStore;
+  const remove = require('../../lib/services/stores').deleteOwnedStore;
   let finish!: () => void; remove.mockReturnValueOnce(new Promise(resolve => { finish = () => resolve({ mode: 'deleted', purgeAfter: null }); }));
   render(<StoreInfoScreen />);
   fireEvent.changeText(screen.getByLabelText('매장명'), '저장하지 않은 이름');
@@ -108,7 +108,7 @@ it('확인 중 매장이나 계정이 바뀌면 이전 삭제창을 닫는다', 
   expect(screen.queryByLabelText('삭제 확인 문구')).toBeNull();
   fireEvent.press(screen.getByText('매장 삭제')); mockUser = 'new-user'; view.rerender(<StoreInfoScreen />);
   expect(screen.queryByLabelText('삭제 확인 문구')).toBeNull();
-  expect(require('../../lib/services/stores').deleteEmptyOwnedStore).not.toHaveBeenCalled();
+  expect(require('../../lib/services/stores').deleteOwnedStore).not.toHaveBeenCalled();
 });
 
 it('소유자가 아닌 관리자에게 삭제와 공유를 표시하지 않는다', () => {
@@ -118,7 +118,7 @@ it('소유자가 아닌 관리자에게 삭제와 공유를 표시하지 않는�
 });
 
 it('삭제 서버 실패는 입력을 보존하고 실패를 안내한다', async () => {
-  require('../../lib/services/stores').deleteEmptyOwnedStore.mockRejectedValueOnce(new Error('not empty'));
+  require('../../lib/services/stores').deleteOwnedStore.mockRejectedValueOnce(new Error('not empty'));
   render(<StoreInfoScreen />); fireEvent.press(screen.getByText('매장 삭제'));
   fireEvent.changeText(screen.getByLabelText('삭제 확인 문구'), '매장 삭제하기'); fireEvent.press(screen.getByText('삭제'));
   await waitFor(() => expect(Alert.alert).toHaveBeenCalledWith('삭제 실패', expect.any(String)));
@@ -165,4 +165,12 @@ it('일 정산 시간 직접 경로에서도 비관리자는 편집할 수 없�
   mockRole = 'member'; render(<SalesSettingsScreen />);
   expect(screen.queryByLabelText('시간')).toBeNull(); expect(screen.queryByText('저장하기')).toBeNull();
   expect(mockSave).not.toHaveBeenCalled();
+});
+
+it('기록이 있어 7일 유예로 삭제되면 복구 기한을 안내한다', async () => {
+  require('../../lib/services/stores').deleteOwnedStore.mockResolvedValueOnce({ mode: 'scheduled', purgeAfter: '2026-11-21T06:00:00.000Z' });
+  render(<StoreInfoScreen />); fireEvent.press(screen.getByText('매장 삭제'));
+  fireEvent.changeText(screen.getByLabelText('삭제 확인 문구'), '매장 삭제하기'); fireEvent.press(screen.getByText('삭제'));
+  await waitFor(() => expect(Alert.alert).toHaveBeenCalledWith('매장을 삭제했어요', '11월 21일 오후 3시까지 매장 선택 화면에서 복구할 수 있어요.'));
+  expect(require('expo-router').router.replace).toHaveBeenCalledWith('/(auth)/select-store');
 });
