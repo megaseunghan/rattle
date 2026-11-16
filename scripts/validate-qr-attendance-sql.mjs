@@ -1,5 +1,5 @@
 // 로컬 PGlite 전용. 실제 Supabase 연결·환경변수·운영 데이터는 사용하지 않는다.
-// QR 출퇴근(20261116120000_qr_attendance.sql) 검증: 토큰·재사용·권한·정정·삭제 대기 매장·파기.
+// QR 출퇴근(20261116120000_qr_attendance.sql + 20261116130000_qr_attendance_fixes.sql) 검증: 토큰·재사용·권한·정정·삭제 대기 매장·파기.
 import assert from 'node:assert/strict';
 import { createHmac } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
@@ -7,9 +7,9 @@ const { PGlite } = await import(process.env.RATTLE_PGLITE_MODULE ?? '@electric-s
 const { pgcrypto } = await import('@electric-sql/pglite/contrib/pgcrypto');
 const db = new PGlite({ extensions: { pgcrypto } });
 const id = n => `00000000-0000-0000-0000-${String(n).padStart(12, '0')}`;
-const u = { owner: id(1), alice: id(2), bob: id(3), other: id(4), outsider: id(5) };
+const u = { owner: id(1), alice: id(2), bob: id(3), other: id(4), outsider: id(5), carol: id(6), dave: id(7) };
 const s = { main: id(11), second: id(12) };
-const e = { alice: id(21), bob: id(22), aliceSecond: id(23), outsider: id(24) };
+const e = { alice: id(21), bob: id(22), aliceSecond: id(23), outsider: id(24), carol: id(25), dave: id(26) };
 let checks = 0;
 const check = (label, actual, expected) => { assert.deepEqual(actual, expected, label); checks++; };
 const ok = (label, value) => { assert.ok(value, label); checks++; };
@@ -65,17 +65,21 @@ try {
       SELECT public.is_store_member(p_store_id) AND (public.is_store_admin(p_store_id) OR EXISTS (
         SELECT 1 FROM employees e WHERE e.id=p_employee_id AND e.store_id=p_store_id AND e.user_id=auth.uid() AND e.is_active)) $$;`);
   await db.exec(await migration('20261116120000_qr_attendance.sql'));
+  await db.exec(await migration('20261116130000_qr_attendance_fixes.sql'));
 
-  await db.exec(`INSERT INTO auth.users(id) VALUES ('${u.owner}'),('${u.alice}'),('${u.bob}'),('${u.other}'),('${u.outsider}');
+  await db.exec(`INSERT INTO auth.users(id) VALUES ('${u.owner}'),('${u.alice}'),('${u.bob}'),('${u.other}'),('${u.outsider}'),('${u.carol}'),('${u.dave}');
     INSERT INTO stores(id, owner_id, name) VALUES ('${s.main}','${u.owner}','본점'),('${s.second}','${u.other}','2호점');
     INSERT INTO store_members(store_id,user_id,role,status) VALUES
-      ('${s.main}','${u.alice}','member','approved'),('${s.main}','${u.bob}','member','approved'),('${s.second}','${u.alice}','member','approved');
+      ('${s.main}','${u.alice}','member','approved'),('${s.main}','${u.bob}','member','approved'),('${s.second}','${u.alice}','member','approved'),
+      ('${s.main}','${u.carol}','member','approved'),('${s.main}','${u.dave}','member','pending');
     INSERT INTO employees(id, store_id, user_id, name) VALUES
       ('${e.alice}','${s.main}','${u.alice}','김앨리스'),('${e.bob}','${s.main}','${u.bob}','박밥'),
-      ('${e.aliceSecond}','${s.second}','${u.alice}','김앨리스');`);
+      ('${e.aliceSecond}','${s.second}','${u.alice}','김앨리스'),
+      ('${e.carol}','${s.main}','${u.carol}','최캐롤'),('${e.dave}','${s.main}','${u.dave}','정데이브');`);
 
   // 1. 기기 등록
   await rejects('직원 연결 없는 계정은 기기 등록 불가', 'ATTENDANCE_EMPLOYEE_REQUIRED', () => as(u.outsider, 'SELECT register_attendance_device($1)', ['폰']));
+  await rejects('가입 대기 계정은 기기 등록 불가(직원 행이 활성이어도)', 'ATTENDANCE_EMPLOYEE_REQUIRED', () => as(u.dave, 'SELECT register_attendance_device($1)', ['폰']));
   const aliceDev = (await as(u.alice, 'SELECT register_attendance_device($1) AS r', ['앨리스 폰'])).rows[0].r;
   check('최초 등록은 즉시 활성', aliceDev.status, 'active');
   check('비밀키 32바이트', Buffer.from(aliceDev.secret, 'base64').length, 32);
@@ -149,8 +153,8 @@ try {
   await rejects('다른 직원은 승인 불가', 'ATTENDANCE_ADMIN_REQUIRED', () => as(u.bob, 'SELECT approve_attendance_device($1)', [aliceNew.device_id]));
   check('관리자 목록에 대기 기기', (await as(u.owner, "SELECT count(*)::int n FROM list_store_attendance_devices($1) WHERE status='pending'", [s.main])).rows[0].n, 1);
   await as(u.owner, 'SELECT approve_attendance_device($1)', [aliceNew.device_id]);
-  const approvedFirst = await punch(scanner2.token, await qrFor(u.alice, aliceNew.device_id, aliceNew.secret)).catch(() => null);
-  ok('승인으로 바뀐 기기의 첫 기록은 확인 필요 표시', approvedFirst === null || approvedFirst.duplicate || approvedFirst.flags.includes('new_device'));
+  const approvedFirst = await punch(scanner2.token, await qrFor(u.alice, aliceNew.device_id, aliceNew.secret));
+  check('승인된 새 기기 스캔 성공(60초 안이라 기존 기록 반환)', approvedFirst.duplicate, true);
   check('승인 후 옛 기기 해제', (await db.query('SELECT status FROM attendance_devices WHERE id=$1', [aliceDev.device_id])).rows[0].status, 'revoked');
   await rejects('해제된 기기 QR 불가', 'ATTENDANCE_DEVICE_INACTIVE', () => as(u.alice, 'SELECT issue_attendance_qr($1)', [aliceDev.device_id]));
 
@@ -175,6 +179,42 @@ try {
   await rejects('추가 요청은 종류·시각 필수', 'ATTENDANCE_INPUT_INVALID', () => as(u.owner, "SELECT request_attendance_correction($1,$2,'add',NULL,NULL,NULL,'x')", [s.main, e.bob]));
   check('추가 요청 생성', typeof staleReq, 'string');
   check('무효 처리 후 유효 기록에서 제외', (await db.query('SELECT count(*)::int n FROM attendance_effective_punches WHERE id=$1', [bobOut.punch_id])).rows[0].n, 0);
+
+  // 7-1. 정정 사유 최대 길이(500자)도 승인 가능
+  const longReason = '가'.repeat(500);
+  const longReq = (await as(u.alice, "SELECT request_attendance_correction($1,$2,'add',NULL,'clock_out', now() - interval '10 minutes', $3) AS r", [s.main, e.alice, longReason])).rows[0].r;
+  const longApplied = (await as(u.owner, 'SELECT review_attendance_correction($1, true) AS r', [longReq])).rows[0].r;
+  ok('500자 사유 정정 승인 성공', typeof longApplied === 'string');
+  check('요청 사유 원문 보존', (await db.query('SELECT reason FROM attendance_correction_requests WHERE id=$1', [longReq])).rows[0].reason, longReason);
+  check('기록 note는 500자로 맞춤', (await db.query('SELECT char_length(note)::int n FROM attendance_punches WHERE id=$1', [longApplied])).rows[0].n, 500);
+
+  // 7-2. 중복 처리한 QR 재시도는 처음 돌려준 기록 유지 + 승인된 새 기기의 첫 기록(독립 사례)
+  const carolDev = (await as(u.carol, 'SELECT register_attendance_device($1) AS r', ['캐롤 폰'])).rows[0].r;
+  const carolIn = await punch(scanner.token, await qrFor(u.carol, carolDev.device_id, carolDev.secret));
+  check('캐롤 첫 스캔은 새 출근', [carolIn.duplicate, carolIn.kind], [false, 'clock_in']);
+  const carolDupQr = await qrFor(u.carol, carolDev.device_id, carolDev.secret);
+  check('60초 안 다른 QR은 기존 기록 반환', (await punch(scanner.token, carolDupQr)).punch_id, carolIn.punch_id);
+  // 60초가 지난 상황을 만들기 위해 검증 전용으로 불변 트리거를 잠시 끄고 출근 시각을 2분 앞당김
+  await db.exec('ALTER TABLE attendance_punches DISABLE TRIGGER guard_attendance_punch_immutable');
+  await db.query("UPDATE attendance_punches SET punched_at = punched_at - interval '2 minutes' WHERE id=$1", [carolIn.punch_id]);
+  await db.exec('ALTER TABLE attendance_punches ENABLE TRIGGER guard_attendance_punch_immutable');
+  const dupRetry = await punch(scanner.token, carolDupQr);
+  check('60초 뒤 중복 QR 재시도도 처음 반환한 기록', [dupRetry.duplicate, dupRetry.punch_id], [true, carolIn.punch_id]);
+  const carolNew = (await as(u.carol, 'SELECT register_attendance_device($1) AS r', ['캐롤 새 폰'])).rows[0].r;
+  await as(u.owner, 'SELECT approve_attendance_device($1)', [carolNew.device_id]);
+  const carolNewFirst = await punch(scanner.token, await qrFor(u.carol, carolNew.device_id, carolNew.secret));
+  check('승인된 새 기기 첫 스캔은 새 기록(퇴근)', [carolNewFirst.duplicate, carolNewFirst.kind], [false, 'clock_out']);
+  ok('승인된 새 기기 첫 기록은 확인 필요(new_device) 표시', carolNewFirst.flags.includes('new_device'));
+  check('새 기록이 실제로 저장됨', (await db.query('SELECT device_id FROM attendance_punches WHERE id=$1', [carolNewFirst.punch_id])).rows[0].device_id, carolNew.device_id);
+
+  // 7-3. 멤버십이 대기·거절로 바뀌면 스캔·본인 정정 요청 차단
+  for (const status of ['pending', 'rejected']) {
+    await db.query('UPDATE store_members SET status=$1 WHERE store_id=$2 AND user_id=$3', [status, s.main, u.carol]);
+    await rejects(`멤버십 ${status}: 스캔 거절`, 'ATTENDANCE_NOT_EMPLOYEE', async () => punch(scanner.token, await qrFor(u.carol, carolNew.device_id, carolNew.secret)));
+    await rejects(`멤버십 ${status}: 본인 정정 요청 거절`, 'ATTENDANCE_NOT_EMPLOYEE', () => as(u.carol, "SELECT request_attendance_correction($1,$2,'add',NULL,'clock_in', now() - interval '1 hour','누락')", [s.main, e.carol]));
+  }
+  await db.query("UPDATE store_members SET status='approved' WHERE store_id=$1 AND user_id=$2", [s.main, u.carol]);
+  ok('승인 복귀 후 정정 요청 가능', typeof (await as(u.carol, "SELECT request_attendance_correction($1,$2,'add',NULL,'clock_in', now() - interval '1 hour','누락') AS r", [s.main, e.carol])).rows[0].r === 'string');
 
   // 8. 퇴사 시 기기 자동 해제(다른 매장 근무가 없을 때만)
   await db.query('UPDATE employees SET is_active=false WHERE id=$1', [e.bob]);
