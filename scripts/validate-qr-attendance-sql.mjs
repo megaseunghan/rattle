@@ -1,5 +1,5 @@
 // 로컬 PGlite 전용. 실제 Supabase 연결·환경변수·운영 데이터는 사용하지 않는다.
-// QR 출퇴근(20261116120000_qr_attendance.sql + 20261116130000_qr_attendance_fixes.sql) 검증: 토큰·재사용·권한·정정·삭제 대기 매장·파기.
+// QR 출퇴근(20261116120000_qr_attendance.sql + 20261116130000_qr_attendance_fixes.sql + 20261117120000_qr_attendance_retry_guard.sql) 검증: 토큰·재사용·권한·정정·삭제 대기 매장·파기.
 import assert from 'node:assert/strict';
 import { createHmac } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
@@ -66,6 +66,7 @@ try {
         SELECT 1 FROM employees e WHERE e.id=p_employee_id AND e.store_id=p_store_id AND e.user_id=auth.uid() AND e.is_active)) $$;`);
   await db.exec(await migration('20261116120000_qr_attendance.sql'));
   await db.exec(await migration('20261116130000_qr_attendance_fixes.sql'));
+  await db.exec(await migration('20261117120000_qr_attendance_retry_guard.sql'));
 
   await db.exec(`INSERT INTO auth.users(id) VALUES ('${u.owner}'),('${u.alice}'),('${u.bob}'),('${u.other}'),('${u.outsider}'),('${u.carol}'),('${u.dave}');
     INSERT INTO stores(id, owner_id, name) VALUES ('${s.main}','${u.owner}','본점'),('${s.second}','${u.other}','2호점');
@@ -202,10 +203,23 @@ try {
   check('60초 뒤 중복 QR 재시도도 처음 반환한 기록', [dupRetry.duplicate, dupRetry.punch_id], [true, carolIn.punch_id]);
   const carolNew = (await as(u.carol, 'SELECT register_attendance_device($1) AS r', ['캐롤 새 폰'])).rows[0].r;
   await as(u.owner, 'SELECT approve_attendance_device($1)', [carolNew.device_id]);
-  const carolNewFirst = await punch(scanner.token, await qrFor(u.carol, carolNew.device_id, carolNew.secret));
+  const carolNewQr = await qrFor(u.carol, carolNew.device_id, carolNew.secret);
+  const carolNewFirst = await punch(scanner.token, carolNewQr);
   check('승인된 새 기기 첫 스캔은 새 기록(퇴근)', [carolNewFirst.duplicate, carolNewFirst.kind], [false, 'clock_out']);
   ok('승인된 새 기기 첫 기록은 확인 필요(new_device) 표시', carolNewFirst.flags.includes('new_device'));
   check('새 기록이 실제로 저장됨', (await db.query('SELECT device_id FROM attendance_punches WHERE id=$1', [carolNewFirst.punch_id])).rows[0].device_id, carolNew.device_id);
+
+  // 7-2-1. 처음 반환한 기록이 삭제되면 같은 QR 재시도는 거절(최근 60초의 다른 기록으로 재연결하지 않음)
+  await db.query('DELETE FROM attendance_punches WHERE id=$1', [carolIn.punch_id]);
+  await rejects('대상 기록 삭제 후 재시도는 거절', 'ATTENDANCE_QR_INVALID', () => punch(scanner.token, carolDupQr));
+  check('nonce가 다른 기록으로 덮어써지지 않음', (await db.query('SELECT count(*)::int n FROM private.attendance_qr_nonces WHERE punch_id=$1', [carolNewFirst.punch_id])).rows[0].n, 1);
+  check('삭제 후 재시도는 새 기록을 만들지 않음', (await db.query('SELECT count(*)::int n FROM attendance_punches WHERE employee_id=$1', [e.carol])).rows[0].n, 1);
+
+  // 7-2-2. nonce 정리(만료 1시간 후) 이후 재시도는 기록이 남아 있어도 QR_INVALID
+  await db.query("UPDATE private.attendance_qr_nonces SET expires_at = now() - interval '2 hours' WHERE punch_id=$1", [carolNewFirst.punch_id]);
+  await qrFor(u.carol, carolNew.device_id, carolNew.secret); // QR 발급 시 오래된 nonce 정리
+  await rejects('정리된 nonce 재시도는 QR_INVALID', 'ATTENDANCE_QR_INVALID', () => punch(scanner.token, carolNewQr));
+  check('정리 후에도 기록은 남음', (await db.query('SELECT count(*)::int n FROM attendance_punches WHERE id=$1', [carolNewFirst.punch_id])).rows[0].n, 1);
 
   // 7-3. 멤버십이 대기·거절로 바뀌면 스캔·본인 정정 요청 차단
   for (const status of ['pending', 'rejected']) {
