@@ -376,6 +376,8 @@ export interface Purchase {
   type: PurchaseType;
   note: string | null;
   created_at: string;
+  /** 매입 목록 조회에서만 채워지는 품목 수 */
+  item_count?: number;
 }
 
 export interface PurchaseItem {

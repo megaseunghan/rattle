@@ -2,7 +2,7 @@ import { getErrorMessage, UserFacingError } from '../utils/error';
 import { useState, useCallback, useRef } from 'react';
 import { useQueryScope } from '../query';
 import { useAuth } from '../contexts/AuthContext';
-import { getPurchasesByMonth, createPurchase, deletePurchase, createPurchaseWithItems } from '../services/purchases';
+import { getPurchasesWithItemCountsByMonth, createPurchase, deletePurchase, createPurchaseWithItems } from '../services/purchases';
 import { Purchase, PurchaseCategory, PurchaseType, PurchaseItemInput } from '../../types';
 
 export function usePurchases(yearMonth: string) {
@@ -25,7 +25,7 @@ export function usePurchases(yearMonth: string) {
     setLoading(true);
     setErrorState(null);
     try {
-      const result = await getPurchasesByMonth(store.id, yearMonth);
+      const result = await getPurchasesWithItemCountsByMonth(store.id, yearMonth);
       if (current()) { setPurchases(result); setLoadedIdentity(identity); }
       return true;
     } catch (e: any) {

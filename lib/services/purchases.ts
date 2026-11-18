@@ -78,21 +78,6 @@ export async function getPurchaseItemsForPurchases(purchaseIds: string[]): Promi
 }
 
 /** 매입 건별 품목 수 (목록에서 "N개 품목" 표시용) */
-export async function getPurchaseItemCounts(purchaseIds: string[]): Promise<Record<string, number>> {
-  if (purchaseIds.length === 0) return {};
-  const { data, error } = await supabase
-    .from('purchase_items')
-    .select('purchase_id')
-    .in('purchase_id', purchaseIds);
-  if (error) throw new Error(error.message);
-
-  const counts: Record<string, number> = {};
-  for (const row of (data ?? []) as { purchase_id: string }[]) {
-    counts[row.purchase_id] = (counts[row.purchase_id] ?? 0) + 1;
-  }
-  return counts;
-}
-
 /** 매입 품목 수량/단가 수정 — 재고 델타 반영 + last_price 갱신 + 매입 합계 재계산 (원자적, RPC) */
 export async function updatePurchaseItem(
   itemId: string,
@@ -109,27 +94,34 @@ export async function updatePurchaseItem(
   catch { return { refreshFailed: true }; }
 }
 
+function monthRange(yearMonth: string): { from: string; to: string } {
+  const lastDay = new Date(Number(yearMonth.slice(0, 4)), Number(yearMonth.slice(5, 7)), 0).getDate();
+  return { from: `${yearMonth}-01`, to: `${yearMonth}-${String(lastDay).padStart(2, '0')}` };
+}
+
+function readMonthPurchases<T>(storeId: string, yearMonth: string, columns: string): Promise<T[]> {
+  const { from, to } = monthRange(yearMonth);
+  return readAllRows<T>((start, end) => supabase
+    .from('purchases')
+    .select(columns)
+    .eq('store_id', storeId)
+    .gte('date', from)
+    .lte('date', to)
+    .order('date', { ascending: false }).order('id').range(start, end) as unknown as PromiseLike<{ data: T[] | null; error: unknown }>);
+}
+
 export async function getPurchasesByMonth(
   storeId: string,
   yearMonth: string, // 'YYYY-MM'
 ): Promise<Purchase[]> {
-  const from = `${yearMonth}-01`;
-  const lastDay = new Date(
-    Number(yearMonth.slice(0, 4)),
-    Number(yearMonth.slice(5, 7)),
-    0,
-  ).getDate();
-  const to = `${yearMonth}-${String(lastDay).padStart(2, '0')}`;
+  return readMonthPurchases<Purchase>(storeId, yearMonth, '*');
+}
 
-  const data = await readAllRows((start, end) => supabase
-    .from('purchases')
-    .select('*')
-    .eq('store_id', storeId)
-    .gte('date', from)
-    .lte('date', to)
-    .order('date', { ascending: false }).order('id').range(start, end));
-
-  return (data ?? []) as Purchase[];
+/** 매입 탭 목록용: 품목 수를 같은 조회에서 받아 별도 개수 조회를 하지 않는다. */
+export async function getPurchasesWithItemCountsByMonth(storeId: string, yearMonth: string): Promise<Purchase[]> {
+  type Row = Purchase & { purchase_items?: { count: number }[] | null };
+  const rows = await readMonthPurchases<Row>(storeId, yearMonth, '*, purchase_items(count)');
+  return rows.map(({ purchase_items, ...purchase }) => ({ ...purchase, item_count: Number(purchase_items?.[0]?.count ?? 0) }));
 }
 
 export async function createPurchase(data: {

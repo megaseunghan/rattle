@@ -14,7 +14,6 @@ import { useTabPager } from '../../lib/contexts/TabPagerContext';
 import { useAuth } from '../../lib/contexts/AuthContext';
 import { usePurchases } from '../../lib/hooks/usePurchases';
 import { useExpenses } from '../../lib/hooks/useExpenses';
-import { getPurchaseItemCounts } from '../../lib/services/purchases';
 import { animateListChange } from '../../lib/utils/layoutAnimation';
 import { ExpensesPanel } from '../../lib/components/ExpensesPanel';
 import { GlassCard } from '../../lib/components/GlassCard';
@@ -115,11 +114,6 @@ function PurchasesView({ active }: { active: boolean }) {
   const selectedPurchases = selectedKey ? (purchaseByDay.get(selectedKey) ?? []) : filtered;
   const monthTotal = filtered.reduce((s, p) => s + p.amount, 0);
 
-  const [itemCounts, setItemCounts] = useState<Record<string, number>>({});
-  useEffect(() => {
-    if (selectedPurchases.length === 0) return;
-    getPurchaseItemCounts(selectedPurchases.map(p => p.id)).then(setItemCounts).catch(() => {});
-  }, [selectedKey, purchases]);
   const isToday = (day: number) => year === today.getFullYear() && month === today.getMonth() && day === today.getDate();
 
   function confirmDeletePurchase(id: string) {
@@ -201,8 +195,8 @@ function PurchasesView({ active }: { active: boolean }) {
                   <TouchableOpacity key={p.id} style={[styles.purchaseRow, i < selectedPurchases.length - 1 && styles.rowBorder]} onPress={() => router.push(`/purchases/${p.id}`)} onLongPress={() => confirmDeletePurchase(p.id)} activeOpacity={0.7} accessibilityRole="button">
                     <View style={styles.purchaseLeft}>
                       <Text style={styles.purchaseSupplier} numberOfLines={2}>{p.supplier}</Text>
-                      {itemCounts[p.id] > 0 && (
-                        <Text style={styles.purchaseItemCount}>{itemCounts[p.id]}개 품목</Text>
+                      {(p.item_count ?? 0) > 0 && (
+                        <Text style={styles.purchaseItemCount}>{p.item_count}개 품목</Text>
                       )}
                       <Badge label={p.category} variant="neutral" />
                     </View>

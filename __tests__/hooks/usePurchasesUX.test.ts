@@ -5,7 +5,7 @@ const mockWrite = jest.fn();
 let mockStore: { id: string } | null = { id: 'a' };
 jest.mock('../../lib/contexts/AuthContext', () => ({ useAuth: () => ({ store: mockStore }) }));
 jest.mock('../../lib/query', () => ({ useQueryScope: () => 'account-role' }));
-jest.mock('../../lib/services/purchases', () => ({ getPurchasesByMonth: (...args: unknown[]) => mockGet(...args), createPurchaseWithItems: (...args: unknown[]) => mockWrite(...args) }));
+jest.mock('../../lib/services/purchases', () => ({ getPurchasesWithItemCountsByMonth: (...args: unknown[]) => mockGet(...args), createPurchaseWithItems: (...args: unknown[]) => mockWrite(...args) }));
 beforeEach(() => { mockGet.mockReset(); mockWrite.mockReset(); mockStore = { id: 'a' }; });
 it('최초 조회 전 0건 확정 상태를 만들지 않는다', () => {
   const { result } = renderHook(() => usePurchases('2026-10'));
