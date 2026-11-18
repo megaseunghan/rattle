@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, useCallback, useRef, ReactNode } from 'react';
 import { AppState } from 'react-native';
-import { getFinancialAccess } from '../services/stores';
+import { loadMyStores } from '../services/stores';
 import { allowsFinancialSharing } from '../utils/financialSharing';
 import { Session, User } from '@supabase/supabase-js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -83,43 +83,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (preferredStoreId) throw new UserFacingError('매장 목록이 갱신됐어요. 같은 설정으로 다시 시도해주세요.');
       return false;
     };
-    const [ownedRes, memberRes] = await Promise.all([
-      supabase
-        .from('stores')
-        .select('*')
-        .eq('owner_id', userId)
-        .order('created_at', { ascending: true }),
-      supabase
-        .from('store_members')
-        .select('store_id, role, stores(*)')
-        .eq('user_id', userId)
-        .eq('status', 'approved'),
-    ]);
-
+    const { stores: storeList, roles, access } = await loadMyStores(userId);
     if (!isCurrent()) return;
-    if (ownedRes.error) throw new Error(ownedRes.error.message);
-    if (memberRes.error) throw new Error(memberRes.error.message);
-
-    const ownedStores: Store[] = (ownedRes.data ?? []) as Store[];
-
-    const roles: Record<string, 'admin' | 'member'> = {};
-    const memberStores: Store[] = [];
-    for (const m of (memberRes.data ?? []) as any[]) {
-      if (m.stores) {
-        roles[m.store_id] = m.role;
-        memberStores.push(m.stores as Store);
-      }
-    }
-
-    // 소유 매장 우선, 멤버 매장 중복 제거 후 병합
-    const storeMap = new Map<string, Store>();
-    ownedStores.forEach(s => storeMap.set(s.id, s));
-    memberStores.forEach(s => { if (!storeMap.has(s.id)) storeMap.set(s.id, s); });
-
-    const storeList = Array.from(storeMap.values());
-    // Missing migration/network error fails closed for members; owners remain usable.
-    let access: Record<string, boolean> = {};
-    try { access = await getFinancialAccess(storeList.map(s => s.id)); } catch { /* No member financial reads without server confirmation. */ }
     const lastStoreId = preferredStoreId ?? await AsyncStorage.getItem(LAST_STORE_ID_KEY);
     if (!isCurrent()) return;
     if (preferredStoreId && !storeList.some(s => s.id === preferredStoreId)) throw new UserFacingError('만들어진 매장을 확인하지 못했어요. 다시 시도해주세요.');

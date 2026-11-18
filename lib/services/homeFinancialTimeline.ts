@@ -14,19 +14,33 @@ export async function getHomeFinancialTimeline(storeId: string, closingTime: str
     const from = getBusinessDayRange(start, closingTime).from;
     const until = getBusinessDayRange(end, closingTime).to;
     const to = current ? new Date(Math.min(Date.parse(until), asOf.getTime())).toISOString() : until;
-    const [orders, manual, purchases, labor, expense] = await Promise.all([
-      from < to ? readAllRows((lo, hi) => supabase.from('toss_orders').select('id,order_at,total_amount,card_amount,cash_amount').eq('store_id', storeId).eq('status', 'COMPLETED').gte('order_at', from).lt('order_at', to).order('id').range(lo, hi)) : Promise.resolve([]),
-      readAllRows((lo, hi) => supabase.from('manual_sales').select('id,date,card_amount,cash_amount').eq('store_id', storeId).gte('date', start).lte('date', end).order('id').range(lo, hi)),
-      readAllRows((lo, hi) => supabase.from('purchases').select('id,date,amount').eq('store_id', storeId).gte('date', start).lte('date', end).order('id').range(lo, hi)),
+    const [hour, minute] = closingTime.slice(0, 5).split(':').map(Number);
+    async function rawRows(): Promise<DailyAmount[]> {
+      const [orders, manual, purchases] = await Promise.all([
+        from < to ? readAllRows((lo, hi) => supabase.from('toss_orders').select('id,order_at,total_amount,card_amount,cash_amount').eq('store_id', storeId).eq('status', 'COMPLETED').gte('order_at', from).lt('order_at', to).order('id').range(lo, hi)) : Promise.resolve([]),
+        readAllRows((lo, hi) => supabase.from('manual_sales').select('id,date,card_amount,cash_amount').eq('store_id', storeId).gte('date', start).lte('date', end).order('id').range(lo, hi)),
+        readAllRows((lo, hi) => supabase.from('purchases').select('id,date,amount').eq('store_id', storeId).gte('date', start).lte('date', end).order('id').range(lo, hi)),
+      ]);
+      return [
+        ...orders.map(order => ({ date: new Date(Date.parse(order.order_at) + 9 * 3600000 - (hour * 60 + minute) * 60000).toISOString().slice(0, 10), revenue: Number(order.card_amount ?? 0) + Number(order.cash_amount ?? 0) > 0 ? Number(order.card_amount ?? 0) + Number(order.cash_amount ?? 0) : Number(order.total_amount ?? 0), purchase: 0, cardRevenue: Number(order.card_amount ?? 0) })),
+        ...manual.map(row => ({ date: row.date, revenue: Number(row.card_amount ?? 0) + Number(row.cash_amount ?? 0), purchase: 0, cardRevenue: Number(row.card_amount ?? 0) })),
+        ...purchases.map(row => ({ date: row.date, revenue: 0, purchase: Number(row.amount) })),
+      ];
+    }
+    /** 영업일별 합계 한 번으로 받는다. 함수가 아직 배포되지 않았을 때(PGRST202)만 원본 행 조회로 계산한다. */
+    async function dailyRows(): Promise<DailyAmount[]> {
+      const { data, error } = await supabase.rpc('get_home_daily_sources', {
+        p_store_id: storeId, p_start: start, p_end: end, p_from: from, p_to: to, p_closing_minutes: hour * 60 + minute,
+      });
+      if (error) { if (error.code === 'PGRST202') return rawRows(); throw error; }
+      return ((data ?? []) as { date: string; revenue: unknown; card_revenue: unknown; purchase: unknown }[])
+        .map(row => ({ date: row.date, revenue: Number(row.revenue), purchase: Number(row.purchase), cardRevenue: Number(row.card_revenue) }));
+    }
+    const [rows, labor, expense] = await Promise.all([
+      dailyRows(),
       getDailyLaborSeries(storeId, month, through, asOf),
       getDailyExpenseSeries(storeId, month),
     ]);
-    const [hour, minute] = closingTime.slice(0, 5).split(':').map(Number);
-    const rows: DailyAmount[] = [
-      ...orders.map(order => ({ date: new Date(Date.parse(order.order_at) + 9 * 3600000 - (hour * 60 + minute) * 60000).toISOString().slice(0, 10), revenue: Number(order.card_amount ?? 0) + Number(order.cash_amount ?? 0) > 0 ? Number(order.card_amount ?? 0) + Number(order.cash_amount ?? 0) : Number(order.total_amount ?? 0), purchase: 0, cardRevenue: Number(order.card_amount ?? 0) })),
-      ...manual.map(row => ({ date: row.date, revenue: Number(row.card_amount ?? 0) + Number(row.cash_amount ?? 0), purchase: 0, cardRevenue: Number(row.card_amount ?? 0) })),
-      ...purchases.map(row => ({ date: row.date, revenue: 0, purchase: Number(row.amount) })),
-    ];
     if (rows.some(row => !Number.isFinite(row.revenue) || !Number.isFinite(row.purchase) || !Number.isFinite(row.cardRevenue ?? 0))) throw new Error('INVALID_FINANCIAL_AMOUNT');
     const cumulative = buildCumulativeDays(month, through, rows);
     return cumulative.map(day => {
