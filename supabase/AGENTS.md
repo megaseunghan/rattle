@@ -31,6 +31,8 @@ Rattle 백엔드(Supabase Postgres·RLS·RPC·Edge Functions)의 저장소 내 �
 - **작업 종료 보고:** SQL을 추가·변경했다면 마지막에 "Supabase에서 SQL 적용을 진행해줘"와 함께 적용 파일·적용 순서·현재 미적용 상태를 명시한다.
 - **적용된 마이그레이션은 수정하지 않는다.** 원격에 이미 적용됐거나 적용 여부가 불확실한 파일은 그대로 두고 새 보정 마이그레이션을 추가한다.
 - **DBA 관점 검토:** 마이그레이션은 통합 전에 RLS·권한·잠금·데이터 보존·재실행 안전성 관점으로 검토한다. 검토 통과는 원격 적용 승인이 아니다.
+- **RLS 정책의 auth 호출은 감싼다:** 정책 `USING`/`WITH CHECK`에서는 `auth.uid()` 대신 `(select auth.uid())`처럼 쓴다(행마다 재계산 방지, Advisor `auth_rls_initplan`). `npm run test:sql`의 `scripts/validate-rls-auth-wrapping.mjs`가 새 마이그레이션을 검사한다. 보정 이전 파일은 `scripts/rls-auth-wrapping-baseline.json`에 고정돼 있으며 새 파일을 추가하지 않는다.
+- **서버 집계 RPC와 앱 계산식은 함께 바꾼다:** 앱이 하던 계산을 RPC로 옮긴 경우(예: 홈 일별 매출·매입 합계, 시작 매장 목록) 판정 기준을 한쪽만 바꾸지 않는다. 대체 경로(`PGRST202`)가 남아 있으면 두 경로와 동등성 검사 스크립트를 함께 고친다.
 - `SECURITY DEFINER` 함수는 `SET search_path`를 고정하고, 필요한 경우 `REVOKE ... FROM PUBLIC, anon, authenticated` 후 필요한 역할에만 `GRANT`한다.
 - `~/.supabase`, `.env`, `supabase/supabase/.temp` 등 비밀·세션·프로젝트 식별 파일을 읽거나 출력하지 않는다.
 - 앱 코드의 DB 접근은 `lib/services/`에서만 한다. 새 RPC를 만들면 서비스 계층 계약과 `types/index.ts`도 함께 맞춘다.
