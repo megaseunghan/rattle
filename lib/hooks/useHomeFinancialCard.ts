@@ -14,7 +14,9 @@ export function useHomeFinancialCard(enabled: boolean) {
   const period = financialPeriod(asOf), allowed = enabled && !!store && !!user && canReadFinancials;
   const summary = useQuery({ ...financialSummaryOptions(scope, store?.id ?? '', store?.closing_time ?? '23:00', period.month, currentRole === 'admin'), enabled: !!allowed }, queryClient);
   const timeline = useQuery({ queryKey: queryKeys.store(scope, store?.id ?? '', 'financial', 'home-daily', period.date, store?.closing_time, currentRole),
-    queryFn: () => getHomeFinancialTimeline(store!.id, store!.closing_time ?? '23:00', asOf), enabled: !!allowed && currentRole === 'admin', staleTime: 30000 }, queryClient);
+    queryFn: () => getHomeFinancialTimeline(store!.id, store!.closing_time ?? '23:00', asOf),
+    // 일별 차트는 원본 조회가 많아 월 요약을 받은 뒤 시작한다. 요약과 동시에 보내면 서버에서 서로 경쟁해 둘 다 늦어진다.
+    enabled: !!allowed && currentRole === 'admin' && summary.isSuccess, staleTime: 30000 }, queryClient);
   const denied = isAccessDenied(summary.error) || (currentRole === 'admin' && isAccessDenied(timeline.error));
   const data: HomeFinancialCardData | null = allowed && !denied && summary.data ? {
     date: period.date, totals: { profit: summary.data.operatingProfit, revenue: summary.data.revenue, purchase: summary.data.purchaseCost, labor: summary.data.laborCost, expense: summary.data.fixedExpense + summary.data.variableExpense },

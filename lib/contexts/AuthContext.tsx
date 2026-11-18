@@ -55,6 +55,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [devPreviewEmployeeId, setDevPreviewEmployeeId] = useState<string | null>(null);
   const storeRequestId = useRef(0);
   const authRequestId = useRef(0);
+  // 매장 목록을 불러온(또는 불러오는 중인) 세션 사용자. 같은 사용자의 토큰 갱신은 재조회하지 않는다.
+  const sessionUserId = useRef<string | null>(null);
   const cacheIdentity = useRef<string | null>(null);
 
   useEffect(() => { void clearLegacyPosCache().catch(() => {}); }, []);
@@ -163,6 +165,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   async function signOut() {
     storeRequestId.current += 1;
     authRequestId.current += 1;
+    sessionUserId.current = null;
     await clearQueryData();
     clearPosSyncCoordinator();
     await clearLegacyPosCache().catch(() => {});
@@ -198,6 +201,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let deferredLoad: ReturnType<typeof setTimeout> | null = null;
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
+        if (event === 'TOKEN_REFRESHED' && session?.user && session.user.id === sessionUserId.current) {
+          setSession(session);
+          setUser(session.user);
+          return;
+        }
         if (deferredLoad !== null) clearTimeout(deferredLoad);
         const eventRequestId = ++authRequestId.current;
         storeRequestId.current += 1;
@@ -205,6 +213,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         if (session?.user) {
           const user = session.user;
+          sessionUserId.current = user.id;
           setExpenseCategorySession(user.id);
           setSession(session);
           setUser(user);
@@ -222,6 +231,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             }
           }, 0);
         } else {
+          sessionUserId.current = null;
           setExpenseCategorySession(null);
           resetQueryIdentity('signed-out');
           setSession(null);

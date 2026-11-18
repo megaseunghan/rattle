@@ -29,7 +29,8 @@ export function useHomeAlerts(todaySales?: number, selectedStore?: Store, financ
         getHomeAlertStock(storeId), financial ? hasMonthlyFixedExpense(storeId, yearMonth) : undefined,
       ]);
       const alerts = buildHomeAlerts({ stock, now, fixedExpenseMissing: financial ? !hasFixed : undefined,
-        tossNotSynced: financial && tossLinked && todaySales === 0 });
+        // 오늘 매출 0원 여부는 화면에서 현재 값으로 판단한다. 매출이 바뀔 때마다 알림 원본을 다시 읽지 않는다.
+        tossNotSynced: financial && tossLinked });
       const read = new Set(await getHomeAlertReads(storeId, userId, alerts.map(alert => alert.key)));
       if (request !== requestId.current || scopeRef.current !== scope) return;
       setState({ scope, alerts: alerts.filter(alert => !read.has(alert.key)), loading: false, error: null });
@@ -38,7 +39,7 @@ export function useHomeAlerts(todaySales?: number, selectedStore?: Store, financ
       setState(previous => ({ scope, alerts: previous.scope === scope ? previous.alerts : [], loading: false,
         error: '홈 알림을 불러오지 못했어요. 다시 시도해 주세요.' }));
     }
-  }, [storeId, userId, scope, financial, tossLinked, todaySales]);
+  }, [storeId, userId, scope, financial, tossLinked]);
   const markRead = useCallback(async (key: string) => {
     if (!storeId || !userId) throw new UserFacingError('로그인과 매장을 확인해 주세요.');
     await markHomeAlertRead(storeId, userId, key);
@@ -50,6 +51,7 @@ export function useHomeAlerts(todaySales?: number, selectedStore?: Store, financ
     return false;
   }, [storeId, userId, scope]);
   const visible = state.scope === scope;
-  return { alerts: visible ? state.alerts : [], loading: visible ? state.loading : !!storeId,
+  const shown = visible ? state.alerts.filter(alert => alert.kind !== 'tossNotSynced' || todaySales === 0) : [];
+  return { alerts: shown, loading: visible ? state.loading : !!storeId,
     error: visible ? state.error : null, refetch, markRead };
 }
