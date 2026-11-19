@@ -60,6 +60,9 @@ function moneyValues(text: string, allowSmall: boolean): number[] {
   const values: number[] = [];
   const tokens = /(?<![\d.,/+\-])(?:\(?\s*(?:[+-]\s*)?(?:[₩W]\s*)?(?:[+-]\s*)?(?:\d{1,3}(?:[,.]\s*\d{3})+|\d+)\s*(?:원)?\s*\)?)(?![\d.,/+\-])/g;
   for (const match of normalized.matchAll(tokens)) {
+    const before = normalized.slice(0, match.index).trimEnd();
+    const after = normalized.slice(match.index! + match[0].length).trimStart();
+    if (/[()+-]$/.test(before) || /^[()+-]\s*$/.test(after)) continue;
     const value = wholeMoney(match[0]);
     if (value === null) continue;
     if (allowSmall || Math.abs(value) >= 1000 || /[,.원]/.test(match[0]) || normalized.trim() === match[0].trim()) values.push(value);
@@ -118,12 +121,16 @@ export function parseReceipt(lines: readonly RecognizedLine[], sourceImageId = '
   ];
   // Only associate amounts inside the same row; crossing a balance row caused the Mac false total.
   const valueFor = (row: ReceiptRow, label: RecognizedLine): number | null => {
-    const own = moneyValues(label.text, true);
-    if (own.length) return own.length === 1 ? own[0] : null;
-    if (/\d/.test(label.text)) return null;
+    const normalized = normalizeMoney(label.text);
+    // Separate the label from its complete value; never pick one token from an ambiguous expression.
+    if (/\d/.test(normalized)) {
+      const start = normalized.search(/[₩W(+\-\d]/);
+      return start < 0 ? null : wholeMoney(normalized.slice(start));
+    }
     const nextLabel = row.cells.find(l => cx(l) > cx(label) && /공급가|부가세|세액|VAT|보증금|회수|상품금액|배송비|할인|잔액|합계|총계|결제/.test(compact(l.text)));
     const right = row.cells.filter(l => l !== label && cx(l) > cx(label) && (!nextLabel || cx(l) < cx(nextLabel)));
-    return right.length ? wholeMoney(right.map(l => l.text).join(' ')) : null;
+    const signInLabel = normalized.match(/[+\-(]\s*$/)?.[0] ?? '';
+    return right.length ? wholeMoney(signInLabel + right.map(l => l.text).join(' ')) : null;
   };
   for (const row of rows) {
     for (const cell of row.cells) {
@@ -204,7 +211,7 @@ export function parseReceipt(lines: readonly RecognizedLine[], sourceImageId = '
     const cell = row.cells.filter(l => Math.abs(cx(l) - cx(column)) < Math.max(column.box.w / 2, .055))
       .sort((a, b) => Math.abs(cx(a) - cx(column)) - Math.abs(cx(b) - cx(column)))[0];
     if (!cell) return null;
-    const value = quantity ? (/^\d+(?:\.\d+)?$/.test(compact(cell.text)) ? Number(compact(cell.text)) : null) : extractMoney(cell.text)[0] ?? null;
+    const value = quantity ? (/^\d+(?:\.\d+)?$/.test(compact(cell.text)) ? Number(compact(cell.text)) : null) : wholeMoney(cell.text);
     return value === null ? null : field(value, [cell]);
   };
   for (const [index, row] of rows.entries()) {
