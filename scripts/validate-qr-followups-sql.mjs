@@ -66,6 +66,7 @@ export async function validateQrFollowups({ db, users, store, emp, as, migration
  const zeroChanged=await change(zeroIn,'clock_out','2026-10-24T00:00:00Z');
  const zeroRestored=await change(zeroChanged,'clock_in','2026-10-24T00:00:00Z');
  check('same-time kind reversal preserves original event ordering',await partner(zeroNext),zeroRestored);
+ check('existing event_order consumers see checkout after same-time correction',(await db.query('SELECT id FROM attendance_effective_punches WHERE id IN ($1,$2) ORDER BY punched_at DESC,event_order DESC LIMIT 1',[zeroRestored,zeroNext])).rows[0].id,zeroNext);
  check('confirmed zero-minute pair is preserved',await day('2026-10-24'),{worked_minutes:0,gross:0,status:'approved'});
  const unrelated=(await db.query("SELECT to_jsonb(s) s FROM private.attendance_work_sync s WHERE employee_id=$1 AND work_date='2026-10-26'",[eid])).rows[0].s;
  const movedIn=await manual('clock_in','2026-10-30T14:00:00Z');

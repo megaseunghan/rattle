@@ -146,21 +146,23 @@ BEGIN
         jsonb_build_object('kind_changed',true,'paired_before_apply',to_jsonb(public.attendance_shift_partner(target.id)))
         WHERE id=req.id;
     END IF;
-    INSERT INTO public.attendance_punches(store_id, employee_id, kind, punched_at, work_date, source, is_void, supersedes_id, flags, note, created_by)
-    VALUES (target.store_id, target.employee_id, coalesce(req.kind, target.kind),
+    -- Superseded versions share their root ordinal; only one version is effective.
+    -- This also keeps existing latest-event queries and home sorting correct at equal times.
+    INSERT INTO public.attendance_punches(store_id, employee_id, kind, punched_at, work_date, source, is_void, supersedes_id, flags, note, created_by,event_order)
+    OVERRIDING SYSTEM VALUE VALUES (target.store_id, target.employee_id, coalesce(req.kind, target.kind),
       CASE WHEN req.action = 'void' THEN target.punched_at ELSE req.requested_time END,
       CASE WHEN req.action = 'void' THEN target.work_date
            WHEN coalesce(req.kind,target.kind)='clock_out' AND partner.kind='clock_in' THEN partner.work_date
            ELSE public.attendance_work_date(target.employee_id, coalesce(req.kind, target.kind), req.requested_time, target.id) END,
-      'correction', req.action = 'void', target.id, '{}', note, caller)
+      'correction', req.action = 'void', target.id, '{}', note, caller,private.attendance_root_order(target.id))
     RETURNING * INTO saved;
   END IF;
   -- 출근 날짜가 바뀌면 원래 짝 퇴근의 시각을 보존한 시스템 정정을 원자적으로 추가한다.
   IF req.action='change' AND target.kind='clock_in' AND saved.kind='clock_in'
      AND partner.kind='clock_out' AND partner.work_date IS DISTINCT FROM saved.work_date THEN
-    INSERT INTO public.attendance_punches(store_id,employee_id,kind,punched_at,work_date,source,supersedes_id,flags,note,created_by)
-    VALUES (partner.store_id,partner.employee_id,partner.kind,partner.punched_at,saved.work_date,'correction',partner.id,'{}',
-            '출근 날짜 변경에 따른 퇴근 귀속 정정',caller) RETURNING id INTO paired_saved;
+    INSERT INTO public.attendance_punches(store_id,employee_id,kind,punched_at,work_date,source,supersedes_id,flags,note,created_by,event_order)
+    OVERRIDING SYSTEM VALUE VALUES (partner.store_id,partner.employee_id,partner.kind,partner.punched_at,saved.work_date,'correction',partner.id,'{}',
+            '출근 날짜 변경에 따른 퇴근 귀속 정정',caller,private.attendance_root_order(partner.id)) RETURNING id INTO paired_saved;
   END IF;
   UPDATE public.attendance_correction_requests SET status = 'approved', reviewed_by = caller, reviewed_at = now(),
     review_note = left(nullif(btrim(coalesce(p_note, '')), ''), 500), applied_punch_id = saved.id, paired_applied_punch_id=paired_saved,
