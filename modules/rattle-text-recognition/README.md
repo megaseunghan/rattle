@@ -1,6 +1,6 @@
 # Rattle 기기 OCR · iPhone 측정 1단계
 
-2026-11-19 요청: 사진별 기기 OCR와 규칙 파서 측정만 수행한다. 매입 등록, 서버 호출·저장, 사진 합치기는 없다. 원문 결과는 화면 메모리에 보관하며 명시적인 공유에서만 임시 JSON 파일을 만든다. 사진은 PHPicker가 제공한 원본을 임시 복사하고 측정·취소 후 삭제한다. 앱 강제 종료 시 임시 파일은 OS 임시 저장소에 남을 수 있다.
+2026-11-19 요청: 사진별 기기 OCR와 규칙 파서 측정만 수행한다. 매입 등록, 서버 호출·저장, 사진 합치기는 없다. 원문 결과는 화면 메모리에 보관하며 명시적인 공유에서만 임시 JSON 파일을 만든다. 사진은 PHPicker가 제공한 원본을 임시 복사하고 측정·취소 후 삭제한다. 앱 강제 종료 시 임시 파일은 OS 임시 저장소에 남을 수 있으며 다음 실측 진입 때 24시간 지난 자기 UUID 파일만 회수한다.
 
 ## 빌드와 진입 (PL 담당)
 
@@ -37,7 +37,7 @@ Mac 실험의 구조를 이식하되 잔액 오연결을 막기 위해 행 연�
 - Swift 구문 parse 및 autolinking 발견은 네이티브 컴파일/링크 성공이나 실기기 동작 증거가 아니다.
 - 실제 빌드 QA: EXIF 1/3/6/8, HEIC/JPEG, 사진 선택 취소·20장·일부 인식 실패·중지·뒤로·권한 변경·공유 취소/AirDrop·키보드/스크롤/안전영역/큰 글자 확인.
 - 닐슨 원칙 정적 적용: 1 진행 상태, 2 원·품목·후보 용어, 3 선택 취소/측정 중지/뒤로/결과 지우기, 4 공통 AppBar/오류/서체, 5 중복 실행 차단/관리 권한/원문 공유 확인, 6 후보·원문 병기, 7 다중 선택/장별 진행, 8 단순 목록, 9 장별 실패와 재선택, 10 사진별 측정/합계 후보 안내. 네이티브 사용성·접근성은 미검증이다.
-- 자체 검토만 수행했다. 독립 검토와 실제 빌드 확인은 PL이 배정한다.
+- 초기 구현은 자체 검토였으며 이후 독립 검토 1회차의 OCR-R1~R6을 반영했다. 같은 검토자의 2회차와 실제 빌드 확인은 PL이 배정한다.
 
 Mac 비교 스크립트는 저장소 밖 `/private/tmp/rattle-ocr-bench/compare-iphone.mjs`. 실행: `node /private/tmp/rattle-ocr-bench/compare-iphone.mjs <공유 JSON 경로> <Rattle 저장소 경로>`. Mac과 iPhone 원문을 동일한 현재 TS 파서에 넣고 truth/금액/품목/날짜/시간/원문 관측 일치를 비교한다. SHA-256이 다른 사진이나 키 미입력·중복은 controlledPairs 분모에서 제외한다. iPhone 실측 파일이 오기 전 인식 정확도를 산출하지 않는다.
 
@@ -55,3 +55,25 @@ Mac 비교 스크립트는 저장소 밖 `/private/tmp/rattle-ocr-bench/compare-
 - `node scripts/validate-screen-coverage.mjs`: 실패. 새 `app/dev/ocr-lab.tsx`가 명세 색인에 없고 기존 색인에도 현재 라우트와 차이가 있다. 명세/manifest는 허용 파일 밖이므로 PL에게 갱신을 넘긴다. 로그 `/tmp/rattle-ocr-screen-coverage.log`.
 - iOS/Android 네이티브 빌드·설치·기기 조작·실제 사진 OCR·AirDrop/Android Share·EAS·원격 작업: 미실행, PL/QA 담당. 실기기 인식률과 1.1.0 포함 여부는 빌드 후 확인할 항목이다.
 - 전체 Jest 최종 재실행(요청된 기본 명령): **194 suites / 1587 tests 전부 통과**, 412.33초, 종료 0. 로그 `/tmp/rattle-ocr-full-jest-final.log`. 같은 작업 공간의 다른 증빙 작업자 변경이 동시에 존재하는 로컬 기준이며, 원격이나 네이티브 런타임 검증을 뜻하지 않는다.
+
+
+## 독립 검토 1회차 반영 · OCR-R1~R6 (2026-11-19)
+
+시작 HEAD `e37153c`; 검토 결과 Critical/High 0, Medium 5, Low 1 전부 수용. 파서 수정 `5450bf1`/`a3035c3`, iOS 파일 회수·화면 수정 `1f9c9f5`, 새 사본 나이 기준 `326db88`, S53 문서 `bc31000`. 다른 증빙/출퇴근 작업자의 변경은 보존했다.
+
+| 지적 | 반영과 검증 |
+| --- | --- |
+| OCR-R1 | 단가·현금받음·라벨 없는 숫자를 파생 합계 근거에서 제외. 같은 금액의 결제/합계 라벨 후보가 있을 때만 파생 후보를 추가하고, 계산과 명시 금액 충돌은 selectedTotal=null+경고. 제시된 두 오인식 fixture 회귀 통과 |
+| OCR-R2 | 떨어진 마이너스·Unicode 대시/마이너스·괄호의 음수 보존; 중복/모순/불완전 부호는 미확정. 별도 OCR 부호 셀·반품 합계·음수 할인·일반 합계 라벨 회귀 통과 |
+| OCR-R3 | amountStatus에 absent/observed/unreadable 구분. 배송/할인 읽기 실패는 goodsAdjustments와 비교 결과 null+경고, 라벨 부재와 확인된 0원은 별도 유지. 합성 회귀 통과 |
+| OCR-R4 | 삭제를 두 번 시도해도 실패하면 ERR_OCR_CLEANUP 반환·실패 URL을 module 인스턴스에 보관. 화면 다시 정리에서 실패 URI/JSON 재시도. 재진입 시 실패 파일 즉시 재시도 및 24시간 지난 자기 UUID 이미지/JSON/과거 형식 JSON만 회수. 새 파일·타 파일 보존. 화면 Jest와 실제 macOS Swift helper fault injection 통과 |
+| OCR-R5 | 인식 serial queue autoreleaseFrequency=.workItem, 해시 InputStream 64KB chunk. 여러 chunk digest를 one-shot 정답과 대조하는 Swift helper 통과. iOS 20장 연속 처리 RSS는 미측정 |
+| OCR-R6 | 금액 라벨 문맥에서 작은 금액도 분리 추출: 0/50/500/999원·작은 음수 inline 합계 회귀 통과 |
+
+새 라우트는 S53/E-S53으로 manifest·전체 화면 명세·E2E에 등록했다. S53 단일 경로/고유 ID/필수 필드 검사는 통과하며 전체 screen-coverage는 기존 S45 `app/attendance/review.tsx`, S46 `app/settings/attendance-devices.tsx`가 실제로 없어 실패한다. 기존 두 항목의 정책/색인 보정은 PM 범위로 남겼다.
+
+검증: 초기 회귀 테스트는 18실패/17통과로 원래 결함을 재현했고 수정 후 parser 40개를 포함한 OCR 54개가 기본 timeout으로 통과(7.481초), 첫 전체 재검사 195 suites/1620 tests 통과(75.475초). 일반 합계의 작은 음수 보완 후 최종 전체 재검사 결과는 아래에 기록한다. Swift helper는 `cat modules/rattle-text-recognition/ios/OCRTemporaryFiles.swift __tests__/ocr/temporaryFiles.swift > /tmp/rattle-ocr-temporary-tests.swift` 후 `swift /tmp/rattle-ocr-temporary-tests.swift`로 실제 실행해 지속 삭제 실패·재시도·오래된 파일 소유 경계·스트리밍 SHA를 확인했다. iOS 모듈 전체는 Swift 구문 parse만 통과했고 iOS 앱 컴파일·기기 파일 보호·실제 사진/메모리·공유·설치는 미실행이다.
+
+로그: `/tmp/rattle-ocr-r1-red.log`, `/tmp/rattle-ocr-r1-target-final.log`, `/tmp/rattle-ocr-r1-swift-tests.log`, `/tmp/rattle-ocr-r1-typecheck-final.log`, `/tmp/rattle-ocr-r1-full-jest-final.log`, `/tmp/rattle-ocr-r1-coverage.log`. 같은 검토자의 2회차 대상은 위 수정 커밋과 S53 문서 커밋이다.
+
+최종 코드의 추가 경계 검증: 파서의 라벨/값을 분리해 한 셀의 복수 금액·금액 뒤 떨어진 부호를 한 값으로 확정하지 않는다. 원본 사진이 오래됐어도 새 사본을 즉시 회수하지 않도록 import 시 modificationDate를 현재 시각으로 설정했다. OCR 최종 4 suites/58 tests 통과(23.243초), 일반 합계/뒤 부호까지 포함한 전체 Jest 195 suites/1629 tests 통과(480.645초, 기본 timeout)이며 이 로그는 `/tmp/rattle-ocr-r1-full-jest-final.log`다. 같은 코드의 커밋 후 반복 전체 검사는 `/tmp/rattle-ocr-r1-full-jest-committed.log`에 별도로 남긴다. 타입 검사 로그는 오류 없이 종료했고 Swift 구문 parse와 helper 실제 실행도 통과했다. 실제 iOS 앱 빌드·설치·20장 메모리·파일 보호·공유는 PL/QA 검증 대기다.
