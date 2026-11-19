@@ -58,12 +58,13 @@ export function usePurchases(yearMonth: string) {
     supplier: string;
     type: PurchaseType;
     items: PurchaseItemInput[];
+    returnId?: boolean;
   }) => {
     assertCanWrite();
     if (!store) throw new UserFacingError('매장 정보가 없습니다');
     const result = await createPurchaseWithItems({ ...data, store_id: store.id });
     const refreshed = await refetch();
-    return { refreshFailed: result.refreshFailed || !refreshed };
+    return { ...result, refreshFailed: result.refreshFailed || !refreshed };
   }, [store, refetch]);
 
   const remove = useCallback(async (id: string) => {

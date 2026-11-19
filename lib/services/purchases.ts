@@ -1,3 +1,4 @@
+import { discardParentEvidence } from './evidence';
 import { readAllRows } from './readAllRows';
 import { invalidateCachedStore } from './cacheInvalidation';
 import { supabase } from '../supabase';
@@ -17,10 +18,11 @@ export async function createPurchaseWithItems(input: {
   supplier: string;
   type: PurchaseType;
   items: PurchaseItemInput[];
-}): Promise<{ refreshFailed: boolean }> {
+  returnId?: boolean;
+}): Promise<{ refreshFailed: boolean; purchaseId?: string }> {
   let result;
   try {
-    result = await supabase.rpc('create_purchase_with_items', {
+    result = await supabase.rpc(input.returnId ? 'create_purchase_with_evidence' : 'create_purchase_with_items', {
       p_store_id: input.store_id,
       p_date: input.date,
       p_supplier: input.supplier,
@@ -39,11 +41,11 @@ export async function createPurchaseWithItems(input: {
   }
   try {
     await invalidateCachedStore(input.store_id);
-    return { refreshFailed: false };
+    return { refreshFailed: false, ...(input.returnId ? { purchaseId: result.data as string } : {}) };
   } catch {
     // The RPC already acknowledged success. Never turn refresh failure into a
     // failed write that encourages duplicate inventory increments.
-    return { refreshFailed: true };
+    return { refreshFailed: true, ...(input.returnId ? { purchaseId: result.data as string } : {}) };
   }
 }
 
@@ -145,6 +147,7 @@ export async function createPurchase(data: {
 }
 
 export async function deletePurchase(id: string): Promise<void> {
+  await discardParentEvidence('purchase', id);
   const { error } = await supabase.from('purchases').delete().eq('id', id);
   if (error) throw new Error(error.message);
   await invalidateCachedStore();

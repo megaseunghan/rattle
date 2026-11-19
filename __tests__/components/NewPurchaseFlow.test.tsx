@@ -1,15 +1,23 @@
 import { FlatList } from 'react-native';
-import { fireEvent, render, waitFor, within } from '@testing-library/react-native';
+import { act, fireEvent, render, waitFor, within } from '@testing-library/react-native';
 import NewPurchaseScreen from '../../app/purchases/new';
 import { PurchaseWriteError } from '../../lib/services/purchases';
-const mockWrite = jest.fn();
 const mockQuickCreate = jest.fn();
 let mockMode='self';
+const mockWrite = jest.fn(), mockPick = jest.fn(), mockReserveEvidence = jest.fn(), mockUploadEvidence = jest.fn(), mockCacheDelete = jest.fn();
+let mockStoreId = 'store';
+jest.mock('expo-document-picker', () => ({ getDocumentAsync: (...a: unknown[]) => mockPick(...a) }));
+jest.mock('expo-crypto', () => ({ randomUUID: () => 'draft-id' }));
+jest.mock('expo-image', () => ({ Image: 'Image' }));
+jest.mock('expo-file-system', () => ({ Paths: { cache: { uri: 'file:///cache' } }, File: jest.fn().mockImplementation(() => ({ delete: mockCacheDelete })) }));
+jest.mock('../../lib/hooks/useStorePermissions', () => ({ useStorePermissions: () => ({ canManageStock: true }) }));
+jest.mock('../../lib/services/evidence', () => ({ listEvidence: jest.fn().mockResolvedValue([]), reserveEvidence: (...a: unknown[]) => mockReserveEvidence(...a), signEvidence: jest.fn(), discardEvidence: jest.fn(), discardPendingEvidence: jest.fn() }));
+jest.mock('../../lib/media/evidenceUpload', () => ({ uploadEvidence: (...a: unknown[]) => mockUploadEvidence(...a) }));
 const mockIngredient = { id: 'rice', name: '쌀', category: '식자재', unit: 'kg', last_price: 0 };
 const mockIngredients = [mockIngredient];
 jest.mock('expo-router', () => ({ router: { back: jest.fn(), push: jest.fn() }, useLocalSearchParams: () => ({ date: '2026-10-01' }) }));
 jest.mock('@react-native-community/datetimepicker', () => 'DateTimePicker');
-jest.mock('../../lib/contexts/AuthContext', () => ({ useAuth: () => ({ store: { id: 'store', name: '검증 매장' }, currentRole: 'admin', canManageStore: true, devPreviewMode: mockMode }) }));
+jest.mock('../../lib/contexts/AuthContext', () => ({ useAuth: () => ({ user: { id: 'user' }, store: { id: mockStoreId, name: '검증 매장' }, currentRole: 'admin', canReadFinancials: true, canManageStore: true, storeRole: 'owner', devPreviewMode: mockMode }) }));
 jest.mock('../../lib/hooks/usePurchases', () => ({ usePurchases: () => ({ purchases: [], addWithItems: mockWrite, refetch: jest.fn() }) }));
 jest.mock('../../lib/hooks/useIngredients', () => ({ useIngredients: () => ({ data: mockIngredients, create: jest.fn(), refetch: jest.fn(), loading: false }) }));
 jest.mock('../../lib/hooks/usePurchaseTypes', () => ({ usePurchaseTypes: () => ({ types: ['수기'], loading: false }) }));
@@ -21,7 +29,12 @@ jest.mock('../../lib/services/purchases', () => ({ PurchaseWriteError: class ext
   outcome: 'rejected' | 'unknown';
   constructor(outcome: 'rejected' | 'unknown', original: unknown) { super(String(original)); this.outcome = outcome; }
 } }));
-beforeEach(() => { mockMode='self';mockWrite.mockReset();mockQuickCreate.mockReset(); });
+beforeEach(() => {
+ jest.clearAllMocks(); mockMode='self'; mockQuickCreate.mockReset(); mockStoreId = 'store'; mockWrite.mockReset();
+ mockPick.mockResolvedValue({ canceled: false, assets: [{uri:'file:///cache/picked.jpg',name:'영수증.jpg',mimeType:'image/jpeg',size:100}] });
+ mockReserveEvidence.mockResolvedValue({id:'draft-id',status:'pending',mime_type:'image/jpeg'});
+ mockUploadEvidence.mockResolvedValue(undefined);
+});
 it('기본정보·품목·검토를 나누고 단계 뒤로가도 값을 보존하며 최종 확인에서만 저장한다', async () => {
   mockWrite.mockResolvedValue({ refreshFailed: false });
   const screen = render(<NewPurchaseScreen />);
@@ -116,4 +129,57 @@ it('미리보기에서 재고에 없는 품목을 빠르게 등록해도 실제 
  fireEvent.press(view.getByText('+ 추가'));fireEvent.press(view.getByText('+ 재고에 없는 품목 바로 추가'));
  fireEvent.changeText(view.getByPlaceholderText('예: 삼겹살'),'가상 품목');fireEvent.press(view.getByText('추가'));
  await waitFor(()=>expect(mockQuickCreate).not.toHaveBeenCalled());
+});
+
+async function stageReceipt(screen: ReturnType<typeof render>) {
+ await act(async()=>{fireEvent.press(screen.getByLabelText('등록 전 증빙 선택'));});
+ expect(screen.getByLabelText('영수증.jpg 미리보기')).toBeTruthy();
+}
+it('registration drafts stay local then automatically upload exactly once for saved purchase ID', async()=>{
+ mockWrite.mockResolvedValue({purchaseId:'saved-purchase',refreshFailed:false});
+ const screen=await reviewFilledPurchase();await stageReceipt(screen);
+ expect(mockReserveEvidence).not.toHaveBeenCalled();expect(mockUploadEvidence).not.toHaveBeenCalled();
+ fireEvent.press(screen.getByLabelText('매입 최종 등록'));
+ await waitFor(()=>expect(mockUploadEvidence).toHaveBeenCalledTimes(1));
+ expect(mockReserveEvidence).toHaveBeenCalledWith({kind:'purchase',id:'saved-purchase',storeId:'store'},expect.objectContaining({id:'draft-id'}));
+ expect(mockWrite).toHaveBeenCalledTimes(1);
+});
+it('save rejection preserves staged previews and only retries the business write explicitly',async()=>{
+ mockWrite.mockRejectedValueOnce(new PurchaseWriteError('rejected','bad input'));
+ const screen=await reviewFilledPurchase();await stageReceipt(screen);
+ fireEvent.press(screen.getByLabelText('매입 최종 등록'));
+ await waitFor(()=>expect(screen.getByText('다시 등록')).toBeTruthy());
+ expect(screen.getByLabelText('영수증.jpg 미리보기')).toBeTruthy();expect(mockReserveEvidence).not.toHaveBeenCalled();
+});
+it('unknown save result keeps drafts without reservation or automatic retry',async()=>{
+ mockWrite.mockRejectedValueOnce(new PurchaseWriteError('unknown','response lost'));
+ const screen=await reviewFilledPurchase();await stageReceipt(screen);
+ fireEvent.press(screen.getByLabelText('매입 최종 등록'));
+ await waitFor(()=>expect(screen.getByText('등록 결과를 확인해주세요')).toBeTruthy());
+ expect(screen.getByLabelText('영수증.jpg 미리보기')).toBeTruthy();expect(mockUploadEvidence).not.toHaveBeenCalled();
+ expect(mockReserveEvidence).not.toHaveBeenCalled();expect(mockWrite).toHaveBeenCalledTimes(1);
+});
+it('failed evidence retry never repeats purchase registration',async()=>{
+ mockWrite.mockResolvedValue({purchaseId:'saved-purchase',refreshFailed:false});
+ mockUploadEvidence.mockRejectedValueOnce(Error('offline')).mockResolvedValue(undefined);
+ const screen=await reviewFilledPurchase();await stageReceipt(screen);
+ fireEvent.press(screen.getByLabelText('매입 최종 등록'));
+ await waitFor(()=>expect(screen.getByText('이 파일 다시 업로드')).toBeTruthy());
+ await act(async()=>{fireEvent.press(screen.getByText('이 파일 다시 업로드'));});
+ await waitFor(()=>expect(mockUploadEvidence).toHaveBeenCalledTimes(2));expect(mockWrite).toHaveBeenCalledTimes(1);
+});
+it('store change immediately drops draft and ignores an old in-flight save result',async()=>{
+ let resolve!: (value: unknown)=>void;mockWrite.mockImplementation(()=>new Promise(r=>{resolve=r;}));
+ const screen=await reviewFilledPurchase();await stageReceipt(screen);
+ fireEvent.press(screen.getByLabelText('매입 최종 등록'));
+ await act(async()=>{mockStoreId='other';screen.rerender(<NewPurchaseScreen />);});
+ expect(screen.queryByLabelText('영수증.jpg 미리보기')).toBeNull();expect(mockCacheDelete).toHaveBeenCalled();
+ await act(async()=>{resolve({purchaseId:'old-purchase',refreshFailed:false});});
+ expect(mockReserveEvidence).not.toHaveBeenCalled();expect(mockUploadEvidence).not.toHaveBeenCalled();
+});
+it('leaving removes owned cached drafts and individual removal removes preview',async()=>{
+ const screen=await reviewFilledPurchase();await stageReceipt(screen);
+ fireEvent.press(screen.getByLabelText('영수증.jpg 선택 삭제'));
+ expect(screen.queryByLabelText('영수증.jpg 미리보기')).toBeNull();expect(mockCacheDelete).toHaveBeenCalledTimes(1);
+ await stageReceipt(screen);screen.unmount();expect(mockCacheDelete).toHaveBeenCalledTimes(2);
 });
