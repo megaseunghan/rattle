@@ -1,3 +1,5 @@
+const mockEvidencePanel = jest.fn((_props: any) => null);
+jest.mock('../../lib/components/EvidencePanel', () => ({ EvidencePanel: (props: any) => mockEvidencePanel(props) }));
 jest.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 0, left: 0, right: 0, bottom: 34 }) }));
 import React from 'react';
 import type { FixedExpenseEditorHandle } from '../../lib/components/RecurringFixedExpensesPanel';
@@ -10,7 +12,7 @@ let mockIdentity='u:s:admin:self:2026-11';
 let mockData:any;
 let mockRole='admin';
 jest.mock('expo-crypto',()=>({randomUUID:()=> 'stable-rule-id'}));
-jest.mock('../../lib/contexts/AuthContext',()=>({useAuth:()=>({store:{id:'s'},currentRole:mockRole})}));
+jest.mock('../../lib/contexts/AuthContext',()=>({useAuth:()=>({store:{id:'s'},canManageStore:mockRole==='admin',devPreviewMode:'self'})}));
 jest.mock('../../lib/hooks/useRecurringFixedExpenses',()=>({useRecurringFixedExpenses:()=>({identity:mockIdentity,data:mockData,loading:false,error:null,refetch:mockRefetch,save:mockSave})}));
 jest.mock('../../lib/components/ui/SheetModal',()=>({SheetModal:({visible,children}:any)=>visible?children:null}));
 const legacy:any={id:'legacy',name:'임대료',amount:100,category:'고정비',year_month:'2020-01',occurred_on:null};
@@ -138,4 +140,17 @@ test('늦게 완료된 원본 삭제는 이후 연 다른 수정 초안을 닫�
  fireEvent.changeText(screen.getByLabelText('고정비 항목명'),'다시 연 임대료');
  act(()=>completeDeletion?.());
  expect(screen.getByLabelText('고정비 항목명').props.value).toBe('다시 연 임대료');
+});
+
+test('manual fixed-cost proof does not require saving a recurring rule',()=>{
+ render(<RecurringFixedExpensesPanel {...props()}/>);act(()=>mockEditor.current?.openSource(legacy));
+ expect(mockEvidencePanel).toHaveBeenCalledWith(expect.objectContaining({target:{kind:'expense',storeId:'s',id:'legacy'}}));
+ expect(mockSave).not.toHaveBeenCalled();
+});
+test('new rule from historical view attaches proof to confirmed first month',async()=>{
+ render(<RecurringFixedExpensesPanel {...props()} yearMonth="2020-01"/>);act(()=>mockEditor.current?.openNew());fill();
+ await act(async()=>{fireEvent.press(screen.getByLabelText('비용 저장'));});
+ expect(mockEvidencePanel).toHaveBeenCalledWith(expect.objectContaining({target:{kind:'recurring',storeId:'s',id:'stable-rule-id',month:koreaExpenseMonth()}}));
+ await act(async()=>{fireEvent.press(screen.getByLabelText('비용 저장'));});
+ expect(mockSave).toHaveBeenCalledTimes(1);
 });

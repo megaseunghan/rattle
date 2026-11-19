@@ -1,3 +1,4 @@
+import { discardParentEvidence } from './evidence';
 import { readAllRows } from './readAllRows';
 import { getEffectiveExpenseRows } from './recurringFixedExpenses';
 import { invalidateCachedStore } from './cacheInvalidation';
@@ -101,6 +102,12 @@ export async function updateExpense(
 }
 
 export async function deleteExpense(id: string): Promise<void> {
+  try { await discardParentEvidence('expense', id); }
+  catch (error) {
+    if (error instanceof UserFacingError) throw error;
+    const message = error && typeof error === 'object' && 'message' in error && typeof error.message === 'string' ? error.message : 'EVIDENCE_DELETE_FAILED';
+    throw expenseWriteError(message);
+  }
   const { error } = await supabase.from('expenses').delete().eq('id', id);
   if (error) throw expenseWriteError(error.message);
   await invalidateCachedStore();

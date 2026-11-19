@@ -1,4 +1,9 @@
+import { useStorePermissions } from '../../lib/hooks/useStorePermissions';
 import { usePreviewWriteGuard } from '../../lib/hooks/usePreviewWriteGuard';
+import { EvidenceStagingPanel } from '../../lib/components/EvidenceStagingPanel';
+import { EvidenceSelection } from '../../lib/types/evidence';
+import { disposeEvidenceCache } from '../../lib/media/evidencePicker';
+import { EvidencePanel } from '../../lib/components/EvidencePanel';
 import { entityKey } from '../../lib/utils/listKeys';
 import { SheetModal } from '../../lib/components/ui/SheetModal';
 /* Hallmark · genre: modern-minimal · macrostructure: Workbench · design-system: DESIGN.md · designed-as-app */
@@ -87,7 +92,14 @@ const IngredientPickerRow = memo(function IngredientPickerRow({ item, already, c
 });
 
 export default function NewPurchaseScreen() {
-  const { store, canManageStore } = useAuth();
+  const { user, store, storeRole, canReadFinancials, devPreviewMode } = useAuth();
+  return <NewPurchaseContent key={`${user?.id}:${store?.id}:${storeRole}:${canReadFinancials}:${devPreviewMode}`} />;
+}
+
+function NewPurchaseContent() {
+  const { store, canManageStore, canReadFinancials, devPreviewMode } = useAuth();
+  const { canManageStock } = useStorePermissions();
+  const canAttach = canManageStock && canReadFinancials && devPreviewMode === 'self';
   const { canWrite } = usePreviewWriteGuard();
   const purchaseTypes = usePurchaseTypes();
   const [typeModalVisible, setTypeModalVisible] = useState(false);
@@ -128,6 +140,19 @@ export default function NewPurchaseScreen() {
   const [purchaseType, setPurchaseType] = useState<PurchaseType>('');
   const writeLock = useRef(false);
   const [submitting, setSubmitting] = useState(false);
+  const [savedPurchaseId, setSavedPurchaseId] = useState<string>();
+  const [stagedEvidence, setStagedEvidence] = useState<EvidenceSelection[]>([]);
+  const [pickingEvidence, setPickingEvidence] = useState(false);
+  const [pendingEvidence, setPendingEvidence] = useState(0);
+  const ownedEvidence = useRef(new Set<string>());
+  const alive = useRef(true);
+  useEffect(() => { alive.current = true; return () => { alive.current = false; ownedEvidence.current.forEach(disposeEvidenceCache); }; }, []);
+  function updateStagedEvidence(next: EvidenceSelection[]) {
+    const uris = new Set(next.map(file => file.uri));
+    for (const file of stagedEvidence) if (!uris.has(file.uri)) { disposeEvidenceCache(file.uri); ownedEvidence.current.delete(file.uri); }
+    next.forEach(file => ownedEvidence.current.add(file.uri));
+    setStagedEvidence(next);
+  }
   useEffect(() => {
     if (!purchaseTypes.loading && !purchaseTypes.error && !purchaseTypes.types.includes(purchaseType)) {
       setPurchaseType(purchaseTypes.types.includes('수기') ? '수기' : purchaseTypes.types[0] ?? '');
@@ -141,13 +166,13 @@ export default function NewPurchaseScreen() {
   const [activeCategory, setActiveCategory] = useState('전체');
   const [selectedIngredients, setSelectedIngredients] = useState<Set<string>>(new Set());
 
-  const isDirty = writeState !== 'saved' && writeState !== 'saved-refresh' && (supplier.trim().length > 0 || typeEdited || items.length > 0 || formatDate(date) !== formatDate(parseInitialDate(params.date)));
+  const isDirty = writeState !== 'saved' && writeState !== 'saved-refresh' && (stagedEvidence.length > 0 || supplier.trim().length > 0 || typeEdited || items.length > 0 || formatDate(date) !== formatDate(parseInitialDate(params.date)));
   useEffect(() => {
-    if ((step === 0 && !editingReview) || submitting || writeState.startsWith('saved') || writeState === 'unknown') return;
+    if ((step === 0 && !editingReview) || submitting || pickingEvidence || writeState.startsWith('saved') || writeState === 'unknown') return;
     const listener = BackHandler.addEventListener('hardwareBackPress', () => { goBackStep(); return true; });
     return () => listener.remove();
-  }, [step, submitting, editingReview, writeState]);
-  const bypassLeaveGuard = useConfirmLeave(isDirty, { message: '지금 나가면 입력한 매입 내용이 저장되지 않아요.' });
+  }, [step, submitting, pickingEvidence, editingReview, writeState]);
+  const bypassLeaveGuard = useConfirmLeave(isDirty || pendingEvidence > 0, { message: pendingEvidence > 0 ? '매입은 저장됐지만 증빙 업로드가 끝나지 않았어요. 나가면 남은 파일을 다시 선택해야 해요.' : '지금 나가면 입력한 매입 내용과 선택한 증빙이 사라져요.' });
 
   // 새 식자재 빠른 등록
   const [showQuickAdd, setShowQuickAdd] = useState(false);
@@ -268,7 +293,7 @@ export default function NewPurchaseScreen() {
   }
 
   function advance() {
-    if (submitting || writeState === 'unknown') return;
+    if (submitting || pickingEvidence || writeState === 'unknown') return;
     if (!validate(step)) return;
     Keyboard.dismiss();
     setStep(value => editingReview ? 2 : value + 1);
@@ -277,7 +302,7 @@ export default function NewPurchaseScreen() {
   }
 
   async function handleSubmit() {
-    if (writeLock.current || submitting || writeState === 'unknown' || writeState.startsWith('saved')) return;
+    if (!canWrite() || writeLock.current || submitting || pickingEvidence || writeState === 'unknown' || writeState.startsWith('saved')) return;
     if (!store) return;
     if (!validate(0)) { setStep(0); return; }
     if (!validate(1)) { setStep(1); return; }
@@ -285,7 +310,7 @@ export default function NewPurchaseScreen() {
     setSubmitting(true);
     try {
       const result = await addWithItems({
-        date: formatDate(date), supplier: supplier.trim(), type: purchaseType,
+        date: formatDate(date), supplier: supplier.trim(), type: purchaseType, returnId: true,
         items: items.map(i => {
           const factor = convertQuantity(1, i.unit, i.ingredient.unit) || 1;
           return { ingredient_id: i.ingredient.id, name: i.ingredient.name,
@@ -293,11 +318,15 @@ export default function NewPurchaseScreen() {
             unit_price: Number(i.unit_price) / factor, category: i.ingredient.category };
         }),
       });
+      if (!alive.current) return;
+      setSavedPurchaseId(result.purchaseId);
+      setPendingEvidence(result.purchaseId ? stagedEvidence.length : 0);
       setWriteState(result.refreshFailed ? 'saved-refresh' : 'saved');
       Keyboard.dismiss();
     } catch (error) {
+      if (!alive.current) return;
       setWriteState(error instanceof PurchaseWriteError && error.outcome === 'rejected' ? 'rejected' : 'unknown');
-    } finally { writeLock.current = false; setSubmitting(false); }
+    } finally { writeLock.current = false; if (alive.current) setSubmitting(false); }
   }
 
   function editReview(target: number) {
@@ -309,6 +338,7 @@ export default function NewPurchaseScreen() {
   }
 
   function goBackStep() {
+    if (pickingEvidence) return;
     Keyboard.dismiss();
     setErrors({});
     setStep(value => editingReview ? 2 : value - 1);
@@ -317,6 +347,11 @@ export default function NewPurchaseScreen() {
   }
 
   function leaveSaved() {
+    if (pendingEvidence > 0) {
+      Alert.alert('증빙 업로드가 남아 있어요', '매입은 저장됐어요. 지금 나가면 미완료 파일을 다시 선택해야 해요.', [{ text: '계속 업로드', style: 'cancel' }, { text: '나가기', style: 'destructive', onPress: navigateSaved }]);
+    } else navigateSaved();
+  }
+  function navigateSaved() {
     bypassLeaveGuard();
     if (router.canGoBack()) router.back();
     else router.replace({ pathname: '/(tabs)', params: { targetTab: 'purchases', month: formatDate(date).slice(0, 7), homeScope: 'store' } });
@@ -340,7 +375,7 @@ export default function NewPurchaseScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => { if (saved) leaveSaved(); else if (!submitting && (step > 0 || editingReview) && writeState !== 'unknown') goBackStep(); else if (!submitting) router.back(); }} disabled={submitting} style={styles.backButton} accessibilityRole="button" accessibilityLabel="뒤로">
+        <TouchableOpacity onPress={() => { if (saved) leaveSaved(); else if (!submitting && (step > 0 || editingReview) && writeState !== 'unknown') goBackStep(); else if (!submitting) router.back(); }} disabled={submitting || pickingEvidence} style={styles.backButton} accessibilityRole="button" accessibilityLabel="뒤로">
           <AppIcon name="chevron-back" size={24} color={Colors.black} />
         </TouchableOpacity>
         <Text style={styles.title}>매입 등록</Text>
@@ -501,8 +536,11 @@ export default function NewPurchaseScreen() {
             {items.map(item => <Text key={item.ingredient.id} style={styles.reviewText}>{item.ingredient.name} · {item.quantity}{item.unit} × {Number(item.unit_price).toLocaleString()}원 = {(Number(item.quantity) * Number(item.unit_price)).toLocaleString('ko-KR', { maximumFractionDigits: 6 })}원</Text>)}
             <TouchableOpacity style={styles.actionButton} disabled={submitting || writeState === 'unknown'} onPress={() => editReview(1)}><Text style={styles.modalClose}>품목 수정</Text></TouchableOpacity>
           </View>}
+          {step === 2 && canAttach && (!saved || !savedPurchaseId) && <EvidenceStagingPanel files={stagedEvidence} onChange={updateStagedEvidence} disabled={saved || submitting || writeState === 'unknown'} onPickingChange={setPickingEvidence} />}
+          {saved && savedPurchaseId && store && <EvidencePanel target={{ kind: 'purchase', id: savedPurchaseId, storeId: store.id }} initiallyExpanded initialSelections={stagedEvidence} onPendingChange={setPendingEvidence} />}
           {writeState === 'rejected' && <Text style={styles.fieldError}>등록되지 않았어요. 입력 내용을 확인한 뒤 다시 등록해주세요.</Text>}
-          {writeState === 'unknown' && <View style={styles.itemCard}><Text style={styles.itemName}>등록 결과를 확인해주세요</Text><Text style={styles.reviewText}>응답을 받지 못해 등록 여부가 확실하지 않아요. 중복 등록을 막기 위해 매입 내역을 먼저 확인해주세요. 현재 입력은 이 화면에 유지돼요.</Text><TouchableOpacity style={styles.actionButton} onPress={() => router.push({ pathname: '/(tabs)', params: { targetTab: 'purchases', month: formatDate(date).slice(0, 7), homeScope: 'store' } })}><Text style={styles.modalClose}>등록 내역 확인</Text></TouchableOpacity></View>}
+          {writeState === 'unknown' && <View style={styles.itemCard}><Text style={styles.itemName}>등록 결과를 확인해주세요</Text><Text style={styles.reviewText}>응답을 받지 못해 등록 여부가 확실하지 않아요. 중복 등록을 막기 위해 매입 내역을 먼저 확인해주세요. 입력과 선택한 증빙은 이 화면에 유지돼요. 등록 여부를 확인하기 전에는 증빙을 업로드하지 않아요.</Text><TouchableOpacity style={styles.actionButton} onPress={() => router.push({ pathname: '/(tabs)', params: { targetTab: 'purchases', month: formatDate(date).slice(0, 7), homeScope: 'store' } })}><Text style={styles.modalClose}>등록 내역 확인</Text></TouchableOpacity></View>}
+          {saved && !savedPurchaseId && stagedEvidence.length > 0 && <Text style={styles.fieldError}>매입은 저장됐지만 거래 번호를 확인하지 못해 증빙을 업로드하지 않았어요. 선택한 파일은 이 화면에 유지돼요.</Text>}
           {saved && <View style={styles.itemCard}><Text style={styles.itemName}>매입이 등록됐어요</Text><Text style={styles.reviewText}>{store?.name} · {formatDate(date)} · {supplier}</Text><Text style={styles.reviewText}>{writeState === 'saved-refresh' ? '등록은 완료됐어요. 목록에서 합계를 다시 불러와 주세요.' : '목록에서 등록 내역을 확인할 수 있어요.'}</Text></View>}
         </ScrollView>
 
@@ -517,7 +555,7 @@ export default function NewPurchaseScreen() {
           accessibilityRole="button"
           accessibilityLabel={saved ? '매입 내역으로' : step < 2 ? '다음 단계' : '매입 최종 등록'}
           onPress={saved ? leaveSaved : step < 2 ? advance : handleSubmit}
-          disabled={submitting || writeState === 'unknown'}
+          disabled={submitting || pickingEvidence || writeState === 'unknown'}
         >
           <Text style={styles.bottomSubmitText}>
             {submitting ? '등록 중...' : saved ? '매입 내역으로' : editingReview ? '검토로 돌아가기' : step === 0 ? '품목 입력으로' : step === 1 ? '입력 내용 검토' : writeState === 'rejected' ? '다시 등록' : '매입 등록'}

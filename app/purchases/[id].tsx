@@ -1,4 +1,5 @@
 import { usePreviewWriteGuard } from '../../lib/hooks/usePreviewWriteGuard';
+import { EvidencePanel } from '../../lib/components/EvidencePanel';
 import { SheetModal } from '../../lib/components/ui/SheetModal';
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import {
@@ -129,6 +130,7 @@ export default function PurchaseDetailScreen() {
             <Text style={styles.amount} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{purchase.amount.toLocaleString()}원</Text>
           </View>
 
+          {store && <EvidencePanel target={{ kind: 'purchase', id: purchase.id, storeId: store.id }} disabled={saving} />}
           <Text style={styles.sectionLabel}>품목</Text>
           {items.length === 0 ? (
             <View style={styles.emptyCard}>

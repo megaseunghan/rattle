@@ -1,3 +1,4 @@
+jest.mock('../../lib/components/EvidencePanel', () => ({ EvidencePanel: () => null }));
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { Alert } from 'react-native';
 import PurchaseDetail from '../../app/purchases/[id]';

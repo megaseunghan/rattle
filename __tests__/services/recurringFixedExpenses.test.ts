@@ -41,6 +41,7 @@ test('existing fixed service uses canonical rows once including recurring, no le
 
 test('linked source move/delete failures explain recovery',async()=>{
  const failure={error:{message:'RECURRING_EXPENSE_SOURCE_LOCKED'}};
+ rpc.mockResolvedValue(failure);
  const chain:any={update:jest.fn().mockReturnThis(),delete:jest.fn().mockReturnThis(),eq:jest.fn().mockReturnThis(),select:jest.fn().mockReturnThis(),single:jest.fn().mockResolvedValue(failure),then:(resolve:any)=>Promise.resolve(failure).then(resolve)};
  (supabase.from as jest.Mock).mockReturnValue(chain);
  await expect(updateExpense('legacy',{name:'임대료',amount:100,occurred_on:'2027-01-01'})).rejects.toThrow('반복 일정에서 변경');
