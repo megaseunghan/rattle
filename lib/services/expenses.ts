@@ -108,8 +108,9 @@ export async function deleteExpense(id: string): Promise<void> {
     const message = error && typeof error === 'object' && 'message' in error && typeof error.message === 'string' ? error.message : 'EVIDENCE_DELETE_FAILED';
     throw expenseWriteError(message);
   }
-  const { error } = await supabase.from('expenses').delete().eq('id', id);
+  const { count, error } = await supabase.from('expenses').delete({ count: 'exact' }).eq('id', id);
   if (error) throw expenseWriteError(error.message);
+  if (count !== 1) throw new UserFacingError('삭제를 확인하지 못했어요. 목록을 새로고침해주세요.');
   await invalidateCachedStore();
 }
 

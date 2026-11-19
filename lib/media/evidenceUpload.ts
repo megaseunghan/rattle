@@ -14,7 +14,7 @@ async function readBounded(uri: string): Promise<ArrayBuffer> {
 export async function uploadEvidence(selection: EvidenceSelection, row: EvidenceFile, isCurrent: () => boolean): Promise<void> {
   const check = () => { if (!isCurrent()) throw new Error('EVIDENCE_SCOPE_CHANGED'); };
   check();
-  if (row.status === 'discarding') throw new UserFacingError('정리 중인 첨부예요. 미완료 첨부 정리를 마친 뒤 다시 선택해주세요.');
+  if (row.status === 'discarding' || row.status === 'deleting') throw new UserFacingError('정리 중인 첨부예요. 미완료 첨부 정리를 마친 뒤 다시 선택해주세요.');
   if (row.status === 'ready') return; // A previous finish response may have been lost.
   if (row.mime_type === 'application/pdf') {
     const bytes = await readBounded(selection.uri); check();

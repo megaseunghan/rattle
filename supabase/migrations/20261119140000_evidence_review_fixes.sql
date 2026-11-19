@@ -73,11 +73,13 @@ DROP POLICY evidence_delete_gate ON storage.objects;
 CREATE POLICY evidence_object_delete ON storage.objects FOR DELETE TO authenticated USING (
  bucket_id='transaction-evidence' AND EXISTS(SELECT 1 FROM public.transaction_evidence f WHERE
  (storage.objects.name=f.store_id::text||'/'||f.id::text||'/image.jpg' OR storage.objects.name=f.store_id::text||'/'||f.id::text||'/thumb.jpg' OR storage.objects.name=f.store_id::text||'/'||f.id::text||'/document.pdf')
+ AND f.status IN ('discarding','deleting')
  AND public.evidence_target_access(f.store_id,f.purchase_id,f.expense_id,f.recurring_rule_id,f.occurrence_month,true)
  AND (f.created_by=(select auth.uid()) OR public.is_store_admin(f.store_id))));
 CREATE POLICY evidence_delete_gate ON storage.objects AS RESTRICTIVE FOR DELETE TO authenticated USING (
  bucket_id<>'transaction-evidence' OR EXISTS(SELECT 1 FROM public.transaction_evidence f WHERE
  (storage.objects.name=f.store_id::text||'/'||f.id::text||'/image.jpg' OR storage.objects.name=f.store_id::text||'/'||f.id::text||'/thumb.jpg' OR storage.objects.name=f.store_id::text||'/'||f.id::text||'/document.pdf')
+ AND f.status IN ('discarding','deleting')
  AND public.evidence_target_access(f.store_id,f.purchase_id,f.expense_id,f.recurring_rule_id,f.occurrence_month,true)
  AND (f.created_by=(select auth.uid()) OR public.is_store_admin(f.store_id))));
 
@@ -125,6 +127,7 @@ BEGIN
  IF NOT FOUND THEN RETURN; END IF;
  IF NOT coalesce(public.evidence_target_access(f.store_id,f.purchase_id,f.expense_id,f.recurring_rule_id,f.occurrence_month,true),false)
  OR (f.created_by<>auth.uid() AND NOT public.is_store_admin(f.store_id)) THEN RAISE EXCEPTION 'EVIDENCE_FORBIDDEN' USING ERRCODE='42501'; END IF;
+ IF f.status NOT IN ('discarding','deleting') THEN RAISE EXCEPTION 'EVIDENCE_DISCARD_REQUIRED'; END IF;
  base:=f.store_id::text||'/'||f.id::text||'/';
  IF EXISTS(SELECT 1 FROM storage.objects WHERE bucket_id='transaction-evidence' AND name IN(base||'image.jpg',base||'thumb.jpg',base||'document.pdf')) THEN
  RAISE EXCEPTION 'EVIDENCE_FILES_REMAIN'; END IF;

@@ -111,6 +111,7 @@ function EvidencePanelContent({ target, disabled = false, initiallyExpanded = fa
             await discardCanceledUpload(row);
             canceledJobs.current.add(job.selection.id);
           }
+          if (ownedCache.current.delete(job.selection.uri)) disposeEvidenceCache(job.selection.uri);
           if (alive.current) setJobs(previous => previous.filter(value => value.selection.id !== job.selection.id));
         } catch (error) {
           if (!alive.current) break;
@@ -173,22 +174,30 @@ function EvidencePanelContent({ target, disabled = false, initiallyExpanded = fa
     if (!alive.current || lock.current || disabled || !canWrite) return;
     lock.current = true; setBusy(true);
     let job: Job | undefined;
+    let pickedUri: string | undefined;
     try {
       const result = await DocumentPicker.getDocumentAsync({ type: '*/*', multiple: false, copyToCacheDirectory: true });
-      if (!alive.current || result.canceled) return;
+      if (result.canceled) return;
       const asset = result.assets[0];
+      pickedUri = asset.uri;
+      if (!alive.current) return;
       const prepared = prepareEvidenceSelection(asset);
       if ((prepared.mimeType === 'application/pdf') !== (file.mime_type === 'application/pdf')) throw new UserFacingError('기존 첨부와 같은 종류의 파일을 선택해주세요.');
       job = { row: file, status: 'queued', selection: { id: file.id, uri: asset.uri, name: file.name, ...prepared } };
+      ownedCache.current.add(asset.uri);
       setJobs(previous => [...previous.filter(j => j.selection.id !== file.id), job!]);
     } catch (error) { if (alive.current) setError(error instanceof UserFacingError ? error.message : '파일을 다시 선택해주세요.'); }
-    finally { lock.current = false; if (alive.current) setBusy(false); }
+    finally {
+      if (!job && pickedUri) disposeEvidenceCache(pickedUri);
+      lock.current = false;
+      if (alive.current) setBusy(false);
+    }
     if (job && alive.current) await run([job]);
   }
   async function remove(file: EvidenceFile, canceledUpload = false) {
     if (!alive.current || lock.current || disabled || !canWrite) return;
     lock.current = true; setBusy(true);
-    try { await (canceledUpload ? discardCanceledUpload(file) : file.status === 'ready' ? discardEvidence(file) : discardPendingEvidence(file)); if (alive.current) { setJobs(previous => previous.filter(j => j.selection.id !== file.id)); await refresh(); } }
+    try { await (canceledUpload ? discardCanceledUpload(file) : (file.status === 'ready' || file.status === 'deleting') ? discardEvidence(file) : discardPendingEvidence(file)); if (alive.current) { setJobs(previous => previous.filter(j => j.selection.id !== file.id)); await refresh(); } }
     catch { if (alive.current) setError('첨부 삭제를 완료하지 못했어요. 다시 시도해주세요.'); }
     finally { lock.current = false; if (alive.current) setBusy(false); }
   }
@@ -203,7 +212,7 @@ function EvidencePanelContent({ target, disabled = false, initiallyExpanded = fa
         if (!alive.current) break;
         if (file.status === 'ready' || (file.created_by !== account && !canManageStore)) continue;
         try {
-          await discardPendingEvidence(file);
+          await (file.status === 'deleting' ? discardEvidence(file) : discardPendingEvidence(file));
           if (alive.current) setJobs(previous => previous.filter(job => job.selection.id !== file.id));
         } catch { failed = true; }
       }
@@ -234,7 +243,7 @@ function EvidencePanelContent({ target, disabled = false, initiallyExpanded = fa
       {!loading && !!error && <TouchableOpacity style={styles.button} accessibilityRole="button" onPress={refresh}><Text style={styles.link}>다시 불러오기</Text></TouchableOpacity>}
       <FlatList horizontal data={files.filter(file => !jobIds.has(file.id))} initialNumToRender={3} maxToRenderPerBatch={3} windowSize={3} keyExtractor={item => item.id} style={styles.list}
         renderItem={({ item }) => <View style={styles.file}>
-          {item.status === 'ready' ? <EvidenceThumbnail file={item} account={account} onOpen={open} /> : <TouchableOpacity disabled={!canWrite || busy || disabled || (item.created_by !== account || item.status === 'discarding')} style={styles.button} accessibilityRole="button" onPress={() => { void reselect(item); }}><Text style={styles.link}>{item.status === 'discarding' ? '정리 미완료 · 다시 삭제해주세요' : item.created_by === account ? '업로드 미완료 · 파일 다시 선택' : '업로드 미완료'}</Text></TouchableOpacity>}
+          {item.status === 'ready' ? <EvidenceThumbnail file={item} account={account} onOpen={open} /> : <TouchableOpacity disabled={!canWrite || busy || disabled || (item.created_by !== account || item.status !== 'pending')} style={styles.button} accessibilityRole="button" onPress={() => { void reselect(item); }}><Text style={styles.link}>{item.status !== 'pending' ? '정리 미완료 · 다시 삭제해주세요' : item.created_by === account ? '업로드 미완료 · 파일 다시 선택' : '업로드 미완료'}</Text></TouchableOpacity>}
           <Text numberOfLines={2} style={styles.name}>{item.name}</Text>
           {canWrite && (item.created_by === account || canManageStore) && <TouchableOpacity disabled={busy || disabled} style={styles.button} accessibilityRole="button" accessibilityLabel={`${item.name} 첨부 삭제`} onPress={() => Alert.alert('첨부 삭제', '이 증빙 파일을 삭제할까요?', [{ text: '취소', style: 'cancel' }, { text: '삭제', style: 'destructive', onPress: () => { void remove(item); } }])}><Text style={styles.error}>삭제</Text></TouchableOpacity>}
         </View>} />
