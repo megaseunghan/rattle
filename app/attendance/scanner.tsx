@@ -1,7 +1,7 @@
 import { Component, ComponentType, ReactNode, memo, useCallback, useEffect, useRef, useState } from 'react';
-import { AccessibilityInfo, Animated, Easing, AppState, Platform, Linking, Modal, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { AccessibilityInfo, AppState, Platform, Linking, Modal, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Svg, { Path } from 'react-native-svg';
+import { ScannerFrame } from '../../lib/components/ScannerFrame';
 import { useKeepAwake } from 'expo-keep-awake';
 import type { CameraViewProps } from 'expo-camera';
 import { Colors } from '../../constants/colors';
@@ -32,7 +32,8 @@ export const CameraSurface = memo(function CameraSurface({ onScan, onAvailabilit
       const permission = await (request ? module.Camera.requestCameraPermissionsAsync() : module.Camera.getCameraPermissionsAsync());
       if (!current.current || version !== permissionRequest.current) return;
       if (permission.granted) { setCamera(() => module.CameraView); setStatus('ready'); }
-      else { setStatus('denied'); if (request && !permission.canAskAgain) void Linking.openSettings(); }
+      else if (permission.status === 'undetermined') setStatus('firstRequest');
+      else setStatus(permission.canAskAgain ? 'retry' : 'settings');
     } catch { if (current.current && version === permissionRequest.current) setStatus('missing'); }
   }
   useEffect(() => {
@@ -50,20 +51,32 @@ export const CameraSurface = memo(function CameraSurface({ onScan, onAvailabilit
   const unavailable = <View style={s.cameraFallback}><Text style={s.whiteTitle}>카메라를 사용할 수 없어요</Text><Text style={s.whiteBody}>앱을 최신 버전으로 설치한 뒤 다시 열어주세요</Text></View>;
   if (status === 'missing') return unavailable;
   if (status === 'loading') return <LoadingSpinner fullScreen={false} />;
-  if (status === 'denied') return <View style={s.cameraFallback}><Text style={s.whiteTitle}>카메라를 허용해주세요</Text><Text style={s.whiteBody}>QR을 스캔하려면 설정에서 카메라를 허용해주세요</Text><Pressable accessibilityRole="button" style={s.action} onPress={() => { void readPermission(true); }}><Text style={s.whiteBody}>카메라 허용하기</Text></Pressable></View>;
+  if (['firstRequest', 'retry', 'settings'].includes(status)) {
+    const settings = status === 'settings';
+    return <View style={s.cameraFallback}>
+      <Text style={s.whiteTitle}>카메라를 허용해주세요</Text>
+      <Text style={s.whiteBody}>{settings ? '설정에서 카메라를 허용해주세요' : 'QR을 찍으려면 카메라를 허용해주세요'}</Text>
+      <Pressable accessibilityRole="button" style={s.action} onPress={() => {
+        if (settings) void Linking.openSettings();
+        else void readPermission(true);
+      }}><Text style={s.whiteBody}>{settings ? '설정 열기' : '카메라 허용하기'}</Text></Pressable>
+    </View>;
+  }
   const Camera = camera;
   return <CameraBoundary fallback={unavailable}>{Camera && active && <Camera style={StyleSheet.absoluteFill} facing="back" barcodeScannerSettings={qrSettings} onBarcodeScanned={onBarcodeScanned} onMountError={() => setStatus('missing')} />}</CameraBoundary>;
 });
+function signalRecognition() {
+  void Haptics.selectionAsync().catch(() => {});
+}
+
 export default function AttendanceScannerScreen() {
   useKeepAwake('rattle-attendance-scanner');
-  const scanner = useAttendanceScanner(); const insets = useSafeAreaInsets(); const { width, height } = useWindowDimensions();
+  const scanner = useAttendanceScanner(undefined, signalRecognition); const insets = useSafeAreaInsets(); const { width, height } = useWindowDimensions();
   const [recovery, setRecovery] = useState(false);
   const [cameraReady, setCameraReady] = useState(false);
   const [reduceMotion, setReduceMotion] = useState(true);
   const reduceTransparency = useReducedTransparency();
   const staticFrame = reduceMotion || (Platform.OS === 'ios' && reduceTransparency);
-  const opacity = useRef(new Animated.Value(1)).current;
-  const sweep = useRef(new Animated.Value(0)).current;
   const repeat = scanner.state === 'repeatQr';
   const success = scanner.state === 'saved' || scanner.state === 'registered';
   const failed = scanner.state === 'scanFailed' || scanner.state === 'wrongQr';
@@ -101,36 +114,15 @@ export default function AttendanceScannerScreen() {
       void Haptics.notificationAsync(feedback).catch(() => {});
     }
   }, [success, failed, repeat, scanner.notice]);
-  useEffect(() => {
-    opacity.setValue(1);
-    if (!cameraReady || staticFrame || !success) return;
-    opacity.setValue(0.4);
-    const animation = Animated.timing(opacity, { toValue: 1, duration: 220, useNativeDriver: true, isInteraction: false });
-    animation.start();
-    return () => animation.stop();
-  }, [cameraReady, staticFrame, success, opacity]);
-  useEffect(() => {
-    sweep.setValue(0);
-    if (!cameraReady || staticFrame || !processing) return;
-    const animation = Animated.loop(Animated.timing(sweep, {
-      toValue: 1, duration: 2400, easing: Easing.linear, useNativeDriver: true, isInteraction: false,
-    }));
-    animation.start();
-    return () => animation.stop();
-  }, [cameraReady, staticFrame, processing, sweep]);
   const size = Math.min(width - 80, 280, height * 0.32), top = Math.max(insets.top + 86, height * 0.19);
-  const lineOffset = sweep.interpolate({ inputRange: [0, 0.25, 0.75, 1], outputRange: [0, size * 0.40, -size * 0.40, 0] });
-  const path = 'M1 60V20Q1 1 20 1H60M220 1H260Q279 1 279 20V60M279 220V260Q279 279 260 279H220M60 279H20Q1 279 1 260V220';
   return <View style={s.root}>
     <View style={[StyleSheet.absoluteFill, !cameraReady && showNotice && s.cameraAboveNotice]}>
       <CameraSurface onAvailability={setCameraReady} onScan={scanner.scan} />
     </View>
-    {cameraReady && <Animated.View pointerEvents="none" style={{ opacity, alignItems: 'center', justifyContent: 'center', position: 'absolute', width: size, height: size, left: (width - size) / 2, top }}><Svg style={StyleSheet.absoluteFill} width="100%" height="100%" viewBox="0 0 280 280"><Path d={path} stroke={Colors.black} strokeWidth={4} fill="none" /><Path d={path} stroke={frameColor} strokeWidth={processing || result ? 5 : 3} fill="none" /></Svg>
-      {processing && <Animated.View testID="scanner-line" style={[s.scanLine, { transform: [{ translateY: lineOffset }] }]} />}
-      {processing && staticFrame && <Text accessible={false} style={[s.symbol, { color: Colors.light }]}>…</Text>}
-      {(success || failed || repeat) && <Text accessible={false} style={[s.symbol, { color: frameColor }]}>{success ? '✓' : '!'}</Text>}
-    </Animated.View>}
-    {cameraReady && <Text pointerEvents="none" style={[s.caption, { top: top + size + 20 }]}>{processing ? 'QR을 인식했어요' : result ? nextAction : scanner.ready ? '직원 QR을 스캔해주세요' : '관리자 앱의 등록 QR을 찍어주세요'}</Text>}
+    {cameraReady && <ScannerFrame size={size} top={top} left={(width - size) / 2} color={frameColor}
+      phase={processing ? 'checking' : result || scanner.state === 'unknownSetup' ? 'result' : 'waiting'}
+      symbol={success ? '✓' : failed ? '×' : repeat ? '!' : ''} staticFrame={staticFrame} />}
+    {cameraReady && <Text pointerEvents="none" style={[s.caption, { top: top + size + 20 }]}>{processing ? 'QR을 읽었어요' : result ? nextAction : scanner.ready ? '직원 QR을 스캔해주세요' : '사장님이나 점장님 앱의 등록 QR을 찍어주세요'}</Text>}
     {showNotice && <View style={[s.noticeZone, { top: cameraReady ? top + size + 60 : height * 0.44, bottom: insets.bottom + (result && scanner.unresolvedCount ? 140 : 84) }]}><View style={s.notice}><View style={s.noticeText} accessible accessibilityLabel={noticeLabel} accessibilityLiveRegion="polite"><Text style={[s.whiteTitle, success && s.receipt]}>{scanner.title}</Text>{!!scanner.time && <Text style={s.time}>{scanner.time}</Text>}{!!scanner.body && <Text style={s.whiteBody}>{scanner.body}</Text>}</View>
       {['error', 'unknownSetup'].includes(scanner.state) && <Pressable accessibilityRole="button" style={s.action} onPress={() => { void scanner.refresh(); }}><Text style={s.whiteBody}>다시 확인</Text></Pressable>}
       {scanner.state === 'unknownSetup' && <Pressable accessibilityRole="button" style={s.action} onPress={() => setRecovery(true)}><Text style={s.whiteBody}>새 등록 준비하기</Text></Pressable>}
@@ -139,15 +131,13 @@ export default function AttendanceScannerScreen() {
     {result && <Pressable accessibilityRole="button" style={[s.confirm, { bottom: insets.bottom + 12 }]} onPress={scanner.clearNotice}>
       <Text style={s.whiteTitle}>확인</Text>
     </Pressable>}
-    <Modal visible={recovery} transparent animationType={staticFrame ? 'none' : 'fade'} onRequestClose={() => setRecovery(false)}><View style={s.shade}><View style={s.recoveryCard} accessibilityViewIsModal><Text style={s.recoveryTitle}>관리자 앱에서 확인했나요?</Text><Text style={s.recoveryBody}>등록돼 있다면 먼저 해제해주세요. 그다음 관리자 앱에서 새 등록 QR을 받아주세요.</Text><View style={s.actions}><Pressable accessibilityRole="button" style={s.action} onPress={() => setRecovery(false)}><Text style={s.recoveryAction}>닫기</Text></Pressable><Pressable accessibilityRole="button" style={s.action} onPress={() => { setRecovery(false); void scanner.confirmRegistrationRecovery(); }}><Text style={s.recoveryAction}>새 QR 찍기</Text></Pressable></View></View></View></Modal>
+    <Modal visible={recovery} transparent animationType={staticFrame ? 'none' : 'fade'} onRequestClose={() => setRecovery(false)}><View style={s.shade}><View style={s.recoveryCard} accessibilityViewIsModal><Text style={s.recoveryTitle}>사장님이나 점장님 앱에서 확인했나요?</Text><Text style={s.recoveryBody}>등록돼 있다면 먼저 해제해주세요. 그다음 사장님이나 점장님 앱에서 새 등록 QR을 받아주세요.</Text><View style={s.actions}><Pressable accessibilityRole="button" style={s.action} onPress={() => setRecovery(false)}><Text style={s.recoveryAction}>닫기</Text></Pressable><Pressable accessibilityRole="button" style={s.action} onPress={() => { setRecovery(false); void scanner.confirmRegistrationRecovery(); }}><Text style={s.recoveryAction}>새 QR 찍기</Text></Pressable></View></View></View></Modal>
   </View>;
 }
 const s = StyleSheet.create({
   noticeText: { gap: 8, alignItems: 'center' },
   cameraAboveNotice: { bottom: '56%' },
-  scanLine: { position: 'absolute', top: '50%', left: 12, right: 12, height: 2, backgroundColor: Colors.light },
   confirm: { position: 'absolute', left: Spacing.screenX, right: Spacing.screenX, minHeight: 52, borderRadius: Radius.lg, backgroundColor: Colors.action, alignItems: 'center', justifyContent: 'center' },
-  symbol: { fontSize: 42, fontFamily: Fonts.wantedSemiBold, backgroundColor: Colors.black, borderRadius: 32, width: 64, lineHeight: 64, textAlign: 'center', overflow: 'hidden' },
   receipt: { fontSize: 24, lineHeight: 32 },
   unresolved: { position: 'absolute', left: 20, right: 20, alignItems: 'center' },
   shade: { flex: 1, justifyContent: 'center', padding: Spacing.screenX, backgroundColor: Colors.overlayDetail }, recoveryCard: { padding: Spacing.screenX, gap: 16, borderRadius: Radius.xl, backgroundColor: Colors.white }, recoveryTitle: { fontFamily: Fonts.wantedSemiBold, fontSize: Type.lg, color: Colors.black }, recoveryBody: { fontFamily: Fonts.wantedRegular, fontSize: Type.base, lineHeight: 22, color: Colors.gray600 }, recoveryAction: { color: Colors.action, fontFamily: Fonts.wantedMedium, fontSize: Type.base }, actions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 12 },

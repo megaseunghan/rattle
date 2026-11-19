@@ -15,7 +15,7 @@ export interface ScannerUiService extends AttendanceScannerEnrollmentService {
 const defaultService: ScannerUiService = Enrollment;
 const waiting = () => ({ state: 'waiting', title: '', body: '', time: '' });
 const feedbackStates = ['saved', 'registered', 'scanFailed', 'wrongQr', 'repeatQr', 'unknown', 'revoked'];
-export function useAttendanceScanner(service: ScannerUiService = defaultService) {
+export function useAttendanceScanner(service: ScannerUiService = defaultService, onRecognized?: () => void) {
   const mounted = useRef(false), busy = useRef(false);
   const registration = useRef<AttendanceScannerRegistration | null>(null);
   // Memory only. Resolving B or replacing a revoked scanner must never erase A.
@@ -33,12 +33,12 @@ export function useAttendanceScanner(service: ScannerUiService = defaultService)
     setState(notice);
   }
   const processed = useRef(new Map<string, 'seen' | 'saved'>());
-  const visibleQr = useRef({ qr: '', lastSeen: 0, warned: false });
+  const visibleQr = useRef({ qr: '', lastSeen: 0, warned: false, recognized: false });
   const revoked = useCallback(() => {
     registration.current = null;
     pairingUnknown.current = false;
     holdingResult.current = true;
-    setState({ state: 'revoked', title: '등록이 해제됐어요', body: '관리자 앱의 새 등록 QR을 찍어주세요', time: '' });
+    setState({ state: 'revoked', title: '등록이 해제됐어요', body: '사장님이나 점장님 앱의 새 등록 QR을 찍어주세요', time: '' });
   }, []);
   const registered = useCallback((saved: AttendanceScannerRegistration) => {
     registration.current = saved;
@@ -50,7 +50,7 @@ export function useAttendanceScanner(service: ScannerUiService = defaultService)
     if (!unresolved.current.has(qr)) unresolved.current.set(qr, Date.now());
     setUnresolvedCount(unresolved.current.size);
   };
-  const showUnknown = () => present({ state: 'unknown', title: '저장됐는지 확인하고 있어요', body: '같은 QR을 다시 보여주거나 다음 직원 QR을 스캔해주세요. 확인이 필요한 기록은 직원 휴대폰에서도 확인해주세요', time: '' });
+  const showUnknown = () => present({ state: 'unknown', title: '저장됐는지 확인하고 있어요', body: '확인을 누른 뒤 같은 QR로 다시 확인해주세요\n\n다음 직원도 스캔할 수 있어요', time: '' });
   const refresh = useCallback(async () => {
     if (!mounted.current || busy.current) return;
     busy.current = true;
@@ -60,7 +60,7 @@ export function useAttendanceScanner(service: ScannerUiService = defaultService)
       if (!saved) {
         registration.current = null;
         if (holdingResult.current) return;
-        setState({ state: pairingUnknown.current ? 'unknownSetup' : 'unregistered', title: pairingUnknown.current ? '등록됐는지 확인하고 있어요' : '매장폰 등록이 필요해요', body: pairingUnknown.current ? '관리자 앱의 매장폰 목록을 확인해주세요. 없으면 새 QR로 다시 등록해주세요' : '사장님이나 점장님 앱에서 매장폰 등록 QR을 열어주세요', time: '' });
+        setState({ state: pairingUnknown.current ? 'unknownSetup' : 'unregistered', title: pairingUnknown.current ? '등록됐는지 확인하고 있어요' : '매장폰 등록이 필요해요', body: pairingUnknown.current ? '사장님이나 점장님 앱에서 매장폰 목록을 확인해주세요. 없으면 새 QR을 받아주세요' : '사장님이나 점장님 앱에서 매장폰 등록 QR을 열어주세요', time: '' });
         return;
       }
       const status = await service.scannerStatus();
@@ -89,6 +89,7 @@ export function useAttendanceScanner(service: ScannerUiService = defaultService)
     if (visible.qr !== qr || now - visible.lastSeen >= 1200) {
       visible.qr = qr;
       visible.warned = false;
+      visible.recognized = false;
     }
     visible.lastSeen = now;
     if (holdingResult.current || !mounted.current || busy.current || pairingUnknown.current || AppState.currentState !== 'active') return;
@@ -97,11 +98,17 @@ export function useAttendanceScanner(service: ScannerUiService = defaultService)
     const key = (isPunch ? 'registered:' : 'setup:') + qr;
     const previous = processed.current.get(key);
     const pairingQr = qr.startsWith('rattle-scanner:v1.');
+    const recognize = () => {
+      if (visible.recognized) return;
+      visible.recognized = true;
+      onRecognized?.();
+    };
     if ((isPunch && pairingQr) || (previous && (isPunch || pairingQr))) {
       if (visible.warned) return;
+      recognize();
       visible.warned = true;
       if (!isPunch) {
-        present({ state: 'repeatQr', title: '새 등록 QR이 필요해요', body: '관리자 앱에서 새 등록 QR을 열어주세요', time: '' });
+        present({ state: 'repeatQr', title: '새 등록 QR이 필요해요', body: '사장님이나 점장님 앱에서 새 등록 QR을 열어주세요', time: '' });
         return;
       }
       const title = pairingQr ? '이미 등록된 매장폰이에요'
@@ -111,30 +118,31 @@ export function useAttendanceScanner(service: ScannerUiService = defaultService)
       return;
     }
     if (previous) return;
+    recognize();
     processed.current.set(key, 'seen');
     busy.current = true;
     try {
       if (!isPunch && qr.startsWith('rattle-punch:v1.')) {
-        present({ state: 'wrongQr', title: '먼저 매장폰을 등록해주세요', body: '관리자 앱에서 매장폰 등록 QR을 열어주세요', time: '' });
+        present({ state: 'wrongQr', title: '먼저 매장폰을 등록해주세요', body: '사장님이나 점장님 앱에서 매장폰 등록 QR을 열어주세요', time: '' });
         return;
       }
       if (!isPunch) {
         // Explicit recovery accepts a new QR, never re-exchanges an uncertain one.
         if (uncertainPairings.current.has(qr)) {
-          present({ state: 'scanFailed', title: '새 등록 QR을 보여주세요', body: '이전 QR은 다시 사용할 수 없어요. 관리자 앱에서 새 QR을 받아주세요', time: '' }); return;
+          present({ state: 'scanFailed', title: '새 등록 QR을 보여주세요', body: '이전 QR은 다시 사용할 수 없어요. 사장님이나 점장님 앱에서 새 QR을 받아주세요', time: '' }); return;
         }
-        present({ state: 'pairing', title: '확인하고 있어요', body: '', time: '' });
+        present({ state: 'pairing', title: '매장폰 등록을 확인하고 있어요', body: '', time: '' });
         const result = await service.exchangeAndStoreAttendanceScannerPairingQr({ qr });
         if (!mounted.current) return;
         if (result.status === 'success') registered(result.data);
         else {
           pairingUnknown.current = result.status === 'unknown';
           if (pairingUnknown.current) uncertainPairings.current.add(qr);
-          present({ state: pairingUnknown.current ? 'unknownSetup' : 'scanFailed', title: pairingUnknown.current ? '등록됐는지 확인하고 있어요' : '등록 QR을 확인하지 못했어요', body: pairingUnknown.current ? '관리자 앱의 매장폰 목록을 확인해주세요. 없으면 새 QR로 다시 등록해주세요' : '관리자 앱에서 등록 QR을 새로 열어주세요', time: '' });
+          present({ state: pairingUnknown.current ? 'unknownSetup' : 'scanFailed', title: pairingUnknown.current ? '등록됐는지 확인하고 있어요' : '등록 QR을 확인하지 못했어요', body: pairingUnknown.current ? '사장님이나 점장님 앱에서 매장폰 목록을 확인해주세요. 없으면 새 QR을 받아주세요' : '사장님이나 점장님 앱에서 등록 QR을 새로 열어주세요', time: '' });
         }
         return;
       }
-      present({ state: 'processing', title: '확인하고 있어요', body: '', time: '' });
+      present({ state: 'processing', title: '출퇴근 기록을 확인하고 있어요', body: '', time: '' });
       const previousUnknown = unresolved.current.has(qr);
       const result = await service.scan(qr, previousUnknown ? 'unknown' : undefined);
       if (!mounted.current) return;
@@ -153,13 +161,13 @@ export function useAttendanceScanner(service: ScannerUiService = defaultService)
       if (isPunch) { remember(qr); showUnknown(); }
       else {
         uncertainPairings.current.add(qr); pairingUnknown.current = true;
-        present({ state: 'unknownSetup', title: '등록됐는지 확인하고 있어요', body: '관리자 앱의 매장폰 목록을 확인해주세요. 없으면 새 QR로 다시 등록해주세요', time: '' });
+        present({ state: 'unknownSetup', title: '등록됐는지 확인하고 있어요', body: '사장님이나 점장님 앱에서 매장폰 목록을 확인해주세요. 없으면 새 QR을 받아주세요', time: '' });
       }
     } finally {
       if (unresolved.current.has(qr) || pairingUnknown.current) processed.current.delete(key);
       busy.current = false;
     }
-  }, [service, revoked, registered]);
+  }, [service, revoked, registered, onRecognized]);
   /** Called only after the operator confirms the manager checked/revoked the old registration. */
   const confirmRegistrationRecovery = useCallback(async () => {
     if (!mounted.current || busy.current || !pairingUnknown.current) return;
@@ -176,7 +184,7 @@ export function useAttendanceScanner(service: ScannerUiService = defaultService)
         return;
       }
       pairingUnknown.current = false;
-      setState({ state: 'unregistered', title: '새 등록 QR을 찍어주세요', body: '관리자 앱에서 새로 받은 QR을 보여주세요', time: '' });
+      setState({ state: 'unregistered', title: '새 등록 QR을 찍어주세요', body: '사장님이나 점장님 앱에서 새로 받은 QR을 보여주세요', time: '' });
     } catch { if (mounted.current) setState({ state: 'unknownSetup', title: '등록됐는지 확인하고 있어요', body: '등록 상태를 불러오지 못했어요. 잠시 후 다시 확인해주세요', time: '' }); }
     finally { busy.current = false; }
   }, [service, revoked, registered]);

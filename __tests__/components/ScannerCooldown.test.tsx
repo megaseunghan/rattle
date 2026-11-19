@@ -9,7 +9,7 @@ jest.mock('../../lib/services/attendanceScannerEnrollment', () => ({
   loadStoredAttendanceScannerRegistration: jest.fn(), scannerStatus: jest.fn(), scan: jest.fn(),
   exchangeAndStoreAttendanceScannerPairingQr: jest.fn(),
 }));
-jest.mock('expo-haptics', () => ({ notificationAsync: jest.fn().mockResolvedValue(undefined), NotificationFeedbackType: { Success: 'success', Error: 'error', Warning: 'warning' } }));
+jest.mock('expo-haptics', () => ({ selectionAsync: jest.fn().mockResolvedValue(undefined), notificationAsync: jest.fn().mockResolvedValue(undefined), NotificationFeedbackType: { Success: 'success', Error: 'error', Warning: 'warning' } }));
 jest.mock('expo-camera', () => ({
   Camera: { getCameraPermissionsAsync: jest.fn().mockResolvedValue({ granted: true }) },
   CameraView: jest.fn((props: object) => require('react').createElement(require('react-native').View, { ...props, testID: 'camera' })),
@@ -119,6 +119,7 @@ it('실패하면 오류 햅틱을 한 번 주고 확인 후 다음 QR을 처리�
   await advance(30000);
   await detect(view, 'fresh');
   expect(view.getByText('출퇴근 QR이 만료됐어요')).toBeTruthy();
+  expect(view.getByText('×')).toBeTruthy();
   expect(Enrollment.scan).toHaveBeenCalledTimes(1);
   expect(Haptics.notificationAsync).toHaveBeenCalledTimes(1);
   expect(Haptics.notificationAsync).toHaveBeenCalledWith(Haptics.NotificationFeedbackType.Error);
@@ -142,6 +143,8 @@ it('등록 QR을 계속 대면 등록 성공을 유지하고 다시 비추면 �
   confirm(view);
   await detect(view, pairingQr);
   expect(view.queryByText('이미 등록된 매장폰이에요')).toBeNull();
+  expect(Haptics.selectionAsync).toHaveBeenCalledTimes(1);
+  expect(Haptics.notificationAsync).toHaveBeenCalledTimes(2);
   expect(Enrollment.exchangeAndStoreAttendanceScannerPairingQr).toHaveBeenCalledTimes(1);
   expect(Enrollment.scan).not.toHaveBeenCalled();
 });
@@ -166,14 +169,15 @@ it.each([[true, false], [false, true]])('동작 줄이기 %s 또는 투명도 �
   expect(timing).not.toHaveBeenCalled();
 });
 
-it('서버 응답을 기다리는 동안 중복 검출과 다음 직원 검출을 모두 무시한다', async () => {
+it.each([false, true])('잠금 완료 %s 시점에 서버 응답이 오면 반복을 즉시 중단한다', async locked => {
   let finish!: (value: typeof receipt) => void;
   (Enrollment.scan as jest.Mock).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
   jest.spyOn(AccessibilityInfo, 'isReduceMotionEnabled').mockResolvedValue(false);
-  const stop = jest.fn();
-  const loop = jest.spyOn(Animated, 'loop').mockReturnValue({ start: jest.fn(), stop, reset: jest.fn() });
-  const timing = jest.spyOn(Animated, 'timing').mockImplementation(() => ({
-    start: jest.fn(), stop: jest.fn(), reset: jest.fn(),
+  const start = jest.fn(), stop = jest.fn();
+  let finishLock!: (result: { finished: boolean }) => void;
+  const loop = jest.spyOn(Animated, 'loop').mockReturnValue({ start, stop, reset: jest.fn() });
+  const timing = jest.spyOn(Animated, 'timing').mockImplementation((_, config) => ({
+    start: callback => { if (config.duration === 120 && callback) finishLock = callback; }, stop: jest.fn(), reset: jest.fn(),
   }));
   const view = render(<AttendanceScannerScreen />);
   await act(async () => {});
@@ -183,11 +187,16 @@ it('서버 응답을 기다리는 동안 중복 검출과 다음 직원 검출�
   const callback = camera.props.onBarcodeScanned;
   const renderCount = (CameraView as unknown as jest.Mock).mock.calls.length;
   await detect(view, employeeQr);
-  expect(view.getByTestId('scanner-line')).toBeTruthy();
+  expect(view.getByText('QR을 읽었어요')).toBeTruthy();
   expect(view.UNSAFE_queryByType(ActivityIndicator)).toBeNull();
   expect(loop).toHaveBeenCalledTimes(1);
+  expect(start).not.toHaveBeenCalled();
+  if (locked) act(() => finishLock({ finished: true }));
+  expect(start).toHaveBeenCalledTimes(locked ? 1 : 0);
+  expect(timing).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ duration: 120, toValue: 0.88 }));
+  expect(timing).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ duration: 1200 }));
   expect(timing).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ useNativeDriver: true }));
-  expect(view.getByText('확인하고 있어요')).toBeTruthy();
+  expect(view.getByText('출퇴근 기록을 확인하고 있어요')).toBeTruthy();
   await detect(view, employeeQr);
   await detect(view, 'employee-B');
   expect(Enrollment.scan).toHaveBeenCalledTimes(1);
@@ -195,6 +204,10 @@ it('서버 응답을 기다리는 동안 중복 검출과 다음 직원 검출�
   expect(view.getByText('가상 직원님, 출근했어요')).toBeTruthy();
   expect(view.queryByTestId('scanner-line')).toBeNull();
   expect(stop).toHaveBeenCalledTimes(1);
+  act(() => finishLock({ finished: true }));
+  expect(start).toHaveBeenCalledTimes(locked ? 1 : 0);
+  expect(timing).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ duration: 240 }));
+  expect(Haptics.selectionAsync).toHaveBeenCalledTimes(1);
   confirm(view);
   expect(view.queryByTestId('scanner-line')).toBeNull();
   expect(view.getByTestId('camera')).toBe(camera);
@@ -205,13 +218,23 @@ it('서버 응답을 기다리는 동안 중복 검출과 다음 직원 검출�
 it('동작 줄이기에서는 서버 응답을 기다리는 동안 정적 아이콘을 표시한다', async () => {
   let finish!: (value: typeof receipt) => void;
   (Enrollment.scan as jest.Mock).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+  const motionEvents: {
+    addEventListener(event: 'reduceMotionChanged', listener: (value: boolean) => void): { remove(): void };
+  } = AccessibilityInfo;
+  const listen = jest.spyOn(motionEvents, 'addEventListener');
   const view = render(<AttendanceScannerScreen />);
   await act(async () => {});
   await detect(view, employeeQr);
-  expect(view.getByText('확인하고 있어요')).toBeTruthy();
-  expect(view.getByTestId('scanner-line')).toBeTruthy();
+  expect(view.getByText('출퇴근 기록을 확인하고 있어요')).toBeTruthy();
+  expect(view.getByText('QR을 읽었어요')).toBeTruthy();
   expect(view.getByText('…')).toBeTruthy();
   expect(view.UNSAFE_queryByType(ActivityIndicator)).toBeNull();
+  const onMotion = listen.mock.calls.find(([event]) => event === 'reduceMotionChanged')![1];
+  act(() => onMotion(false));
+  expect(view.queryByText('…')).toBeNull();
+  act(() => onMotion(true));
+  expect(view.getByText('…')).toBeTruthy();
+  expect(Haptics.selectionAsync).toHaveBeenCalledTimes(1);
   await act(async () => { finish(receipt); });
 });
 it('권한을 회수하고 복귀해도 결과를 읽고 확인할 수 있고 iOS 알림은 한 번만 읽는다', async () => {
@@ -242,7 +265,7 @@ it('미등록 매장폰에서 거절된 등록 QR을 다시 비추면 재교환 
   confirm(view);
   await detect(view, pairingQr);
   expect(view.getByText('새 등록 QR이 필요해요')).toBeTruthy();
-  expect(view.getByText('관리자 앱에서 새 등록 QR을 열어주세요')).toBeTruthy();
+  expect(view.getByText('사장님이나 점장님 앱에서 새 등록 QR을 열어주세요')).toBeTruthy();
   expect(Haptics.notificationAsync).toHaveBeenLastCalledWith(Haptics.NotificationFeedbackType.Warning);
   confirm(view);
   await detect(view, pairingQr);

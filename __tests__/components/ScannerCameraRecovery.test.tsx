@@ -1,11 +1,11 @@
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
-import { AppState, type AppStateStatus } from 'react-native';
+import { Linking, AppState, type AppStateStatus } from 'react-native';
 import AttendanceScannerScreen, { CameraSurface } from '../../app/attendance/scanner';
 const mockGetPermission = jest.fn(), mockRequestPermission = jest.fn();
 jest.mock('expo-camera', () => ({ Camera: { getCameraPermissionsAsync: (...args: unknown[]) => mockGetPermission(...args), requestCameraPermissionsAsync: (...args: unknown[]) => mockRequestPermission(...args) }, CameraView: () => require('react').createElement(require('react-native').View, { testID: 'scanner-camera' }) }));
 jest.mock('expo-keep-awake', () => ({ useKeepAwake: jest.fn() }));
 const mockRecovery = jest.fn();
-const mockScanner = { state: 'unknownSetup', title: '등록됐는지 확인하고 있어요', body: '관리자 앱에서 확인해주세요', time: '', canScan: false, ready: false, unresolvedCount: 2, confirmRegistrationRecovery: mockRecovery, refresh: jest.fn(), scan: jest.fn(), clearNotice: jest.fn() };
+const mockScanner = { state: 'unknownSetup', title: '등록됐는지 확인하고 있어요', body: '사장님이나 점장님 앱에서 확인해주세요', time: '', canScan: false, ready: false, unresolvedCount: 2, confirmRegistrationRecovery: mockRecovery, refresh: jest.fn(), scan: jest.fn(), clearNotice: jest.fn() };
 jest.mock('../../lib/hooks/useAttendanceScanner', () => ({ useAttendanceScanner: () => mockScanner }));
 jest.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) }));
 const listeners = new Set<(state: AppStateStatus) => void>();
@@ -55,8 +55,24 @@ it('등록 복구는 관리자 확인 안내를 거친 명시적 행동이고 �
   expect(view.getByText('등록됐는지 확인하고 있어요')).toBeTruthy();
   expect(view.getByText('확인할 기록 2건이 있어요')).toBeTruthy();
   fireEvent.press(view.getByText('새 등록 준비하기'));
-  expect(view.getByText('관리자 앱에서 확인했나요?')).toBeTruthy(); expect(mockRecovery).not.toHaveBeenCalled();
+  expect(view.getByText('사장님이나 점장님 앱에서 확인했나요?')).toBeTruthy(); expect(mockRecovery).not.toHaveBeenCalled();
   fireEvent.press(view.getByText('닫기')); expect(mockRecovery).not.toHaveBeenCalled();
   fireEvent.press(view.getByText('새 등록 준비하기')); fireEvent.press(view.getByText('새 QR 찍기'));
   expect(mockRecovery).toHaveBeenCalledTimes(1);
+});
+
+it('첫 권한 요청과 재요청을 거쳐 영구 거절되면 설정 버튼을 제공한다', async () => {
+  const open = jest.spyOn(Linking, 'openSettings').mockResolvedValue(undefined);
+  mockGetPermission.mockResolvedValue({ status: 'undetermined', canAskAgain: true });
+  mockRequestPermission.mockResolvedValueOnce({ status: 'denied', canAskAgain: true })
+    .mockResolvedValueOnce({ status: 'denied', canAskAgain: false });
+  const view = render(<CameraSurface onScan={jest.fn()} onAvailability={jest.fn()} />);
+  for (let request = 0; request < 2; request++) {
+    const button = await view.findByText('카메라 허용하기');
+    await act(async () => { fireEvent.press(button); });
+  }
+  expect(mockRequestPermission).toHaveBeenCalledTimes(2);
+  expect(open).not.toHaveBeenCalled();
+  fireEvent.press(view.getByText('설정 열기'));
+  expect(open).toHaveBeenCalledTimes(1);
 });
