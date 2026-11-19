@@ -1,5 +1,5 @@
 /** Shared by the UI worklet and continuity tests. All contours keep the same 8 cubic segments. */
-export const SPLASH_DURATION_MS = 1800;
+export const SPLASH_DURATION_MS = 600;
 
 export function smoothProgress(value: number, start = 0, end = 1): number {
   'worklet';

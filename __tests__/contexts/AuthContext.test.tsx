@@ -116,6 +116,35 @@ it('인증 갱신 직후 매장을 선택해도 앱 로딩 상태가 끝난다',
   await waitFor(() => expect(result.current.loading).toBe(false));
   expect(result.current.store?.id).toBe('b');
 });
+it('같은 사용자의 토큰 갱신은 매장을 다시 조회하거나 로딩 상태로 돌리지 않는다', async () => {
+  const { result } = await login();
+  const calls = (supabase.from as jest.Mock).mock.calls.length;
+  act(() => notify('TOKEN_REFRESHED', { user: { id: 'user' }, access_token: 'next' }));
+  expect(result.current.loading).toBe(false);
+  await act(async () => { await Promise.resolve(); });
+  expect((supabase.from as jest.Mock).mock.calls.length).toBe(calls);
+  expect(result.current.session).toEqual({ user: { id: 'user' }, access_token: 'next' });
+  expect(result.current.store?.id).toBe('a');
+});
+it('첫 매장 조회 중 토큰이 갱신돼도 조회를 반복하지 않고 로딩을 끝낸다', async () => {
+  let done!: (value: unknown) => void;
+  queries(new Promise(resolve => { done = resolve; }));
+  const { result } = renderHook(useAuth, { wrapper });
+  act(() => notify('INITIAL_SESSION', { user: { id: 'user' } }));
+  await waitFor(() => expect((supabase.from as jest.Mock).mock.calls.length).toBeGreaterThan(0));
+  act(() => notify('TOKEN_REFRESHED', { user: { id: 'user' } }));
+  await act(async () => { done({ data: stores, error: null }); });
+  await waitFor(() => expect(result.current.loading).toBe(false));
+  expect((supabase.from as jest.Mock).mock.calls.filter(([table]) => table === 'stores')).toHaveLength(1);
+  expect(result.current.store?.id).toBe('a');
+});
+it('다른 사용자의 토큰 이벤트는 매장을 새로 조회한다', async () => {
+  const { result } = await login();
+  const calls = (supabase.from as jest.Mock).mock.calls.length;
+  act(() => notify('TOKEN_REFRESHED', { user: { id: 'other' } }));
+  await waitFor(() => expect((supabase.from as jest.Mock).mock.calls.length).toBeGreaterThan(calls));
+  await waitFor(() => expect(result.current.loading).toBe(false));
+});
 it('로그아웃 뒤 늦게 끝나는 매장 조회로 로그인 자료를 복원하지 않는다', async () => {
   const { result } = await login();
   let done!: (value: unknown) => void;
