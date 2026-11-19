@@ -10,12 +10,12 @@ import { Colors } from '../../constants/colors';
 import { Fonts } from '../../constants/fonts';
 import { useAuth } from '../contexts/AuthContext';
 import { useStorePermissions } from '../hooks/useStorePermissions';
-import { EvidenceFile, EvidenceSelection, EvidenceTarget } from '../types/evidence';
+import { EvidenceFile, EvidenceSelection, EvidenceTarget, MAX_EVIDENCE_FILES } from '../types/evidence';
 import { discardEvidence, discardPendingEvidence, listEvidence, reserveEvidence, signEvidence } from '../services/evidence';
 import { prepareEvidenceSelection } from '../media/evidenceSelection';
 import { UserFacingError } from '../utils/error';
 import { uploadEvidence } from '../media/evidenceUpload';
-import { evidenceFailure, logEvidenceFailure, type EvidenceFailure } from '../utils/evidenceError';
+import { EvidenceReuploadRequired, evidenceFailure, logEvidenceFailure, type EvidenceFailure } from '../utils/evidenceError';
 
 type Job = { selection: EvidenceSelection; status: 'queued' | 'uploading' | 'failed'; row?: EvidenceFile; failure?: EvidenceFailure };
 
@@ -32,17 +32,22 @@ async function discardCanceledUpload(file: EvidenceFile): Promise<void> {
 
 const EvidenceThumbnail = memo(function EvidenceThumbnail({ file, account, onOpen }: { file: EvidenceFile; account: string; onOpen: (file: EvidenceFile, thumbnail?: string) => void }) {
   const [url, setUrl] = useState<string>();
-  const [failed, setFailed] = useState(false);
+  const [failure, setFailure] = useState<'retry' | 'original' | null>(null);
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     let active = true;
     if (file.mime_type === 'image/jpeg' && file.status === 'ready') {
-      void signEvidence(file, true).then(value => { if (active) { setUrl(value); setFailed(false); } }).catch(() => { if (active) setFailed(true); });
+      void signEvidence(file, true).then(value => {
+        if (active) { setUrl(value); setFailure(null); }
+      }).catch(error => {
+        if (active) { setUrl(undefined); setFailure(error instanceof EvidenceReuploadRequired ? 'original' : 'retry'); }
+      });
     }
     return () => { active = false; };
   }, [file.id, file.status, attempt]);
-  return <TouchableOpacity accessibilityRole="button" accessibilityLabel={`${file.name} ${failed ? '다시 불러오기' : '열기'}`} style={styles.preview} onPress={() => failed ? setAttempt(x => x + 1) : onOpen(file, url)}>
-    {url && !failed ? <Image style={styles.image} source={{ uri: url, cacheKey: `${account}:${file.id}:thumb` }} cachePolicy="memory-disk" contentFit="contain" recyclingKey={file.id} onError={() => setFailed(true)} /> : <Text style={styles.help}>{failed ? '다시 불러오기' : file.mime_type === 'application/pdf' ? 'PDF' : '불러오는 중'}</Text>}
+  const action = failure === 'retry' ? '다시 불러오기' : failure === 'original' ? '원본 열기' : '열기';
+  return <TouchableOpacity accessibilityRole="button" accessibilityLabel={`${file.name} ${action}`} style={styles.preview} onPress={() => failure === 'retry' ? setAttempt(x => x + 1) : onOpen(file, url)}>
+    {url && !failure ? <Image style={styles.image} source={{ uri: url, cacheKey: `${account}:${file.id}:thumb` }} cachePolicy="memory-disk" contentFit="contain" recyclingKey={file.id} onError={() => setFailure('retry')} /> : <Text style={styles.help}>{failure ? action : file.mime_type === 'application/pdf' ? 'PDF' : '불러오는 중'}</Text>}
   </TouchableOpacity>;
 });
 
@@ -143,13 +148,13 @@ function EvidencePanelContent({ target, disabled = false, initiallyExpanded = fa
     autoStarted.current = true;
     void run(initialSelections.map(selection => ({ selection, status: 'queued' })));
   }, [loaded, error, disabled, canWrite]);
+  const attachmentCount = new Set([...files.map(f => f.id), ...jobs.map(j => j.selection.id)]).size;
   async function pick() {
     if (!alive.current || lock.current || disabled || !loaded || !canWrite) return;
     lock.current = true; setBusy(true);
     let batch: Job[] = [];
     try {
-      const count = new Set([...files.map(f => f.id), ...jobs.map(j => j.selection.id)]).size;
-      const selected = await pickEvidenceSelections(count, () => alive.current);
+      const selected = await pickEvidenceSelections(attachmentCount, () => alive.current);
       if (!alive.current) return;
       selected.forEach(file => ownedCache.current.add(file.uri));
       batch = selected.map(selection => ({ selection, status: 'queued' }));
@@ -231,7 +236,24 @@ function EvidencePanelContent({ target, disabled = false, initiallyExpanded = fa
       if (!cached || cached.expires <= Date.now()) signed.current.set(file.id, { url, expires: Date.now() + 240000 });
       if (file.mime_type === 'application/pdf') await WebBrowser.openBrowserAsync(url);
       else setViewer({ file, url, thumb });
-    } catch { if (alive.current) setError('증빙을 열지 못했어요. 다시 시도해주세요.'); }
+    } catch (error) {
+      if (!alive.current) return;
+      if (!(error instanceof EvidenceReuploadRequired)) {
+        setError('증빙을 열지 못했어요. 다시 시도해주세요.');
+        return;
+      }
+      const title = '원본을 다시 첨부해주세요';
+      if (!canWrite || disabled) {
+        Alert.alert(title, '매장 관리자에게 이 파일의 원본을 다시 첨부해 달라고 요청해주세요.');
+      } else if (attachmentCount >= MAX_EVIDENCE_FILES) {
+        Alert.alert(title, '첨부가 가득 찼어요. 기존 증빙은 보관하고 관리자와 원본 사본을 확인한 뒤 첨부 공간을 마련해주세요.');
+      } else {
+        Alert.alert(title, '기기에 보관한 원본을 새 증빙으로 첨부해주세요. 기존 증빙은 새 파일이 열리는지 확인한 뒤 정리해주세요.', [
+          { text: '닫기', style: 'cancel' },
+          { text: '원본 선택', onPress: () => { void pick(); } },
+        ]);
+      }
+    }
   }
   const jobIds = new Set(jobs.map(job => job.selection.id));
   return <View style={styles.container}>

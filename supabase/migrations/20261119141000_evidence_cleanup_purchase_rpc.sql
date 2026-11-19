@@ -136,7 +136,11 @@ CREATE TABLE private.evidence_purge_attempts (
  store_id uuid NOT NULL,
  object_id uuid NOT NULL,
  object_version text, -- retained for provider-side reconciliation if Storage loses its row
+ first_attempted_at timestamptz NOT NULL DEFAULT clock_timestamp(),
  attempted_at timestamptz NOT NULL,
+ reconciled_at timestamptz,
+ reconciled_by text,
+ provider_reference text,
  outcome text NOT NULL DEFAULT 'unknown' CHECK (outcome IN ('unknown','failed','confirmed'))
 );
 CREATE INDEX evidence_purge_unresolved ON private.evidence_purge_attempts(store_id,attempted_at)
@@ -179,6 +183,31 @@ REVOKE ALL ON FUNCTION public.claim_expired_evidence_paths(),public.record_evide
  FROM PUBLIC,anon,authenticated;
 GRANT EXECUTE ON FUNCTION public.claim_expired_evidence_paths(),public.record_evidence_purge_result(text,text)
  TO service_role;
+
+-- Operator-only settlement after the storage provider verifies physical deletion.
+-- The immutable object identity and the external case/receipt remain in the ledger.
+CREATE FUNCTION private.confirm_reconciled_evidence_purge(
+ p_store uuid, p_path text, p_object uuid, p_version text, p_provider_reference text
+) RETURNS void LANGUAGE plpgsql SECURITY INVOKER SET search_path=pg_catalog,pg_temp AS $$
+DECLARE target public.stores;
+BEGIN
+ IF nullif(btrim(p_provider_reference),'') IS NULL THEN RAISE EXCEPTION 'EVIDENCE_PROVIDER_REFERENCE_REQUIRED'; END IF;
+ SELECT * INTO target FROM public.stores WHERE id=p_store FOR UPDATE;
+ IF NOT FOUND OR target.deleted_at IS NULL OR target.purge_after > clock_timestamp() THEN
+   RAISE EXCEPTION 'EVIDENCE_STORE_NOT_EXPIRED';
+ END IF;
+ IF EXISTS (SELECT 1 FROM storage.objects WHERE bucket_id='transaction-evidence' AND name=p_path) THEN
+   RAISE EXCEPTION 'EVIDENCE_STORAGE_OBJECT_PRESENT';
+ END IF;
+ UPDATE private.evidence_purge_attempts
+ SET outcome='confirmed',reconciled_at=clock_timestamp(),reconciled_by=current_user,
+     provider_reference=btrim(p_provider_reference)
+ WHERE store_id=p_store AND path=p_path AND object_id=p_object
+   AND object_version IS NOT DISTINCT FROM p_version AND outcome IN ('failed','unknown');
+ IF NOT FOUND THEN RAISE EXCEPTION 'EVIDENCE_UNRESOLVED_OBJECT_NOT_FOUND'; END IF;
+END $$;
+REVOKE ALL ON FUNCTION private.confirm_reconciled_evidence_purge(uuid,text,uuid,text,text)
+ FROM PUBLIC,anon,authenticated,service_role;
 
 CREATE OR REPLACE FUNCTION public.purge_expired_deleted_stores()
 RETURNS integer LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
@@ -229,6 +258,18 @@ CREATE TABLE private.evidence_purge_requests (
 );
 CREATE INDEX evidence_purge_requests_pending ON private.evidence_purge_requests(queued_at) WHERE result='pending';
 REVOKE ALL ON private.evidence_purge_requests FROM PUBLIC,anon,authenticated;
+
+-- Retry leases keep moving; measure the unresolved interval from the first claim.
+CREATE VIEW private.evidence_purge_alerts WITH (security_invoker=true) AS
+ SELECT a.outcome AS issue,a.first_attempted_at AS since,a.store_id,a.path,NULL::bigint AS request_id,NULL::integer AS http_status
+ FROM private.evidence_purge_attempts a
+ WHERE a.outcome <> 'confirmed' AND a.first_attempted_at <= now()-interval '15 minutes'
+ UNION ALL
+ SELECT CASE WHEN r.result='pending' THEN 'overdue' ELSE r.result END,
+        r.queued_at,NULL::uuid,NULL::text,r.request_id,r.http_status
+ FROM private.evidence_purge_requests r
+ WHERE r.result IN ('failed','timeout','missing') OR (r.result='pending' AND r.queued_at < now()-interval '2 minutes');
+REVOKE ALL ON private.evidence_purge_alerts FROM PUBLIC,anon,authenticated,service_role;
 
 CREATE FUNCTION private.check_evidence_purge_responses() RETURNS void
 LANGUAGE plpgsql SET search_path=pg_catalog,pg_temp AS $$
@@ -282,6 +323,12 @@ BEGIN
    RAISE EXCEPTION 'EVIDENCE_PURGE_PG_NET_AND_PGCRYPTO_REQUIRED';
  END IF;
  PERFORM private.evidence_purge_config();
+ IF current_setting('cron.launch_active_jobs',true)='off' OR NOT EXISTS (
+   SELECT 1 FROM cron.job WHERE jobname='rattle-purge-deleted-stores' AND active
+     AND database=current_database() AND schedule='17 3 * * *'
+     AND lower(rtrim(btrim(command),';'))='select public.purge_expired_deleted_stores()'
+     AND has_function_privilege(username,'public.purge_expired_deleted_stores()','EXECUTE')
+ ) THEN RAISE EXCEPTION 'EVIDENCE_DAILY_PURGE_JOB_REQUIRED'; END IF;
  PERFORM cron.schedule('rattle-expired-evidence-storage','*/5 * * * *','SELECT private.dispatch_evidence_purge()');
  PERFORM cron.schedule('rattle-evidence-storage-results','* * * * *','SELECT private.check_evidence_purge_responses()');
 END $schedule$;
