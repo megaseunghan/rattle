@@ -111,3 +111,46 @@ Mac 비교 스크립트는 저장소 밖 `/private/tmp/rattle-ocr-bench/compare-
 초기 회귀 실행은 2 suites/61 tests 중 8 실패로 두 결함을 재현했고, 수정 후 OCR **5 suites/81 tests 통과**(1.931초), typecheck 통과, 전체 기본 Jest **196 suites/1655 tests 전부 통과**(44.784초, 종료 0), diff 검사 통과. 로그는 `/tmp/rattle-ocr-r78-red.log`, `/tmp/rattle-ocr-r78-target.log`, `/tmp/rattle-ocr-r78-typecheck.log`, `/tmp/rattle-ocr-r78-full-jest.log`. 기존 10쌍 raw 재평가는 Android 6/10·Mac 7/10, 오선택 양쪽 0으로 유지했다(`/tmp/rattle-ocr-r78-evaluation.log`). 원문·이미지는 저장소에 넣지 않았다.
 
 다음: 같은 검토자의 3회차(6d55cdd 엔진 보완 및 9712625/ad025ca 포함), 실제 기기 선택기/권한 전환/정리 대기 E2E. 기기·빌드·EAS·원격 실행은 이번 작업에서 하지 않았다. 기존 S45/S46 색인 보정은 PM 범위로 유지한다.
+
+## 독립 검토 3회차 반영 · OCR-R9/R10 (2026-11-19)
+
+작업 `task_8893aebc5c6e`, 기준 `feature/evidence-attachments@d24144c`, 역할 기준 `main@44308ed`. 허용 범위는 `lib/ocr/**`, `__tests__/ocr/**`, 이 README 기록이며 구현·자체 검토만 수행했다. R1 → R7 → R9의 반복 원인은 공급가+VAT의 범위를 한쪽으로 고정한 것이고, R10은 OCR 관측과 표의 금액 셀을 동일시한 것이다.
+
+**판정 원칙:** 파생 합계는 명시 합계 라벨과 독립된 계산 관계가 함께 맞을 때만 만든다. 공급가+VAT를 S, 상품액을 G, 배송−할인을 A라 하면, S=G일 때는 결제 G+A, S=G+A일 때는 배송/할인이 이미 포함된 결제 S다. 상품액이 없어서 포함 범위를 모르면 명시 결제가 S 또는 S+A와 일치하는 경우 관측 후보를 보존하고 범위 경고를 남긴다. 이때 파생 합계와 세금 검산 결과는 확정하지 않는다. 어느 관계로도 설명되지 않는 값이나 복수 명시 결제 충돌은 null이다. 관측 후보 보존은 회계상 확정·매입 저장을 의미하지 않는다.
+
+공백 숫자는 원문 관측 전체가 금액 열 경계 안에 있거나 독립 검산이 뒷받침해야 천단위로 해석한다. 관측 하나라는 이유만으로 `2 500`을 2,500원으로 선택하지 않는다. 열 근거 없는 공백 공급가·매출액은 검산에 재사용하지 않아 자기 검증을 막는다. 허용한 공백 해석도 derived·낮은 confidence·원문 경고를 유지한다. 품목 검산을 먼저 읽도록 순서만 옮겼으며 품목 감지 규칙은 유지했다.
+
+### R1~R10 합성 재현 → 기대값 회귀표
+
+금액은 모두 원 단위의 가상 자료다. 파서 항목은 `__tests__/ocr/totalEvidence.test.ts`의 표 기반 fixture와 기존 `receiptParser.test.ts`·`engineSegmentation.test.ts`로 실행한다. 파일·생명주기 지적 R4/R5/R8은 해당 실제 경계의 합성 테스트로 연결하며 파서 금액 테스트로 대체하지 않는다.
+
+| 지적 | 재현 입력 | 기대값·실행 fixture |
+| --- | --- | --- |
+| R1 | 매출 30,000 / 회수 5,000 / 결제 30,000 / 단가 25,000; 공급가 20,000 / VAT 2,000 / 총합계 30,000 / 현금받음 22,000 | 선택 null, 임의 숫자에서 파생 후보 생성 안 함; `totalEvidence`·`receiptParser` |
+| R2 | `− 500`, 괄호 반품, 떨어진 부호 / `--5,000`·미완성 괄호 | 유효 음수 보존, 모순 부호 null; `totalEvidence`·`receiptParser` |
+| R3 | 상품 10,000 / 배송 `?` / 결제 10,000; 배송 라벨 부재·읽힌 0 | 명시 결제 보존, 미확인 배송 검산 null·경고, 부재/0과 구분; `totalEvidence`·`receiptParser` |
+| R4 | 합성 URI/JSON 삭제가 계속 실패 → 재시도; 오래된 자기 파일과 새 파일·타 파일 혼재 | 실패 표시·실패 URI 재시도, 자기 오래된 파일만 삭제; `OcrLabScreen.test.tsx`·`temporaryFiles.swift` |
+| R5 | 합성 데이터 3×64KB+7바이트 SHA-256 | 스트리밍 digest가 one-shot과 같음; `temporaryFiles.swift`. iOS 20장 RSS는 미검증 |
+| R6 | 한 셀 `금일합계 0/50/500/999`, 작은 음수 | 0과 작은 금액도 보존; `totalEvidence`·`receiptParser` |
+| R7 | 공급가 20,000 / VAT 2,000 / 상품 22,000 / 배송 3,000 / 결제 25,000 | 25,000, 배송을 반영한 관계 검산 일치; `totalEvidence`·`receiptParser` |
+| R8 | 합성 cleanup deferred Promise 대기 중 unmount·권한 전환·측정 중지 후 resolve | 선택기·OCR 미호출; `OcrLabScreen.test.tsx`의 3개 표 기반 케이스 |
+| R9 | 공급가 20,000 / VAT 2,000 / 상품 19,000 / 배송 3,000 / 결제 22,000; 상품 라벨 생략 | 둘 다 22,000 보존, 라벨 생략 때 포함 범위 경고·검산 null; `totalEvidence` |
+| R10 | 합계 `2 500` 관측이 수량·금액 열을 걸침 / 근거 없는 `38 760` / 금액 열 내부 `2 500` / 공급가+VAT가 검산하는 `22 000` | 앞 두 경우 null, 뒤 두 경우 2,500·22,000 + derived·공백 경고; `totalEvidence` |
+
+기존 OCR 81개 케이스를 유지하고 새 표·경계 회귀 26개를 추가했다. 기존 공백 `38 760` 성공 fixture에는 새 원칙에 필요한 금액 열 머리글을 추가했고, 머리글/독립 검산이 없는 원래 모양은 새 null 회귀로 고정했다. 새 회귀 최초 실행은 19개 중 8개 실패로 기존 결함을 재현했다(`/tmp/rattle-ocr-r910-red.log`).
+
+### 검증과 남은 범위
+
+- OCR 대상: `npx jest __tests__/ocr --runInBand --no-coverage --testPathIgnorePatterns='/node_modules/'` — **6 suites/107 tests 통과**, 1.945초. 로그 `/tmp/rattle-ocr-r910-target.log`.
+- R4/R5: `cat modules/rattle-text-recognition/ios/OCRTemporaryFiles.swift __tests__/ocr/temporaryFiles.swift > /tmp/rattle-ocr-r910-temporary-tests.swift` 후 `swift /tmp/rattle-ocr-r910-temporary-tests.swift` — 지속 삭제 실패·재시도·소유 경계·스트리밍 SHA 실제 macOS 실행 통과. 로그 `/tmp/rattle-ocr-r910-swift.log`.
+- 외부 비교: `node /private/tmp/rattle-ocr-bench/android/compare-r910.mjs` — d24144c와 최종 파서를 같은 Android/Mac raw 10쌍에 실행했다. 비교 파일 `/private/tmp/rattle-ocr-bench/android/parser-r910-comparison.json`에 파서·원문 SHA와 원문 불변성 검사를 남겼다. 기준 금액은 평가기에만 제공한다.
+
+| 동일 10쌍, d24144c → 수정본 | Android | Mac |
+| --- | --- | --- |
+| 기준 합계 일치 | 6/10 → 6/10 | 7/10 → 7/10 |
+| 잘못 선택한 합계 | 0 → 0 | 0 → 0 |
+| 미확정 합계 | 4 → 4 | 3 → 3 |
+
+규칙 작성에 사용한 같은 10장 재평가이며 독립 정확도나 운영 정확도가 아니다. 실영수증 원문·이미지·사업자정보는 저장소에 추가하지 않았다. 새 OCR·기기 조작·빌드·설치·EAS·원격 작업은 이 과제 범위 밖이며 실행하지 않았다. 같은 독립 검토자의 재검토와 실제 기기 검증은 PL이 이어서 배정한다.
+
+최종 동일 코드 검증(2026-11-19 21:47~21:48 KST, macOS 로컬 Node/Jest, 기준 d24144c 위 이 과제의 미커밋 diff): `npm run typecheck` **통과**(`/tmp/rattle-ocr-r910-typecheck.log`), 전체 Jest 기본 timeout **197 suites/1681 tests 통과**(45.211초, 종료 0, `/tmp/rattle-ocr-r910-full-jest-final.log`). 전체 명령은 위 「검증과 QA 인계」의 worktree용 ignore override와 같다. `git diff --check`, 외부 `compare-r910.mjs`의 `node --check`도 통과했다. 구현자 자체 검토이며 독립 검토 통과를 주장하지 않는다.

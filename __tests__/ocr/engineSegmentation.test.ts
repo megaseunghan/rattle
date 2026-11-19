@@ -24,8 +24,9 @@ describe('OCR 엔진 분할 차이 · 합성 원문만 사용', () => {
   it('별도 또는 같은 값 셀의 인수 표시는 금액에 합치지 않는다', () => {
     expect(parseReceipt([cell('총합계', .1, .2), cell('48,620 인수', .6, .2, .25)]).selectedTotal?.value).toBe(48620);
   });
-  it('명시 합계의 단일 원문 셀 공백 천단위는 확인 경고와 함께 해석한다', () => {
-    const parsed = parseReceipt([cell('금일합계', .1, .2), cell('38 760', .7, .2)]);
+  it('명시 합계의 공백 천단위는 금액 열 경계가 있을 때 확인 경고와 함께 해석한다', () => {
+    const parsed = parseReceipt([cell('품목명', .1, .1), cell('수량', .5, .1), cell('금액', .7, .1),
+      cell('금일합계', .1, .2), cell('38 760', .7, .2)]);
     expect(parsed.selectedTotal?.value).toBe(38760);
     expect(parsed.selectedTotal?.source).toBe('derived');
     expect(parsed.warnings.some(w => w.includes('공백'))).toBe(true);
