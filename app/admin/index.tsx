@@ -85,7 +85,7 @@ function CleaningWeekCard({ weekly, error }: { weekly: { days: WeeklyCleaningDay
 
 /** 화면 00 — 통합 대시보드 (사장님 홈 탭 기본 화면) */
 export function AdminDashboardScreen({ embedded = false }: { embedded?: boolean }) {
-  const { realRole, switchStore } = useAuth();
+  const { canViewOwnerDashboard, switchStore } = useAuth();
   const { selectStoreScope, selectedMonth, setSelectedMonth } = useTabPager();
   const [selectedMetric, setSelectedMetric] = useState<DashboardMetric | null>(null);
   const resetMetric = useCallback(() => setSelectedMetric(null), []);
@@ -112,7 +112,7 @@ export function AdminDashboardScreen({ embedded = false }: { embedded?: boolean 
     setSelectedMonth(`${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`);
   }, [period, trend, anchorYear, anchorMonth, setSelectedMonth]);
 
-  if (realRole !== 'admin') return <SafeAreaView style={[styles.container, embedded && styles.embedded]} edges={embedded ? ['left', 'right'] : undefined}>{!embedded && <GlassBackdrop />}<View style={styles.empty}><Text style={styles.emptyText}>접근 권한이 없어요</Text></View></SafeAreaView>;
+  if (!canViewOwnerDashboard) return <SafeAreaView style={[styles.container, embedded && styles.embedded]} edges={embedded ? ['left', 'right'] : undefined}>{!embedded && <GlassBackdrop />}<View style={styles.empty}><Text style={styles.emptyText}>사장님 계정으로 확인해주세요</Text></View></SafeAreaView>;
 
   const selectedStore = ownedStores.find(store => store.id === scopeId);
   const activeScope = selectedStore?.id ?? null;

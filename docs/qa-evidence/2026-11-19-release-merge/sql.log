@@ -1,0 +1,30 @@
+
+> rattle@1.0.0 test:sql
+> node scripts/validate-operations-sql.mjs && node scripts/validate-release-sql.mjs && node scripts/validate-read-models-sql.mjs && node scripts/validate-pos-read-models.mjs && node scripts/validate-financial-sharing.mjs && node scripts/validate-regular-wages-sql.mjs && node scripts/validate-daily-work-sql.mjs && node scripts/validate-payroll-snapshot-integration.mjs && node scripts/validate-store-soft-delete-sql.mjs && node scripts/validate-rls-auth-initplan-sql.mjs && node scripts/validate-rls-auth-wrapping.mjs && node scripts/validate-store-bootstrap-sql.mjs && node scripts/validate-home-daily-sources-sql.mjs && node scripts/validate-pos-unchanged-sql.mjs && node scripts/validate-qr-attendance-sql.mjs && node scripts/validate-role-model-sql.mjs && node scripts/validate-store-visibility-sql.mjs && node scripts/validate-manager-role-integration-sql.mjs
+
+PASS join wage required: 48 checks (QA-JOIN-WAGE-REQUIRED-20261118, local PGlite).
+PASS local PostgreSQL migrations and 115 workflow/security checks
+{"localOnly":true,"syntheticData":true,"checks":82}
+Read models SQL: 63 checks passed (isolated PGlite fixture).
+POS SQL: boundary, item totals, cross-store collision, transaction rollback, replacement/payment atomicity, anonymous rejection passed
+Financial sharing SQL: 408+ role/policy/read/notification checks, owner protection, idempotent creation, raw write rejection and exact payroll preservation passed
+PASS regular wages SQL: baseline, retained slip, effective change, duplicate/pre-hire/permission, snapshot amount, historical financial aggregate
+PASS daily work SQL 30 checks (PGlite isolated, no remote state)
+PASS integrated payroll security SQL 42 checks (PGlite isolated, no remote state)
+store soft delete SQL: 45 checks passed
+RLS auth initplan: wraps bare auth calls, keeps policy shape and access, replay-safe
+RLS auth wrapping: 84 migration files checked, 18 pre-fix files in baseline
+Store bootstrap SQL: matches legacy owned/member/role/access load for 8 user shapes, owned-first order, anon rejected, replay-safe
+Home daily sources SQL: 233 business dates match legacy client aggregation across 4 closing times; RLS, anon, replay passed
+POS unchanged SQL: 81 checks passed (local PGlite only)
+QR attendance SQL: 253 checks passed
+PASS QR automatic daily work: 80 checks (QA-QR-AUTO-20261118, PGlite, no remote).
+PASS scanner pairing: 51 checks (QA-SCANNER-PAIR-20261118, PGlite, no remote).
+PASS attendance immediate labor application: 77 checks (QA-ATTENDANCE-AUTO-APPLY-20261118, local PGlite).
+POS/financial overlaps after retry_guard: [{"file":"20261117160000_store_visibility.sql","function":"can_read_store_financials"},{"file":"20261117160000_store_visibility.sql","function":"get_shared_financial_summary"},{"file":"20261118120000_qr_attendance_daily_work.sql","function":"get_daily_labor_sources"},{"file":"20261118150000_daily_work_labor_read_models.sql","function":"get_financial_summaries_v2"},{"file":"20261118150000_daily_work_labor_read_models.sql","function":"get_daily_labor_sources"}]
+PASS POS visibility and Disk IO compatibility: 159 checks (QA-POS-VISIBILITY-20261118, PGlite, no remote).
+PASS join wage role chain: 14 checks (owner/manager allowed, staff/pending/outside denied; local PGlite).
+PASS release ordered QR/performance chain: 83 cumulative assertions; initPlan, bootstrap, home daily, final policies.
+Role model SQL validation passed (157 checks; PGlite single connection, no remote).
+Store visibility SQL: 9358 checks passed (27 setting combinations; local PGlite).
+Manager integration SQL validation passed: 285 assertions (local PGlite only).

@@ -1,0 +1,120 @@
+import { act, renderHook } from '@testing-library/react-native';
+import { useTossSync } from '../../lib/hooks/useTossSync';
+import { usePosAnalytics } from '../../lib/hooks/usePosAnalytics';
+import { queryClient, queryKeys } from '../../lib/query/client';
+import { getAutoSyncRange } from '../../lib/services/posAnalytics';
+jest.mock('../../lib/query/legacyPosCache', () => ({ clearLegacyPosCache: jest.fn() }));
+const mockSummary = jest.fn();
+let mockScope = 'user-a:admin';
+let mockStore = { id: 'a', closing_time: '23:00', toss_merchant_id: 'merchant' };
+let mockAllowed = true;
+jest.mock('../../lib/contexts/AuthContext', () => ({ useAuth: () => ({ store: mockStore, currentRole: 'admin', canManageStore: true, devPreviewMode: 'self', canReadFinancials: mockAllowed }) }));
+jest.mock('../../lib/query', () => ({ ...jest.requireActual('../../lib/query/client'), useQueryScope: () => mockScope }));
+jest.mock('../../lib/services/posAnalytics', () => ({ ...jest.requireActual('../../lib/services/posAnalytics'), getDailySummariesByRange: (...args: unknown[]) => mockSummary(...args) }));
+jest.mock('../../lib/supabase', () => ({ supabase: {} }));
+jest.mock('../../lib/services/tossplace', () => ({ fetchTossOrders: jest.fn() }));
+jest.mock('../../lib/services/tossSync', () => ({ getTossMerchantId: jest.fn(), hasPosOrders: jest.fn(), savePosOrders: jest.fn() }));
+const rows = [{ date: '2026-11-17', totalAmount: 100, orderCount: 1 }];
+beforeEach(() => { jest.useFakeTimers(); jest.setSystemTime(new Date('2026-11-17T15:01:00Z')); queryClient.clear(); mockScope = 'user-a:admin'; mockStore = { id: 'a', closing_time: '23:00', toss_merchant_id: 'merchant' }; mockAllowed = true; mockSummary.mockReset().mockResolvedValue(rows); });
+afterEach(() => { queryClient.clear(); jest.useRealTimers(); });
+it('분 경계 뒤 재마운트 첫 렌더에도 오늘 캐시를 쓰고 강제 갱신은 최신값을 읽는다', async () => {
+ const first = renderHook(useTossSync);
+ await act(async () => { await first.result.current.loadTodaySales(); });
+ first.unmount();
+ jest.setSystemTime(new Date('2026-11-17T15:02:00Z'));
+ const next = renderHook(useTossSync);
+ expect(next.result.current.todaySales).toBe(100);
+ mockSummary.mockResolvedValue([{ ...rows[0], totalAmount: 200 }]);
+ await act(async () => { await next.result.current.loadTodaySales(true); });
+ expect(next.result.current.todaySales).toBe(200);
+});
+it('계정·매장·마감 또는 영업일이 바뀌면 이전 오늘 금액을 즉시 숨긴다', async () => {
+ const view = renderHook(useTossSync);
+ await act(async () => { await view.result.current.loadTodaySales(); });
+ mockScope = 'user-b:member'; view.rerender(undefined);
+ expect(view.result.current.todaySales).toBe(0);
+ mockScope = 'user-a:admin'; mockStore = { ...mockStore, id: 'b' }; view.rerender(undefined);
+ expect(view.result.current.todaySales).toBe(0);
+ mockStore = { ...mockStore, id: 'a', closing_time: '22:00' }; view.rerender(undefined);
+ expect(view.result.current.todaySales).toBe(0);
+ mockStore = { ...mockStore, closing_time: '23:00' };
+ jest.setSystemTime(new Date('2026-11-18T15:01:00Z')); view.rerender(undefined);
+ expect(view.result.current.todaySales).toBe(0);
+});
+it('고정 월 범위의 캐시는 재마운트에 즉시 보이고 다른 월·권한으로 섞이지 않는다', async () => {
+ const from = new Date('2026-11-01T14:00:00Z'), to = new Date('2026-12-01T14:00:00Z');
+ const first = renderHook(() => usePosAnalytics(from, to));
+ await act(async () => { await first.result.current.fetchSummariesByRange(from, to); });
+ expect(mockSummary.mock.calls[0][3].getTime()).toBe(Date.now());
+ first.unmount();
+ jest.setSystemTime(new Date('2026-11-17T15:02:00Z'));
+ const next = renderHook(({ start, end }: { start: Date; end: Date }) => usePosAnalytics(start, end), { initialProps: { start: from, end: to } });
+ expect(next.result.current.summaries).toEqual(rows);
+ next.rerender({ start: new Date('2026-10-01T14:00:00Z'), end: from });
+ expect(next.result.current.summaries).toEqual([]);
+ mockScope = 'user-a:member'; next.rerender({ start: from, end: to });
+ expect(next.result.current.summaries).toEqual([]);
+ mockAllowed = false; next.rerender({ start: from, end: to });
+ await act(async () => { await next.result.current.fetchSummariesByRange(from, to); });
+ expect(mockSummary).toHaveBeenCalledTimes(1);
+});
+it('영업일이 바뀐 월 캐시는 새 키를 사용한다', async () => {
+ const from = new Date('2026-11-01T14:00:00Z'), to = new Date('2026-12-01T14:00:00Z');
+ const oldDay = getAutoSyncRange('23:00').from;
+ queryClient.setQueryData(queryKeys.store(mockScope, 'a', 'pos', 'summaries', '23:00', from.toISOString(), to.toISOString(), oldDay), rows);
+ jest.setSystemTime(new Date('2026-11-18T15:01:00Z'));
+ const view = renderHook(() => usePosAnalytics(from, to));
+ expect(view.result.current.summaries).toEqual([]);
+});
+
+it('권한 거절 후 재마운트에도 남은 캐시 금액을 다시 노출하지 않는다', async () => {
+ const today = renderHook(useTossSync);
+ await act(async () => { await today.result.current.loadTodaySales(); });
+ mockSummary.mockRejectedValue({ code: '42501', message: 'denied' });
+ await act(async () => { await today.result.current.loadTodaySales(true); });
+ today.unmount();
+ const reopened = renderHook(useTossSync);
+ expect(reopened.result.current.todaySales).toBe(0);
+ const from = new Date('2026-11-01T14:00:00Z'), to = new Date('2026-12-01T14:00:00Z');
+ mockSummary.mockResolvedValue(rows);
+ const month = renderHook(() => usePosAnalytics(from, to));
+ await act(async () => { await month.result.current.fetchSummariesByRange(from, to); });
+ mockSummary.mockRejectedValue({ code: '42501', message: 'denied' });
+ await act(async () => { await month.result.current.fetchSummariesByRange(from, to, true); });
+ month.unmount();
+ const reopenedMonth = renderHook(() => usePosAnalytics(from, to));
+ expect(reopenedMonth.result.current.summaries).toEqual([]);
+});
+
+it('월 시작 마감 이전에는 역전된 조회를 서버로 보내지 않는다', async () => {
+ jest.setSystemTime(new Date('2026-11-01T10:00:00Z'));
+ const from = new Date('2026-11-01T14:00:00Z'), to = new Date('2026-12-01T14:00:00Z');
+ const view = renderHook(() => usePosAnalytics(from, to));
+ await act(async () => { await view.result.current.fetchSummariesByRange(from, to); });
+ expect(mockSummary).not.toHaveBeenCalled();
+ expect(view.result.current.summaries).toEqual([]);
+});
+
+it('이전 월의 늦은 응답은 현재 월을 덮지 않는다', async () => {
+ const from = new Date('2026-11-01T14:00:00Z'), to = new Date('2026-12-01T14:00:00Z');
+ let done!: (rows: unknown[]) => void;
+ mockSummary.mockImplementationOnce(() => new Promise(resolve => { done = resolve; }));
+ const view = renderHook(({ start, end }: { start: Date; end: Date }) => usePosAnalytics(start, end), { initialProps: { start: from, end: to } });
+ let pending!: Promise<void>;
+ act(() => { pending = view.result.current.fetchSummariesByRange(from, to); });
+ const older = new Date('2026-10-01T14:00:00Z');
+ view.rerender({ start: older, end: from });
+ await act(async () => { await view.result.current.fetchSummariesByRange(older, from); });
+ await act(async () => { done([{ ...rows[0], totalAmount: 999 }]); await pending; });
+ expect(view.result.current.summaries).toEqual(rows);
+});
+it('화면을 켜 둔 채 영업일 경계를 지나면 새로운 오늘 범위로 갱신한다', async () => {
+ jest.setSystemTime(new Date('2026-11-17T13:59:59Z'));
+ const view = renderHook(useTossSync);
+ await act(async () => { await view.result.current.loadTodaySales(); });
+ mockSummary.mockResolvedValue([{ ...rows[0], totalAmount: 200 }]);
+ await act(async () => { jest.advanceTimersByTime(1000); });
+ expect(mockSummary).toHaveBeenCalledTimes(2);
+ expect(mockSummary.mock.calls[1][2].toISOString()).toBe('2026-11-17T14:00:00.000Z');
+ expect(view.result.current.todaySales).toBe(200);
+});

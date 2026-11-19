@@ -1,0 +1,41 @@
+import { fireEvent, render, waitFor } from '@testing-library/react-native';
+import CorrectionScreen from '../../app/attendance/correction';
+const mockSubmit = jest.fn();
+let mockPunchId: string | undefined;
+const start = { id: 'original-in', kind: 'clock_in', punched_at: '2026-11-18T09:00:00+09:00' };
+const end = { id: 'original-out', kind: 'clock_out', punched_at: '2026-11-18T12:00:00+09:00' };
+jest.mock('expo-router', () => ({ router: { back: jest.fn(), push: jest.fn() }, useLocalSearchParams: () => ({ punchId: mockPunchId }) }));
+jest.mock('../../lib/contexts/AuthContext', () => ({ useAuth: () => ({ store: { id: 'store' }, user: { id: 'user' }, devPreviewMode: 'self', storeRole: 'employee' }) }));
+jest.mock('../../lib/hooks/useEmployees', () => ({ useEmployees: () => ({ employees: [{ id: 'employee', user_id: 'user', is_active: true }] }) }));
+jest.mock('../../lib/hooks/useAttendanceToday', () => ({ useAttendanceToday: () => ({ start, end, loading: false, error: '' }) }));
+jest.mock('../../lib/hooks/useAttendanceCorrectionTarget', () => ({ useAttendanceCorrectionTarget: () => ({ row: start, loading: false, error: '' }) }));
+jest.mock('../../lib/hooks/useAttendanceCorrections', () => ({ useAttendanceCorrections: () => ({ submit: mockSubmit, outcome: '' }) }));
+jest.mock('../../lib/hooks/useConfirmLeave', () => ({ useConfirmLeave: jest.fn() }));
+jest.mock('../../lib/components/GlassBackdrop', () => ({ GlassBackdrop: () => null }));
+jest.mock('../../lib/components/ui', () => ({ AppBar: () => null }));
+jest.mock('@react-native-community/datetimepicker', () => () => null);
+beforeEach(() => { mockPunchId = undefined; mockSubmit.mockReset(); });
+it('changing the replacement kind preserves the selected original record', async () => {
+ const view=render(<CorrectionScreen />);
+ fireEvent.press(view.getByRole('button', { name: '퇴근' }));
+ fireEvent.changeText(view.getByLabelText('정정 사유'),'출근을 놓치고 퇴근할 때 찍었어요');
+ fireEvent.press(view.getByRole('button', { name: '정정 요청하기' }));
+ await waitFor(() => expect(mockSubmit).toHaveBeenCalledWith(expect.objectContaining({ p_target_punch_id: 'original-in', p_kind: 'clock_out' })));
+});
+it('selecting the original checkout independently resets the replacement kind and time', async () => {
+ const view=render(<CorrectionScreen />);
+ fireEvent.press(view.getByLabelText('기존 퇴근 기록'));
+ fireEvent.press(view.getByRole('button', { name: '출근' }));
+ fireEvent.changeText(view.getByLabelText('정정 사유'),'종류 정정');
+ fireEvent.press(view.getByRole('button', { name: '정정 요청하기' }));
+ await waitFor(() => expect(mockSubmit).toHaveBeenCalledWith(expect.objectContaining({ p_target_punch_id: 'original-out', p_kind: 'clock_in', p_time: '2026-11-18T03:00:00.000Z' })));
+});
+it('a reminder keeps its historical original target when changing kind', async () => {
+ mockPunchId='original-in';
+ const view=render(<CorrectionScreen />);
+ expect(view.queryByLabelText('기존 퇴근 기록')).toBeNull();
+ fireEvent.press(view.getByRole('button', { name: '퇴근' }));
+ fireEvent.changeText(view.getByLabelText('정정 사유'),'알림에서 정정');
+ fireEvent.press(view.getByRole('button', { name: '정정 요청하기' }));
+ await waitFor(() => expect(mockSubmit).toHaveBeenCalledWith(expect.objectContaining({ p_target_punch_id: 'original-in', p_kind: 'clock_out' })));
+});

@@ -30,7 +30,7 @@ export async function getNotifications(storeId: string, category?: NotificationC
   const load = (includeDismissals: boolean) => {
     let query = supabase.from('notifications')
       .select(includeDismissals ? '*, notification_dismissals(notification_id)' : '*')
-      .eq('store_id', storeId).neq('category', 'attendance').order('created_at', { ascending: false });
+      .eq('store_id', storeId).order('created_at', { ascending: false });
     if (!allowFinancial) query = query.neq('category', 'sales').neq('category', 'profit');
     if (category) query = query.eq('category', category);
     return query;
@@ -41,7 +41,8 @@ export async function getNotifications(storeId: string, category?: NotificationC
   if (result.error && missingDismissals(result.error)) result = await load(false);
   if (result.error) throw new Error(result.error.message);
   const rows = (result.data ?? []) as unknown as (AppNotification & { notification_dismissals?: { notification_id: string }[] })[];
-  return rows.filter(row => !row.notification_dismissals?.length).map(({ notification_dismissals: _dismissals, ...notification }) => notification);
+  return rows.filter(row => !row.notification_dismissals?.length
+    && (row.category !== 'attendance' || row.type === 'attendance_missing_checkout' || row.type === 'attendance_labor_failed')).map(({ notification_dismissals: _dismissals, ...notification }) => notification);
 }
 
 /** Permanently hides an event for the authenticated user; the shared event is preserved. */

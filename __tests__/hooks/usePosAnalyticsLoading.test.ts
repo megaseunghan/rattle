@@ -4,8 +4,8 @@ import { queryClient } from '../../lib/query';
 jest.mock('../../lib/query/legacyPosCache', () => ({ clearLegacyPosCache: jest.fn() }));
 let mockStore = { id: 'one', closing_time: '23:00' };
 jest.mock('../../lib/contexts/AuthContext', () => ({ useAuth: () => ({ store: mockStore }) }));
-jest.mock('../../lib/services/posAnalytics', () => ({ getDailySummaries: jest.fn(), getDailySummariesByRange: jest.fn(), getDailyItems: jest.fn() }));
-jest.mock('../../lib/query', () => ({ useQueryScope: () => 'user', queryKeys: { store: (...args: any[]) => args }, queryClient: { getQueryData: jest.fn(), fetchQuery: jest.fn() } }));
+jest.mock('../../lib/services/posAnalytics', () => ({ getDailySummaries: jest.fn(), getDailySummariesByRange: jest.fn(), getDailyItems: jest.fn(), getAutoSyncRange: () => ({ from: "2026-11-16T14:00:00Z" }) }));
+jest.mock('../../lib/query', () => ({ useQueryScope: () => 'user', isAccessDenied: (e: any) => e?.code === '42501', queryKeys: { store: (...args: any[]) => args }, queryClient: { getQueryData: jest.fn(), getQueryState: jest.fn(), fetchQuery: jest.fn() } }));
 const rows = [{ date: '2026-10-20', totalAmount: 100, orderCount: 1 }];
 beforeEach(() => { jest.clearAllMocks(); mockStore = { id: 'one', closing_time: '23:00' }; });
 it('동일 기간 재조회와 종료시각 변경 중 기존 매출을 유지하고 오류에도 보존한다', async () => {
@@ -65,4 +65,14 @@ it('전체라는 원본 분류가 있어도 필터 키를 중복하지 않는다
   const { result } = renderHook(() => usePosAnalytics());
   await act(async () => { await result.current.fetchItems('2026-10-01', '2026-10-02'); });
   expect(result.current.categories).toEqual(['전체']);
+});
+
+it('같은 월의 열린 끝 범위는 시각이 달라도 캐시 키가 같고 다른 월은 분리한다', async () => {
+  (queryClient.fetchQuery as jest.Mock).mockResolvedValue(rows);
+  const { result } = renderHook(usePosAnalytics);
+  const from = new Date('2026-11-01T14:00:00Z');
+  await act(async () => { await result.current.fetchSummariesByRange(from, new Date('2026-12-01T14:00:00Z')); });
+  const first = (queryClient.fetchQuery as jest.Mock).mock.calls.at(-1)[0].queryKey;
+  await act(async () => { await result.current.fetchSummariesByRange(from, new Date('2026-12-01T14:00:00Z')); });
+  expect((queryClient.fetchQuery as jest.Mock).mock.calls.at(-1)[0].queryKey).toEqual(first);
 });

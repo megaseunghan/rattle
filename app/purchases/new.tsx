@@ -1,3 +1,4 @@
+import { usePreviewWriteGuard } from '../../lib/hooks/usePreviewWriteGuard';
 import { entityKey } from '../../lib/utils/listKeys';
 import { SheetModal } from '../../lib/components/ui/SheetModal';
 /* Hallmark · genre: modern-minimal · macrostructure: Workbench · design-system: DESIGN.md · designed-as-app */
@@ -86,7 +87,8 @@ const IngredientPickerRow = memo(function IngredientPickerRow({ item, already, c
 });
 
 export default function NewPurchaseScreen() {
-  const { store, currentRole } = useAuth();
+  const { store, canManageStore } = useAuth();
+  const { canWrite } = usePreviewWriteGuard();
   const purchaseTypes = usePurchaseTypes();
   const [typeModalVisible, setTypeModalVisible] = useState(false);
   const sheetHandoff = useRef<'categories' | 'picker' | null>(null);
@@ -214,6 +216,7 @@ export default function NewPurchaseScreen() {
     if (!store) return;
     setQuickAdding(true);
     try {
+      if (!canWrite()) return;
       const created = await createIngredient({
         store_id: store.id,
         name: quickName.trim(),
@@ -390,7 +393,7 @@ export default function NewPurchaseScreen() {
 
           <View style={styles.amountLabelRow}>
             <Text style={styles.label}>유형</Text>
-            {currentRole === 'admin' && <TouchableOpacity onPress={() => setTypeModalVisible(true)} accessibilityRole="button" style={{ minHeight: 44, justifyContent: 'center' }}>
+            {canManageStore && <TouchableOpacity onPress={() => setTypeModalVisible(true)} accessibilityRole="button" style={{ minHeight: 44, justifyContent: 'center' }}>
               <Text style={{ color: Colors.action }}>유형 관리</Text>
             </TouchableOpacity>}
           </View>

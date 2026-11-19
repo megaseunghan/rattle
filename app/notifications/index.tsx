@@ -20,7 +20,7 @@ function dayLabel(key: string) {
 }
 export default function NotificationsScreen() {
   const { notifications, loading, error, unreadCount, refetch, markRead, markAllRead, dismiss, deletingId } = useNotifications();
-  const { user, store, currentRole, devPreviewMode } = useAuth();
+  const { user, store, currentRole, storeRole, devPreviewMode } = useAuth();
   const scope = JSON.stringify([user?.id, store?.id, currentRole, devPreviewMode]);
   const deleting = useRef(false);
   const scrollGesture = useMemo(() => Gesture.Native(), []);
@@ -40,7 +40,11 @@ export default function NotificationsScreen() {
         : notifications.map((n, index) => <Fragment key={`${scope}:${n.id}`}>
           {(index === 0 || dayKeys[index] !== dayKeys[index - 1]) && <Text accessibilityRole="header" style={styles.day}>{dayLabel(dayKeys[index])}</Text>}
           <NotificationSwipeRow item={n} disabled={!!deletingId} onDeleteRequest={() => deleteNotification(n.id)} scrollGesture={scrollGesture}
-            onPress={() => { if (!n.is_read) void markRead(n.id); if (n.category === 'members') router.push('/settings/members'); }} />
+            onPress={() => { if (!n.is_read) void markRead(n.id); if (n.category === 'members') router.push('/settings/members');
+              else if (n.type === 'attendance_missing_checkout' || n.type === 'attendance_labor_failed') {
+                if (storeRole === 'owner' || storeRole === 'manager') router.push({ pathname: '/(tabs)', params: { targetTab: 'payroll', homeScope: 'store', ...(n.attendance_work_date ? { month: n.attendance_work_date.slice(0, 7) } : {}) } });
+                else if (n.type === 'attendance_missing_checkout' && n.attendance_punch_id) router.push({ pathname: '/attendance/correction', params: { punchId: n.attendance_punch_id } });
+              } }} />
         </Fragment>)}
     </ScrollView></GestureDetector>
   </SafeAreaView>;

@@ -4,9 +4,9 @@ import { getNotificationSettings, setNotificationSetting } from '../services/not
 import { getErrorMessage } from '../utils/error';
 
 export function useNotificationSettings() {
-  const { store, user, currentRole, devPreviewMode } = useAuth();
+  const { store, user, currentRole, devPreviewMode, permissionRevision } = useAuth();
   const storeId = store?.id;
-  const scope = useMemo(() => ({}), [storeId, user?.id, currentRole, devPreviewMode]);
+  const scope = useMemo(() => ({}), [permissionRevision, storeId, user?.id, currentRole, devPreviewMode]);
   const currentScope = useRef(scope);
   currentScope.current = scope;
   const mounted = useRef(true);
@@ -35,7 +35,7 @@ export function useNotificationSettings() {
   }, [storeId, scope, available]);
 
   const toggle = useCallback(async (key: string, enabled: boolean) => {
-    if (!storeId || !available || !mounted.current || currentScope.current !== scope || readyScope.current !== scope || state.scope !== scope || !state.ready || state.loading || writeLock.current === scope) return;
+    if (devPreviewMode !== 'self' || !storeId || !available || !mounted.current || currentScope.current !== scope || readyScope.current !== scope || state.scope !== scope || !state.ready || state.loading || writeLock.current === scope) return;
     request.current += 1;
     writeLock.current = scope;
     const previous = state.settings;
@@ -49,7 +49,7 @@ export function useNotificationSettings() {
       if (writeLock.current === scope) writeLock.current = null;
       if (mounted.current && currentScope.current === scope) setState(prev => ({ ...prev, savingKey: null }));
     }
-  }, [storeId, scope, state, available]);
+  }, [storeId, scope, state, available, devPreviewMode]);
 
   return { settings: visible.settings, loading: visible.loading, ready: visible.ready, error: visible.error, savingKey: visible.savingKey, refetch, toggle };
 }

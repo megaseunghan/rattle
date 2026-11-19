@@ -190,8 +190,8 @@ function Sep() {
 }
 
 export default function ProfitLossScreen() {
-  const { currentRole } = useAuth();
-  if (currentRole !== 'admin') return (
+  const { canManageStore } = useAuth();
+  if (!canManageStore) return (
     <SafeAreaView style={styles.container}><GlassBackdrop />
       <AppBar transparent title="손익" onBack={() => router.back()} />
       <ErrorMessage message="관리자만 확인할 수 있어요." />

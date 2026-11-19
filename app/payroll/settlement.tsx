@@ -1,3 +1,4 @@
+import { usePreviewWriteGuard } from '../../lib/hooks/usePreviewWriteGuard';
 import { NumericText } from '../../lib/components/ui/NumericText';
 import { getErrorMessage } from '../../lib/utils/error';
 import { useCallback, useEffect, useState, useMemo } from 'react';
@@ -27,6 +28,7 @@ export default function PayrollSettlementScreen() {
   const monthLabel = `${Number(yearMonth.slice(5, 7))}월`;
 
   const { store } = useAuth();
+  const { canWrite } = usePreviewWriteGuard();
   const { employees, loading: empLoading, error: empError, refetch: refetchEmployees } = useEmployees(true);
   const [payrolls, setPayrolls] = useState<Payroll[]>([]);
   const [loading, setLoading] = useState(true);
@@ -75,6 +77,7 @@ export default function PayrollSettlementScreen() {
         onPress: async () => {
           setSettling(true);
           try {
+            if (!canWrite()) return;
             await settlePayrolls(unsettledIds);
             await load();
           } catch (e: any) {

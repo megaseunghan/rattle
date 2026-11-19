@@ -12,7 +12,7 @@ jest.mock('expo-router', () => ({
 }));
 jest.mock('../../lib/contexts/AuthContext', () => ({ useAuth: () => ({
   user: { id: mockUser, email: 'test@example.test', user_metadata: { full_name: '사장님' } }, store: { id: mockStore, name: '래틀' },
-  currentRole: mockRole, realRole: mockRealRole, devPreviewMode: mockMode, devPreviewEmployeeId: mockPreviewEmployee, signOut: mockSignOut,
+  currentRole: mockRole, canManageStore: mockRole === 'admin', storeRole: mockRole === 'admin' ? 'owner' : mockMode === 'part_time' ? 'part_timer' : 'employee', realRole: mockRealRole, devPreviewMode: mockMode, devPreviewEmployeeId: mockPreviewEmployee, signOut: mockSignOut,
 }) }));
 jest.mock('../../lib/hooks/useEmployees', () => ({ useEmployees: () => ({ employees: mockEmployees, refetch: mockEmployeesRefetch }) }));
 jest.mock('../../lib/hooks/useSchedule', () => ({ useSchedule: () => ({ schedule: mockSchedule, loading: mockLoading, refetch: mockRefetch }) }));
@@ -95,7 +95,8 @@ it('파트타이머 메뉴와 관리자 요청함 접근 조건을 유지한다'
   mockUser = 'part'; mockRole = 'part_time'; mockRealRole = 'member'; await mount();
   expect(screen.getByTestId('illustration-work-time')).toBeTruthy();
   expect(screen.queryByLabelText('요청함 (스케줄)')).toBeNull();
-  fireEvent.press(screen.getByLabelText('근무시간 제출')); expect(mockPush).toHaveBeenCalledWith('/mypage/work-minutes');
+  expect(screen.queryByLabelText('근무시간 제출')).toBeNull();
+  fireEvent.press(screen.getByLabelText('근태 확인')); expect(mockPush).toHaveBeenCalledWith('/attendance/my-qr');
 });
 it('미리보기 중 개인정보 수정은 숨기고 기존 급여 경로는 유지한다', async () => {
   mockMode = 'regular'; mockPreviewEmployee = 'employee'; await mount();

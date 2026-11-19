@@ -9,6 +9,9 @@ import Recipes from '../../app/recipes';
 import { StockScreen } from '../../app/(tabs)/stock';
 
 let mockManage = false;
+let mockMode = 'self';
+let mockRecipeIngredients: any[] = [];
+let mockPickerIngredients: any[] = [];
 let mockAdmin = false;
 let mockReady = true;
 let mockParams: { id?: string } = { id: 'i' };
@@ -17,18 +20,18 @@ let mockRecipesPopulated = false;
 const mockUpdate = jest.fn(), mockCreate = jest.fn(), mockRemove = jest.fn(), mockPush = jest.fn();
 const mockRefetch = jest.fn();
 const mockIngredient = () => ({ id: 'i', store_id: mockItemStore, name: '우유', category: '유제품', unit: 'mL', current_stock: 10, min_stock: 2, last_price: 3 });
-const mockRecipe = () => ({ id: 'r', store_id: mockItemStore, name: '라떼', category: '음료', selling_price: 5000, cost: 0, margin_rate: 100, recipe_ingredients: [] });
+const mockRecipe = () => ({ id: 'r', store_id: mockItemStore, name: '라떼', category: '음료', selling_price: 5000, cost: 0, margin_rate: 100, recipe_ingredients: mockRecipeIngredients });
 jest.mock('expo-router', () => ({ router: { back: jest.fn(), push: (...args: unknown[]) => mockPush(...args) }, useLocalSearchParams: () => mockParams, useFocusEffect: (callback: () => unknown) => {
   const React = require('react'); React.useEffect(callback, [callback]);
 } }));
-jest.mock('../../lib/contexts/AuthContext', () => ({ useAuth: () => ({ user: { id: 'u' }, store: { id: 's' }, currentRole: mockAdmin ? 'admin' : 'member' }) }));
+jest.mock('../../lib/contexts/AuthContext', () => ({ useAuth: () => ({ user: { id: 'u' }, store: { id: 's' }, devPreviewMode: mockMode, currentRole: mockAdmin ? 'admin' : 'member' }) }));
 jest.mock('../../lib/hooks/useStorePermissions', () => ({ useStorePermissions: () => ({ canReadRecipes: true, canManageRecipes: mockManage, canManageStock: mockManage, canAdjustStock: mockReady, isPartTime: !mockManage, isAdmin: mockAdmin, permissionsReady: mockReady }) }));
-jest.mock('../../lib/hooks/useIngredients', () => ({ useIngredients: () => ({ data: [], loading: false, hasMore: false, refetch: mockRefetch, update: mockUpdate, create: mockCreate }) }));
+jest.mock('../../lib/hooks/useIngredients', () => ({ useIngredients: () => ({ data: mockPickerIngredients, loading: false, hasMore: false, refetch: mockRefetch, update: mockUpdate, create: mockCreate }) }));
 jest.mock('../../lib/hooks/useRecipes', () => ({ useRecipes: () => ({ data: mockRecipesPopulated ? [mockRecipe()] : [], loading: false, hasMore: false, refetch: mockRefetch, remove: mockRemove, create: mockCreate, bulkUpdateCategory: jest.fn() }) }));
 jest.mock('../../lib/hooks/useCategories', () => ({ useCategories: () => ({ categories: ['유제품'], refetch: mockRefetch }) }));
 jest.mock('../../lib/hooks/useTossSync', () => ({ useTossSync: () => ({ syncCatalog: jest.fn() }) }));
 jest.mock('../../lib/hooks/useConfirmLeave', () => ({ useConfirmLeave: () => jest.fn() }));
-jest.mock('../../lib/services/ingredients', () => ({ getIngredientById: jest.fn(async () => mockIngredient()), updateIngredient: jest.fn() }));
+jest.mock('../../lib/services/ingredients', () => ({ getIngredientById: jest.fn(async () => mockIngredient()), updateIngredient: jest.fn(), createIngredient: jest.fn() }));
 jest.mock('../../lib/services/recipes', () => ({ getRecipeById: jest.fn(async () => mockRecipe()), deleteRecipe: (...args: unknown[]) => mockRemove(...args), getRecipesByCategory: jest.fn(async () => []), upsertRecipesFromCatalog: jest.fn(), updateRecipeFull: jest.fn() }));
 jest.mock('../../lib/icons/AppIcon', () => ({ AppIcon: () => null }));
 jest.mock('../../lib/components/GlassBackdrop', () => ({ GlassBackdrop: () => null }));
@@ -36,7 +39,7 @@ jest.mock('../../lib/components/CategoryManageModal', () => ({ CategoryManageMod
 jest.mock('../../lib/components/CatalogImportModal', () => ({ CatalogImportModal: () => null }));
 jest.mock('../../lib/components/BulkCategoryModal', () => ({ BulkCategoryModal: () => null }));
 jest.mock('../../lib/components/ui/SheetModal', () => ({ SheetModal: ({ visible, children }: any) => visible ? children : null }));
-beforeEach(() => { jest.clearAllMocks(); mockManage = false; mockAdmin = false; mockReady = true; mockParams = { id: 'i' }; mockItemStore = 's'; mockRecipesPopulated = false; mockUpdate.mockResolvedValue(undefined); });
+beforeEach(() => { jest.clearAllMocks(); mockManage = false; mockMode='self'; mockRecipeIngredients=[];mockPickerIngredients=[]; mockAdmin = false; mockReady = true; mockParams = { id: 'i' }; mockItemStore = 's'; mockRecipesPopulated = false; mockUpdate.mockResolvedValue(undefined); });
 it('PT 재고 상세는 수량만 편집하고 저장 payload도 한 필드뿐이다', async () => {
   render(<StockDetail />);
   await waitFor(() => expect(screen.getByLabelText('현재 재고 수량')).toBeTruthy());
@@ -140,4 +143,27 @@ it('재고 저장 뒤 캐시 갱신 실패는 재저장을 막고 읽기로 복�
  await waitFor(()=>expect(screen.getByText('저장된 재고 다시 불러오기')).toBeTruthy()); fireEvent.press(screen.getByText('저장')); expect(mockUpdate).toHaveBeenCalledTimes(1);
  fireEvent.press(screen.getByText('저장된 재고 다시 불러오기'));
  await waitFor(()=>expect(screen.queryByText('저장된 재고 다시 불러오기')).toBeNull()); expect(mockUpdate).toHaveBeenCalledTimes(1);
+});
+
+it('역할 표시가 관리 가능해도 미리보기의 레시피 수정은 서버를 호출하지 않는다', async () => {
+ mockManage=true;mockAdmin=true;mockMode='regular';mockParams={id:'r'};
+ mockRecipeIngredients=[{ingredient:mockIngredient(),quantity:1,unit:'mL'}];
+ render(<RecipeNew/>);await waitFor(()=>expect(screen.getByPlaceholderText('예) 아메리카노').props.value).toBe('라떼'));
+ fireEvent.changeText(screen.getByPlaceholderText('예) 아메리카노'),'수정한 이름');fireEvent.press(screen.getByText('저장'));
+ await waitFor(()=>expect(require('../../lib/services/recipes').updateRecipeFull).not.toHaveBeenCalled());
+});
+
+it('레시피 미리보기에서 식자재를 빠르게 등록하지 않는다', async () => {
+ mockManage=true;mockAdmin=true;mockMode='regular';mockParams={};
+ render(<RecipeNew/>);fireEvent.press(screen.getByText('+ 추가'));fireEvent.press(screen.getByText('+ 새 식자재 등록'));
+ fireEvent.changeText(screen.getByPlaceholderText('식자재명'),'가상 재료');fireEvent.changeText(screen.getByPlaceholderText('단위 (g, ml…)'),'g');
+ fireEvent.press(screen.getByText('등록 후 추가'));
+ await waitFor(()=>expect(require('../../lib/services/ingredients').createIngredient).not.toHaveBeenCalled());
+});
+it('레시피 미리보기에서 개당 용량을 저장하지 않는다', async () => {
+ mockManage=true;mockAdmin=true;mockMode='regular';mockParams={};mockPickerIngredients=[{...mockIngredient(),unit:'개'}];
+ render(<RecipeNew/>);fireEvent.press(screen.getByText('+ 추가'));
+ fireEvent.press(screen.getByLabelText('우유, 개, 추가'));
+ fireEvent.changeText(screen.getByPlaceholderText('예: 500'),'500');fireEvent.press(screen.getByLabelText('개당 용량 저장'));
+ await waitFor(()=>expect(require('../../lib/services/ingredients').updateIngredient).not.toHaveBeenCalled());
 });

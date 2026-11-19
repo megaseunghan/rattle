@@ -1,7 +1,7 @@
 import { act, renderHook } from '@testing-library/react-native';
 import { useExpenses } from '../../lib/hooks/useExpenses';
 import * as service from '../../lib/services/expenses';
-let mockAuth: any = { store: { id: 's' }, user: { id: 'u' }, currentRole: 'admin', devPreviewMode: 'self' };
+let mockAuth: any = { store: { id: 's' }, user: { id: 'u' }, currentRole: 'admin', canManageStore: true, devPreviewMode: 'self' };
 jest.mock('../../lib/contexts/AuthContext', () => ({ useAuth: () => mockAuth }));
 jest.mock('../../lib/services/expenses', () => ({ getExpensesByMonth: jest.fn(), getEffectiveFixedExpenses: jest.fn(), createExpense: jest.fn(), updateExpense: jest.fn(), deleteExpense: jest.fn(), copyFixedExpensesWithDates: jest.fn() }));
 const monthRead = service.getExpensesByMonth as jest.Mock;
@@ -11,7 +11,7 @@ const update = service.updateExpense as jest.Mock;
 const copy = service.copyFixedExpensesWithDates as jest.Mock;
 const row = { id:'e',store_id:'s',year_month:'2026-11',category:'공과금',name:'전기',amount:20,occurred_on:'2026-11-02' };
 function deferred<T>() { let resolve!: (value:T)=>void; const promise=new Promise<T>(r=>{resolve=r;}); return {promise,resolve}; }
-beforeEach(()=>{ jest.clearAllMocks(); mockAuth={store:{id:'s'},user:{id:'u'},currentRole:'admin',devPreviewMode:'self'}; monthRead.mockResolvedValue([]); fixedRead.mockResolvedValue([]); });
+beforeEach(()=>{ jest.clearAllMocks(); mockAuth={store:{id:'s'},user:{id:'u'},currentRole: 'admin', canManageStore: true,devPreviewMode:'self'}; monthRead.mockResolvedValue([]); fixedRead.mockResolvedValue([]); });
 test('reverse responses cannot overwrite the latest query',async()=>{
  const first=deferred<any[]>(),second=deferred<any[]>(); monthRead.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
  const {result}=renderHook(()=>useExpenses('2026-11'));

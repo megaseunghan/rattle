@@ -1,3 +1,4 @@
+import { useScopedWriteGuard } from '../../lib/hooks/useScopedWriteGuard';
 import { useState, useCallback } from 'react';
 import {
   View,
@@ -18,14 +19,20 @@ import { Colors } from '../../constants/colors';
 import { Spacing } from '../../constants/designTokens';
 import { getErrorMessage } from '../../lib/utils/error';
 import { ErrorMessage } from '../../lib/components/ErrorMessage';
-import { ListCard } from '../../lib/components/ui';
+import { Button, ListCard } from '../../lib/components/ui';
+import { listMyDeletedStores, restoreDeletedStore, type DeletedStore } from '../../lib/services/stores';
+import { formatRestoreDeadline } from '../../lib/utils/storeDeletion';
 
 export default function SelectStoreScreen() {
   const [showForm, setShowForm] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [deletedStores, setDeletedStores] = useState<DeletedStore[]>([]);
+  const [deletedError, setDeletedError] = useState<string | null>(null);
+  const [restoringId, setRestoringId] = useState<string | null>(null);
   const { user, store, stores, storesLoaded, switchStore, refreshStore, signOut } = useAuth();
   const router = useRouter();
+  const canWrite = useScopedWriteGuard([]);
 
   function handleLogout() {
     Alert.alert('로그아웃', '로그아웃 하시겠습니까?', [
@@ -37,13 +44,12 @@ export default function SelectStoreScreen() {
   const reload = useCallback(async () => {
     setIsRefreshing(true);
     setLoadError(null);
-    try {
-      await refreshStore();
-    } catch (e) {
-      setLoadError(getErrorMessage(e, '매장 목록을 불러오지 못했어요.'));
-    } finally {
-      setIsRefreshing(false);
-    }
+    setDeletedError(null);
+    const [storesResult, deletedResult] = await Promise.allSettled([refreshStore(), listMyDeletedStores()]);
+    if (storesResult.status === 'rejected') setLoadError(getErrorMessage(storesResult.reason, '매장 목록을 불러오지 못했어요.'));
+    if (deletedResult.status === 'fulfilled') setDeletedStores(deletedResult.value);
+    else { setDeletedStores([]); setDeletedError('삭제한 매장 목록을 불러오지 못했어요.'); }
+    setIsRefreshing(false);
   }, [refreshStore]);
   useFocusEffect(useCallback(() => { void reload(); }, [reload]));
 
@@ -56,9 +62,31 @@ export default function SelectStoreScreen() {
     }
   }
 
+  function handleRestore(target: DeletedStore) {
+    if (!canWrite() || restoringId) return;
+    Alert.alert('매장 복구', `‘${target.name}’ 매장을 복구할까요? 구성원들도 다시 매장을 볼 수 있게 돼요.`, [
+      { text: '취소', style: 'cancel' },
+      { text: '복구', onPress: () => { void restore(target); } },
+    ]);
+  }
+
+  async function restore(target: DeletedStore) {
+    setRestoringId(target.id);
+    try {
+      if (!canWrite()) return;
+      await restoreDeletedStore(target.id);
+      await reload();
+      Alert.alert('복구 완료', `‘${target.name}’ 매장을 복구했어요.`);
+    } catch (e) {
+      Alert.alert('복구 실패', getErrorMessage(e, '매장을 복구하지 못했어요. 다시 시도해주세요.'));
+    } finally {
+      setRestoringId(null);
+    }
+  }
+
   const hasStores = stores.length > 0;
 
-  if (showForm && user) return <SafeAreaView style={[styles.container, { backgroundColor: Colors.homeCanvas }]}>
+  if (showForm && user && canWrite()) return <SafeAreaView style={[styles.container, { backgroundColor: Colors.homeCanvas }]}>
     <StoreSetupWizard knownRequestIds={stores.flatMap(s => s.setup_request_id ? [s.setup_request_id] : [])} userId={user.id} onCancel={() => setShowForm(false)} onCreated={async (id, choice) => {
       await refreshStore(id);
       router.replace(choice === 'now' ? '/settings/pos-sync?setup=1' : '/(tabs)');
@@ -111,7 +139,7 @@ export default function SelectStoreScreen() {
         {/* 신규 회원: stores 로드 완료 후 진짜 매장 없을 때만 표시 */}
         {storesLoaded && !hasStores && !showForm && (
           <View style={styles.optionGroup}>
-            <ListCard trailingIcon="chevron" onPress={() => setShowForm(true)} style={styles.optionCardPrimary}>
+            <ListCard trailingIcon="chevron" onPress={() => { if (canWrite()) setShowForm(true); }} style={styles.optionCardPrimary}>
               <View style={styles.optionRow}>
                 <View style={[styles.optionIcon, styles.optionIconPrimary]}>
                   <AppIcon name="storefront" size={22} color={Colors.primary} />
@@ -123,7 +151,7 @@ export default function SelectStoreScreen() {
               </View>
             </ListCard>
 
-            <ListCard trailingIcon="chevron" onPress={() => router.push('/(auth)/join-store')}>
+            <ListCard trailingIcon="chevron" onPress={() => { if (canWrite()) router.push('/(auth)/join-store'); }}>
               <View style={styles.optionRow}>
                 <View style={styles.optionIcon}>
                   <AppIcon name="people" size={22} color={Colors.gray600} />
@@ -140,7 +168,7 @@ export default function SelectStoreScreen() {
         {/* 기존 회원: 매장 있을 때 추가/참여 버튼 */}
         {hasStores && !showForm && (
           <View style={styles.optionGroup}>
-            <ListCard trailingIcon="chevron" onPress={() => setShowForm(true)}>
+            <ListCard trailingIcon="chevron" onPress={() => { if (canWrite()) setShowForm(true); }}>
               <View style={styles.optionRow}>
                 <View style={[styles.optionIcon, styles.optionIconPrimary]}>
                   <AppIcon name="add" size={22} color={Colors.primary} />
@@ -152,7 +180,7 @@ export default function SelectStoreScreen() {
               </View>
             </ListCard>
 
-            <ListCard trailingIcon="chevron" onPress={() => router.push('/(auth)/join-store')}>
+            <ListCard trailingIcon="chevron" onPress={() => { if (canWrite()) router.push('/(auth)/join-store'); }}>
               <View style={styles.optionRow}>
                 <View style={styles.optionIcon}>
                   <AppIcon name="people" size={22} color={Colors.gray600} />
@@ -163,6 +191,26 @@ export default function SelectStoreScreen() {
                 </View>
               </View>
             </ListCard>
+          </View>
+        )}
+
+        {(deletedStores.length > 0 || deletedError) && (
+          <View style={styles.deletedSection}>
+            <Text style={styles.deletedTitle}>삭제한 매장</Text>
+            {deletedError && <Text style={styles.deletedHelp}>{deletedError}</Text>}
+            {deletedStores.map(item => (
+              <ListCard key={item.id}>
+                <View style={styles.storeCardRow}>
+                  <View style={styles.optionTextWrap}>
+                    <Text style={styles.storeName}>{item.name}</Text>
+                    <Text style={styles.deletedHelp}>{formatRestoreDeadline(item.purgeAfter)}까지 복구할 수 있어요</Text>
+                  </View>
+                  <View style={styles.restoreAction}>
+                    <Button label="복구" variant="secondary" onPress={() => handleRestore(item)} loading={restoringId === item.id} disabled={!!restoringId || !canWrite()} />
+                  </View>
+                </View>
+              </ListCard>
+            ))}
           </View>
         )}
 
@@ -230,6 +278,24 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: Colors.black,
+  },
+  deletedSection: {
+    gap: Spacing.listGap,
+    marginTop: 28,
+  },
+  deletedTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: Colors.gray600,
+  },
+  restoreAction: {
+    width: 88,
+    flexShrink: 0,
+  },
+  deletedHelp: {
+    fontSize: 12,
+    color: Colors.gray500,
+    lineHeight: 17,
   },
   optionGroup: {
     gap: Spacing.listGap,

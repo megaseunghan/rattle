@@ -1,9 +1,11 @@
+import { usePreviewWriteGuard } from './usePreviewWriteGuard';
 import { useEffect, useCallback, useRef, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { CategoryTaxonomy } from '../services/categoryTaxonomy';
 import { UserFacingError } from '../utils/error';
 
 export function useCategoryTaxonomy(taxonomy: CategoryTaxonomy) {
+  const { assertCanWrite } = usePreviewWriteGuard();
   const { store } = useAuth();
   const storeId = store?.id;
   const currentStore = useRef(storeId);
@@ -25,6 +27,7 @@ export function useCategoryTaxonomy(taxonomy: CategoryTaxonomy) {
   useEffect(() => { void refetch(); }, [refetch]);
   const categories = state.storeId === storeId ? state.categories : [];
   async function change(action: 'add' | 'rename' | 'remove', name: string, next?: string) {
+    assertCanWrite();
     if (!storeId) throw new UserFacingError('매장을 선택해 주세요.');
     if (action === 'add') await taxonomy.addCategory(storeId, name);
     else if (action === 'rename') await taxonomy.renameCategory(storeId, name, next!, categories);

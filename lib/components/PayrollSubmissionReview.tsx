@@ -1,3 +1,5 @@
+import { useAuth } from '../contexts/AuthContext';
+import { useScopedWriteGuard } from '../hooks/useScopedWriteGuard';
 import { getErrorMessage } from '../utils/error';
 import { useEffect, useRef, useState } from 'react';
 import { Alert, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -13,6 +15,18 @@ export function PayrollSubmissionReview({ yearMonth, active, employees, payrolls
   yearMonth: string; active: boolean; employees: Employee[]; payrolls: Payroll[];
   onApply: (employee: Employee, submission: PayrollWorkSubmission) => Promise<void>;
 }) {
+  const { user, access, canManageStore } = useAuth();
+  const canWrite = useScopedWriteGuard([yearMonth, active]);
+  const canReview = (employee: Employee | undefined) => {
+    const current = employees.find(e => e.id === employee?.id);
+    return !!current && canManageStore && (access.is_owner ||
+      (current.id !== access.employee_id && current.user_id !== user?.id));
+  };
+  const allowed = useRef(canReview); allowed.current = canReview;
+  const apply = (employee: Employee, row: PayrollWorkSubmission) => {
+    if (!canWrite() || !allowed.current(employee)) return Promise.resolve();
+    return onApply(employee, row);
+  };
   const { rows, loading, error, refetch } = usePayrollSubmissions(yearMonth);
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState<string | null>(null);
@@ -22,7 +36,7 @@ export function PayrollSubmissionReview({ yearMonth, active, employees, payrolls
   const latest = new Map<string, PayrollWorkSubmission>();
   for (const row of rows) if (!latest.has(row.employee_id)) latest.set(row.employee_id, row);
   async function review(row: PayrollWorkSubmission, status: 'approved' | 'rejected') {
-    if (saving) return;
+    if (!canWrite() || !allowed.current(employees.find(e => e.id === row.employee_id)) || saving) return;
     setSaving(row.id);
     try {
       const saved = await reviewWorkMinutes(row.id, status, notes[row.id] ?? '');
@@ -31,7 +45,7 @@ export function PayrollSubmissionReview({ yearMonth, active, employees, payrolls
         const employee = employees.find(employee => employee.id === saved.employee_id);
         Alert.alert('제출 확인 완료', '제출 확인은 저장됐어요. 시급·공제를 검토한 뒤 급여에 반영해 주세요.', [
           { text: '나중에', style: 'cancel' },
-          ...(employee ? [{ text: '급여 검토', onPress: () => { void onApply(employee, saved).catch(() => Alert.alert('제출 확인 완료', '급여 검토를 열지 못했어요. 제출 내역에서 다시 열어 주세요.')); } }] : []),
+          ...(employee ? [{ text: '급여 검토', onPress: () => { void apply(employee, saved).catch(() => Alert.alert('제출 확인 완료', '급여 검토를 열지 못했어요. 제출 내역에서 다시 열어 주세요.')); } }] : []),
         ]);
       }
     } catch (e) { Alert.alert('확인 실패', getErrorMessage(e, '다시 시도해 주세요.')); }
@@ -53,7 +67,7 @@ export function PayrollSubmissionReview({ yearMonth, active, employees, payrolls
         {row.status === 'pending' && payroll && payroll.work_submission_id !== row.id && <Text style={styles.hint}>새 제출을 검토하기 전까지 기존 급여 금액은 유지돼요. 정산 확정 여부를 다시 확인해 주세요.</Text>}
         {applied && !payroll?.is_settled && <Text style={styles.hint}>급여 명세와 공제를 확인한 뒤 ‘정산’을 눌러 확정해 주세요.</Text>}
         {row.review_note && <Text style={styles.hint}>관리자 메모: {row.review_note}</Text>}
-        {row.status === 'pending' && <>
+        {row.status === 'pending' && canReview(employee) && <>
           <TextInput style={styles.input} placeholder="확인 메모 / 반려 사유" placeholderTextColor={Colors.gray400}
             value={notes[row.id] ?? ''} onChangeText={value => setNotes(previous => ({ ...previous, [row.id]: value }))} maxLength={1000} multiline editable={saving === null} />
           <View style={styles.buttons}>
@@ -61,7 +75,7 @@ export function PayrollSubmissionReview({ yearMonth, active, employees, payrolls
             <Button label="반려" variant="secondary" onPress={() => void review(row, 'rejected')} disabled={saving !== null} />
           </View>
         </>}
-        {row.status === 'approved' && !applied && employee && <Button label="시급·공제 검토 후 급여 반영" onPress={() => void onApply(employee, row)} disabled={saving !== null} />}
+        {row.status === 'approved' && !applied && employee && canReview(employee) && <Button label="시급·공제 검토 후 급여 반영" onPress={() => void apply(employee, row)} disabled={saving !== null} />}
       </View>;
     })}
   </View>;

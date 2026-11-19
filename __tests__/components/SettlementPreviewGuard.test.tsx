@@ -1,0 +1,21 @@
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { Alert } from 'react-native';
+import Settlement from '../../app/payroll/settlement';
+const mockStore = { id: 's' };
+let mockMode = 'self';
+const mockSettle = jest.fn(), mockRefetch = jest.fn();
+jest.mock('expo-router', () => ({ router: { back: jest.fn() }, useLocalSearchParams: () => ({ yearMonth: '2026-11' }) }));
+jest.mock('../../lib/contexts/AuthContext', () => ({ useAuth: () => ({ store: mockStore, devPreviewMode: mockMode }) }));
+jest.mock('../../lib/hooks/useEmployees', () => ({ useEmployees: () => ({ employees: [{ id: 'e', name: '가상 직원', employment_type: 'regular', base_salary: 100 }], loading: false, refetch: mockRefetch }) }));
+jest.mock('../../lib/services/payroll', () => ({ getPayrollByMonth: async () => [{ id: 'p', employee_id: 'e', gross: 100, net_pay: 100, is_settled: false }], getPayrollSettlementGaps: () => ({ missingPayroll: [], missingPartTimeMinutes: [] }), settlePayrolls: (...a: unknown[]) => mockSettle(...a) }));
+beforeEach(() => { jest.clearAllMocks(); mockMode = 'self'; jest.spyOn(Alert, 'alert').mockImplementation(() => {}); });
+afterEach(() => jest.restoreAllMocks());
+it('확인창을 연 뒤 미리보기로 바꾸면 실제 정산을 확정하지 않는다', async () => {
+ const view=render(<Settlement/>);
+ await waitFor(()=>expect(screen.getByLabelText('전체 정산 확정하기')).toBeTruthy());
+ fireEvent.press(screen.getByLabelText('전체 정산 확정하기'));
+ const buttons=(Alert.alert as jest.Mock).mock.calls.at(-1)[2];
+ mockMode='regular';view.rerender(<Settlement/>);
+ await act(async()=>{await buttons.find((b:any)=>b.text==='확정').onPress();});
+ expect(mockSettle).not.toHaveBeenCalled();
+});

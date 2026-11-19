@@ -1,3 +1,4 @@
+import { usePreviewWriteGuard } from './usePreviewWriteGuard';
 import { getErrorMessage } from '../utils/error';
 import { useState, useCallback, useRef, useMemo } from 'react';
 import { useInfiniteQuery, type InfiniteData } from '@tanstack/react-query';
@@ -33,6 +34,7 @@ interface UseIngredientsResult {
 
 export function useIngredients(): UseIngredientsResult {
   const { store } = useAuth();
+  const { assertCanWrite } = usePreviewWriteGuard();
   const scope = useQueryScope();
   const storeId = store?.id;
   const identity = `${scope}:${storeId ?? ''}`;
@@ -76,24 +78,28 @@ export function useIngredients(): UseIngredientsResult {
   };
 
   async function create(ingredientData: Omit<Ingredient, 'id' | 'updated_at' | 'created_at'>): Promise<Ingredient> {
+    assertCanWrite();
     const result = await createIngredient(ingredientData);
     if (active.current === identity) setMutationError(null);
     return result;
   }
 
   async function update(id: string, ingredientData: Partial<Pick<Ingredient, 'name' | 'category' | 'current_stock' | 'unit' | 'min_stock' | 'last_price'>>) {
+    assertCanWrite();
     const saved = await updateIngredient(id, ingredientData);
     if (active.current === identity) setMutationError(null);
     return saved;
   }
 
   async function remove(id: string) {
+    assertCanWrite();
     const cancelling = queryClient.cancelQueries({ queryKey: key });
     const previous = queryClient.getQueryData<InfiniteData<Ingredient[], number>>(key);
     const optimistic = previous ? { ...previous, pages: previous.pages.map(page => page.filter(item => item.id !== id)) } : undefined;
     const optimisticVersion = queryClient.setQueryData(key, optimistic);
     try {
       await cancelling;
+      assertCanWrite();
       await deleteIngredient(id);
       if (active.current === identity) setMutationError(null);
     } catch (e) {
@@ -104,12 +110,14 @@ export function useIngredients(): UseIngredientsResult {
   }
 
   async function bulkCreate(items: Omit<Ingredient, 'id' | 'updated_at' | 'created_at'>[]) {
+    assertCanWrite();
     const count = await bulkCreateIngredients(items);
     if (active.current === identity) setMutationError(null);
     return count;
   }
 
   async function bulkUpdateCategory(ids: string[], category: string) {
+    assertCanWrite();
     if (!storeId) return;
     await updateIngredientCategories(storeId, ids, category);
     if (active.current === identity) setMutationError(null);

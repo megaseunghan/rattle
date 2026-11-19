@@ -4,7 +4,7 @@
     "slug": "rattle",
     "privacyPolicyUrl": "https://megaseunghan.github.io/rattle/privacy-policy.html",
     "scheme": "rattle",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "orientation": "portrait",
     "icon": "./assets/Rattle_ios_1024.png",
     "userInterfaceStyle": "light",
@@ -32,6 +32,7 @@
       "favicon": "./assets/Rattle_192x192.png"
     },
     "plugins": [
+      "./plugins/withExpoCameraBarcodeScanning",
       "expo-router",
       "expo-font",
       [
@@ -43,7 +44,15 @@
       "@react-native-community/datetimepicker",
       "expo-web-browser",
       "expo-secure-store",
-      "expo-apple-authentication"
+      "expo-apple-authentication",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "매장폰으로 직원의 출퇴근 QR을 읽으려면 카메라 권한이 필요해요.",
+          "microphonePermission": false,
+          "recordAudioAndroid": false
+        }
+      ]
     ],
     "extra": {
       "router": {},

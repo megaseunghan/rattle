@@ -1,5 +1,7 @@
+import { Alert } from 'react-native';
+let mockMode='self';
 import 'react-native-gesture-handler/jestSetup';
-import { act, render } from '@testing-library/react-native';
+import { act, fireEvent, render } from '@testing-library/react-native';
 import * as Reanimated from 'react-native-reanimated';
 import { MoreDrawer } from '../../lib/components/MoreDrawer';
 import { State } from 'react-native-gesture-handler';
@@ -8,7 +10,7 @@ import { fireGestureHandler, getByGestureTestId } from 'react-native-gesture-han
 Object.assign(Reanimated, { useEvent: () => undefined });
 jest.mock('expo-router', () => ({ router: { push: jest.fn() } }));
 jest.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 0, bottom: 0 }) }));
-jest.mock('../../lib/contexts/AuthContext', () => ({ useAuth: () => ({ stores: [], store: null, currentRole: 'member', user: null }) }));
+jest.mock('../../lib/contexts/AuthContext', () => ({ useAuth: () => ({ stores: [], store: null, currentRole: 'member', devPreviewMode:mockMode, user:{id:'u',app_metadata:{provider:'email'}} }) }));
 jest.mock('../../lib/services/account', () => ({ deleteAccount: jest.fn() }));
 jest.mock('../../lib/services/socialAuth', () => ({ isAuthCancelled: jest.fn() }));
 it('닫힘 뒤 늦게 도착한 콜백은 다시 열린 서랍을 숨기지 않는다', () => {
@@ -62,4 +64,26 @@ it('시스템이 드래그를 취소하면 서랍을 열린 상태로 남기지 
   ]));
   expect(onOpen).not.toHaveBeenCalled();
   expect(view.queryByText('더보기')).toBeNull();
+});
+
+it('직원 메뉴의 소제목과 펼침을 유지하고 관리자 설정은 숨긴다', () => {
+  const { fireEvent } = require('@testing-library/react-native');
+  const view = render(<MoreDrawer visible onClose={jest.fn()} />);
+  expect(view.getByText('매장 관리')).toBeTruthy();
+  expect(view.queryByText('매장 정보')).toBeNull();
+  expect(view.queryByText('손익 공유')).toBeNull();
+  fireEvent.press(view.getByText('설정'));
+  expect(view.queryByText('청소 체크리스트')).toBeNull();
+  fireEvent.press(view.getByText('설정'));
+  fireEvent.press(view.getByText('청소 체크리스트'));
+  expect(require('expo-router').router.push).toHaveBeenCalledWith('/cleaning');
+});
+
+it('미리보기에서 계정 변경·매장 추가 진입과 탈퇴를 숨기고 기존 탈퇴 확인창도 차단한다',async()=>{
+ jest.spyOn(Alert,'alert').mockImplementation(()=>{});mockMode='self';const view=render(<MoreDrawer visible onClose={jest.fn()}/>);
+ fireEvent.press(view.getByText('회원 탈퇴'));const buttons=(Alert.alert as jest.Mock).mock.calls.at(-1)[2];
+ mockMode='regular';view.rerender(<MoreDrawer visible onClose={jest.fn()}/>);
+ expect(view.queryByText('회원 탈퇴')).toBeNull();expect(view.queryByText('매장 추가·참여')).toBeNull();expect(view.queryByText('비밀번호 변경')).toBeNull();
+ await act(async()=>{await buttons.find((b:any)=>b.text==='탈퇴하기').onPress();});
+ expect(require('../../lib/services/account').deleteAccount).not.toHaveBeenCalled();mockMode='self';jest.restoreAllMocks();
 });

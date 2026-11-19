@@ -1,0 +1,22 @@
+import { render } from '@testing-library/react-native';
+import MyAttendanceQrScreen from '../../app/attendance/my-qr';
+const mockRefetch = jest.fn().mockResolvedValue(undefined), mockRefresh = jest.fn();
+const mockQr = { state: 'rate_limited', qr: '', expiresAt: 0, retryAt: 45000, retrySeconds: 32, refresh: mockRefresh, register: jest.fn() };
+jest.mock('expo-router', () => ({ router: { back: jest.fn(), push: jest.fn() }, useFocusEffect: (callback: () => void) => require('react').useEffect(callback, [callback]) }));
+jest.mock('../../lib/contexts/AuthContext', () => ({ useAuth: () => ({ store: { name: '가상 매장' }, user: { id: 'person' }, devPreviewMode: 'self' }) }));
+jest.mock('../../lib/hooks/useEmployees', () => ({ useEmployees: () => ({ employees: [], refetch: mockRefetch }) }));
+jest.mock('../../lib/utils/resolveSelfEmployee', () => ({ resolveSelfEmployee: () => ({ id: 'employee', employment_type: 'regular' }) }));
+jest.mock('../../lib/hooks/useAttendanceToday', () => ({ useAttendanceToday: () => ({ scope: 'scope', loading: false, error: '', refetch: mockRefetch }) }));
+jest.mock('../../lib/hooks/useAttendanceQr', () => ({ useAttendanceQr: () => mockQr }));
+jest.mock('../../lib/components/AttendanceRecordCard', () => ({ AttendanceRecordCard: () => null }));
+jest.mock('../../lib/components/AttendanceQrCode', () => ({ AttendanceQrCode: () => null }));
+jest.mock('../../lib/components/GlassBackdrop', () => ({ GlassBackdrop: () => null }));
+jest.mock('../../lib/components/ui', () => ({ AppBar: () => null }));
+jest.mock('../../lib/icons/AppIcon', () => ({ AppIcon: () => null }));
+jest.mock('react-native-safe-area-context', () => ({ SafeAreaView: require('react-native').View }));
+it('제한은 연결 오류 대신 대기 안내와 자동 재시도까지 남은 시간을 보여준다', () => {
+  const view = render(<MyAttendanceQrScreen />);
+  expect(view.getByText('잠시 후 다시 시도해주세요')).toBeTruthy();
+  expect(view.getByText('32초 후 QR을 다시 불러올게요')).toBeTruthy();
+  expect(view.queryByText(/인터넷 연결/)).toBeNull(); expect(mockRefresh).not.toHaveBeenCalled();
+});

@@ -110,7 +110,7 @@ function TabIcon({ tab, focused, badge }: { tab: TabName; focused: boolean; badg
 }
 
 export default function TabsLayout() {
-  const { user, store, stores, switchStore, currentRole, realRole, devPreviewMode, devPreviewEmployeeId, canReadFinancials } = useAuth();
+  const { user, store, stores, switchStore, currentRole, realRole, canViewOwnerDashboard, storeRole, devPreviewMode, devPreviewEmployeeId, canReadFinancials } = useAuth();
   const { employees, refetch } = useEmployees();
   const { unreadCount } = useNotifications();
 
@@ -118,12 +118,12 @@ export default function TabsLayout() {
 
   // 파트타이머는 하단 탭을 홈·재고·설정으로 간소화 (관리자 테스트 미리보기도 반영)
   const myEmployee = resolveSelfEmployee(employees, user?.id, devPreviewEmployeeId);
-  const isPartTime = currentRole !== 'admin' && (devPreviewMode === 'part_time' || myEmployee?.employment_type === 'part_time');
+  const isPartTime = storeRole === 'part_timer';
 
   // 사장님 본인(미리보기 아님)일 때만 홈 탭이 통합 대시보드/매장 홈을 오갈 수 있음
   const insets = useSafeAreaInsets();
   const [tabBarHeight, setTabBarHeight] = useState(66 + Math.max(insets.bottom, 8));
-  const isOwnerAdminSelf = realRole === 'admin' && devPreviewMode === 'self';
+  const isOwnerAdminSelf = canViewOwnerDashboard && devPreviewMode === 'self';
   const [homeMode, setHomeModeState] = useState<HomeMode>(() => isQaLoginEnabled() && Constants.platform?.ios?.buildNumber === '900001' ? 'dashboard' : 'store');
   const effectiveHomeMode: HomeMode = isOwnerAdminSelf ? homeMode : 'store';
   const setHomeMode = useCallback((mode: HomeMode) => { requestedPage.current = null; setHomeModeState(mode); if (mode === 'dashboard') { setActiveIndex(0); pagerRef.current?.setPageWithoutAnimation(0); } }, []);
@@ -275,7 +275,9 @@ export default function TabsLayout() {
 
   return (
     <TabPagerContext.Provider value={pagerValue}>
-      <View style={styles.shell} testID="tab-shell" onLayout={event => setContainerHeight(event.nativeEvent.layout.height)}>
+      <View style={styles.shell} testID="tab-shell" onLayout={event => setContainerHeight(event.nativeEvent.layout.height)}
+        onTouchEnd={event => { if (event.nativeEvent.touches.length === 0) setPagerGestureActive('', false, true); }}
+        onTouchCancel={event => { if (event.nativeEvent.touches.length === 0) setPagerGestureActive('', false, true); }}>
         <GlassBackdrop />
         <View style={{ paddingTop: insets.top }}>
           <StoreAppBar name={effectiveHomeMode === 'dashboard' ? '전체 매장' : store?.name ?? '매장 선택'} unreadCount={unreadCount}

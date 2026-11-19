@@ -66,3 +66,15 @@ it('읽지 않은 개수에서도 개인 삭제 알림을 제외한다', async (
  responses.push({ data: [{ ...notice, notification_dismissals: [{ notification_id: 'n1' }] }, { ...notice, id: 'n2', notification_dismissals: [] }], error: null });
  expect(await getUnreadCount('s')).toBe(1);
 });
+
+it('서버 권한으로 허용된 근태 알림을 조회에서 일괄 제외하지 않는다', async () => {
+ const reminder={ ...notice, category: 'attendance', type: 'attendance_missing_checkout' };
+ responses.push({ data: [reminder], error: null });
+ expect(await getNotifications('s')).toEqual([reminder]);
+ expect(chains[0].neq).not.toHaveBeenCalledWith('category', 'attendance');
+});
+
+it('새 미처리 두 종류 외의 이전 근태 알림은 계속 숨긴다', async () => {
+ responses.push({ data: [{ ...notice, category: 'attendance', type: 'late' }], error: null });
+ expect(await getNotifications('s')).toEqual([]);
+});

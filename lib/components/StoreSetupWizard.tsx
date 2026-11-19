@@ -1,3 +1,4 @@
+import { useScopedWriteGuard } from '../hooks/useScopedWriteGuard';
 /* Hallmark · genre: modern-minimal · macrostructure: Workbench · design-system: DESIGN.md · designed-as-app */
 import { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, KeyboardAvoidingView, Platform, ScrollView, Keyboard } from 'react-native';
@@ -20,6 +21,7 @@ export function StoreSetupWizard({ userId, onCreated, onCancel, knownRequestIds 
   userId: string; onCreated: (id: string, choice: PosSetupChoice) => Promise<void>; onCancel: () => void;
 }) {
   const key = `store-setup:v1:${userId}`;
+  const canWrite = useScopedWriteGuard([userId]);
   const [draft, setDraft] = useState<Draft>(emptyDraft);
   const [ready, setReady] = useState(false);
   const [step, setStep] = useState(0);
@@ -65,12 +67,13 @@ export function StoreSetupWizard({ userId, onCreated, onCancel, knownRequestIds 
     finally { saving.current = false; setBusy(false); }
   }
   async function finish() {
-    if (saving.current || !draft.pos || !draft.scope || !draft.name.trim()) return;
+    if (!canWrite() || saving.current || !draft.pos || !draft.scope || !draft.name.trim()) return;
     saving.current = true; setBusy(true); setError(null);
     try {
       const submitted = { ...draft, submitted: true };
       await AsyncStorage.setItem(key, JSON.stringify(submitted));
       setDraft(submitted);
+      if (!canWrite()) return;
       const store = await createStoreWithSetup({ name: draft.name, posChoice: draft.pos, shareScope: draft.scope, requestId: draft.requestId });
       await onCreated(store.id, store.pos_setup_choice ?? draft.pos);
       await AsyncStorage.removeItem(key).catch(() => {});

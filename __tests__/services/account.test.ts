@@ -10,7 +10,7 @@ beforeEach(() => {
 });
 it('소유 매장이 남아 있으면 삭제 또는 소유권 이전을 안내한다', async () => {
   (supabase.functions.invoke as jest.Mock).mockResolvedValue({ error: { context: Response.json({ code: 'ACCOUNT_OWNS_STORES' }, { status: 409 }) } });
-  await expect(deleteAccount()).rejects.toThrow('매장 정보에서 빈 매장을 삭제하거나, 멤버 관리에서 소유권을 이전');
+  await expect(deleteAccount()).rejects.toThrow('삭제한 매장은 7일 뒤 완전히 삭제된 다음 탈퇴할 수 있어요');
 });
 it('서버 원문은 화면에 전달하지 않는다', async () => {
   (supabase.functions.invoke as jest.Mock).mockResolvedValue({ error: { context: Response.json({ error: 'private database detail' }, { status: 500 }) } });

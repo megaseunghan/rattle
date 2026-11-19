@@ -13,9 +13,11 @@ it('같은 범위 구독은 타이머 하나를 공유하고 마지막 구독 �
   expect(subscribeActive).toHaveBeenCalledTimes(1);
   expect(pollA).toHaveBeenCalledTimes(1);
   expect(pollB).not.toHaveBeenCalled();
+  jest.advanceTimersByTime(30_000);
+  expect(pollA).toHaveBeenCalledTimes(1);
   active = false; jest.advanceTimersByTime(30_000);
   expect(pollA).toHaveBeenCalledTimes(1);
-  stopA(); active = true; jest.advanceTimersByTime(30_000);
+  stopA(); active = true; jest.advanceTimersByTime(60_000);
   expect(pollB).toHaveBeenCalledTimes(1);
   stopB();
   expect(jest.getTimerCount()).toBe(0);

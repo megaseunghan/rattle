@@ -3,22 +3,25 @@ import { fireEvent, render, waitFor, within } from '@testing-library/react-nativ
 import NewPurchaseScreen from '../../app/purchases/new';
 import { PurchaseWriteError } from '../../lib/services/purchases';
 const mockWrite = jest.fn();
+const mockQuickCreate = jest.fn();
+let mockMode='self';
 const mockIngredient = { id: 'rice', name: '쌀', category: '식자재', unit: 'kg', last_price: 0 };
 const mockIngredients = [mockIngredient];
 jest.mock('expo-router', () => ({ router: { back: jest.fn(), push: jest.fn() }, useLocalSearchParams: () => ({ date: '2026-10-01' }) }));
 jest.mock('@react-native-community/datetimepicker', () => 'DateTimePicker');
-jest.mock('../../lib/contexts/AuthContext', () => ({ useAuth: () => ({ store: { id: 'store', name: '검증 매장' }, currentRole: 'admin' }) }));
+jest.mock('../../lib/contexts/AuthContext', () => ({ useAuth: () => ({ store: { id: 'store', name: '검증 매장' }, currentRole: 'admin', canManageStore: true, devPreviewMode: mockMode }) }));
 jest.mock('../../lib/hooks/usePurchases', () => ({ usePurchases: () => ({ purchases: [], addWithItems: mockWrite, refetch: jest.fn() }) }));
 jest.mock('../../lib/hooks/useIngredients', () => ({ useIngredients: () => ({ data: mockIngredients, create: jest.fn(), refetch: jest.fn(), loading: false }) }));
 jest.mock('../../lib/hooks/usePurchaseTypes', () => ({ usePurchaseTypes: () => ({ types: ['수기'], loading: false }) }));
 jest.mock('../../lib/hooks/useCategories', () => ({ useCategories: () => ({ categories: ['식자재'] }) }));
+jest.mock('../../lib/services/ingredients',()=>({createIngredient:(...a:unknown[])=>mockQuickCreate(...a)}));
 jest.mock('../../lib/hooks/useConfirmLeave', () => ({ useConfirmLeave: () => jest.fn() }));
 jest.mock('../../lib/components/CategoryManageModal', () => ({ CategoryManageModal: () => null }));
 jest.mock('../../lib/services/purchases', () => ({ PurchaseWriteError: class extends Error {
   outcome: 'rejected' | 'unknown';
   constructor(outcome: 'rejected' | 'unknown', original: unknown) { super(String(original)); this.outcome = outcome; }
 } }));
-beforeEach(() => mockWrite.mockReset());
+beforeEach(() => { mockMode='self';mockWrite.mockReset();mockQuickCreate.mockReset(); });
 it('기본정보·품목·검토를 나누고 단계 뒤로가도 값을 보존하며 최종 확인에서만 저장한다', async () => {
   mockWrite.mockResolvedValue({ refreshFailed: false });
   const screen = render(<NewPurchaseScreen />);
@@ -105,4 +108,12 @@ it('같은 품목 data에서 선택·선택 취소와 추가 후 비활성을 �
   fireEvent.press(screen.getByText('+ 추가'));
   fireEvent.press(within(screen.UNSAFE_getByType(FlatList)).getByText('쌀'));
   expect(screen.queryByText('1개 추가')).toBeNull();
+});
+
+it('미리보기에서 재고에 없는 품목을 빠르게 등록해도 실제 식자재를 만들지 않는다', async () => {
+ mockMode='regular';const view=render(<NewPurchaseScreen/>);
+ fireEvent.changeText(view.getByLabelText('거래처명'),'가상 거래처');fireEvent.press(view.getByText('품목 입력으로'));
+ fireEvent.press(view.getByText('+ 추가'));fireEvent.press(view.getByText('+ 재고에 없는 품목 바로 추가'));
+ fireEvent.changeText(view.getByPlaceholderText('예: 삼겹살'),'가상 품목');fireEvent.press(view.getByText('추가'));
+ await waitFor(()=>expect(mockQuickCreate).not.toHaveBeenCalled());
 });

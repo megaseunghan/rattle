@@ -65,3 +65,10 @@ export async function markHomeAlertRead(storeId: string, userId: string, key: st
     { onConflict: 'store_id,user_id,alert_key', ignoreDuplicates: true });
   if (error) throw new Error(error.message);
 }
+
+/** 마지막 숨김 실행취소. 다른 사용자·매장의 확인 기록에는 접근하지 않는다. */
+export async function restoreHomeAlert(storeId: string, userId: string, key: string): Promise<void> {
+  const { error } = await supabase.from('home_alert_reads').delete()
+    .eq('store_id', storeId).eq('user_id', userId).eq('alert_key', key);
+  if (error) throw new Error(error.message);
+}

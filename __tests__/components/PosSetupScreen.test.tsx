@@ -7,7 +7,7 @@ jest.mock('expo-router', () => {
   const React = require('react');
   return { router: { replace: (...args: unknown[]) => mockReplace(...args), back: jest.fn(), push: jest.fn() }, useLocalSearchParams: () => ({ setup: '1' }), useFocusEffect: (callback: () => void) => React.useEffect(callback, [callback]) };
 });
-jest.mock('../../lib/contexts/AuthContext', () => ({ useAuth: () => ({ store: mockStore, currentRole: 'admin' }) }));
+jest.mock('../../lib/contexts/AuthContext', () => ({ useAuth: () => ({ store: mockStore, currentRole: 'admin', canManageStore: true, devPreviewMode: 'self' }) }));
 jest.mock('../../lib/services/stores', () => ({ getStoreDetails: jest.fn() }));
 beforeEach(() => { jest.clearAllMocks(); mockStore = { id: 'a', name: 'A매장' }; });
 it('연결을 조회하는 동안 완료로 표시하지 않고 나중에 시작할 수 있다', () => {

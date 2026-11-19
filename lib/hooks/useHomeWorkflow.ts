@@ -10,7 +10,6 @@ export function useHomeWorkflow(active = true) {
   const scope = useQueryScope();
   const query = useQuery({ queryKey: queryKeys.store(scope, store?.id ?? '', 'home-workflow'),
     queryFn: () => getHomeWorkflow(store!.id), enabled: active && !!store, staleTime: 15_000,
-    refetchInterval: active ? 30_000 : false,
   }, queryClient);
   useFocusEffect(useCallback(() => { if (active && store) void query.refetch(); }, [active, store?.id, query.refetch]));
   return query;

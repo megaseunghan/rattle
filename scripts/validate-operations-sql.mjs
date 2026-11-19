@@ -39,7 +39,7 @@ try {
   await db.exec(await readFile(new URL('../supabase/migrations/20260602_employees_payroll.sql', import.meta.url), 'utf8'));
   await db.exec(await readFile(new URL('../supabase/migrations/20260914_payroll_settlement.sql', import.meta.url), 'utf8'));
   await db.exec('GRANT SELECT, INSERT, UPDATE, DELETE ON payroll TO authenticated');
-  for (const file of ['20261016_manual_work_minutes.sql', '20261018_part_time_minutes_settlement.sql', '20261019_home_alert_reads.sql', '20261019_purchase_types.sql', '20261019_payroll_submissions.sql', '20261019_member_employee_auto_link.sql']) {
+  for (const file of ['20261016_manual_work_minutes.sql', '20261018_part_time_minutes_settlement.sql', '20261019_home_alert_reads.sql', '20261103180000_home_alert_undo.sql', '20261019_purchase_types.sql', '20261019_payroll_submissions.sql', '20261019_member_employee_auto_link.sql']) {
     await db.exec(await readFile(new URL(`../supabase/migrations/${file}`, import.meta.url), 'utf8'));
   }
   await db.query('INSERT INTO auth.users(id) SELECT unnest($1::uuid[])', [[ids.admin, ids.a, ids.b]]);
@@ -50,6 +50,23 @@ try {
   check('읽음 상태는 본인만 조회', (await as(ids.a, 'SELECT * FROM home_alert_reads')).rows.length, 1);
   check('다른 사용자에게 읽음 전파 안 함', (await as(ids.b, 'SELECT * FROM home_alert_reads')).rows.length, 0);
   await rejected('타인 읽음 위조 차단', ids.b, 'INSERT INTO home_alert_reads(store_id,user_id,alert_key) VALUES($1,$2,$3)', [ids.store, ids.a, 'stock:fixture:2']);
+  const undoSql = 'DELETE FROM home_alert_reads WHERE store_id=$1 AND user_id=$2 AND alert_key=$3 RETURNING alert_key';
+  const undoArgs = [ids.store, ids.a, 'stock:fixture:1'];
+  check('다른 사용자 숨김 실행취소 차단', (await as(ids.b, undoSql, undoArgs)).rows.length, 0);
+  const undoForeignStore = '00000000-0000-0000-0000-000000000099';
+  await db.query('INSERT INTO stores(id,owner_id) VALUES($1,$2)', [undoForeignStore, ids.b]);
+  await db.query("INSERT INTO home_alert_reads(store_id,user_id,alert_key) VALUES($1,$2,'stock:foreign')", [undoForeignStore, ids.a]);
+  check('본인 기록이라도 타매장 실행취소 차단', (await as(ids.a, undoSql, [undoForeignStore, ids.a, 'stock:foreign'])).rows.length, 0);
+  await db.query("UPDATE store_members SET status='pending' WHERE store_id=$1 AND user_id=$2", [ids.store, ids.a]);
+  check('승인 해제 후 실행취소 차단', (await as(ids.a, undoSql, undoArgs)).rows.length, 0);
+  await db.query("SELECT set_config('request.jwt.claim.sub', $1, false)", [ids.admin]);
+  await db.query("UPDATE store_members SET status='approved' WHERE store_id=$1 AND user_id=$2", [ids.store, ids.a]);
+  await db.exec('SET ROLE anon');
+  try { await assert.rejects(() => db.query(undoSql, undoArgs)); checks++; }
+  finally { await db.exec('RESET ROLE'); }
+  check('본인 소속매장 마지막 숨김 실행취소', (await as(ids.a, undoSql, undoArgs)).rows.length, 1);
+  check('반복 실행취소는 멱등', (await as(ids.a, undoSql, undoArgs)).rows.length, 0);
+  check('다른 매장 숨김 기록 보존', (await db.query('SELECT * FROM home_alert_reads WHERE store_id=$1', [undoForeignStore])).rows.length, 1);
   await as(ids.admin, 'SELECT change_purchase_type($1,NULL,$2)', [ids.store, '직접입력']);
   await as(ids.admin, "INSERT INTO purchases(store_id,type) VALUES($1,'수기')", [ids.store]);
   await as(ids.admin, 'SELECT change_purchase_type($1,$2,$3)', [ids.store, '수기', '매장구매']);
@@ -287,5 +304,6 @@ try {
   check('실패 시 신청 대기 상태 유지',(await db.query('SELECT status FROM store_members WHERE id=$1',[rollbackMember])).rows[0].status,'pending');
   check('실패 시 검토 확정도 롤백',(await db.query('SELECT reviewed_revision FROM store_join_profiles WHERE member_id=$1',[rollbackMember])).rows[0].reviewed_revision,null);
   await db.exec('DROP TRIGGER fixture_fail_join_wage ON employee_wage_history');
+  await (await import('./validate-join-wage-required-sql.mjs')).validateJoinWageRequired({db,as,owner:onOwner,store:onStore});
   console.log(`PASS local PostgreSQL migrations and ${checks} workflow/security checks`);
 } catch (error) { console.error('FAIL local SQL:', error.message); process.exitCode = 1; } finally { await db.close(); }

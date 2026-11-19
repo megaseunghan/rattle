@@ -22,17 +22,16 @@ import { usePayroll } from '../../lib/hooks/usePayroll';
 import { Employee, EmploymentType } from '../../types';
 import { isInProbation, isInsuranceApplicable } from '../../lib/services/employees';
 import { PayrollSubmissionReview } from '../../lib/components/PayrollSubmissionReview';
+import { AttendanceWorkIssuesNotice, attendanceWorkFailureReason } from '../../lib/components/AttendanceWorkIssuesNotice';
+import { useAttendanceWorkFailures } from '../../lib/hooks/useAttendanceWorkFailures';
 import { PayrollWorkSubmission } from '../../types';
 import { WorkMinutesForm } from '../../lib/components/WorkMinutesForm';
 import { ErrorMessage } from '../../lib/components/ErrorMessage';
 import { formatWorkedMinutes } from '../../lib/utils/workMinutes';
 import { getPayrollSettlementGaps, PayrollDeductions, probationFactor } from '../../lib/services/payroll';
-import {
-  getStoreWageHistory,
-} from '../../lib/services/wageHistory';
+import { useStoreWageHistory } from '../../lib/hooks/useStoreWageHistory';
 import { isWageDate } from '../../lib/utils/wageCondition';
 import { accruedRegularPayroll, regularEmployeesForAccrual } from '../../lib/utils/regularWages';
-import { WageHistory } from '../../types';
 import { animateListChange } from '../../lib/utils/layoutAnimation';
 import { Badge, EmptyState, Field } from '../../lib/components/ui';
 
@@ -368,9 +367,11 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
     remove: removePayroll,
   } = usePayroll(yearMonth);
 
-  const { store, currentRole, user } = useAuth();
-  const isAdmin = currentRole === 'admin';
-  const workScope = `${user?.id}:${currentRole}:${store?.id}:${yearMonth}`;
+  const { store, canManageStore, access, permissionRevision, user } = useAuth();
+  const isAdmin = canManageStore;
+  const workFailures = useAttendanceWorkFailures(yearMonth, active);
+  const workScope = `${user?.id}:${canManageStore}:${store?.id}:${yearMonth}:${permissionRevision}`;
+  const canChangeAttendance = (employee: Employee) => isAdmin && (access.is_owner || (employee.user_id !== user?.id && employee.id !== access.employee_id));
   const deductionDraftCache = useRef(new Map<string, PayrollDeductionDraft>());
   const [dirtyDeductions, setDirtyDeductions] = useState<Record<string, boolean>>({});
   const onDeductionDirtyChange = useCallback((id: string, dirty: boolean) => {
@@ -390,29 +391,12 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
   const [workTarget, setWorkTarget] = useState<Employee | null>(null);
   const [workSubmission, setWorkSubmission] = useState<PayrollWorkSubmission | undefined>();
   useEffect(() => { setWorkTarget(null); setWorkSubmission(undefined); }, [workScope]);
-  const [histMap, setHistMap] = useState<Record<string, WageHistory[]>>({});
-  const [histLoading, setHistLoading] = useState(true);
-  const [histError, setHistError] = useState(false);
-  const historyRequest = useRef(0);
+  const { map: histMap, loading: histLoading, error: histError, refetch: refetchHist } = useStoreWageHistory(canManageStore ? store?.id : undefined, `${user?.id}:${permissionRevision}`);
 
   // 급여 이력 보기 모달
   const [histTarget, setHistTarget] = useState<Employee | null>(null);
-  useEffect(() => { setHistTarget(null); setModalVisible(false); }, [store?.id]);
+  useEffect(() => { setHistTarget(null); setModalVisible(false); }, [store?.id, permissionRevision]);
 
-  const refetchHist = useCallback(async () => {
-    const request = ++historyRequest.current;
-    if (!store) { setHistMap({}); setHistLoading(false); return; }
-    setHistLoading(true); setHistError(false); setHistMap({});
-    try {
-      const rows = await getStoreWageHistory(store.id);
-      if (request !== historyRequest.current) return;
-      const map: Record<string, WageHistory[]> = {};
-      for (const row of rows) (map[row.employee_id] ??= []).push(row);
-      setHistMap(map);
-    } catch { if (request === historyRequest.current) setHistError(true); }
-    finally { if (request === historyRequest.current) setHistLoading(false); }
-  }, [store?.id]);
-  useEffect(() => () => { historyRequest.current += 1; }, []);
 
   useFocusEffect(useCallback(() => {
     if (!active) return;
@@ -424,7 +408,7 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
   const [refreshing, setRefreshing] = useState(false);
   async function onRefresh() {
     setRefreshing(true);
-    try { await Promise.all([refetchEmp(), refetchPay(), refetchHist()]); }
+    try { await Promise.all([refetchEmp(), refetchPay(), refetchHist(), workFailures.refetch()]); }
     finally { setRefreshing(false); }
   }
 
@@ -482,6 +466,7 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
   }
 
   async function handleSave() {
+    if (!isAdmin || workScopeRef.current !== workScope) return;
     const name = form.name.trim();
     const isPart = form.employment_type === 'part_time';
     const wh = form.weekly_hours ? Number(form.weekly_hours) : null;
@@ -648,8 +633,18 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
           <Text style={styles.workWarningBody}>입사일이 없는 직원은 등록일부터 임시 계산돼요. 직원 정보에서 입사일을 입력해 주세요.</Text>
           {employees.filter(employee => !employee.joined_at).map(employee => <TouchableOpacity key={employee.id} onPress={() => openEdit(employee)} style={{ minHeight: 44, justifyContent: 'center' }} accessibilityRole="button"><Text style={{ color: Colors.action }}>{employee.name} · 입사일 입력</Text></TouchableOpacity>)}
         </View>}
+        {isAdmin && <AttendanceWorkIssuesNotice rows={workFailures.rows.map(row => ({
+          id: `${row.employee_id}:${row.work_date}`, employeeId: row.employee_id, employeeName: row.employee_name,
+          workDate: row.work_date, reason: attendanceWorkFailureReason(row.error_code),
+          retryPunchId: row.retry_punch_id, retryUnknown: !!row.retry_punch_id && workFailures.isRetryUnknown(row.retry_punch_id),
+        }))} loading={workFailures.loading} error={workFailures.error} onReload={() => { void workFailures.refetch(); }}
+          hasMore={workFailures.hasMore} onMore={() => { void workFailures.loadMore(); }}
+          limitReached={workFailures.limitReached} retryingId={workFailures.retryingId} retryMessage={workFailures.retryMessage}
+          onRetry={id => { void workFailures.retry(id); }}
+          onEmployee={id => { const employee = employees.find(row => row.id === id); if (employee) openEdit(employee); }} />}
         {isAdmin && <PayrollSubmissionReview key={`${store?.id}:${yearMonth}`} yearMonth={yearMonth} active={active}
           employees={employees} payrolls={monthPayrolls} onApply={async (employee, submission) => {
+            if (!canChangeAttendance(employee)) return;
             await refetchPay();
             if (workScopeRef.current !== workScope) return;
             setWorkSubmission(submission); setWorkTarget(employee);
@@ -681,10 +676,10 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
               accruedGross={accruedForEmployee(emp)}
               accrualLabel={`${month}월 ${elapsed}/${daysInMonth}일 · ${monthPayrolls.find(p => p.employee_id === emp.id) ? '일할 누적' : '급여 이력 기준'}`}
               onShowHistory={() => setHistTarget(emp)}
-              canCalculate={isAdmin && !payLoading && !payrollError}
+              canCalculate={canChangeAttendance(emp) && !payLoading && !payrollError}
               isCalculating={calculating === emp.id}
-              onCalculate={() => { if (!isAdmin) { Alert.alert('관리자 확인 필요', '급여 작성은 관리자에게 요청해주세요.'); return; } setWorkSubmission(undefined); emp.employment_type === 'part_time' ? setWorkTarget(emp) : calculate(emp).catch(e => Alert.alert('계산 실패', getErrorMessage(e))); }}
-              onWorkMinutes={isAdmin && !payLoading && !payrollError && emp.employment_type === 'part_time' ? () => { setWorkSubmission(undefined); setWorkTarget(emp); } : undefined}
+              onCalculate={() => { if (!canChangeAttendance(emp)) { Alert.alert('사장님 확인이 필요해요', '급여 작성은 관리자에게 요청해주세요.'); return; } setWorkSubmission(undefined); emp.employment_type === 'part_time' ? setWorkTarget(emp) : calculate(emp).catch(e => Alert.alert('계산 실패', getErrorMessage(e))); }}
+              onWorkMinutes={canChangeAttendance(emp) && !payLoading && !payrollError && emp.employment_type === 'part_time' ? () => { setWorkSubmission(undefined); setWorkTarget(emp); } : undefined}
               onSaveDeductions={deductions => {
                 const payroll = monthPayrolls.find(p => p.employee_id === emp.id);
                 if (!payroll) return Promise.resolve();
@@ -696,7 +691,7 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
               canEditDeductions={isAdmin && !payLoading && !payrollError}
               onWageCondition={isAdmin ? () => router.push({ pathname: '/payroll/wage-condition', params: { storeId: store!.id, employeeId: emp.id, targetMonth: yearMonth, returnScope: pager?.returnScope ?? 'store' } }) : undefined}
               onEdit={isAdmin ? () => openEdit(emp) : undefined}
-              onRemovePayroll={isAdmin ? () => {
+              onRemovePayroll={canChangeAttendance(emp) ? () => {
                 const p = payrolls.find(pr => pr.employee_id === emp.id);
                 if (!p) return;
                 Alert.alert('인건비 삭제', `${emp.name}의 ${yearMonth} 인건비를 삭제할까요?`, [
@@ -854,7 +849,7 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
               />
             </View>
 
-            {currentRole === 'admin' && (
+            {canManageStore && (
               <>
                 <Text style={styles.fieldLabel}>직원 계정</Text>
                 <Text style={styles.fieldHint}>
@@ -864,7 +859,7 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
               </>
             )}
 
-            {editTarget && isAdmin && (
+            {editTarget && canChangeAttendance(editTarget) && (
               <TouchableOpacity
                 style={styles.deleteBtn}
                 onPress={() => {

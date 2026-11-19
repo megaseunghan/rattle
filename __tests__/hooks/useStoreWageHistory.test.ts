@@ -1,0 +1,77 @@
+import { act, renderHook } from '@testing-library/react-native';
+import { useStoreWageHistory } from '../../lib/hooks/useStoreWageHistory';
+const mockGet = jest.fn();
+jest.mock('../../lib/services/wageHistory', () => ({ getStoreWageHistory: (...args: unknown[]) => mockGet(...args) }));
+const row = (id: string, employee_id: string) => ({ id, employee_id }) as never;
+beforeEach(() => { mockGet.mockReset(); });
+it('직원별로 이력을 묶고 첫 조회 동안에는 불러오는 중으로 표시한다', async () => {
+  let done!: (rows: unknown) => void;
+  mockGet.mockImplementation(() => new Promise(resolve => { done = resolve; }));
+  const { result } = renderHook(() => useStoreWageHistory('s1'));
+  act(() => { void result.current.refetch(); });
+  expect(result.current.loading).toBe(true);
+  await act(async () => { done([row('a', 'e1'), row('b', 'e1'), row('c', 'e2')]); });
+  expect(result.current.loading).toBe(false);
+  expect(Object.keys(result.current.map)).toEqual(['e1', 'e2']);
+  expect(result.current.map.e1).toHaveLength(2);
+});
+it('같은 매장 재조회 중에는 기존 이력을 비우지 않고 불러오는 중으로 바꾸지 않는다', async () => {
+  mockGet.mockResolvedValueOnce([row('a', 'e1')]);
+  const { result } = renderHook(() => useStoreWageHistory('s1'));
+  await act(async () => { await result.current.refetch(); });
+  let done!: (rows: unknown) => void;
+  mockGet.mockImplementation(() => new Promise(resolve => { done = resolve; }));
+  act(() => { void result.current.refetch(); });
+  expect(result.current.loading).toBe(false);
+  expect(result.current.map.e1).toHaveLength(1);
+  await act(async () => { done([row('a', 'e1'), row('b', 'e2')]); });
+  expect(Object.keys(result.current.map)).toEqual(['e1', 'e2']);
+});
+it('매장이 바뀌면 이전 매장 이력을 보이지 않고 새로 불러온다', async () => {
+  mockGet.mockResolvedValueOnce([row('a', 'e1')]);
+  const { result, rerender } = renderHook(({ id }: { id: string }) => useStoreWageHistory(id), { initialProps: { id: 's1' } });
+  await act(async () => { await result.current.refetch(); });
+  let done!: (rows: unknown) => void;
+  mockGet.mockImplementation(() => new Promise(resolve => { done = resolve; }));
+  rerender({ id: 's2' });
+  expect(result.current.map).toEqual({});
+  act(() => { void result.current.refetch(); });
+  expect(result.current.loading).toBe(true);
+  await act(async () => { done([row('z', 'e9')]); });
+  expect(Object.keys(result.current.map)).toEqual(['e9']);
+});
+it('재조회 실패는 오류로 알리고, 늦게 끝난 이전 요청은 결과를 덮지 않는다', async () => {
+  const resolvers: ((rows: unknown) => void)[] = [];
+  mockGet.mockImplementation(() => new Promise(resolve => { resolvers.push(resolve); }));
+  const { result } = renderHook(() => useStoreWageHistory('s1'));
+  act(() => { void result.current.refetch(); });
+  act(() => { void result.current.refetch(); });
+  await act(async () => { resolvers[1]([row('new', 'e2')]); });
+  await act(async () => { resolvers[0]([row('old', 'e1')]); });
+  expect(Object.keys(result.current.map)).toEqual(['e2']);
+  mockGet.mockRejectedValueOnce(new Error('offline'));
+  await act(async () => { await result.current.refetch(); });
+  expect(result.current.error).toBe(true);
+});
+it('같은 매장에서는 조회가 끝나도 refetch 함수가 바뀌지 않아 화면 재조회를 다시 일으키지 않는다', async () => {
+  mockGet.mockResolvedValue([row('a', 'e1')]);
+  const { result, rerender } = renderHook(({ id }: { id: string }) => useStoreWageHistory(id), { initialProps: { id: 's1' } });
+  const first = result.current.refetch;
+  await act(async () => { await result.current.refetch(); });
+  expect(result.current.refetch).toBe(first);
+  rerender({ id: 's2' });
+  expect(result.current.refetch).not.toBe(first);
+});
+it('같은 매장도 계정·권한 범위가 바뀌면 캐시를 숨기고 이전 응답을 버린다', async () => {
+  mockGet.mockResolvedValueOnce([row('saved', 'e1')]);
+  const { result, rerender } = renderHook(({ scope }: { scope: string }) => useStoreWageHistory('s1', scope), { initialProps: { scope: 'owner:1' } });
+  await act(async () => { await result.current.refetch(); });
+  let done!: (rows: unknown) => void;
+  mockGet.mockImplementationOnce(() => new Promise(resolve => { done = resolve; }));
+  let pending!: Promise<void>;
+  act(() => { pending = result.current.refetch(); });
+  rerender({ scope: 'employee:2' });
+  expect(result.current.map).toEqual({});
+  await act(async () => { done([row('stale', 'e1')]); await pending; });
+  expect(result.current.map).toEqual({});
+});

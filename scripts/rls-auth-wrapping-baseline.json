@@ -1,0 +1,23 @@
+{
+  "note": "20261118121000_rls_auth_initplan.sql이 적용 시점에 이 파일들의 정책을 보정했다. 새 파일을 여기에 추가하지 말고 정책에서 (select auth.uid())로 감싼다.",
+  "files": [
+    "20260403_toss_sales.sql",
+    "20260407_pos_catalog.sql",
+    "20260408_normalize_toss_orders.sql",
+    "20260414_store_members.sql",
+    "20260416_fix_store_members_rls.sql",
+    "20260416_fix_stores_select_recursion.sql",
+    "20260416_stores_select_for_members.sql",
+    "20260602_employees_payroll.sql",
+    "20260602_purchases_expenses.sql",
+    "20260605_attendance.sql",
+    "20260605_stores_update_policy.sql",
+    "20260605_stores_update_policy_v2.sql",
+    "20260608_employee_user_link.sql",
+    "20260902_fix_store_members_delete_rls.sql",
+    "20261019_home_alert_reads.sql",
+    "20261019_member_employee_auto_link.sql",
+    "20261019_payroll_submissions.sql",
+    "20261022_employee_join_onboarding.sql"
+  ]
+}

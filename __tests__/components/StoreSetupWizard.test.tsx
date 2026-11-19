@@ -1,12 +1,14 @@
+let mockMode='self';
+jest.mock('../../lib/contexts/AuthContext',()=>({useAuth:()=>({devPreviewMode:mockMode,user:{id:'owner'}})}));
 import React from 'react';
-import { render, fireEvent, waitFor } from '@testing-library/react-native';
+import { act, render, fireEvent, waitFor } from '@testing-library/react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StoreSetupWizard } from '../../lib/components/StoreSetupWizard';
 import { createStoreWithSetup } from '../../lib/services/stores';
 jest.mock('@react-native-async-storage/async-storage', () => ({ getItem: jest.fn(), setItem: jest.fn(), removeItem: jest.fn() }));
 jest.mock('expo-crypto', () => ({ randomUUID: () => 'same-request' }));
 jest.mock('../../lib/services/stores', () => ({ createStoreWithSetup: jest.fn() }));
-beforeEach(() => { jest.clearAllMocks(); (AsyncStorage.getItem as jest.Mock).mockResolvedValue(null); (AsyncStorage.setItem as jest.Mock).mockResolvedValue(undefined); (AsyncStorage.removeItem as jest.Mock).mockResolvedValue(undefined); });
+beforeEach(() => { mockMode='self';jest.clearAllMocks(); (AsyncStorage.getItem as jest.Mock).mockResolvedValue(null); (AsyncStorage.setItem as jest.Mock).mockResolvedValue(undefined); (AsyncStorage.removeItem as jest.Mock).mockResolvedValue(undefined); });
 it('사업자번호 없이 POS·공유 선택을 보존하고 재시도는 같은 요청 ID를 사용한다', async () => {
   const created = jest.fn().mockResolvedValue(undefined);
   const view = render(<StoreSetupWizard userId="owner" onCreated={created} onCancel={jest.fn()} />);
@@ -79,4 +81,11 @@ it('요약에서 이름을 비우면 안내하고 빈 이름의 최종 요약으
   await waitFor(() => expect(view.getByText('매장 이름을 입력해주세요.')).toBeTruthy());
   expect(view.queryByText('매장 시작하기')).toBeNull();
   expect(createStoreWithSetup).not.toHaveBeenCalled();
+});
+
+it.each(['regular','part_time'])('%s 미리보기에서 보존된 매장 생성 초안을 제출해도 생성하지 않는다',async mode=>{
+ mockMode=mode;(AsyncStorage.getItem as jest.Mock).mockResolvedValue(JSON.stringify({name:'가상 매장',pos:'later',scope:'none',requestId:'qa-preview',submitted:true}));
+ const view=render(<StoreSetupWizard userId="owner" onCreated={jest.fn()} onCancel={jest.fn()}/>);
+ await waitFor(()=>expect(view.getByText('매장 시작하기')).toBeTruthy());fireEvent.press(view.getByText('매장 시작하기'));
+ await act(async()=>{});expect(createStoreWithSetup).not.toHaveBeenCalled();
 });

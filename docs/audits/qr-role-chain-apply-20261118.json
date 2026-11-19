@@ -1,0 +1,1735 @@
+{
+ "captured_at": "2026-11-18",
+ "project": "galrnwpiaedtahoupbgo",
+ "purpose": "QR/역할 체인 8개 적용 전 원격 기준값",
+ "function_names_in_chain": [
+  "private.assert_store_visibility_access",
+  "private.audit_store_manager_change",
+  "private.can_read_shared_domain",
+  "private.clear_store_manager",
+  "private.guard_manager_self_attendance",
+  "private.guard_manager_self_payroll_source",
+  "private.revoke_store_manager_on_account_delete",
+  "private.revoke_store_manager_on_employee_change",
+  "private.revoke_store_manager_on_member_change",
+  "private.sync_store_manager_state",
+  "private.validate_shared_page",
+  "public.attendance_can_review_employee",
+  "public.attendance_insert_punch",
+  "public.attendance_open_clock_in",
+  "public.attendance_scanner_status",
+  "public.attendance_schedule_flags",
+  "public.attendance_shift_partner",
+  "public.attendance_validate_correction_order",
+  "public.attendance_work_date",
+  "public.can_manage_employee_attendance",
+  "public.can_manage_recipes",
+  "public.can_read_employee",
+  "public.can_read_other_attendance",
+  "public.can_read_other_payroll",
+  "public.can_read_store_financials",
+  "public.daily_work_month_snapshot",
+  "public.get_daily_labor_sources",
+  "public.get_my_store_access",
+  "public.get_my_store_visibility",
+  "public.get_shared_attendance",
+  "public.get_shared_attendance_requests",
+  "public.get_shared_employee_pay",
+  "public.get_shared_financial_summary",
+  "public.get_shared_payroll",
+  "public.guard_attendance_punch_immutable",
+  "public.guard_legacy_member_role",
+  "public.guard_store_owner_change",
+  "public.guard_store_visibility_owner",
+  "public.is_store_admin",
+  "public.is_store_manager",
+  "public.is_store_owner",
+  "public.issue_attendance_qr",
+  "public.punch_attendance",
+  "public.record_manual_attendance",
+  "public.register_attendance_device",
+  "public.register_attendance_scanner",
+  "public.request_attendance_correction",
+  "public.review_attendance_correction",
+  "public.review_daily_work",
+  "public.review_work_minutes",
+  "public.revoke_attendance_devices_on_resign",
+  "public.save_daily_work",
+  "public.set_store_financial_sharing",
+  "public.set_store_manager",
+  "public.set_store_visibility",
+  "public.submit_work_minutes",
+  "public.transfer_store_ownership"
+ ],
+ "functions": [
+  {
+   "name": "public.can_read_employee",
+   "args": "p_store_id uuid, p_employee_id uuid",
+   "def": "CREATE OR REPLACE FUNCTION public.can_read_employee(p_store_id uuid, p_employee_id uuid)\n RETURNS boolean\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\n  SELECT public.is_store_member(p_store_id) AND (\n    public.is_store_admin(p_store_id) OR EXISTS (\n      SELECT 1 FROM employees e WHERE e.id=p_employee_id AND e.store_id=p_store_id\n        AND e.user_id=auth.uid() AND e.is_active\n    )\n  );\n$function$\n",
+   "acl": "{postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}"
+  },
+  {
+   "name": "public.attendance_open_clock_in",
+   "args": "p_employee_id uuid",
+   "def": "CREATE OR REPLACE FUNCTION public.attendance_open_clock_in(p_employee_id uuid)\n RETURNS attendance_punches\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO 'extensions', 'public', 'pg_temp'\nAS $function$\n  SELECT p.* FROM public.attendance_effective_punches p\n  WHERE p.employee_id = p_employee_id\n  ORDER BY p.punched_at DESC, p.created_at DESC\n  LIMIT 1;\n$function$\n",
+   "acl": "{postgres=X/postgres,service_role=X/postgres}"
+  },
+  {
+   "name": "public.is_store_admin",
+   "args": "sid uuid",
+   "def": "CREATE OR REPLACE FUNCTION public.is_store_admin(sid uuid)\n RETURNS boolean\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\n  SELECT EXISTS (\n    SELECT 1 FROM stores WHERE id = sid AND owner_id = auth.uid() AND deleted_at IS NULL\n    UNION\n    SELECT 1 FROM store_members m JOIN stores s ON s.id = m.store_id AND s.deleted_at IS NULL\n      WHERE m.store_id = sid AND m.user_id = auth.uid()\n        AND m.role = 'admin' AND m.status = 'approved'\n  );\n$function$\n",
+   "acl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}"
+  },
+  {
+   "name": "public.can_manage_recipes",
+   "args": "sid uuid",
+   "def": "CREATE OR REPLACE FUNCTION public.can_manage_recipes(sid uuid)\n RETURNS boolean\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\n  SELECT is_store_member(sid) AND NOT is_store_part_timer(sid);\n$function$\n",
+   "acl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}"
+  },
+  {
+   "name": "public.punch_attendance",
+   "args": "p_scanner_token text, p_qr text",
+   "def": "CREATE OR REPLACE FUNCTION public.punch_attendance(p_scanner_token text, p_qr text)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'extensions', 'public', 'pg_temp'\nAS $function$\nDECLARE s public.attendance_scanners; parts text[]; dev_id uuid; n text; sig text;\n  rec record; dev public.attendance_devices; v_secret bytea; emp public.employees; existing public.attendance_punches;\n  saved public.attendance_punches; recent public.attendance_punches; extra text[] := '{}'; at_time timestamptz;\nBEGIN\n  SELECT * INTO s FROM public.attendance_scanners WHERE token_hash = digest(coalesce(p_scanner_token, ''), 'sha256');\n  IF NOT FOUND OR s.revoked_at IS NOT NULL THEN RAISE EXCEPTION 'ATTENDANCE_SCANNER_INVALID'; END IF;\n  IF NOT public.is_store_active(s.store_id) THEN RAISE EXCEPTION 'ATTENDANCE_SCANNER_INVALID'; END IF;\n\n  parts := regexp_match(coalesce(p_qr, ''),\n    '^rattle-punch:v1\\.([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\\.([0-9a-f]{24})\\.([0-9a-f]{32})$');\n  IF parts IS NULL THEN RAISE EXCEPTION 'ATTENDANCE_QR_INVALID'; END IF;\n  dev_id := parts[1]::uuid; n := parts[2]; sig := parts[3];\n\n  -- 서명 먼저 검증한다(서명 없이 nonce 존재·만료 여부를 구분할 수 없게).\n  SELECT * INTO rec FROM private.attendance_qr_nonces WHERE nonce = n AND device_id = dev_id FOR UPDATE;\n  IF NOT FOUND THEN RAISE EXCEPTION 'ATTENDANCE_QR_INVALID'; END IF;\n  SELECT d.secret INTO v_secret FROM private.attendance_device_secrets d WHERE d.device_id = dev_id;\n  IF v_secret IS NULL OR encode(substring(hmac(convert_to(dev_id::text || '.' || n, 'UTF8'), v_secret, 'sha256') FROM 1 FOR 16), 'hex') <> sig THEN\n    RAISE EXCEPTION 'ATTENDANCE_QR_INVALID';\n  END IF;\n\n  -- 같은 QR 재제출(응답 유실 재시도): 이 QR에 처음 돌려준 기록을 그대로 반환(새 기록·중복 처리 모두)\n  IF rec.punch_id IS NOT NULL THEN\n    SELECT * INTO existing FROM public.attendance_punches WHERE id = rec.punch_id;\n  ELSE\n    SELECT * INTO existing FROM public.attendance_punches WHERE qr_nonce = n;\n  END IF;\n  IF FOUND THEN\n    IF existing.store_id <> s.store_id THEN RAISE EXCEPTION 'ATTENDANCE_QR_INVALID'; END IF;\n    RETURN jsonb_build_object('punch_id', existing.id, 'kind', existing.kind, 'punched_at', existing.punched_at,\n      'flags', to_jsonb(existing.flags), 'duplicate', true,\n      'employee_name', (SELECT left(name, 1) || repeat('*', greatest(char_length(name) - 1, 0)) FROM public.employees WHERE id = existing.employee_id));\n  END IF;\n  -- 이미 처리한 QR인데 대상 기록이 없으면(삭제 등) 거절. 다른 기록으로 다시 연결하지 않는다.\n  IF rec.used_at IS NOT NULL THEN RAISE EXCEPTION 'ATTENDANCE_QR_INVALID'; END IF;\n  IF rec.expires_at < clock_timestamp() THEN RAISE EXCEPTION 'ATTENDANCE_QR_EXPIRED'; END IF;\n\n  SELECT * INTO dev FROM public.attendance_devices WHERE id = dev_id FOR UPDATE;\n  IF dev.status <> 'active' THEN RAISE EXCEPTION 'ATTENDANCE_DEVICE_INACTIVE'; END IF;\n\n  emp := public.attendance_active_employee(s.store_id, dev.user_id);\n  IF emp.id IS NULL THEN RAISE EXCEPTION 'ATTENDANCE_NOT_EMPLOYEE'; END IF;\n  PERFORM pg_advisory_xact_lock(hashtextextended('attendance_punch:' || emp.id::text, 0));\n  at_time := clock_timestamp();\n\n  -- 짧은 간격 중복 스캔(연속 스캔·응답 유실 재시도): 60초 안의 '스캔' 기록이 있으면 새로 만들지 않음\n  SELECT * INTO recent FROM public.attendance_effective_punches\n  WHERE employee_id = emp.id AND source = 'scan' AND punched_at BETWEEN at_time - interval '60 seconds' AND at_time\n  ORDER BY punched_at DESC LIMIT 1;\n  IF FOUND THEN\n    UPDATE private.attendance_qr_nonces SET used_at = at_time, punch_id = recent.id WHERE nonce = n;\n    RETURN jsonb_build_object('punch_id', recent.id, 'kind', recent.kind, 'punched_at', recent.punched_at,\n      'flags', to_jsonb(recent.flags), 'duplicate', true,\n      'employee_name', left(emp.name, 1) || repeat('*', greatest(char_length(emp.name) - 1, 0)));\n  END IF;\n\n  -- 기기 변경 승인(관리자 승인으로 활성화된 기기)의 첫 기록만 확인 필요로 표시\n  IF dev.first_punch_at IS NULL THEN\n    IF dev.activated_by IS DISTINCT FROM dev.user_id THEN extra := ARRAY['new_device']; END IF;\n    UPDATE public.attendance_devices SET first_punch_at = at_time WHERE id = dev.id;\n  END IF;\n  saved := public.attendance_insert_punch(emp, at_time, 'scan', NULL, s.id, dev.id, n, NULL, NULL, NULL, false, extra);\n  UPDATE private.attendance_qr_nonces SET used_at = at_time, punch_id = saved.id WHERE nonce = n;\n  IF s.last_seen_at IS NULL OR s.last_seen_at < at_time - interval '1 minute' THEN\n    UPDATE public.attendance_scanners SET last_seen_at = at_time WHERE id = s.id;\n  END IF;\n  RETURN jsonb_build_object('punch_id', saved.id, 'kind', saved.kind, 'punched_at', saved.punched_at,\n    'flags', to_jsonb(saved.flags), 'duplicate', false,\n    'employee_name', left(emp.name, 1) || repeat('*', greatest(char_length(emp.name) - 1, 0)));\nEND $function$\n",
+   "acl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}"
+  },
+  {
+   "name": "public.attendance_scanner_status",
+   "args": "p_scanner_token text",
+   "def": "CREATE OR REPLACE FUNCTION public.attendance_scanner_status(p_scanner_token text)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'extensions', 'public', 'pg_temp'\nAS $function$\nDECLARE s public.attendance_scanners; store_name text;\nBEGIN\n  SELECT * INTO s FROM public.attendance_scanners WHERE token_hash = digest(coalesce(p_scanner_token, ''), 'sha256');\n  IF NOT FOUND OR s.revoked_at IS NOT NULL OR NOT public.is_store_active(s.store_id) THEN RAISE EXCEPTION 'ATTENDANCE_SCANNER_INVALID'; END IF;\n  SELECT name INTO store_name FROM public.stores WHERE id = s.store_id;\n  RETURN jsonb_build_object('scanner_id', s.id, 'store_name', store_name, 'label', s.label);\nEND $function$\n",
+   "acl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}"
+  },
+  {
+   "name": "public.guard_attendance_punch_immutable",
+   "args": "",
+   "def": "CREATE OR REPLACE FUNCTION public.guard_attendance_punch_immutable()\n RETURNS trigger\n LANGUAGE plpgsql\n SET search_path TO 'extensions', 'public', 'pg_temp'\nAS $function$\nBEGIN\n  -- FK의 SET NULL(scanner_id, device_id)만 허용한다.\n  IF (NEW.store_id, NEW.employee_id, NEW.kind, NEW.punched_at, NEW.work_date, NEW.source, NEW.is_void,\n      NEW.supersedes_id, NEW.qr_nonce, NEW.flags, NEW.note, NEW.created_by, NEW.created_at)\n     IS DISTINCT FROM\n     (OLD.store_id, OLD.employee_id, OLD.kind, OLD.punched_at, OLD.work_date, OLD.source, OLD.is_void,\n      OLD.supersedes_id, OLD.qr_nonce, OLD.flags, OLD.note, OLD.created_by, OLD.created_at) THEN\n    RAISE EXCEPTION 'ATTENDANCE_PUNCH_IMMUTABLE';\n  END IF;\n  RETURN NEW;\nEND $function$\n",
+   "acl": "{postgres=X/postgres,service_role=X/postgres}"
+  },
+  {
+   "name": "public.revoke_attendance_devices_on_resign",
+   "args": "",
+   "def": "CREATE OR REPLACE FUNCTION public.revoke_attendance_devices_on_resign()\n RETURNS trigger\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'extensions', 'public', 'pg_temp'\nAS $function$\nBEGIN\n  IF OLD.is_active AND NOT NEW.is_active AND NEW.user_id IS NOT NULL\n     AND NOT EXISTS (SELECT 1 FROM public.employees e WHERE e.user_id = NEW.user_id AND e.is_active AND e.id <> NEW.id) THEN\n    UPDATE public.attendance_devices SET status = 'revoked', revoked_at = now(), revoked_reason = '퇴사 처리로 자동 해제'\n    WHERE user_id = NEW.user_id AND status IN ('pending', 'active');\n  END IF;\n  RETURN NEW;\nEND $function$\n",
+   "acl": "{postgres=X/postgres,service_role=X/postgres}"
+  },
+  {
+   "name": "public.review_attendance_correction",
+   "args": "p_request_id uuid, p_approve boolean, p_note text",
+   "def": "CREATE OR REPLACE FUNCTION public.review_attendance_correction(p_request_id uuid, p_approve boolean, p_note text DEFAULT NULL::text)\n RETURNS uuid\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'extensions', 'public', 'pg_temp'\nAS $function$\nDECLARE caller uuid := auth.uid(); req public.attendance_correction_requests; emp public.employees;\n  target public.attendance_punches; saved public.attendance_punches; note text;\nBEGIN\n  IF caller IS NULL THEN RAISE EXCEPTION 'ATTENDANCE_AUTH_REQUIRED'; END IF;\n  SELECT * INTO req FROM public.attendance_correction_requests WHERE id = p_request_id FOR UPDATE;\n  IF NOT FOUND OR req.status <> 'pending' THEN RAISE EXCEPTION 'ATTENDANCE_CORRECTION_NOT_PENDING'; END IF;\n  IF NOT public.is_store_admin(req.store_id) THEN RAISE EXCEPTION 'ATTENDANCE_ADMIN_REQUIRED'; END IF;\n  IF NOT p_approve THEN\n    UPDATE public.attendance_correction_requests SET status = 'rejected', reviewed_by = caller, reviewed_at = now(),\n      review_note = left(nullif(btrim(coalesce(p_note, '')), ''), 500) WHERE id = req.id;\n    RETURN NULL;\n  END IF;\n  SELECT * INTO emp FROM public.employees WHERE id = req.employee_id;\n  PERFORM pg_advisory_xact_lock(hashtextextended('attendance_punch:' || emp.id::text, 0));\n  note := left('정정 승인: ' || req.reason, 500); -- 요청 원문(최대 500자)은 요청 행에 그대로 보존\n  IF req.action = 'add' THEN\n    saved := public.attendance_insert_punch(emp, req.requested_time, 'correction', req.kind, NULL, NULL, NULL, note, caller);\n  ELSE\n    SELECT * INTO target FROM public.attendance_effective_punches WHERE id = req.target_punch_id;\n    IF NOT FOUND THEN\n      -- 대상이 이미 다른 정정으로 바뀐 경우: 요청을 자동 반려(대기로 남지 않게)\n      UPDATE public.attendance_correction_requests SET status = 'rejected', reviewed_by = caller, reviewed_at = now(),\n        review_note = '대상 기록이 이미 변경되어 자동 반려' WHERE id = req.id;\n      RETURN NULL;\n    END IF;\n    INSERT INTO public.attendance_punches(store_id, employee_id, kind, punched_at, work_date, source, is_void, supersedes_id, flags, note, created_by)\n    VALUES (target.store_id, target.employee_id, coalesce(req.kind, target.kind),\n      CASE WHEN req.action = 'void' THEN target.punched_at ELSE req.requested_time END,\n      CASE WHEN req.action = 'void' THEN target.work_date\n           ELSE public.attendance_work_date(target.employee_id, coalesce(req.kind, target.kind), req.requested_time, target.id) END,\n      'correction', req.action = 'void', target.id, '{}', note, caller)\n    RETURNING * INTO saved;\n  END IF;\n  UPDATE public.attendance_correction_requests SET status = 'approved', reviewed_by = caller, reviewed_at = now(),\n    review_note = left(nullif(btrim(coalesce(p_note, '')), ''), 500), applied_punch_id = saved.id WHERE id = req.id;\n  RETURN saved.id;\nEND $function$\n",
+   "acl": "{postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}"
+  },
+  {
+   "name": "public.transfer_store_ownership",
+   "args": "p_store_id uuid, p_member_id uuid",
+   "def": "CREATE OR REPLACE FUNCTION public.transfer_store_ownership(p_store_id uuid, p_member_id uuid)\n RETURNS void\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\nDECLARE target_user uuid;\nBEGIN\n  PERFORM 1 FROM stores WHERE id=p_store_id AND owner_id=auth.uid() FOR UPDATE;\n  IF NOT FOUND THEN RAISE EXCEPTION 'OWNERSHIP_OWNER_REQUIRED'; END IF;\n  SELECT user_id INTO target_user FROM store_members WHERE id=p_member_id AND store_id=p_store_id\n    AND status='approved' AND user_id<>auth.uid() FOR UPDATE;\n  IF NOT FOUND THEN RAISE EXCEPTION 'OWNERSHIP_APPROVED_MEMBER_REQUIRED'; END IF;\n  PERFORM 1 FROM auth.users WHERE id=target_user FOR KEY SHARE;\n  IF NOT FOUND THEN RAISE EXCEPTION 'OWNERSHIP_APPROVED_MEMBER_REQUIRED'; END IF;\n  UPDATE store_members SET role='admin' WHERE id=p_member_id;\n  UPDATE stores SET owner_id=target_user WHERE id=p_store_id;\nEND $function$\n",
+   "acl": "{postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}"
+  },
+  {
+   "name": "public.submit_work_minutes",
+   "args": "p_employee_id uuid, p_year_month text, p_minutes integer, p_note text, p_previous_id uuid",
+   "def": "CREATE OR REPLACE FUNCTION public.submit_work_minutes(p_employee_id uuid, p_year_month text, p_minutes integer, p_note text, p_previous_id uuid DEFAULT NULL::uuid)\n RETURNS payroll_work_submissions\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\nDECLARE emp public.employees; latest public.payroll_work_submissions; saved public.payroll_work_submissions; max_minutes integer;\nBEGIN\n  SELECT * INTO emp FROM public.employees WHERE id = p_employee_id FOR UPDATE;\n  IF NOT FOUND OR auth.uid() IS NULL OR emp.user_id IS DISTINCT FROM auth.uid() OR NOT emp.is_active\n    OR emp.employment_type <> 'part_time' OR NOT public.is_store_member(emp.store_id) THEN\n    RAISE EXCEPTION '연결된 본인 파트타이머 계정으로만 제출할 수 있습니다';\n  END IF;\n  IF p_year_month IS NULL OR p_year_month !~ '^\\d{4}-(0[1-9]|1[0-2])$'\n    OR p_year_month > to_char(now() AT TIME ZONE 'Asia/Seoul', 'YYYY-MM') THEN RAISE EXCEPTION '대상 월을 확인해주세요'; END IF;\n  max_minutes := extract(day FROM (p_year_month || '-01')::date + interval '1 month - 1 day')::integer * 1440;\n  IF p_minutes IS NULL OR p_minutes < 0 OR p_minutes > max_minutes THEN RAISE EXCEPTION '총 근무 분을 확인해주세요'; END IF;\n  IF p_note IS NULL OR length(btrim(p_note)) NOT BETWEEN 1 AND 1000 THEN RAISE EXCEPTION '입력 근거를 1~1000자로 작성해주세요'; END IF;\n  SELECT * INTO latest FROM public.payroll_work_submissions WHERE employee_id = emp.id AND year_month = p_year_month ORDER BY version DESC LIMIT 1;\n  IF latest.id IS DISTINCT FROM p_previous_id THEN RAISE EXCEPTION '제출 내역이 변경됐습니다. 새로고침해주세요'; END IF;\n  IF latest.status = 'pending' THEN UPDATE public.payroll_work_submissions SET status = 'superseded' WHERE id = latest.id; END IF;\n  INSERT INTO public.payroll_work_submissions(store_id,employee_id,year_month,worked_minutes,note,version,status,submitted_by)\n    VALUES(emp.store_id,emp.id,p_year_month,p_minutes,btrim(p_note),coalesce(latest.version,0)+1,'pending',auth.uid()) RETURNING * INTO saved;\n  -- 재제출된 시간은 승인 전까지 급여 금액에 반영하지 않는다. 기존 정산 확정만 해제한다.\n  UPDATE public.payroll SET is_settled = false, settled_at = NULL WHERE employee_id = emp.id AND year_month = p_year_month AND is_settled;\n  RETURN saved;\nEND;\n$function$\n",
+   "acl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}"
+  },
+  {
+   "name": "public.review_work_minutes",
+   "args": "p_submission_id uuid, p_status text, p_note text",
+   "def": "CREATE OR REPLACE FUNCTION public.review_work_minutes(p_submission_id uuid, p_status text, p_note text DEFAULT ''::text)\n RETURNS payroll_work_submissions\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\nDECLARE saved public.payroll_work_submissions; target_employee uuid;\nBEGIN\n  SELECT employee_id INTO target_employee FROM public.payroll_work_submissions WHERE id = p_submission_id;\n  PERFORM 1 FROM public.employees WHERE id = target_employee FOR UPDATE;\n  SELECT * INTO saved FROM public.payroll_work_submissions WHERE id = p_submission_id FOR UPDATE;\n  IF NOT FOUND OR auth.uid() IS NULL OR NOT public.is_store_admin(saved.store_id) THEN RAISE EXCEPTION '관리자만 확인할 수 있습니다'; END IF;\n  IF saved.status <> 'pending' OR EXISTS (SELECT 1 FROM public.payroll_work_submissions s WHERE s.employee_id = saved.employee_id AND s.year_month = saved.year_month AND s.version > saved.version)\n    THEN RAISE EXCEPTION '최신 제출 내역을 새로고침해주세요'; END IF;\n  IF p_status IS NULL OR p_status NOT IN ('approved','rejected') THEN RAISE EXCEPTION '확인 상태를 선택해주세요'; END IF;\n  IF length(coalesce(p_note,'')) > 1000 OR (p_status = 'rejected' AND length(btrim(coalesce(p_note,''))) = 0) THEN RAISE EXCEPTION '반려 사유를 1~1000자로 작성해주세요'; END IF;\n  UPDATE public.payroll_work_submissions SET status=p_status,reviewed_by=auth.uid(),reviewed_at=now(),review_note=btrim(coalesce(p_note,'')) WHERE id=saved.id RETURNING * INTO saved;\n  RETURN saved;\nEND;\n$function$\n",
+   "acl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}"
+  },
+  {
+   "name": "public.can_read_store_financials",
+   "args": "p_store_id uuid",
+   "def": "CREATE OR REPLACE FUNCTION public.can_read_store_financials(p_store_id uuid)\n RETURNS boolean\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\n SELECT auth.uid() IS NOT NULL AND (public.is_store_admin(p_store_id) OR EXISTS(\n SELECT 1 FROM public.stores s\n JOIN public.store_members m ON m.store_id=s.id AND m.user_id=auth.uid() AND m.status='approved'\n JOIN public.employees e ON e.store_id=s.id AND e.user_id=auth.uid() AND e.is_active AND e.employment_type IN ('regular','part_time')\n WHERE s.id=p_store_id AND (s.financial_share_scope='all_staff' OR\n (s.financial_share_scope='regular_only' AND e.employment_type='regular'))\n ))\n$function$\n",
+   "acl": "{postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}"
+  },
+  {
+   "name": "public.daily_work_month_snapshot",
+   "args": "p_employee_id uuid, p_year_month text",
+   "def": "CREATE OR REPLACE FUNCTION public.daily_work_month_snapshot(p_employee_id uuid, p_year_month text)\n RETURNS jsonb\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\n SELECT coalesce(jsonb_agg(jsonb_build_object('id',id,'revision',revision,'work_date',work_date,'worked_minutes',worked_minutes,'applied_hourly_wage',applied_hourly_wage,'gross',gross,'status',status) ORDER BY work_date),'[]'::jsonb)\n FROM public.payroll_daily_work WHERE employee_id=p_employee_id AND work_date>= (p_year_month||'-01')::date AND work_date<((p_year_month||'-01')::date+interval '1 month');\n$function$\n",
+   "acl": "{postgres=X/postgres,service_role=X/postgres}"
+  },
+  {
+   "name": "public.save_daily_work",
+   "args": "p_employee_id uuid, p_work_date date, p_minutes integer, p_note text, p_revision integer",
+   "def": "CREATE OR REPLACE FUNCTION public.save_daily_work(p_employee_id uuid, p_work_date date, p_minutes integer, p_note text, p_revision integer DEFAULT NULL::integer)\n RETURNS payroll_daily_work\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\nDECLARE e public.employees; old_row public.payroll_daily_work; saved public.payroll_daily_work; rate numeric; admin boolean;\nBEGIN\n SELECT * INTO e FROM public.employees WHERE id=p_employee_id FOR UPDATE;\n admin:=public.is_store_admin(e.store_id);\n IF auth.uid() IS NULL OR e.id IS NULL OR NOT e.is_active OR e.employment_type<>'part_time'\n OR NOT public.is_store_member(e.store_id) OR (NOT admin AND e.user_id IS DISTINCT FROM auth.uid()) THEN RAISE EXCEPTION 'DAILY_WORK_FORBIDDEN'; END IF;\n IF p_work_date IS NULL OR p_work_date>(now() AT TIME ZONE 'Asia/Seoul')::date OR e.joined_at IS NULL OR p_work_date<e.joined_at\n OR p_minutes IS NULL OR p_minutes NOT BETWEEN 0 AND 1440 OR length(btrim(coalesce(p_note,''))) NOT BETWEEN 1 AND 1000 THEN RAISE EXCEPTION 'DAILY_WORK_INVALID'; END IF;\n SELECT * INTO old_row FROM public.payroll_daily_work WHERE employee_id=e.id AND work_date=p_work_date FOR UPDATE;\n IF old_row.revision IS DISTINCT FROM p_revision THEN RAISE EXCEPTION 'DAILY_WORK_CHANGED'; END IF;\n -- Existing date's rate is an immutable snapshot even when minutes are corrected.\n rate:=old_row.applied_hourly_wage;\n IF rate IS NULL THEN\n   SELECT hourly_wage INTO rate FROM public.employee_wage_history WHERE employee_id=e.id AND store_id=e.store_id AND effective_date<=p_work_date\n     ORDER BY effective_date DESC,created_at DESC,id DESC LIMIT 1;\n   IF rate IS NULL THEN SELECT hourly_wage INTO rate FROM public.employee_wage_history WHERE employee_id=e.id AND store_id=e.store_id ORDER BY effective_date,created_at DESC,id DESC LIMIT 1; END IF;\n   IF rate IS NULL AND NOT EXISTS(SELECT 1 FROM public.employee_wage_history WHERE employee_id=e.id AND store_id=e.store_id) THEN rate:=e.hourly_wage; END IF;\n END IF;\n IF rate IS NULL OR rate<=0 OR rate>=100000000 OR rate::text IN ('NaN','Infinity','-Infinity') THEN RAISE EXCEPTION 'DAILY_WORK_RATE_REQUIRED'; END IF;\n INSERT INTO public.payroll_daily_work(store_id,employee_id,work_date,worked_minutes,applied_hourly_wage,gross,note,status,revision,submitted_by,reviewed_by)\n VALUES(e.store_id,e.id,p_work_date,p_minutes,rate,round(p_minutes*rate/60),btrim(p_note),CASE WHEN admin THEN 'approved' ELSE 'pending' END,1,auth.uid(),CASE WHEN admin THEN auth.uid() ELSE NULL END)\n ON CONFLICT(employee_id,work_date) DO UPDATE SET worked_minutes=excluded.worked_minutes,gross=excluded.gross,note=excluded.note,status=excluded.status,\n revision=payroll_daily_work.revision+1,submitted_by=excluded.submitted_by,reviewed_by=excluded.reviewed_by,review_note=NULL,updated_at=now() RETURNING * INTO saved;\n UPDATE public.payroll SET is_settled=false,settled_at=NULL WHERE employee_id=e.id AND year_month=to_char(p_work_date,'YYYY-MM') AND is_settled;\n RETURN saved;\nEND $function$\n",
+   "acl": "{postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}"
+  },
+  {
+   "name": "public.review_daily_work",
+   "args": "p_id uuid, p_revision integer, p_status text, p_note text",
+   "def": "CREATE OR REPLACE FUNCTION public.review_daily_work(p_id uuid, p_revision integer, p_status text, p_note text DEFAULT ''::text)\n RETURNS payroll_daily_work\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\nDECLARE target uuid; saved public.payroll_daily_work;\nBEGIN\n SELECT employee_id INTO target FROM public.payroll_daily_work WHERE id=p_id;\n PERFORM 1 FROM public.employees WHERE id=target FOR UPDATE;\n SELECT * INTO saved FROM public.payroll_daily_work WHERE id=p_id FOR UPDATE;\n IF auth.uid() IS NULL OR saved.id IS NULL OR NOT public.is_store_admin(saved.store_id) THEN RAISE EXCEPTION 'DAILY_WORK_FORBIDDEN'; END IF;\n IF saved.revision IS DISTINCT FROM p_revision OR saved.status<>'pending' THEN RAISE EXCEPTION 'DAILY_WORK_CHANGED'; END IF;\n IF p_status IS NULL OR p_status NOT IN ('approved','rejected') OR length(coalesce(p_note,''))>1000 OR (p_status='rejected' AND btrim(coalesce(p_note,''))='') THEN RAISE EXCEPTION 'DAILY_WORK_INVALID'; END IF;\n UPDATE public.payroll_daily_work SET status=p_status,review_note=btrim(coalesce(p_note,'')),reviewed_by=auth.uid(),revision=revision+1,updated_at=now() WHERE id=p_id RETURNING * INTO saved;\n UPDATE public.payroll SET is_settled=false,settled_at=NULL WHERE employee_id=saved.employee_id AND year_month=to_char(saved.work_date,'YYYY-MM') AND is_settled;\n RETURN saved;\nEND $function$\n",
+   "acl": "{postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}"
+  },
+  {
+   "name": "public.set_store_financial_sharing",
+   "args": "p_store_id uuid, p_scope text",
+   "def": "CREATE OR REPLACE FUNCTION public.set_store_financial_sharing(p_store_id uuid, p_scope text)\n RETURNS void\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\nBEGIN\n IF auth.uid() IS NULL OR NOT EXISTS(SELECT 1 FROM public.stores WHERE id=p_store_id AND owner_id=auth.uid()) THEN\n RAISE EXCEPTION 'STORE_OWNER_REQUIRED' USING ERRCODE='42501'; END IF;\n IF p_scope IS NULL OR p_scope NOT IN ('none','regular_only','all_staff') THEN RAISE EXCEPTION 'INVALID_SHARE_SCOPE'; END IF;\n UPDATE public.stores SET financial_share_scope=p_scope WHERE id=p_store_id AND owner_id=auth.uid();\nEND $function$\n",
+   "acl": "{postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}"
+  },
+  {
+   "name": "public.get_daily_labor_sources",
+   "args": "p_store_id uuid, p_year_month text",
+   "def": "CREATE OR REPLACE FUNCTION public.get_daily_labor_sources(p_store_id uuid, p_year_month text)\n RETURNS jsonb\n LANGUAGE plpgsql\n STABLE SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\nBEGIN\n IF auth.uid() IS NULL OR NOT coalesce(public.is_store_admin(p_store_id),false) THEN\n   RAISE EXCEPTION 'DAILY_LABOR_FORBIDDEN' USING ERRCODE='42501';\n END IF;\n IF p_year_month IS NULL OR p_year_month !~ '^(19|20)[0-9]{2}-(0[1-9]|1[0-2])$' THEN RAISE EXCEPTION 'INVALID_LABOR_PERIOD'; END IF;\n RETURN jsonb_build_object(\n 'monthlyLaborCost',(SELECT labor_cost FROM public.get_financial_summaries_v2(ARRAY[p_store_id],ARRAY[p_year_month],true)),\n 'employees',(SELECT coalesce(jsonb_agg(jsonb_build_object('id',e.id,'store_id',e.store_id,'joined_at',e.joined_at,'is_active',e.is_active,'employment_type',e.employment_type,'is_resigned_during_probation',e.is_resigned_during_probation)),'[]') FROM public.employees e WHERE e.store_id=p_store_id AND (e.joined_at IS NULL OR e.joined_at<(p_year_month||'-01')::date+interval '1 month')),\n 'payrolls',(SELECT coalesce(jsonb_agg(jsonb_build_object('id',p.id,'store_id',p.store_id,'employee_id',p.employee_id,'year_month',btrim(p.year_month),'gross',p.gross,'regular_wage_snapshot',p.regular_wage_snapshot,'daily_work_snapshot',p.daily_work_snapshot,'applied_hourly_wage',p.applied_hourly_wage,'work_source',p.work_source)),'[]') FROM public.payroll p WHERE p.store_id=p_store_id AND p.year_month=p_year_month),\n 'dailyWork',(SELECT coalesce(jsonb_agg(jsonb_build_object('id',d.id,'store_id',d.store_id,'employee_id',d.employee_id,'work_date',d.work_date,'revision',d.revision,'status',d.status)),'[]') FROM public.payroll_daily_work d WHERE d.store_id=p_store_id AND d.work_date>=(p_year_month||'-01')::date AND d.work_date<(p_year_month||'-01')::date+interval '1 month'),\n 'wages',(SELECT coalesce(jsonb_agg(jsonb_build_object('id',w.id,'store_id',w.store_id,'employee_id',w.employee_id,'effective_date',w.effective_date,'created_at',w.created_at,'base_salary',w.base_salary,'non_taxable',w.non_taxable)),'[]') FROM public.employee_wage_history w WHERE w.store_id=p_store_id AND w.effective_date<(p_year_month||'-01')::date+interval '1 month')\n );\nEND $function$\n",
+   "acl": "{postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}"
+  },
+  {
+   "name": "public.attendance_schedule_flags",
+   "args": "p_employee_id uuid, p_kind text, p_at timestamp with time zone",
+   "def": "CREATE OR REPLACE FUNCTION public.attendance_schedule_flags(p_employee_id uuid, p_kind text, p_at timestamp with time zone)\n RETURNS text[]\n LANGUAGE plpgsql\n STABLE SECURITY DEFINER\n SET search_path TO 'extensions', 'public', 'pg_temp'\nAS $function$\nDECLARE s public.employee_schedules; local_time time := (p_at AT TIME ZONE 'Asia/Seoul')::time;\nBEGIN\n  SELECT * INTO s FROM public.employee_schedules\n  WHERE employee_id = p_employee_id AND day_of_week = extract(dow FROM p_at AT TIME ZONE 'Asia/Seoul');\n  IF NOT FOUND OR NOT s.is_working OR s.start_time IS NULL OR s.end_time IS NULL THEN\n    RETURN CASE WHEN p_kind = 'clock_in' THEN ARRAY['no_schedule'] ELSE '{}'::text[] END;\n  END IF;\n  IF p_kind = 'clock_in' AND local_time < s.start_time - interval '10 minutes' THEN RETURN ARRAY['early_clock_in']; END IF;\n  IF p_kind = 'clock_out' AND s.end_time > s.start_time AND local_time > s.end_time + interval '10 minutes' THEN RETURN ARRAY['late_clock_out']; END IF;\n  RETURN '{}'::text[];\nEND $function$\n",
+   "acl": "{postgres=X/postgres,service_role=X/postgres}"
+  },
+  {
+   "name": "public.attendance_work_date",
+   "args": "p_employee_id uuid, p_kind text, p_at timestamp with time zone, p_exclude uuid",
+   "def": "CREATE OR REPLACE FUNCTION public.attendance_work_date(p_employee_id uuid, p_kind text, p_at timestamp with time zone, p_exclude uuid DEFAULT NULL::uuid)\n RETURNS date\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO 'extensions', 'public', 'pg_temp'\nAS $function$\n  SELECT CASE WHEN p_kind = 'clock_out' THEN coalesce((\n    SELECT p.work_date FROM public.attendance_effective_punches p\n    WHERE p.employee_id = p_employee_id AND p.kind = 'clock_in' AND p.id IS DISTINCT FROM p_exclude\n      AND p.punched_at <= p_at AND p.punched_at > p_at - interval '16 hours'\n    ORDER BY p.punched_at DESC LIMIT 1), public.kst_date(p_at))\n  ELSE public.kst_date(p_at) END;\n$function$\n",
+   "acl": "{postgres=X/postgres,service_role=X/postgres}"
+  },
+  {
+   "name": "public.attendance_insert_punch",
+   "args": "p_employee employees, p_at timestamp with time zone, p_source text, p_kind text, p_scanner_id uuid, p_device_id uuid, p_nonce text, p_note text, p_actor uuid, p_supersedes uuid, p_void boolean, p_extra_flags text[]",
+   "def": "CREATE OR REPLACE FUNCTION public.attendance_insert_punch(p_employee employees, p_at timestamp with time zone, p_source text, p_kind text, p_scanner_id uuid, p_device_id uuid, p_nonce text, p_note text, p_actor uuid, p_supersedes uuid DEFAULT NULL::uuid, p_void boolean DEFAULT false, p_extra_flags text[] DEFAULT '{}'::text[])\n RETURNS attendance_punches\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'extensions', 'public', 'pg_temp'\nAS $function$\nDECLARE last public.attendance_punches; kind text := p_kind; work date; flags text[] := coalesce(p_extra_flags, '{}');\n  saved public.attendance_punches;\nBEGIN\n  last := public.attendance_open_clock_in(p_employee.id);\n  IF kind IS NULL THEN\n    IF last.id IS NOT NULL AND last.kind = 'clock_in' AND p_at - last.punched_at <= interval '16 hours' THEN\n      kind := 'clock_out';\n    ELSE\n      kind := 'clock_in';\n      IF last.id IS NOT NULL AND last.kind = 'clock_in' THEN flags := flags || 'previous_open_over_16h'; END IF;\n    END IF;\n  END IF;\n  work := public.attendance_work_date(p_employee.id, kind, p_at);\n  IF NOT p_void THEN flags := flags || public.attendance_schedule_flags(p_employee.id, kind, p_at); END IF;\n  INSERT INTO public.attendance_punches(store_id, employee_id, kind, punched_at, work_date, source, is_void, supersedes_id,\n    scanner_id, device_id, qr_nonce, flags, note, created_by)\n  VALUES (p_employee.store_id, p_employee.id, kind, p_at, work, p_source, p_void, p_supersedes,\n    p_scanner_id, p_device_id, p_nonce, flags, nullif(btrim(coalesce(p_note, '')), ''), p_actor)\n  RETURNING * INTO saved;\n  RETURN saved;\nEND $function$\n",
+   "acl": "{postgres=X/postgres,service_role=X/postgres}"
+  },
+  {
+   "name": "public.register_attendance_device",
+   "args": "p_label text",
+   "def": "CREATE OR REPLACE FUNCTION public.register_attendance_device(p_label text DEFAULT ''::text)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'extensions', 'public', 'pg_temp'\nAS $function$\nDECLARE caller uuid := auth.uid(); had_any boolean; dev public.attendance_devices; v_secret bytea := gen_random_bytes(32);\nBEGIN\n  IF caller IS NULL THEN RAISE EXCEPTION 'ATTENDANCE_AUTH_REQUIRED'; END IF;\n  IF NOT EXISTS (SELECT 1 FROM public.employees e WHERE e.user_id = caller AND e.is_active AND public.is_store_active(e.store_id)\n                   AND public.attendance_member_approved(e.store_id, caller)) THEN\n    RAISE EXCEPTION 'ATTENDANCE_EMPLOYEE_REQUIRED';\n  END IF;\n  PERFORM pg_advisory_xact_lock(hashtextextended('attendance_device:' || caller::text, 0));\n  IF (SELECT count(*) FROM public.attendance_devices WHERE user_id = caller AND requested_at > now() - interval '1 day') >= 5 THEN\n    RAISE EXCEPTION 'ATTENDANCE_DEVICE_RATE_LIMIT';\n  END IF;\n  SELECT EXISTS (SELECT 1 FROM public.attendance_devices WHERE user_id = caller) INTO had_any;\n  UPDATE public.attendance_devices SET status = 'revoked', revoked_at = now(), revoked_by = caller, revoked_reason = '새 기기 등록 요청으로 대체'\n  WHERE user_id = caller AND status = 'pending';\n  INSERT INTO public.attendance_devices(user_id, label, status, activated_at, activated_by)\n  VALUES (caller, left(btrim(coalesce(p_label, '')), 60),\n          CASE WHEN had_any THEN 'pending' ELSE 'active' END,\n          CASE WHEN had_any THEN NULL ELSE now() END,\n          CASE WHEN had_any THEN NULL ELSE caller END)\n  RETURNING * INTO dev;\n  INSERT INTO private.attendance_device_secrets(device_id, secret) VALUES (dev.id, v_secret);\n  RETURN jsonb_build_object('device_id', dev.id, 'status', dev.status, 'secret', encode(v_secret, 'base64'));\nEND $function$\n",
+   "acl": "{postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}"
+  },
+  {
+   "name": "public.issue_attendance_qr",
+   "args": "p_device_id uuid",
+   "def": "CREATE OR REPLACE FUNCTION public.issue_attendance_qr(p_device_id uuid)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'extensions', 'public', 'pg_temp'\nAS $function$\nDECLARE caller uuid := auth.uid(); dev public.attendance_devices; n text := encode(gen_random_bytes(12), 'hex');\n  expires timestamptz := now() + interval '45 seconds';\nBEGIN\n  IF caller IS NULL THEN RAISE EXCEPTION 'ATTENDANCE_AUTH_REQUIRED'; END IF;\n  SELECT * INTO dev FROM public.attendance_devices WHERE id = p_device_id AND user_id = caller;\n  IF NOT FOUND OR dev.status <> 'active' THEN RAISE EXCEPTION 'ATTENDANCE_DEVICE_INACTIVE'; END IF;\n  DELETE FROM private.attendance_qr_nonces WHERE expires_at < now() - interval '1 hour';\n  IF (SELECT count(*) FROM private.attendance_qr_nonces WHERE device_id = dev.id AND used_at IS NULL AND expires_at > now()) >= 5 THEN\n    RAISE EXCEPTION 'ATTENDANCE_QR_RATE_LIMIT';\n  END IF;\n  INSERT INTO private.attendance_qr_nonces(nonce, device_id, expires_at) VALUES (n, dev.id, expires);\n  RETURN jsonb_build_object('nonce', n, 'expires_at', expires);\nEND $function$\n",
+   "acl": "{postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}"
+  },
+  {
+   "name": "public.register_attendance_scanner",
+   "args": "p_store_id uuid, p_label text",
+   "def": "CREATE OR REPLACE FUNCTION public.register_attendance_scanner(p_store_id uuid, p_label text)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'extensions', 'public', 'pg_temp'\nAS $function$\nDECLARE caller uuid := auth.uid(); token text := encode(gen_random_bytes(32), 'hex'); saved public.attendance_scanners;\nBEGIN\n  IF caller IS NULL THEN RAISE EXCEPTION 'ATTENDANCE_AUTH_REQUIRED'; END IF;\n  IF NOT public.is_store_admin(p_store_id) THEN RAISE EXCEPTION 'ATTENDANCE_ADMIN_REQUIRED'; END IF;\n  INSERT INTO public.attendance_scanners(store_id, label, token_hash, created_by)\n  VALUES (p_store_id, btrim(coalesce(p_label, '')), digest(token, 'sha256'), caller)\n  RETURNING * INTO saved;\n  RETURN jsonb_build_object('scanner_id', saved.id, 'token', token);\nEND $function$\n",
+   "acl": "{postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}"
+  },
+  {
+   "name": "public.record_manual_attendance",
+   "args": "p_store_id uuid, p_employee_id uuid, p_kind text, p_at timestamp with time zone, p_reason text",
+   "def": "CREATE OR REPLACE FUNCTION public.record_manual_attendance(p_store_id uuid, p_employee_id uuid, p_kind text, p_at timestamp with time zone, p_reason text)\n RETURNS uuid\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'extensions', 'public', 'pg_temp'\nAS $function$\nDECLARE caller uuid := auth.uid(); emp public.employees; saved public.attendance_punches;\nBEGIN\n  IF caller IS NULL OR NOT public.is_store_admin(p_store_id) THEN RAISE EXCEPTION 'ATTENDANCE_ADMIN_REQUIRED'; END IF;\n  IF p_kind NOT IN ('clock_in', 'clock_out') OR p_at IS NULL OR p_at > now() + interval '5 minutes' THEN RAISE EXCEPTION 'ATTENDANCE_INPUT_INVALID'; END IF;\n  IF length(btrim(coalesce(p_reason, ''))) = 0 THEN RAISE EXCEPTION 'ATTENDANCE_REASON_REQUIRED'; END IF;\n  SELECT * INTO emp FROM public.employees WHERE id = p_employee_id AND store_id = p_store_id AND is_active;\n  IF NOT FOUND THEN RAISE EXCEPTION 'ATTENDANCE_NOT_EMPLOYEE'; END IF;\n  PERFORM pg_advisory_xact_lock(hashtextextended('attendance_punch:' || emp.id::text, 0));\n  saved := public.attendance_insert_punch(emp, p_at, 'manual', p_kind, NULL, NULL, NULL, p_reason, caller);\n  RETURN saved.id;\nEND $function$\n",
+   "acl": "{postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}"
+  },
+  {
+   "name": "public.request_attendance_correction",
+   "args": "p_store_id uuid, p_employee_id uuid, p_action text, p_target_punch_id uuid, p_kind text, p_time timestamp with time zone, p_reason text",
+   "def": "CREATE OR REPLACE FUNCTION public.request_attendance_correction(p_store_id uuid, p_employee_id uuid, p_action text, p_target_punch_id uuid, p_kind text, p_time timestamp with time zone, p_reason text)\n RETURNS uuid\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'extensions', 'public', 'pg_temp'\nAS $function$\nDECLARE caller uuid := auth.uid(); emp public.employees; target public.attendance_punches; saved uuid;\nBEGIN\n  IF caller IS NULL THEN RAISE EXCEPTION 'ATTENDANCE_AUTH_REQUIRED'; END IF;\n  SELECT * INTO emp FROM public.employees WHERE id = p_employee_id AND store_id = p_store_id AND is_active;\n  IF NOT FOUND OR NOT public.is_store_active(p_store_id) THEN RAISE EXCEPTION 'ATTENDANCE_NOT_EMPLOYEE'; END IF;\n  IF emp.user_id IS DISTINCT FROM caller AND NOT public.is_store_admin(p_store_id) THEN RAISE EXCEPTION 'ATTENDANCE_ADMIN_REQUIRED'; END IF;\n  -- 가입 대기·거절 계정은 본인 정정 요청 불가(관리자는 매장 관리 권한으로 요청 가능)\n  IF NOT public.is_store_admin(p_store_id) AND NOT public.attendance_member_approved(p_store_id, caller) THEN\n    RAISE EXCEPTION 'ATTENDANCE_NOT_EMPLOYEE';\n  END IF;\n  IF p_action NOT IN ('add', 'change', 'void') THEN RAISE EXCEPTION 'ATTENDANCE_INPUT_INVALID'; END IF;\n  IF p_time IS NOT NULL AND p_time > now() + interval '5 minutes' THEN RAISE EXCEPTION 'ATTENDANCE_INPUT_INVALID'; END IF;\n  IF p_action = 'add' AND (p_kind NOT IN ('clock_in', 'clock_out') OR p_kind IS NULL OR p_time IS NULL) THEN RAISE EXCEPTION 'ATTENDANCE_INPUT_INVALID'; END IF;\n  IF p_action = 'change' AND p_time IS NULL THEN RAISE EXCEPTION 'ATTENDANCE_INPUT_INVALID'; END IF;\n  IF p_time IS NOT NULL AND p_time < now() - interval '1 year' THEN RAISE EXCEPTION 'ATTENDANCE_INPUT_INVALID'; END IF;\n  IF length(btrim(coalesce(p_reason, ''))) NOT BETWEEN 1 AND 500 THEN RAISE EXCEPTION 'ATTENDANCE_REASON_REQUIRED'; END IF;\n  IF (SELECT count(*) FROM public.attendance_correction_requests WHERE employee_id = emp.id AND status = 'pending') >= 10 THEN\n    RAISE EXCEPTION 'ATTENDANCE_CORRECTION_RATE_LIMIT';\n  END IF;\n  IF p_action IN ('change', 'void') THEN\n    SELECT * INTO target FROM public.attendance_effective_punches WHERE id = p_target_punch_id AND employee_id = emp.id;\n    IF NOT FOUND THEN RAISE EXCEPTION 'ATTENDANCE_TARGET_INVALID'; END IF;\n  END IF;\n  IF EXISTS (SELECT 1 FROM public.attendance_correction_requests WHERE target_punch_id = p_target_punch_id AND status = 'pending' AND p_target_punch_id IS NOT NULL) THEN\n    RAISE EXCEPTION 'ATTENDANCE_CORRECTION_PENDING';\n  END IF;\n  INSERT INTO public.attendance_correction_requests(store_id, employee_id, action, target_punch_id, kind, requested_time,\n    reason, original_snapshot, requested_by)\n  VALUES (p_store_id, emp.id, p_action, CASE WHEN p_action = 'add' THEN NULL ELSE target.id END,\n    CASE WHEN p_action = 'add' THEN p_kind ELSE coalesce(p_kind, target.kind) END,\n    CASE WHEN p_action = 'void' THEN NULL ELSE p_time END,\n    btrim(coalesce(p_reason, '')),\n    CASE WHEN target.id IS NULL THEN NULL ELSE jsonb_build_object('punch_id', target.id, 'kind', target.kind,\n      'punched_at', target.punched_at, 'work_date', target.work_date, 'source', target.source) END,\n    caller)\n  RETURNING id INTO saved;\n  RETURN saved;\nEND $function$\n",
+   "acl": "{postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}"
+  }
+ ],
+ "policies": [
+  {
+   "schemaname": "public",
+   "tablename": "attendance",
+   "policyname": "attendance_insert_self",
+   "cmd": "INSERT",
+   "roles": "{public}",
+   "qual": null,
+   "with_check": "(employee_id IN ( SELECT employees.id\n   FROM employees\n  WHERE (employees.user_id = ( SELECT auth.uid() AS uid))))"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "attendance",
+   "policyname": "attendance_modify_admin",
+   "cmd": "DELETE",
+   "roles": "{public}",
+   "qual": "(store_id IN ( SELECT stores.id\n   FROM stores\n  WHERE (stores.owner_id = ( SELECT auth.uid() AS uid))\nUNION\n SELECT store_members.store_id\n   FROM store_members\n  WHERE ((store_members.user_id = ( SELECT auth.uid() AS uid)) AND (store_members.role = 'admin'::text) AND (store_members.status = 'approved'::text))))",
+   "with_check": null
+  },
+  {
+   "schemaname": "public",
+   "tablename": "attendance",
+   "policyname": "attendance_select_store_member",
+   "cmd": "SELECT",
+   "roles": "{public}",
+   "qual": "(store_id IN ( SELECT stores.id\n   FROM stores\n  WHERE (stores.owner_id = ( SELECT auth.uid() AS uid))\nUNION\n SELECT store_members.store_id\n   FROM store_members\n  WHERE ((store_members.user_id = ( SELECT auth.uid() AS uid)) AND (store_members.status = 'approved'::text))))",
+   "with_check": null
+  },
+  {
+   "schemaname": "public",
+   "tablename": "attendance",
+   "policyname": "deleted_store_guard_store_id",
+   "cmd": "ALL",
+   "roles": "{authenticated}",
+   "qual": "((store_id IS NULL) OR (NOT (store_id = ANY (COALESCE(( SELECT deleted_store_ids() AS deleted_store_ids), '{}'::uuid[])))))",
+   "with_check": "((store_id IS NULL) OR (NOT (store_id = ANY (COALESCE(( SELECT deleted_store_ids() AS deleted_store_ids), '{}'::uuid[])))))"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "attendance_correction_requests",
+   "policyname": "attendance_correction_requests_read",
+   "cmd": "SELECT",
+   "roles": "{authenticated}",
+   "qual": "can_read_employee(store_id, employee_id)",
+   "with_check": null
+  },
+  {
+   "schemaname": "public",
+   "tablename": "attendance_correction_requests",
+   "policyname": "deleted_store_guard_store_id",
+   "cmd": "ALL",
+   "roles": "{authenticated}",
+   "qual": "((store_id IS NULL) OR (NOT (store_id = ANY (COALESCE(( SELECT deleted_store_ids() AS deleted_store_ids), '{}'::uuid[])))))",
+   "with_check": "((store_id IS NULL) OR (NOT (store_id = ANY (COALESCE(( SELECT deleted_store_ids() AS deleted_store_ids), '{}'::uuid[])))))"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "attendance_corrections",
+   "policyname": "attendance_corrections_insert",
+   "cmd": "INSERT",
+   "roles": "{public}",
+   "qual": null,
+   "with_check": "is_own_employee(employee_id)"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "attendance_corrections",
+   "policyname": "attendance_corrections_select",
+   "cmd": "SELECT",
+   "roles": "{public}",
+   "qual": "is_store_member(store_id)",
+   "with_check": null
+  },
+  {
+   "schemaname": "public",
+   "tablename": "attendance_corrections",
+   "policyname": "attendance_corrections_update",
+   "cmd": "UPDATE",
+   "roles": "{public}",
+   "qual": "is_store_admin(store_id)",
+   "with_check": "is_store_admin(store_id)"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "attendance_corrections",
+   "policyname": "deleted_store_guard_store_id",
+   "cmd": "ALL",
+   "roles": "{authenticated}",
+   "qual": "((store_id IS NULL) OR (NOT (store_id = ANY (COALESCE(( SELECT deleted_store_ids() AS deleted_store_ids), '{}'::uuid[])))))",
+   "with_check": "((store_id IS NULL) OR (NOT (store_id = ANY (COALESCE(( SELECT deleted_store_ids() AS deleted_store_ids), '{}'::uuid[])))))"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "attendance_devices",
+   "policyname": "attendance_devices_own_read",
+   "cmd": "SELECT",
+   "roles": "{authenticated}",
+   "qual": "(user_id = ( SELECT auth.uid() AS uid))",
+   "with_check": null
+  },
+  {
+   "schemaname": "public",
+   "tablename": "attendance_punches",
+   "policyname": "attendance_punches_read",
+   "cmd": "SELECT",
+   "roles": "{authenticated}",
+   "qual": "can_read_employee(store_id, employee_id)",
+   "with_check": null
+  },
+  {
+   "schemaname": "public",
+   "tablename": "attendance_punches",
+   "policyname": "deleted_store_guard_store_id",
+   "cmd": "ALL",
+   "roles": "{authenticated}",
+   "qual": "((store_id IS NULL) OR (NOT (store_id = ANY (COALESCE(( SELECT deleted_store_ids() AS deleted_store_ids), '{}'::uuid[])))))",
+   "with_check": "((store_id IS NULL) OR (NOT (store_id = ANY (COALESCE(( SELECT deleted_store_ids() AS deleted_store_ids), '{}'::uuid[])))))"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "attendance_scanners",
+   "policyname": "attendance_scanners_admin_read",
+   "cmd": "SELECT",
+   "roles": "{authenticated}",
+   "qual": "is_store_admin(store_id)",
+   "with_check": null
+  },
+  {
+   "schemaname": "public",
+   "tablename": "attendance_scanners",
+   "policyname": "deleted_store_guard_store_id",
+   "cmd": "ALL",
+   "roles": "{authenticated}",
+   "qual": "((store_id IS NULL) OR (NOT (store_id = ANY (COALESCE(( SELECT deleted_store_ids() AS deleted_store_ids), '{}'::uuid[])))))",
+   "with_check": "((store_id IS NULL) OR (NOT (store_id = ANY (COALESCE(( SELECT deleted_store_ids() AS deleted_store_ids), '{}'::uuid[])))))"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "cleaning_items",
+   "policyname": "cleaning_items_member_all",
+   "cmd": "ALL",
+   "roles": "{public}",
+   "qual": "is_store_member(store_id)",
+   "with_check": "is_store_member(store_id)"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "cleaning_items",
+   "policyname": "deleted_store_guard_store_id",
+   "cmd": "ALL",
+   "roles": "{authenticated}",
+   "qual": "((store_id IS NULL) OR (NOT (store_id = ANY (COALESCE(( SELECT deleted_store_ids() AS deleted_store_ids), '{}'::uuid[])))))",
+   "with_check": "((store_id IS NULL) OR (NOT (store_id = ANY (COALESCE(( SELECT deleted_store_ids() AS deleted_store_ids), '{}'::uuid[])))))"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "cleaning_logs",
+   "policyname": "cleaning_logs_member_all",
+   "cmd": "ALL",
+   "roles": "{public}",
+   "qual": "is_store_member(store_id)",
+   "with_check": "is_store_member(store_id)"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "cleaning_logs",
+   "policyname": "deleted_store_guard_store_id",
+   "cmd": "ALL",
+   "roles": "{authenticated}",
+   "qual": "((store_id IS NULL) OR (NOT (store_id = ANY (COALESCE(( SELECT deleted_store_ids() AS deleted_store_ids), '{}'::uuid[])))))",
+   "with_check": "((store_id IS NULL) OR (NOT (store_id = ANY (COALESCE(( SELECT deleted_store_ids() AS deleted_store_ids), '{}'::uuid[])))))"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "employee_schedules",
+   "policyname": "deleted_store_guard_store_id",
+   "cmd": "ALL",
+   "roles": "{authenticated}",
+   "qual": "((store_id IS NULL) OR (NOT (store_id = ANY (COALESCE(( SELECT deleted_store_ids() AS deleted_store_ids), '{}'::uuid[])))))",
+   "with_check": "((store_id IS NULL) OR (NOT (store_id = ANY (COALESCE(( SELECT deleted_store_ids() AS deleted_store_ids), '{}'::uuid[])))))"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "employee_schedules",
+   "policyname": "employee_schedules_select",
+   "cmd": "SELECT",
+   "roles": "{public}",
+   "qual": "is_store_member(store_id)",
+   "with_check": null
+  },
+  {
+   "schemaname": "public",
+   "tablename": "employee_schedules",
+   "policyname": "employee_schedules_write",
+   "cmd": "ALL",
+   "roles": "{public}",
+   "qual": "is_store_admin(store_id)",
+   "with_check": "is_store_admin(store_id)"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "employee_wage_history",
+   "policyname": "deleted_store_guard_store_id",
+   "cmd": "ALL",
+   "roles": "{authenticated}",
+   "qual": "((store_id IS NULL) OR (NOT (store_id = ANY (COALESCE(( SELECT deleted_store_ids() AS deleted_store_ids), '{}'::uuid[])))))",
+   "with_check": "((store_id IS NULL) OR (NOT (store_id = ANY (COALESCE(( SELECT deleted_store_ids() AS deleted_store_ids), '{}'::uuid[])))))"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "employee_wage_history",
+   "policyname": "wage_history_select",
+   "cmd": "SELECT",
+   "roles": "{authenticated}",
+   "qual": "can_read_employee(store_id, employee_id)",
+   "with_check": null
+  },
+  {
+   "schemaname": "public",
+   "tablename": "employee_wage_history",
+   "policyname": "wage_history_write",
+   "cmd": "ALL",
+   "roles": "{authenticated}",
+   "qual": "is_store_admin(store_id)",
+   "with_check": "(is_store_admin(store_id) AND (EXISTS ( SELECT 1\n   FROM employees e\n  WHERE ((e.id = employee_wage_history.employee_id) AND (e.store_id = employee_wage_history.store_id)))))"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "employees",
+   "policyname": "deleted_store_guard_store_id",
+   "cmd": "ALL",
+   "roles": "{authenticated}",
+   "qual": "((store_id IS NULL) OR (NOT (store_id = ANY (COALESCE(( SELECT deleted_store_ids() AS deleted_store_ids), '{}'::uuid[])))))",
+   "with_check": "((store_id IS NULL) OR (NOT (store_id = ANY (COALESCE(( SELECT deleted_store_ids() AS deleted_store_ids), '{}'::uuid[])))))"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "employees",
+   "policyname": "employees_delete",
+   "cmd": "DELETE",
+   "roles": "{authenticated}",
+   "qual": "is_store_admin(store_id)",
+   "with_check": null
+  },
+  {
+   "schemaname": "public",
+   "tablename": "employees",
+   "policyname": "employees_insert",
+   "cmd": "INSERT",
+   "roles": "{authenticated}",
+   "qual": null,
+   "with_check": "is_store_admin(store_id)"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "employees",
+   "policyname": "employees_select",
+   "cmd": "SELECT",
+   "roles": "{authenticated}",
+   "qual": "can_read_employee(store_id, id)",
+   "with_check": null
+  },
+  {
+   "schemaname": "public",
+   "tablename": "employees",
+   "policyname": "employees_update",
+   "cmd": "UPDATE",
+   "roles": "{authenticated}",
+   "qual": "is_store_admin(store_id)",
+   "with_check": "is_store_admin(store_id)"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "expenses",
+   "policyname": "deleted_store_guard_store_id",
+   "cmd": "ALL",
+   "roles": "{authenticated}",
+   "qual": "((store_id IS NULL) OR (NOT (store_id = ANY (COALESCE(( SELECT deleted_store_ids() AS deleted_store_ids), '{}'::uuid[])))))",
+   "with_check": "((store_id IS NULL) OR (NOT (store_id = ANY (COALESCE(( SELECT deleted_store_ids() AS deleted_store_ids), '{}'::uuid[])))))"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "expenses",
+   "policyname": "expenses_delete",
+   "cmd": "DELETE",
+   "roles": "{public}",
+   "qual": "(is_store_member(store_id) AND ((category <> '고정비'::text) OR is_store_admin(store_id)))",
+   "with_check": null
+  },
+  {
+   "schemaname": "public",
+   "tablename": "expenses",
+   "policyname": "expenses_insert",
+   "cmd": "INSERT",
+   "roles": "{public}",
+   "qual": null,
+   "with_check": "(is_store_member(store_id) AND ((category <> '고정비'::text) OR is_store_admin(store_id)))"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "expenses",
+   "policyname": "expenses_select",
+   "cmd": "SELECT",
+   "roles": "{public}",
+   "qual": "is_store_member(store_id)",
+   "with_check": null
+  },
+  {
+   "schemaname": "public",
+   "tablename": "expenses",
+   "policyname": "expenses_update",
+   "cmd": "UPDATE",
+   "roles": "{public}",
+   "qual": "(is_store_member(store_id) AND ((category <> '고정비'::text) OR is_store_admin(store_id)))",
+   "with_check": "(is_store_member(store_id) AND ((category <> '고정비'::text) OR is_store_admin(store_id)))"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "expenses",
+   "policyname": "financial_sharing_gate",
+   "cmd": "ALL",
+   "roles": "{authenticated}",
+   "qual": "can_read_store_financials(store_id)",
+   "with_check": "can_read_store_financials(store_id)"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "home_alert_reads",
+   "policyname": "deleted_store_guard_store_id",
+   "cmd": "ALL",
+   "roles": "{authenticated}",
+   "qual": "((store_id IS NULL) OR (NOT (store_id = ANY (COALESCE(( SELECT deleted_store_ids() AS deleted_store_ids), '{}'::uuid[])))))",
+   "with_check": "((store_id IS NULL) OR (NOT (store_id = ANY (COALESCE(( SELECT deleted_store_ids() AS deleted_store_ids), '{}'::uuid[])))))"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "home_alert_reads",
+   "policyname": "home_alert_reads_self_delete",
+   "cmd": "DELETE",
+   "roles": "{authenticated}",
+   "qual": "((user_id = ( SELECT auth.uid() AS uid)) AND is_store_member(store_id))",
+   "with_check": null
+  },
+  {
+   "schemaname": "public",
+   "tablename": "home_alert_reads",
+   "policyname": "home_alert_reads_self_insert",
+   "cmd": "INSERT",
+   "roles": "{authenticated}",
+   "qual": null,
+   "with_check": "((user_id = ( SELECT auth.uid() AS uid)) AND is_store_member(store_id))"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "home_alert_reads",
+   "policyname": "home_alert_reads_self_select",
+   "cmd": "SELECT",
+   "roles": "{authenticated}",
+   "qual": "((user_id = ( SELECT auth.uid() AS uid)) AND is_store_member(store_id))",
+   "with_check": null
+  },
+  {
+   "schemaname": "public",
+   "tablename": "income_tax_table",
+   "policyname": "income_tax_read_all",
+   "cmd": "SELECT",
+   "roles": "{authenticated}",
+   "qual": "true",
+   "with_check": null
+  },
+  {
+   "schemaname": "public",
+   "tablename": "ingredients",
+   "policyname": "deleted_store_guard_store_id",
+   "cmd": "ALL",
+   "roles": "{authenticated}",
+   "qual": "((store_id IS NULL) OR (NOT (store_id = ANY (COALESCE(( SELECT deleted_store_ids() AS deleted_store_ids), '{}'::uuid[])))))",
+   "with_check": "((store_id IS NULL) OR (NOT (store_id = ANY (COALESCE(( SELECT deleted_store_ids() AS deleted_store_ids), '{}'::uuid[])))))"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "ingredients",
+   "policyname": "ingredients_member_all",
+   "cmd": "ALL",
+   "roles": "{public}",
+   "qual": "is_store_member(store_id)",
+   "with_check": "is_store_member(store_id)"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "ingredients",
+   "policyname": "ingredients_member_insert",
+   "cmd": "INSERT",
+   "roles": "{public}",
+   "qual": null,
+   "with_check": "user_has_store_access(store_id)"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "ingredients",
+   "policyname": "ingredients_member_select",
+   "cmd": "SELECT",
+   "roles": "{public}",
+   "qual": "user_has_store_access(store_id)",
+   "with_check": null
+  },
+  {
+   "schemaname": "public",
+   "tablename": "ingredients",
+   "policyname": "ingredients_member_update",
+   "cmd": "UPDATE",
+   "roles": "{public}",
+   "qual": "user_has_store_access(store_id)",
+   "with_check": null
+  },
+  {
+   "schemaname": "public",
+   "tablename": "manual_sales",
+   "policyname": "deleted_store_guard_store_id",
+   "cmd": "ALL",
+   "roles": "{authenticated}",
+   "qual": "((store_id IS NULL) OR (NOT (store_id = ANY (COALESCE(( SELECT deleted_store_ids() AS deleted_store_ids), '{}'::uuid[])))))",
+   "with_check": "((store_id IS NULL) OR (NOT (store_id = ANY (COALESCE(( SELECT deleted_store_ids() AS deleted_store_ids), '{}'::uuid[])))))"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "manual_sales",
+   "policyname": "financial_sharing_gate",
+   "cmd": "ALL",
+   "roles": "{authenticated}",
+   "qual": "can_read_store_financials(store_id)",
+   "with_check": "can_read_store_financials(store_id)"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "manual_sales",
+   "policyname": "manual_sales_store_member",
+   "cmd": "ALL",
+   "roles": "{public}",
+   "qual": "is_store_member(store_id)",
+   "with_check": "is_store_member(store_id)"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "notification_dismissals",
+   "policyname": "deleted_store_guard_store_id",
+   "cmd": "ALL",
+   "roles": "{authenticated}",
+   "qual": "((store_id IS NULL) OR (NOT (store_id = ANY (COALESCE(( SELECT deleted_store_ids() AS deleted_store_ids), '{}'::uuid[])))))",
+   "with_check": "((store_id IS NULL) OR (NOT (store_id = ANY (COALESCE(( SELECT deleted_store_ids() AS deleted_store_ids), '{}'::uuid[])))))"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "notification_dismissals",
+   "policyname": "notification_dismissals_self_insert",
+   "cmd": "INSERT",
+   "roles": "{authenticated}",
+   "qual": null,
+   "with_check": "((user_id = ( SELECT auth.uid() AS uid)) AND is_store_member(store_id) AND (EXISTS ( SELECT 1\n   FROM notifications n\n  WHERE ((n.id = notification_dismissals.notification_id) AND (n.store_id = notification_dismissals.store_id)))))"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "notification_dismissals",
+   "policyname": "notification_dismissals_self_select",
+   "cmd": "SELECT",
+   "roles": "{authenticated}",
+   "qual": "((user_id = ( SELECT auth.uid() AS uid)) AND is_store_member(store_id) AND (EXISTS ( SELECT 1\n   FROM notifications n\n  WHERE ((n.id = notification_dismissals.notification_id) AND (n.store_id = notification_dismissals.store_id)))))",
+   "with_check": null
+  },
+  {
+   "schemaname": "public",
+   "tablename": "notification_settings",
+   "policyname": "deleted_store_guard_store_id",
+   "cmd": "ALL",
+   "roles": "{authenticated}",
+   "qual": "((store_id IS NULL) OR (NOT (store_id = ANY (COALESCE(( SELECT deleted_store_ids() AS deleted_store_ids), '{}'::uuid[])))))",
+   "with_check": "((store_id IS NULL) OR (NOT (store_id = ANY (COALESCE(( SELECT deleted_store_ids() AS deleted_store_ids), '{}'::uuid[])))))"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "notification_settings",
+   "policyname": "notification_settings_select",
+   "cmd": "SELECT",
+   "roles": "{public}",
+   "qual": "is_store_member(store_id)",
+   "with_check": null
+  },
+  {
+   "schemaname": "public",
+   "tablename": "notification_settings",
+   "policyname": "notification_settings_write",
+   "cmd": "ALL",
+   "roles": "{public}",
+   "qual": "is_store_admin(store_id)",
+   "with_check": "is_store_admin(store_id)"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "notifications",
+   "policyname": "deleted_store_guard_store_id",
+   "cmd": "ALL",
+   "roles": "{authenticated}",
+   "qual": "((store_id IS NULL) OR (NOT (store_id = ANY (COALESCE(( SELECT deleted_store_ids() AS deleted_store_ids), '{}'::uuid[])))))",
+   "with_check": "((store_id IS NULL) OR (NOT (store_id = ANY (COALESCE(( SELECT deleted_store_ids() AS deleted_store_ids), '{}'::uuid[])))))"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "notifications",
+   "policyname": "financial_notification_gate",
+   "cmd": "SELECT",
+   "roles": "{authenticated}",
+   "qual": "(((category <> ALL (ARRAY['sales'::text, 'profit'::text])) OR can_read_store_financials(store_id)) AND ((category <> 'members'::text) OR is_store_admin(store_id)))",
+   "with_check": null
+  },
+  {
+   "schemaname": "public",
+   "tablename": "notifications",
+   "policyname": "notifications_members_admin_only",
+   "cmd": "ALL",
+   "roles": "{public}",
+   "qual": "((category <> 'members'::text) OR is_store_admin(store_id))",
+   "with_check": "((category <> 'members'::text) OR is_store_admin(store_id))"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "notifications",
+   "policyname": "notifications_store_member",
+   "cmd": "ALL",
+   "roles": "{public}",
+   "qual": "(is_store_member(store_id) AND ((category <> 'members'::text) OR is_store_admin(store_id)))",
+   "with_check": "(is_store_member(store_id) AND ((category <> 'members'::text) OR is_store_admin(store_id)))"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "ocr_results",
+   "policyname": "Users can manage own ocr results",
+   "cmd": "ALL",
+   "roles": "{public}",
+   "qual": "(store_id IN ( SELECT stores.id\n   FROM stores\n  WHERE (stores.owner_id = ( SELECT auth.uid() AS uid))))",
+   "with_check": null
+  },
+  {
+   "schemaname": "public",
+   "tablename": "ocr_results",
+   "policyname": "deleted_store_guard_store_id",
+   "cmd": "ALL",
+   "roles": "{authenticated}",
+   "qual": "((store_id IS NULL) OR (NOT (store_id = ANY (COALESCE(( SELECT deleted_store_ids() AS deleted_store_ids), '{}'::uuid[])))))",
+   "with_check": "((store_id IS NULL) OR (NOT (store_id = ANY (COALESCE(( SELECT deleted_store_ids() AS deleted_store_ids), '{}'::uuid[])))))"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "order_items",
+   "policyname": "order_items_member_all",
+   "cmd": "ALL",
+   "roles": "{public}",
+   "qual": "(order_id IN ( SELECT orders.id\n   FROM orders\n  WHERE is_store_member(orders.store_id)))",
+   "with_check": "(order_id IN ( SELECT orders.id\n   FROM orders\n  WHERE is_store_member(orders.store_id)))"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "orders",
+   "policyname": "deleted_store_guard_store_id",
+   "cmd": "ALL",
+   "roles": "{authenticated}",
+   "qual": "((store_id IS NULL) OR (NOT (store_id = ANY (COALESCE(( SELECT deleted_store_ids() AS deleted_store_ids), '{}'::uuid[])))))",
+   "with_check": "((store_id IS NULL) OR (NOT (store_id = ANY (COALESCE(( SELECT deleted_store_ids() AS deleted_store_ids), '{}'::uuid[])))))"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "orders",
+   "policyname": "orders_member_all",
+   "cmd": "ALL",
+   "roles": "{public}",
+   "qual": "is_store_member(store_id)",
+   "with_check": "is_store_member(store_id)"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "orders",
+   "policyname": "orders_member_insert",
+   "cmd": "INSERT",
+   "roles": "{public}",
+   "qual": null,
+   "with_check": "user_has_store_access(store_id)"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "orders",
+   "policyname": "orders_member_select",
+   "cmd": "SELECT",
+   "roles": "{public}",
+   "qual": "user_has_store_access(store_id)",
+   "with_check": null
+  },
+  {
+   "schemaname": "public",
+   "tablename": "orders",
+   "policyname": "orders_member_update",
+   "cmd": "UPDATE",
+   "roles": "{public}",
+   "qual": "user_has_store_access(store_id)",
+   "with_check": null
+  },
+  {
+   "schemaname": "public",
+   "tablename": "payroll",
+   "policyname": "deleted_store_guard_store_id",
+   "cmd": "ALL",
+   "roles": "{authenticated}",
+   "qual": "((store_id IS NULL) OR (NOT (store_id = ANY (COALESCE(( SELECT deleted_store_ids() AS deleted_store_ids), '{}'::uuid[])))))",
+   "with_check": "((store_id IS NULL) OR (NOT (store_id = ANY (COALESCE(( SELECT deleted_store_ids() AS deleted_store_ids), '{}'::uuid[])))))"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "payroll",
+   "policyname": "payroll_read",
+   "cmd": "SELECT",
+   "roles": "{authenticated}",
+   "qual": "can_read_employee(store_id, employee_id)",
+   "with_check": null
+  },
+  {
+   "schemaname": "public",
+   "tablename": "payroll",
+   "policyname": "payroll_write",
+   "cmd": "ALL",
+   "roles": "{authenticated}",
+   "qual": "is_store_admin(store_id)",
+   "with_check": "is_store_admin(store_id)"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "payroll_daily_work",
+   "policyname": "daily_work_read",
+   "cmd": "SELECT",
+   "roles": "{authenticated}",
+   "qual": "can_read_employee(store_id, employee_id)",
+   "with_check": null
+  },
+  {
+   "schemaname": "public",
+   "tablename": "payroll_daily_work",
+   "policyname": "deleted_store_guard_store_id",
+   "cmd": "ALL",
+   "roles": "{authenticated}",
+   "qual": "((store_id IS NULL) OR (NOT (store_id = ANY (COALESCE(( SELECT deleted_store_ids() AS deleted_store_ids), '{}'::uuid[])))))",
+   "with_check": "((store_id IS NULL) OR (NOT (store_id = ANY (COALESCE(( SELECT deleted_store_ids() AS deleted_store_ids), '{}'::uuid[])))))"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "payroll_daily_work_history",
+   "policyname": "daily_work_history_read",
+   "cmd": "SELECT",
+   "roles": "{authenticated}",
+   "qual": "can_read_employee(store_id, employee_id)",
+   "with_check": null
+  },
+  {
+   "schemaname": "public",
+   "tablename": "payroll_daily_work_history",
+   "policyname": "deleted_store_guard_store_id",
+   "cmd": "ALL",
+   "roles": "{authenticated}",
+   "qual": "((store_id IS NULL) OR (NOT (store_id = ANY (COALESCE(( SELECT deleted_store_ids() AS deleted_store_ids), '{}'::uuid[])))))",
+   "with_check": "((store_id IS NULL) OR (NOT (store_id = ANY (COALESCE(( SELECT deleted_store_ids() AS deleted_store_ids), '{}'::uuid[])))))"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "payroll_work_history",
+   "policyname": "deleted_store_guard_store_id",
+   "cmd": "ALL",
+   "roles": "{authenticated}",
+   "qual": "((store_id IS NULL) OR (NOT (store_id = ANY (COALESCE(( SELECT deleted_store_ids() AS deleted_store_ids), '{}'::uuid[])))))",
+   "with_check": "((store_id IS NULL) OR (NOT (store_id = ANY (COALESCE(( SELECT deleted_store_ids() AS deleted_store_ids), '{}'::uuid[])))))"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "payroll_work_history",
+   "policyname": "payroll_work_history_read",
+   "cmd": "SELECT",
+   "roles": "{authenticated}",
+   "qual": "can_read_employee(store_id, employee_id)",
+   "with_check": null
+  },
+  {
+   "schemaname": "public",
+   "tablename": "payroll_work_submissions",
+   "policyname": "deleted_store_guard_store_id",
+   "cmd": "ALL",
+   "roles": "{authenticated}",
+   "qual": "((store_id IS NULL) OR (NOT (store_id = ANY (COALESCE(( SELECT deleted_store_ids() AS deleted_store_ids), '{}'::uuid[])))))",
+   "with_check": "((store_id IS NULL) OR (NOT (store_id = ANY (COALESCE(( SELECT deleted_store_ids() AS deleted_store_ids), '{}'::uuid[])))))"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "payroll_work_submissions",
+   "policyname": "payroll_submissions_read",
+   "cmd": "SELECT",
+   "roles": "{authenticated}",
+   "qual": "(is_store_member(store_id) AND (is_store_admin(store_id) OR (EXISTS ( SELECT 1\n   FROM employees e\n  WHERE ((e.id = payroll_work_submissions.employee_id) AND (e.store_id = payroll_work_submissions.store_id) AND (e.user_id = ( SELECT auth.uid() AS uid)))))))",
+   "with_check": null
+  },
+  {
+   "schemaname": "public",
+   "tablename": "purchase_items",
+   "policyname": "deleted_store_guard_store_id",
+   "cmd": "ALL",
+   "roles": "{authenticated}",
+   "qual": "((store_id IS NULL) OR (NOT (store_id = ANY (COALESCE(( SELECT deleted_store_ids() AS deleted_store_ids), '{}'::uuid[])))))",
+   "with_check": "((store_id IS NULL) OR (NOT (store_id = ANY (COALESCE(( SELECT deleted_store_ids() AS deleted_store_ids), '{}'::uuid[])))))"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "purchase_items",
+   "policyname": "financial_sharing_gate",
+   "cmd": "ALL",
+   "roles": "{authenticated}",
+   "qual": "can_read_store_financials(store_id)",
+   "with_check": "can_read_store_financials(store_id)"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "purchase_items",
+   "policyname": "purchase_items_member",
+   "cmd": "ALL",
+   "roles": "{public}",
+   "qual": "is_store_member(store_id)",
+   "with_check": "is_store_member(store_id)"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "purchases",
+   "policyname": "deleted_store_guard_store_id",
+   "cmd": "ALL",
+   "roles": "{authenticated}",
+   "qual": "((store_id IS NULL) OR (NOT (store_id = ANY (COALESCE(( SELECT deleted_store_ids() AS deleted_store_ids), '{}'::uuid[])))))",
+   "with_check": "((store_id IS NULL) OR (NOT (store_id = ANY (COALESCE(( SELECT deleted_store_ids() AS deleted_store_ids), '{}'::uuid[])))))"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "purchases",
+   "policyname": "financial_sharing_gate",
+   "cmd": "ALL",
+   "roles": "{authenticated}",
+   "qual": "can_read_store_financials(store_id)",
+   "with_check": "can_read_store_financials(store_id)"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "purchases",
+   "policyname": "purchases_store_member",
+   "cmd": "ALL",
+   "roles": "{public}",
+   "qual": "(store_id IN ( SELECT stores.id\n   FROM stores\n  WHERE (stores.owner_id = ( SELECT auth.uid() AS uid))\nUNION\n SELECT store_members.store_id\n   FROM store_members\n  WHERE ((store_members.user_id = ( SELECT auth.uid() AS uid)) AND (store_members.status = 'approved'::text))))",
+   "with_check": null
+  },
+  {
+   "schemaname": "public",
+   "tablename": "recipe_ingredients",
+   "policyname": "recipe_ingredients_catalog_delete_gate",
+   "cmd": "DELETE",
+   "roles": "{authenticated}",
+   "qual": "(EXISTS ( SELECT 1\n   FROM recipes r\n  WHERE ((r.id = recipe_ingredients.recipe_id) AND (is_store_admin(r.store_id) OR can_manage_recipes(r.store_id)))))",
+   "with_check": null
+  },
+  {
+   "schemaname": "public",
+   "tablename": "recipe_ingredients",
+   "policyname": "recipe_ingredients_catalog_insert_gate",
+   "cmd": "INSERT",
+   "roles": "{authenticated}",
+   "qual": null,
+   "with_check": "(EXISTS ( SELECT 1\n   FROM recipes r\n  WHERE ((r.id = recipe_ingredients.recipe_id) AND (is_store_admin(r.store_id) OR can_manage_recipes(r.store_id)))))"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "recipe_ingredients",
+   "policyname": "recipe_ingredients_catalog_update_gate",
+   "cmd": "UPDATE",
+   "roles": "{authenticated}",
+   "qual": "(EXISTS ( SELECT 1\n   FROM recipes r\n  WHERE ((r.id = recipe_ingredients.recipe_id) AND (is_store_admin(r.store_id) OR can_manage_recipes(r.store_id)))))",
+   "with_check": "(EXISTS ( SELECT 1\n   FROM recipes r\n  WHERE ((r.id = recipe_ingredients.recipe_id) AND (is_store_admin(r.store_id) OR can_manage_recipes(r.store_id)))))"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "recipe_ingredients",
+   "policyname": "recipe_ingredients_delete",
+   "cmd": "DELETE",
+   "roles": "{public}",
+   "qual": "(recipe_id IN ( SELECT recipes.id\n   FROM recipes\n  WHERE is_store_admin(recipes.store_id)))",
+   "with_check": null
+  },
+  {
+   "schemaname": "public",
+   "tablename": "recipe_ingredients",
+   "policyname": "recipe_ingredients_insert",
+   "cmd": "INSERT",
+   "roles": "{public}",
+   "qual": null,
+   "with_check": "(recipe_id IN ( SELECT recipes.id\n   FROM recipes\n  WHERE is_store_admin(recipes.store_id)))"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "recipe_ingredients",
+   "policyname": "recipe_ingredients_manage",
+   "cmd": "ALL",
+   "roles": "{public}",
+   "qual": "(recipe_id IN ( SELECT recipes.id\n   FROM recipes\n  WHERE can_manage_recipes(recipes.store_id)))",
+   "with_check": "(recipe_id IN ( SELECT recipes.id\n   FROM recipes\n  WHERE can_manage_recipes(recipes.store_id)))"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "recipe_ingredients",
+   "policyname": "recipe_ingredients_select",
+   "cmd": "SELECT",
+   "roles": "{public}",
+   "qual": "(recipe_id IN ( SELECT recipes.id\n   FROM recipes\n  WHERE is_store_member(recipes.store_id)))",
+   "with_check": null
+  },
+  {
+   "schemaname": "public",
+   "tablename": "recipe_ingredients",
+   "policyname": "recipe_ingredients_update",
+   "cmd": "UPDATE",
+   "roles": "{public}",
+   "qual": "(recipe_id IN ( SELECT recipes.id\n   FROM recipes\n  WHERE is_store_admin(recipes.store_id)))",
+   "with_check": "(recipe_id IN ( SELECT recipes.id\n   FROM recipes\n  WHERE is_store_admin(recipes.store_id)))"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "recipes",
+   "policyname": "deleted_store_guard_store_id",
+   "cmd": "ALL",
+   "roles": "{authenticated}",
+   "qual": "((store_id IS NULL) OR (NOT (store_id = ANY (COALESCE(( SELECT deleted_store_ids() AS deleted_store_ids), '{}'::uuid[])))))",
+   "with_check": "((store_id IS NULL) OR (NOT (store_id = ANY (COALESCE(( SELECT deleted_store_ids() AS deleted_store_ids), '{}'::uuid[])))))"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "recipes",
+   "policyname": "recipes_catalog_delete_gate",
+   "cmd": "DELETE",
+   "roles": "{authenticated}",
+   "qual": "(is_store_admin(store_id) OR can_manage_recipes(store_id))",
+   "with_check": null
+  },
+  {
+   "schemaname": "public",
+   "tablename": "recipes",
+   "policyname": "recipes_catalog_insert_gate",
+   "cmd": "INSERT",
+   "roles": "{authenticated}",
+   "qual": null,
+   "with_check": "(is_store_admin(store_id) OR can_manage_recipes(store_id))"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "recipes",
+   "policyname": "recipes_catalog_update_gate",
+   "cmd": "UPDATE",
+   "roles": "{authenticated}",
+   "qual": "(is_store_admin(store_id) OR can_manage_recipes(store_id))",
+   "with_check": "(is_store_admin(store_id) OR can_manage_recipes(store_id))"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "recipes",
+   "policyname": "recipes_delete",
+   "cmd": "DELETE",
+   "roles": "{public}",
+   "qual": "is_store_admin(store_id)",
+   "with_check": null
+  },
+  {
+   "schemaname": "public",
+   "tablename": "recipes",
+   "policyname": "recipes_insert",
+   "cmd": "INSERT",
+   "roles": "{public}",
+   "qual": null,
+   "with_check": "is_store_admin(store_id)"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "recipes",
+   "policyname": "recipes_manage",
+   "cmd": "ALL",
+   "roles": "{public}",
+   "qual": "can_manage_recipes(store_id)",
+   "with_check": "can_manage_recipes(store_id)"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "recipes",
+   "policyname": "recipes_member_select",
+   "cmd": "SELECT",
+   "roles": "{public}",
+   "qual": "user_has_store_access(store_id)",
+   "with_check": null
+  },
+  {
+   "schemaname": "public",
+   "tablename": "recipes",
+   "policyname": "recipes_select",
+   "cmd": "SELECT",
+   "roles": "{public}",
+   "qual": "is_store_member(store_id)",
+   "with_check": null
+  },
+  {
+   "schemaname": "public",
+   "tablename": "recipes",
+   "policyname": "recipes_update",
+   "cmd": "UPDATE",
+   "roles": "{public}",
+   "qual": "is_store_admin(store_id)",
+   "with_check": "is_store_admin(store_id)"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "recurring_fixed_expense_versions",
+   "policyname": "recurring_fixed_versions_admin_read",
+   "cmd": "SELECT",
+   "roles": "{authenticated}",
+   "qual": "(EXISTS ( SELECT 1\n   FROM recurring_fixed_expenses r\n  WHERE ((r.id = recurring_fixed_expense_versions.rule_id) AND is_store_admin(r.store_id))))",
+   "with_check": null
+  },
+  {
+   "schemaname": "public",
+   "tablename": "recurring_fixed_expenses",
+   "policyname": "deleted_store_guard_store_id",
+   "cmd": "ALL",
+   "roles": "{authenticated}",
+   "qual": "((store_id IS NULL) OR (NOT (store_id = ANY (COALESCE(( SELECT deleted_store_ids() AS deleted_store_ids), '{}'::uuid[])))))",
+   "with_check": "((store_id IS NULL) OR (NOT (store_id = ANY (COALESCE(( SELECT deleted_store_ids() AS deleted_store_ids), '{}'::uuid[])))))"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "recurring_fixed_expenses",
+   "policyname": "recurring_fixed_expenses_admin_read",
+   "cmd": "SELECT",
+   "roles": "{authenticated}",
+   "qual": "is_store_admin(store_id)",
+   "with_check": null
+  },
+  {
+   "schemaname": "public",
+   "tablename": "schedule_requests",
+   "policyname": "deleted_store_guard_store_id",
+   "cmd": "ALL",
+   "roles": "{authenticated}",
+   "qual": "((store_id IS NULL) OR (NOT (store_id = ANY (COALESCE(( SELECT deleted_store_ids() AS deleted_store_ids), '{}'::uuid[])))))",
+   "with_check": "((store_id IS NULL) OR (NOT (store_id = ANY (COALESCE(( SELECT deleted_store_ids() AS deleted_store_ids), '{}'::uuid[])))))"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "schedule_requests",
+   "policyname": "schedule_requests_insert",
+   "cmd": "INSERT",
+   "roles": "{public}",
+   "qual": null,
+   "with_check": "is_own_employee(employee_id)"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "schedule_requests",
+   "policyname": "schedule_requests_select",
+   "cmd": "SELECT",
+   "roles": "{public}",
+   "qual": "is_store_member(store_id)",
+   "with_check": null
+  },
+  {
+   "schemaname": "public",
+   "tablename": "schedule_requests",
+   "policyname": "schedule_requests_update",
+   "cmd": "UPDATE",
+   "roles": "{public}",
+   "qual": "is_store_admin(store_id)",
+   "with_check": "is_store_admin(store_id)"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "store_home_workflows",
+   "policyname": "deleted_store_guard_store_id",
+   "cmd": "ALL",
+   "roles": "{authenticated}",
+   "qual": "((store_id IS NULL) OR (NOT (store_id = ANY (COALESCE(( SELECT deleted_store_ids() AS deleted_store_ids), '{}'::uuid[])))))",
+   "with_check": "((store_id IS NULL) OR (NOT (store_id = ANY (COALESCE(( SELECT deleted_store_ids() AS deleted_store_ids), '{}'::uuid[])))))"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "store_home_workflows",
+   "policyname": "home_workflow_insert",
+   "cmd": "INSERT",
+   "roles": "{authenticated}",
+   "qual": null,
+   "with_check": "is_store_admin(store_id)"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "store_home_workflows",
+   "policyname": "home_workflow_read",
+   "cmd": "SELECT",
+   "roles": "{authenticated}",
+   "qual": "(is_store_member(store_id) OR is_store_admin(store_id))",
+   "with_check": null
+  },
+  {
+   "schemaname": "public",
+   "tablename": "store_home_workflows",
+   "policyname": "home_workflow_update",
+   "cmd": "UPDATE",
+   "roles": "{authenticated}",
+   "qual": "is_store_admin(store_id)",
+   "with_check": "is_store_admin(store_id)"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "store_invites",
+   "policyname": "deleted_store_guard_store_id",
+   "cmd": "ALL",
+   "roles": "{authenticated}",
+   "qual": "((store_id IS NULL) OR (NOT (store_id = ANY (COALESCE(( SELECT deleted_store_ids() AS deleted_store_ids), '{}'::uuid[])))))",
+   "with_check": "((store_id IS NULL) OR (NOT (store_id = ANY (COALESCE(( SELECT deleted_store_ids() AS deleted_store_ids), '{}'::uuid[])))))"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "store_join_profiles",
+   "policyname": "deleted_store_guard_store_id",
+   "cmd": "ALL",
+   "roles": "{authenticated}",
+   "qual": "((store_id IS NULL) OR (NOT (store_id = ANY (COALESCE(( SELECT deleted_store_ids() AS deleted_store_ids), '{}'::uuid[])))))",
+   "with_check": "((store_id IS NULL) OR (NOT (store_id = ANY (COALESCE(( SELECT deleted_store_ids() AS deleted_store_ids), '{}'::uuid[])))))"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "store_join_profiles",
+   "policyname": "join_profile_read",
+   "cmd": "SELECT",
+   "roles": "{authenticated}",
+   "qual": "((applicant_user_id = ( SELECT auth.uid() AS uid)) OR is_store_admin(store_id))",
+   "with_check": null
+  },
+  {
+   "schemaname": "public",
+   "tablename": "store_members",
+   "policyname": "deleted_store_guard_store_id",
+   "cmd": "ALL",
+   "roles": "{authenticated}",
+   "qual": "((store_id IS NULL) OR (NOT (store_id = ANY (COALESCE(( SELECT deleted_store_ids() AS deleted_store_ids), '{}'::uuid[])))))",
+   "with_check": "((store_id IS NULL) OR (NOT (store_id = ANY (COALESCE(( SELECT deleted_store_ids() AS deleted_store_ids), '{}'::uuid[])))))"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "store_members",
+   "policyname": "store_members_delete",
+   "cmd": "DELETE",
+   "roles": "{public}",
+   "qual": "((user_id = ( SELECT auth.uid() AS uid)) OR (store_id IN ( SELECT stores.id\n   FROM stores\n  WHERE (stores.owner_id = ( SELECT auth.uid() AS uid)))) OR (store_id IN ( SELECT sm2.store_id\n   FROM store_members sm2\n  WHERE ((sm2.user_id = ( SELECT auth.uid() AS uid)) AND (sm2.role = 'admin'::text) AND (sm2.status = 'approved'::text)))))",
+   "with_check": null
+  },
+  {
+   "schemaname": "public",
+   "tablename": "store_members",
+   "policyname": "store_members_insert",
+   "cmd": "INSERT",
+   "roles": "{authenticated}",
+   "qual": null,
+   "with_check": "((user_id = ( SELECT auth.uid() AS uid)) AND (status = 'pending'::text) AND (role = 'member'::text))"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "store_members",
+   "policyname": "store_members_select",
+   "cmd": "SELECT",
+   "roles": "{public}",
+   "qual": "((user_id = ( SELECT auth.uid() AS uid)) OR (store_id IN ( SELECT stores.id\n   FROM stores\n  WHERE (stores.owner_id = ( SELECT auth.uid() AS uid)))) OR is_store_admin(store_id))",
+   "with_check": null
+  },
+  {
+   "schemaname": "public",
+   "tablename": "store_members",
+   "policyname": "store_members_update",
+   "cmd": "UPDATE",
+   "roles": "{public}",
+   "qual": "((store_id IN ( SELECT stores.id\n   FROM stores\n  WHERE (stores.owner_id = ( SELECT auth.uid() AS uid)))) OR is_store_admin(store_id))",
+   "with_check": null
+  },
+  {
+   "schemaname": "public",
+   "tablename": "store_taxonomies",
+   "policyname": "deleted_store_guard_store_id",
+   "cmd": "ALL",
+   "roles": "{authenticated}",
+   "qual": "((store_id IS NULL) OR (NOT (store_id = ANY (COALESCE(( SELECT deleted_store_ids() AS deleted_store_ids), '{}'::uuid[])))))",
+   "with_check": "((store_id IS NULL) OR (NOT (store_id = ANY (COALESCE(( SELECT deleted_store_ids() AS deleted_store_ids), '{}'::uuid[])))))"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "store_taxonomies",
+   "policyname": "taxonomy_member_read",
+   "cmd": "SELECT",
+   "roles": "{authenticated}",
+   "qual": "is_store_member(store_id)",
+   "with_check": null
+  },
+  {
+   "schemaname": "public",
+   "tablename": "stores",
+   "policyname": "Users can create stores",
+   "cmd": "INSERT",
+   "roles": "{public}",
+   "qual": null,
+   "with_check": "(owner_id = ( SELECT auth.uid() AS uid))"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "stores",
+   "policyname": "Users can update own stores",
+   "cmd": "UPDATE",
+   "roles": "{public}",
+   "qual": "(owner_id = ( SELECT auth.uid() AS uid))",
+   "with_check": null
+  },
+  {
+   "schemaname": "public",
+   "tablename": "stores",
+   "policyname": "Users can view own stores",
+   "cmd": "SELECT",
+   "roles": "{public}",
+   "qual": "(owner_id = ( SELECT auth.uid() AS uid))",
+   "with_check": null
+  },
+  {
+   "schemaname": "public",
+   "tablename": "stores",
+   "policyname": "Users cannot delete stores",
+   "cmd": "DELETE",
+   "roles": "{public}",
+   "qual": "false",
+   "with_check": null
+  },
+  {
+   "schemaname": "public",
+   "tablename": "stores",
+   "policyname": "deleted_store_guard",
+   "cmd": "ALL",
+   "roles": "{authenticated}",
+   "qual": "(deleted_at IS NULL)",
+   "with_check": "(deleted_at IS NULL)"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "stores",
+   "policyname": "stores_select_member",
+   "cmd": "SELECT",
+   "roles": "{public}",
+   "qual": "((owner_id = ( SELECT auth.uid() AS uid)) OR is_store_member(id))",
+   "with_check": null
+  },
+  {
+   "schemaname": "public",
+   "tablename": "stores",
+   "policyname": "stores_update_owner_or_admin",
+   "cmd": "UPDATE",
+   "roles": "{public}",
+   "qual": "((owner_id = ( SELECT auth.uid() AS uid)) OR (id IN ( SELECT store_members.store_id\n   FROM store_members\n  WHERE ((store_members.user_id = ( SELECT auth.uid() AS uid)) AND (store_members.role = 'admin'::text) AND (store_members.status = 'approved'::text)))))",
+   "with_check": "((owner_id = ( SELECT auth.uid() AS uid)) OR (id IN ( SELECT store_members.store_id\n   FROM store_members\n  WHERE ((store_members.user_id = ( SELECT auth.uid() AS uid)) AND (store_members.role = 'admin'::text) AND (store_members.status = 'approved'::text)))))"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "toss_catalog",
+   "policyname": "deleted_store_guard_store_id",
+   "cmd": "ALL",
+   "roles": "{authenticated}",
+   "qual": "((store_id IS NULL) OR (NOT (store_id = ANY (COALESCE(( SELECT deleted_store_ids() AS deleted_store_ids), '{}'::uuid[])))))",
+   "with_check": "((store_id IS NULL) OR (NOT (store_id = ANY (COALESCE(( SELECT deleted_store_ids() AS deleted_store_ids), '{}'::uuid[])))))"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "toss_catalog",
+   "policyname": "toss_catalog: store owner only",
+   "cmd": "ALL",
+   "roles": "{public}",
+   "qual": "(store_id IN ( SELECT stores.id\n   FROM stores\n  WHERE (stores.owner_id = ( SELECT auth.uid() AS uid))))",
+   "with_check": null
+  },
+  {
+   "schemaname": "public",
+   "tablename": "toss_catalog",
+   "policyname": "toss_catalog_member_insert",
+   "cmd": "INSERT",
+   "roles": "{public}",
+   "qual": null,
+   "with_check": "user_has_store_access(store_id)"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "toss_catalog",
+   "policyname": "toss_catalog_member_select",
+   "cmd": "SELECT",
+   "roles": "{public}",
+   "qual": "user_has_store_access(store_id)",
+   "with_check": null
+  },
+  {
+   "schemaname": "public",
+   "tablename": "toss_catalog",
+   "policyname": "toss_catalog_member_update",
+   "cmd": "UPDATE",
+   "roles": "{public}",
+   "qual": "user_has_store_access(store_id)",
+   "with_check": null
+  },
+  {
+   "schemaname": "public",
+   "tablename": "toss_order_items",
+   "policyname": "Users can manage own toss order items",
+   "cmd": "ALL",
+   "roles": "{public}",
+   "qual": "(store_id IN ( SELECT stores.id\n   FROM stores\n  WHERE (stores.owner_id = ( SELECT auth.uid() AS uid))))",
+   "with_check": null
+  },
+  {
+   "schemaname": "public",
+   "tablename": "toss_order_items",
+   "policyname": "deleted_store_guard_store_id",
+   "cmd": "ALL",
+   "roles": "{authenticated}",
+   "qual": "((store_id IS NULL) OR (NOT (store_id = ANY (COALESCE(( SELECT deleted_store_ids() AS deleted_store_ids), '{}'::uuid[])))))",
+   "with_check": "((store_id IS NULL) OR (NOT (store_id = ANY (COALESCE(( SELECT deleted_store_ids() AS deleted_store_ids), '{}'::uuid[])))))"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "toss_order_items",
+   "policyname": "financial_sharing_gate",
+   "cmd": "ALL",
+   "roles": "{authenticated}",
+   "qual": "can_read_store_financials(store_id)",
+   "with_check": "can_read_store_financials(store_id)"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "toss_order_items",
+   "policyname": "toss_order_items_member_insert",
+   "cmd": "INSERT",
+   "roles": "{public}",
+   "qual": null,
+   "with_check": "user_has_store_access(store_id)"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "toss_order_items",
+   "policyname": "toss_order_items_member_select",
+   "cmd": "SELECT",
+   "roles": "{public}",
+   "qual": "user_has_store_access(store_id)",
+   "with_check": null
+  },
+  {
+   "schemaname": "public",
+   "tablename": "toss_orders",
+   "policyname": "Users can manage own toss sales",
+   "cmd": "ALL",
+   "roles": "{public}",
+   "qual": "(store_id IN ( SELECT stores.id\n   FROM stores\n  WHERE (stores.owner_id = ( SELECT auth.uid() AS uid))))",
+   "with_check": null
+  },
+  {
+   "schemaname": "public",
+   "tablename": "toss_orders",
+   "policyname": "deleted_store_guard_store_id",
+   "cmd": "ALL",
+   "roles": "{authenticated}",
+   "qual": "((store_id IS NULL) OR (NOT (store_id = ANY (COALESCE(( SELECT deleted_store_ids() AS deleted_store_ids), '{}'::uuid[])))))",
+   "with_check": "((store_id IS NULL) OR (NOT (store_id = ANY (COALESCE(( SELECT deleted_store_ids() AS deleted_store_ids), '{}'::uuid[])))))"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "toss_orders",
+   "policyname": "financial_sharing_gate",
+   "cmd": "ALL",
+   "roles": "{authenticated}",
+   "qual": "can_read_store_financials(store_id)",
+   "with_check": "can_read_store_financials(store_id)"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "toss_orders",
+   "policyname": "toss_orders_member_insert",
+   "cmd": "INSERT",
+   "roles": "{public}",
+   "qual": null,
+   "with_check": "user_has_store_access(store_id)"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "toss_orders",
+   "policyname": "toss_orders_member_select",
+   "cmd": "SELECT",
+   "roles": "{public}",
+   "qual": "user_has_store_access(store_id)",
+   "with_check": null
+  },
+  {
+   "schemaname": "public",
+   "tablename": "toss_orders",
+   "policyname": "toss_orders_member_update",
+   "cmd": "UPDATE",
+   "roles": "{public}",
+   "qual": "user_has_store_access(store_id)",
+   "with_check": null
+  },
+  {
+   "schemaname": "public",
+   "tablename": "toss_pending_installations",
+   "policyname": "deleted_store_guard_matched_store_id",
+   "cmd": "ALL",
+   "roles": "{authenticated}",
+   "qual": "((matched_store_id IS NULL) OR (NOT (matched_store_id = ANY (COALESCE(( SELECT deleted_store_ids() AS deleted_store_ids), '{}'::uuid[])))))",
+   "with_check": "((matched_store_id IS NULL) OR (NOT (matched_store_id = ANY (COALESCE(( SELECT deleted_store_ids() AS deleted_store_ids), '{}'::uuid[])))))"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "transaction_evidence",
+   "policyname": "deleted_store_guard_store_id",
+   "cmd": "ALL",
+   "roles": "{authenticated}",
+   "qual": "((store_id IS NULL) OR (NOT (store_id = ANY (COALESCE(( SELECT deleted_store_ids() AS deleted_store_ids), '{}'::uuid[])))))",
+   "with_check": "((store_id IS NULL) OR (NOT (store_id = ANY (COALESCE(( SELECT deleted_store_ids() AS deleted_store_ids), '{}'::uuid[])))))"
+  },
+  {
+   "schemaname": "public",
+   "tablename": "transaction_evidence",
+   "policyname": "evidence_delete",
+   "cmd": "DELETE",
+   "roles": "{authenticated}",
+   "qual": "(evidence_target_access(store_id, purchase_id, expense_id, recurring_rule_id, occurrence_month, true) AND ((created_by = ( SELECT auth.uid() AS uid)) OR is_store_admin(store_id)))",
+   "with_check": null
+  },
+  {
+   "schemaname": "public",
+   "tablename": "transaction_evidence",
+   "policyname": "evidence_read",
+   "cmd": "SELECT",
+   "roles": "{authenticated}",
+   "qual": "(evidence_target_access(store_id, purchase_id, expense_id, recurring_rule_id, occurrence_month, false) AND ((status = 'ready'::text) OR (created_by = ( SELECT auth.uid() AS uid)) OR is_store_admin(store_id)))",
+   "with_check": null
+  }
+ ],
+ "schema_migrations": [
+  {
+   "version": "20260401",
+   "name": "store_categories"
+  },
+  {
+   "version": "20260403",
+   "name": "fix_deliver_order_unit_price"
+  },
+  {
+   "version": "20260407",
+   "name": "pos_catalog"
+  },
+  {
+   "version": "20260408",
+   "name": "normalize_toss_orders"
+  },
+  {
+   "version": "20260409",
+   "name": "toss_order_items_category_options"
+  },
+  {
+   "version": "20260414",
+   "name": "store_members"
+  },
+  {
+   "version": "20260416",
+   "name": "delete_user_data"
+  },
+  {
+   "version": "20260602",
+   "name": "employees_payroll"
+  },
+  {
+   "version": "20260604",
+   "name": "employee_extra_fields"
+  },
+  {
+   "version": "20260605",
+   "name": "attendance"
+  },
+  {
+   "version": "20260608",
+   "name": "attendance_daily_wage"
+  },
+  {
+   "version": "20260609",
+   "name": "ingredient_drop_container"
+  },
+  {
+   "version": "20260612",
+   "name": "purchase_category_merge"
+  },
+  {
+   "version": "20260811",
+   "name": "toss_confirm_matching"
+  },
+  {
+   "version": "20261105043033",
+   "name": "daily_labor_sources"
+  },
+  {
+   "version": "20261105054459",
+   "name": "expense_occurrence_dates"
+  },
+  {
+   "version": "20261105054501",
+   "name": "recurring_fixed_expenses"
+  },
+  {
+   "version": "20261105054519",
+   "name": "recurring_financial_summaries"
+  },
+  {
+   "version": "20261114025150",
+   "name": "transaction_evidence"
+  },
+  {
+   "version": "20261114025338",
+   "name": "transaction_evidence_privileges"
+  },
+  {
+   "version": "20261117100000",
+   "name": "pos_skip_unchanged"
+  }
+ ],
+ "store_member_role_counts": [
+  {
+   "role": "member",
+   "count": 5
+  },
+  {
+   "role": "admin",
+   "count": 2
+  }
+ ],
+ "after": {
+  "schema_migrations_added": [
+   {
+    "version": "20261117130000",
+    "name": "qr_attendance_hardening",
+    "created_by": "claude-orchestrator"
+   },
+   {
+    "version": "20261117140000",
+    "name": "qr_attendance_policy",
+    "created_by": "claude-orchestrator"
+   },
+   {
+    "version": "20261117150000",
+    "name": "role_model_core",
+    "created_by": "claude-orchestrator"
+   },
+   {
+    "version": "20261117160000",
+    "name": "store_visibility",
+    "created_by": "claude-orchestrator"
+   },
+   {
+    "version": "20261117170000",
+    "name": "manager_rpc_policy",
+    "created_by": "claude-orchestrator"
+   },
+   {
+    "version": "20261117180000",
+    "name": "legacy_admin_to_member",
+    "created_by": "claude-orchestrator"
+   },
+   {
+    "version": "20261118120000",
+    "name": "qr_attendance_daily_work",
+    "created_by": "claude-orchestrator"
+   },
+   {
+    "version": "20261118130000",
+    "name": "scanner_pairing",
+    "created_by": "claude-orchestrator"
+   }
+  ],
+  "store_member_role_counts": [
+   {
+    "role": "admin",
+    "count": 1
+   },
+   {
+    "role": "member",
+    "count": 6
+   }
+  ],
+  "policy_count": [
+   {
+    "count": 195
+   }
+  ],
+  "upsert_pos_order_batch_md5": [
+   {
+    "md5": "1c9902fdc96fa82b24a3cd5da6f84bdf"
+   }
+  ],
+  "note": "8개 순서 적용 완료. POS 일괄 저장 함수 본문은 Disk IO 버전과 동일. 비소유 admin 1명 member 전환."
+ }
+}

@@ -1,7 +1,7 @@
 jest.mock('../../lib/components/DailyWorkPanel', () => ({ DailyWorkPanel: () => null }));
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { Alert } from 'react-native';
-import { LegacyWorkMinutesScreen as WorkMinutesScreen } from '../../app/mypage/work-minutes';
+import CurrentWorkMinutesScreen, { LegacyWorkMinutesScreen as WorkMinutesScreen } from '../../app/mypage/work-minutes';
 const mockRefetchEmployees = jest.fn().mockResolvedValue(undefined);
 const mockRefetchSubmissions = jest.fn().mockResolvedValue(undefined);
 const mockSubmit = jest.fn().mockResolvedValue({ id: 'submitted' });
@@ -94,4 +94,13 @@ it('제출 중 중복 탭을 막고 제출 후 조회 실패는 재제출로 안
   expect(Alert.alert).toHaveBeenCalledWith('제출 완료', '제출은 완료됐어요. 제출 이력을 다시 불러와 주세요.');
   expect(screen.getByRole('button', { name: '제출 완료 · 관리자 확인 대기' })).toBeDisabled();
   expect(screen.getByLabelText('입력 근거 / 수정 사유')).toHaveDisplayValue('근무 합계');
+});
+
+it('현재 직접 경로는 수동 제출 없이 QR 출퇴근 안내만 보여준다', () => {
+  render(<CurrentWorkMinutesScreen />);
+  expect(screen.getByText('퇴근하면 근무시간을 자동으로 기록해요')).toBeTruthy();
+  expect(screen.getByText('내 출퇴근 보기')).toBeTruthy();
+  expect(screen.queryByLabelText('총 실근무 시간 (분)')).toBeNull();
+  expect(mockSubmit).not.toHaveBeenCalled();
+  expect(mockRefetchEmployees).not.toHaveBeenCalled();
 });

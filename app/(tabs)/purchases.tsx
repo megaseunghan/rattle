@@ -14,7 +14,6 @@ import { useTabPager } from '../../lib/contexts/TabPagerContext';
 import { useAuth } from '../../lib/contexts/AuthContext';
 import { usePurchases } from '../../lib/hooks/usePurchases';
 import { useExpenses } from '../../lib/hooks/useExpenses';
-import { getPurchaseItemCounts } from '../../lib/services/purchases';
 import { animateListChange } from '../../lib/utils/layoutAnimation';
 import { ExpensesPanel } from '../../lib/components/ExpensesPanel';
 import { GlassCard } from '../../lib/components/GlassCard';
@@ -75,7 +74,7 @@ function PurchasesView({ active }: { active: boolean }) {
   const [filterNotice, setFilterNotice] = useState(false);
 
   const category = usePurchaseCategories();
-  const { currentRole } = useAuth();
+  const { canManageStore } = useAuth();
   const [categoryModal, setCategoryModal] = useState(false);
   const [activeCategory, setActiveCategory] = useState('전체');
   const categoryOptions = ['전체', ...new Set(category.categories)];
@@ -115,11 +114,6 @@ function PurchasesView({ active }: { active: boolean }) {
   const selectedPurchases = selectedKey ? (purchaseByDay.get(selectedKey) ?? []) : filtered;
   const monthTotal = filtered.reduce((s, p) => s + p.amount, 0);
 
-  const [itemCounts, setItemCounts] = useState<Record<string, number>>({});
-  useEffect(() => {
-    if (selectedPurchases.length === 0) return;
-    getPurchaseItemCounts(selectedPurchases.map(p => p.id)).then(setItemCounts).catch(() => {});
-  }, [selectedKey, purchases]);
   const isToday = (day: number) => year === today.getFullYear() && month === today.getMonth() && day === today.getDate();
 
   function confirmDeletePurchase(id: string) {
@@ -152,7 +146,7 @@ function PurchasesView({ active }: { active: boolean }) {
       >
         {filterNotice && <Text style={styles.emptyHint}>선택한 달에 내역이 없는 거래처 필터를 해제했어요.</Text>}
         <LedgerHeader year={year} month={month + 1} onPrev={prevMonth} onNext={nextMonth} label={activeTab === '전체' && activeCategory === '전체' ? '이번 달 매입' : '선택한 조건의 매입'} amount={loading ? '불러오는 중' : error ? '조회 필요' : `${monthTotal.toLocaleString()}원`} />
-        <LedgerFilters label="매입 카테고리" options={availableCategories} selected={activeCategory} onSelect={setActiveCategory} onManage={currentRole === 'admin' ? () => setCategoryModal(true) : undefined} />
+        <LedgerFilters label="매입 카테고리" options={availableCategories} selected={activeCategory} onSelect={setActiveCategory} onManage={canManageStore ? () => setCategoryModal(true) : undefined} />
         {category.error && <Text style={styles.emptyHint}>{category.error}</Text>}
         {purchaseTabs.length > 1 && <LedgerFilters label="거래처" options={purchaseTabs} selected={activeTab} onSelect={setActiveTab} />}
 
@@ -201,8 +195,8 @@ function PurchasesView({ active }: { active: boolean }) {
                   <TouchableOpacity key={p.id} style={[styles.purchaseRow, i < selectedPurchases.length - 1 && styles.rowBorder]} onPress={() => router.push(`/purchases/${p.id}`)} onLongPress={() => confirmDeletePurchase(p.id)} activeOpacity={0.7} accessibilityRole="button">
                     <View style={styles.purchaseLeft}>
                       <Text style={styles.purchaseSupplier} numberOfLines={2}>{p.supplier}</Text>
-                      {itemCounts[p.id] > 0 && (
-                        <Text style={styles.purchaseItemCount}>{itemCounts[p.id]}개 품목</Text>
+                      {(p.item_count ?? 0) > 0 && (
+                        <Text style={styles.purchaseItemCount}>{p.item_count}개 품목</Text>
                       )}
                       <Badge label={p.category} variant="neutral" />
                     </View>

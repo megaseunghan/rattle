@@ -1,10 +1,11 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import { AdminDashboardScreen } from '../../app/admin/index';
+let mockOwnerCapability = true;
 const mockDashboard = { ownedStores: [{ id: 'a', name: '매장A' }, { id: 'b', name: '매장B' }], period: 'month', setPeriod: jest.fn(), anchorYear: 2026, anchorMonth: 10, isCurrentMonth: true,
   pnl: { current: [{ storeId: 'a', storeName: '매장A', revenue: 100, profit: 10, purchaseCost: 30, laborCost: 20, otherExpense: 40 }, { storeId: 'b', storeName: '매장B', revenue: 300, profit: 30, purchaseCost: 90, laborCost: 60, otherExpense: 120 }], previous: [] },
   trend: [], weeklyCleaning: {}, weeklySchedule: { a: [{ weekday: 1, headcount: 2, totalHours: 16, shifts: [] }], b: [{ weekday: 1, headcount: 3, totalHours: 24, shifts: [] }] }, errors: { pnl: false, trend: false, cleaning: {}, schedule: {} }, financialError: null, loading: false, refetch: jest.fn(), goPrev: jest.fn(), goNext: jest.fn() };
 jest.mock('expo-router', () => ({ router: { push: jest.fn() } }));
-jest.mock('../../lib/contexts/AuthContext', () => ({ useAuth: () => ({ realRole: 'admin', switchStore: jest.fn() }) }));
+jest.mock('../../lib/contexts/AuthContext', () => ({ useAuth: () => ({ realRole: 'admin', canViewOwnerDashboard: mockOwnerCapability, switchStore: jest.fn() }) }));
 jest.mock('../../lib/contexts/TabPagerContext', () => ({ useTabPager: () => ({ goToTab: jest.fn(), openStorePicker: jest.fn(), selectStoreScope: jest.fn(), selectedMonth: '2026-10', setSelectedMonth: jest.fn() }) }));
 jest.mock('../../lib/hooks/useAdminDashboard', () => ({ useAdminDashboard: () => mockDashboard }));
 jest.mock('../../lib/components/GlassBackdrop', () => ({ GlassBackdrop: () => null }));
@@ -38,4 +39,13 @@ it('매장이 많으면 검색을 제공하고 세로 매장 카드 목록을 �
     expect(screen.queryByLabelText('매장0 영업이익')).toBeNull();
     expect(screen.queryByText('매장별 현황')).toBeNull();
   } finally { mockDashboard.ownedStores = original; }
+});
+
+it('이전 관리자 역할만으로 사장님 대시보드를 열지 않는다', () => {
+  mockOwnerCapability = false;
+  try {
+    render(<AdminDashboardScreen />);
+    expect(screen.getByText('사장님 계정으로 확인해주세요')).toBeTruthy();
+    expect(screen.queryByText('ring 400 40')).toBeNull();
+  } finally { mockOwnerCapability = true; }
 });

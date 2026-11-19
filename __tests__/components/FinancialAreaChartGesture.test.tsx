@@ -63,3 +63,23 @@ it('음수 범위에서만 점선 없는 0 기준선을 표시한다', () => {
  expect(view.getByTestId('chart-zero-baseline').props.strokeDasharray).toBeUndefined();
  expect(view.getByTestId('chart-zero-baseline').props.strokeOpacity).toBe(0.22);
 });
+
+it('드래그의 여러 이동을 한 프레임으로 합치고 종료 후 대기 갱신을 취소한다', () => {
+ const frames: FrameRequestCallback[] = [];
+ const request = jest.spyOn(globalThis, 'requestAnimationFrame').mockImplementation(callback => { frames.push(callback); return frames.length; });
+ const cancel = jest.spyOn(globalThis, 'cancelAnimationFrame').mockImplementation(() => {});
+ try {
+   const view = render(<FinancialAreaChart current={days} previous={[]} metric="revenue" date="2026-11-03" />);
+   const gesture = getByGestureTestId('financial-chart-pan') as any;
+   act(() => gesture.handlers.onBegin({ x: 10, y: 50 }));
+   act(() => { for (let x = 20; x <= 300; x += 10) gesture.handlers.onUpdate({ x, y: 50 }); });
+   expect(request).toHaveBeenCalledTimes(1);
+   act(() => frames[0](0));
+   expect(view.getByText('11월 3일')).toBeTruthy();
+   act(() => gesture.handlers.onUpdate({ x: 50, y: 50 }));
+   act(() => gesture.handlers.onFinalize());
+   expect(cancel).toHaveBeenCalledWith(2);
+   expect(view.queryByTestId('chart-range-high')).toBeNull();
+   view.unmount();
+ } finally { request.mockRestore(); cancel.mockRestore(); }
+});

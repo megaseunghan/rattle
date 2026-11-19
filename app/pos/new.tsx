@@ -1,3 +1,4 @@
+import { usePreviewWriteGuard } from '../../lib/hooks/usePreviewWriteGuard';
 import { NumericText } from '../../lib/components/ui/NumericText';
 import { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, Platform, KeyboardAvoidingView } from 'react-native';
@@ -39,6 +40,7 @@ function fmtWon(n: number): string {
 /** 화면 11 · 매출 추가 — 현금/카드를 동시에 입력하고 할인액(선택)까지 기록하는 수기 매출 폼 */
 export default function ManualSaleNewScreen() {
   const { store } = useAuth();
+  const { canWrite } = usePreviewWriteGuard();
   const [date, setDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [cashAmount, setCashAmount] = useState('');
@@ -107,7 +109,7 @@ export default function ManualSaleNewScreen() {
   }
 
   function handleSave() {
-    if (!store || !ready || lock.current) return;
+    if (!canWrite() || !store || !ready || lock.current) return;
     if (![cashNum, cardNum, discountNum].every(n => Number.isSafeInteger(n) && n >= 0 && n < 1e12)) { Alert.alert('입력 오류', '금액은 1조 원 미만의 0 이상 정수로 입력해주세요.'); return; }
     if (total <= 0) { Alert.alert('입력 오류', '현금 또는 카드 매출액을 입력해주세요.'); return; }
     const input = { storeId: store.id, date: dateKey, cashAmount: cashNum, cardAmount: cardNum, discountAmount: discountNum, memo: memo.trim() || null, expected: previous };
@@ -128,7 +130,7 @@ export default function ManualSaleNewScreen() {
       { text: '저장', onPress: async () => {
         if (reviewHandled) return;
         reviewHandled = true;
-        if (!isCurrent()) { cancel(); return; }
+        if (!canWrite() || !isCurrent()) { cancel(); return; }
         setReviewing(false); setSaving(true);
         try {
           const saved = await saveManualSale(input);

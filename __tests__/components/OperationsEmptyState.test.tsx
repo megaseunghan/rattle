@@ -12,6 +12,7 @@ jest.mock('../../lib/hooks/useRequestApprovals',()=>({useRequestApprovals:()=>mo
 jest.mock('../../lib/hooks/useManualSales',()=>({useManualSales:()=>mockSales}));
 jest.mock('../../lib/hooks/useTossSync',()=>({useTossSync:()=>({loadTodaySales:mockRead,autoSyncRecent:mockRead})}));
 jest.mock('../../lib/hooks/usePosAnalytics',()=>({usePosAnalytics:()=>({summaries:[],fetchSummariesByRange:mockRead})}));
+jest.mock('../../lib/services/posAnalytics',()=>({getDailySummariesByRange:jest.fn(),getBusinessDayRange:(date:string)=>({from:`${date}T14:00:00Z`,to:`${date}T15:00:00Z`}),getAutoSyncRange:()=>({from:'2026-11-17T14:00:00Z',to:'2026-11-18T14:00:00Z'})}));
 jest.mock('../../lib/services/stores',()=>({getStoreDetails:async()=>({toss_merchant_id:null})}));
 jest.mock('../../lib/components/GlassBackdrop',()=>({GlassBackdrop:()=>null}));
 jest.mock('../../lib/icons/AppIcon',()=>({AppIcon:()=>null}));

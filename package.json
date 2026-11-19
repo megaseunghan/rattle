@@ -11,7 +11,7 @@
     "updates:native": "node scripts/configure-native-updates.cjs",
     "test": "jest",
     "docs:api": "python3 -m http.server 8732 --bind 127.0.0.1 --directory docs/api",
-    "test:sql": "node scripts/validate-operations-sql.mjs && node scripts/validate-release-sql.mjs && node scripts/validate-read-models-sql.mjs && node scripts/validate-pos-read-models.mjs && node scripts/validate-financial-sharing.mjs && node scripts/validate-regular-wages-sql.mjs && node scripts/validate-daily-work-sql.mjs && node scripts/validate-payroll-snapshot-integration.mjs"
+    "test:sql": "node scripts/validate-operations-sql.mjs && node scripts/validate-release-sql.mjs && node scripts/validate-read-models-sql.mjs && node scripts/validate-pos-read-models.mjs && node scripts/validate-financial-sharing.mjs && node scripts/validate-regular-wages-sql.mjs && node scripts/validate-daily-work-sql.mjs && node scripts/validate-payroll-snapshot-integration.mjs && node scripts/validate-store-soft-delete-sql.mjs && node scripts/validate-rls-auth-initplan-sql.mjs && node scripts/validate-rls-auth-wrapping.mjs && node scripts/validate-store-bootstrap-sql.mjs && node scripts/validate-home-daily-sources-sql.mjs && node scripts/validate-pos-unchanged-sql.mjs && node scripts/validate-qr-attendance-sql.mjs && node scripts/validate-role-model-sql.mjs && node scripts/validate-store-visibility-sql.mjs && node scripts/validate-manager-role-integration-sql.mjs"
   },
   "jest": {
     "preset": "jest-expo",
@@ -22,7 +22,7 @@
       "<rootDir>/supabase/functions/"
     ],
     "transformIgnorePatterns": [
-      "node_modules/(?!((jest-)?react-native|@react-native(-community)?)|expo(nent)?|@expo(nent)?/.*|react-navigation|@react-navigation/.*|@supabase/.*)"
+      "node_modules/(?!((jest-)?react-native|@react-native(-community)?)|expo(nent)?|@expo(nent)?/.*|react-navigation|@react-navigation/.*|@supabase/.*|@noble/hashes/.*)"
     ],
     "moduleNameMapper": {
       "^@expo/vector-icons$": "<rootDir>/__mocks__/@expo/vector-icons.js",
@@ -37,6 +37,7 @@
   },
   "dependencies": {
     "@expo/vector-icons": "^14.0.4",
+    "@noble/hashes": "2.4.0",
     "@react-native-async-storage/async-storage": "^2.2.0",
     "@react-native-community/datetimepicker": "8.6.0",
     "@react-native-community/slider": "5.1.2",
@@ -46,12 +47,14 @@
     "expo": "~55.0.8",
     "expo-apple-authentication": "~55.0.17",
     "expo-blur": "~55.0.14",
+    "expo-camera": "~55.0.23",
     "expo-constants": "~55.0.9",
     "expo-crypto": "~55.0.19",
     "expo-device": "~55.0.10",
     "expo-document-picker": "~55.0.9",
     "expo-font": "~55.0.4",
     "expo-haptics": "~55.0.18",
+    "expo-keep-awake": "~55.0.8",
     "expo-linking": "~55.0.8",
     "expo-router": "~55.0.7",
     "expo-secure-store": "~55.0.18",
@@ -68,6 +71,7 @@
     "react-native-gesture-handler": "~2.30.0",
     "react-native-maps": "1.27.2",
     "react-native-pager-view": "8.0.0",
+    "react-native-qrcode-svg": "^6.3.54",
     "react-native-reanimated": "4.2.1",
     "react-native-safe-area-context": "~5.6.2",
     "react-native-screens": "~4.23.0",
