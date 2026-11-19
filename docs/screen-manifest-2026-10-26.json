@@ -703,5 +703,19 @@
     "status": "current",
     "verification": "source_present_static_inspection_no_design_behavioral_e2e_not_run",
     "review_result": "registered_2026_11_18_task_ab7e8f5ea02b"
+  },
+  {
+    "id": "S53",
+    "source": "app/dev/ocr-lab.tsx",
+    "name": "영수증 기기 OCR 실측",
+    "access": "로그인·현재 매장·permissionsReady·canManageStore·devPreviewMode self; 직원/대기/미리보기 차단",
+    "input": "숨은 직접 경로·여러 사진 선택·사진별 Mac 비교 키·측정 중지·JSON 공유·임시파일 정리 재시도",
+    "behavior": "기기 OCR 원문/신뢰도/ms·행/열 파서·날짜/거래처/합계 후보·미확인/충돌 경고; 범위 전환 이전 응답 폐기; iOS 원본 EXIF·Android 캐시 이미지",
+    "effect": "매입/서버 저장 없음; 앱 임시 사진/명시적 공유 파일 생성 후 삭제; 삭제 실패 전달/재시도·24시간 지난 자기 임시파일 회수",
+    "family": "OCR_LAB",
+    "status": "current",
+    "verification": "local_mock_and_swift_helper_tests_native_device_e2e_not_run",
+    "source_sha256": "e0f7eb1585f0e63f1b390a841f9f94add46c48353fa477a39d1bfd4134180a6e",
+    "review_result": "OCR_R1_followup_native_device_validation_pending"
   }
 ]
