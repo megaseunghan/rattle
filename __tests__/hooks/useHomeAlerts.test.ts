@@ -4,6 +4,7 @@ let mockUser = { id: 'a' };
 let mockStore: { id: string; toss_merchant_id?: string } = { id: 'store' };
 let mockAlerts: { key: string; kind: string }[] = [];
 const mockBuild = jest.fn();
+const mockRestore = jest.fn();
 const mockRead = jest.fn();
 const mockGetReads = jest.fn();
 const mockStock = jest.fn().mockResolvedValue([]);
@@ -12,9 +13,10 @@ jest.mock('../../lib/services/homeAlerts', () => ({
   buildHomeAlerts: (input: unknown) => { mockBuild(input); return mockAlerts; },
   getHomeAlertStock: (...args: unknown[]) => mockStock(...args), hasMonthlyFixedExpense: async () => true,
   getHomeAlertReads: (...args: unknown[]) => mockGetReads(...args),
+  restoreHomeAlert: (...args: unknown[]) => mockRestore(...args),
   markHomeAlertRead: (...args: unknown[]) => mockRead(...args),
 }));
-beforeEach(() => { mockUser = { id: 'a' }; mockStore = { id: 'store' }; mockBuild.mockReset();
+beforeEach(() => { mockRestore.mockReset().mockResolvedValue(undefined); mockUser = { id: 'a' }; mockStore = { id: 'store' }; mockBuild.mockReset();
   mockAlerts = [{ key: 'stock:one', kind: 'stock' }, { key: 'stock:two', kind: 'stock' }]; mockRead.mockReset().mockResolvedValue(undefined); mockGetReads.mockReset().mockResolvedValue([]); });
 it('읽음 처리한 품목만 숨기고 저장 대상에 사용자와 매장을 명시한다', async () => {
   const { result } = renderHook(() => useHomeAlerts());
@@ -73,4 +75,38 @@ it('오늘 매출만 바뀌면 원본 재조회 없이 경고를 다시 계산�
   const callback = result.current.refetch;
   rerender({ sales: 100 });
   expect(result.current.refetch).toBe(callback);
+});
+
+it('실행취소는 본인·매장·키만 되돌리고 이미 해결된 알림을 다시 만들지 않는다', async () => {
+  const { result } = renderHook(() => useHomeAlerts());
+  await act(async () => { await result.current.refetch(); await result.current.markRead('stock:one'); });
+  mockAlerts = [];
+  await act(async () => { expect(await result.current.restoreRead('stock:one')).toBe(true); });
+  expect(mockRestore).toHaveBeenCalledWith('store', 'a', 'stock:one');
+  expect(result.current.alerts).toEqual([]);
+});
+it('실행취소 저장 실패는 성공으로 처리하지 않는다', async () => {
+  const { result } = renderHook(() => useHomeAlerts());
+  mockRestore.mockRejectedValueOnce(new Error('permission denied'));
+  await act(async () => { await expect(result.current.restoreRead('stock:one')).rejects.toThrow('permission denied'); });
+});
+it('계정 전환 전 실행취소 응답은 새 계정 조회를 시작하지 않는다', async () => {
+  let done!: () => void;
+  mockRestore.mockImplementation(() => new Promise<void>(resolve => { done = resolve; }));
+  const { result, rerender } = renderHook(() => useHomeAlerts());
+  let pending!: Promise<boolean>;
+  act(() => { pending = result.current.restoreRead('stock:one'); });
+  mockUser = { id: 'b' }; rerender({});
+  await act(async () => { done(); expect(await pending).toBe(false); });
+  expect(mockGetReads).not.toHaveBeenCalled();
+});
+
+it('복원 저장 후 조회 실패는 복원 완료로 표시하지 않고 재시도할 수 있다', async () => {
+  const { result } = renderHook(() => useHomeAlerts());
+  await act(async () => { await result.current.refetch(); await result.current.markRead('stock:one'); });
+  mockGetReads.mockRejectedValueOnce(new Error('offline'));
+  await act(async () => { await expect(result.current.restoreRead('stock:one')).rejects.toThrow('홈 알림'); });
+  expect(result.current.error).toContain('홈 알림');
+  await act(async () => { expect(await result.current.restoreRead('stock:one')).toBe(true); });
+  expect(result.current.alerts.map(alert => alert.key)).toContain('stock:one');
 });

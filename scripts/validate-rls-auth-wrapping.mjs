@@ -24,9 +24,10 @@ assert.deepEqual(unwrappedPolicies('CREATE POLICY a ON t USING (is_store_member(
 assert.deepEqual(unwrappedPolicies('-- CREATE POLICY old ON t USING (auth.uid() = x);'), []);
 
 const files = (await readdir(dir)).filter(f => f.endsWith('.sql')).sort();
-// Imported QR files are already deployed and immutable. Only these exact bytes
+// Imported historical files are already deployed and immutable. Only these exact bytes
 // may rely on the ordered forward repair; do not extend the old baseline.
-const repairedQrFiles = new Map([
+const repairedHistoricalFiles = new Map([
+  ['20261103180000_home_alert_undo.sql', '8636739a331c03b2475150028edbdea5569696468c12f74c3927c9c4faaca1ad'],
   ['20261117150000_role_model_core.sql', '36f6f4fbc11eb397599d7be37053542dc05e8e18e19410962a30be0413bedc4d'],
   ['20261117160000_store_visibility.sql', '31d14a9ebf79314f1f92e50cecb1c93560ed1014876d5db1e71805d5047851a7'],
   ['20261117170000_manager_rpc_policy.sql', 'f9ef7eb3628c8bf0d851e341968738a01176aeaabe0dbe05c1588b124b22ad45'],
@@ -39,8 +40,8 @@ const offenders = [];
 for (const file of files) {
   if (baseline.has(file)) continue;
   const sql = await readFile(new URL(file, dir), 'utf8');
-  if (repairedQrFiles.has(file)) {
-    assert.equal(createHash('sha256').update(sql).digest('hex'), repairedQrFiles.get(file), `${file}: immutable deployed QR file changed`);
+  if (repairedHistoricalFiles.has(file)) {
+    assert.equal(createHash('sha256').update(sql).digest('hex'), repairedHistoricalFiles.get(file), `${file}: immutable deployed file changed`);
     assert.ok(file < repairName, 'repair must run after the imported policy');
     continue;
   }

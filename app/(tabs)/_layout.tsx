@@ -275,7 +275,9 @@ export default function TabsLayout() {
 
   return (
     <TabPagerContext.Provider value={pagerValue}>
-      <View style={styles.shell} testID="tab-shell" onLayout={event => setContainerHeight(event.nativeEvent.layout.height)}>
+      <View style={styles.shell} testID="tab-shell" onLayout={event => setContainerHeight(event.nativeEvent.layout.height)}
+        onTouchEnd={event => { if (event.nativeEvent.touches.length === 0) setPagerGestureActive('', false, true); }}
+        onTouchCancel={event => { if (event.nativeEvent.touches.length === 0) setPagerGestureActive('', false, true); }}>
         <GlassBackdrop />
         <View style={{ paddingTop: insets.top }}>
           <StoreAppBar name={effectiveHomeMode === 'dashboard' ? '전체 매장' : store?.name ?? '매장 선택'} unreadCount={unreadCount}

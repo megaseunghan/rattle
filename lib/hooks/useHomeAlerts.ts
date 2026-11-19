@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { AppState } from 'react-native';
 import { koreanDate } from '../utils/regularWages';
 import { Store } from '../../types';
-import { buildHomeAlerts, getHomeAlertReads, getHomeAlertStock, hasMonthlyFixedExpense, markHomeAlertRead } from '../services/homeAlerts';
+import { buildHomeAlerts, getHomeAlertReads, getHomeAlertStock, hasMonthlyFixedExpense, markHomeAlertRead, restoreHomeAlert } from '../services/homeAlerts';
 
 export function useHomeAlerts(todaySales?: number, selectedStore?: Store, financial = true) {
   const { store, user } = useAuth();
@@ -50,6 +50,7 @@ export function useHomeAlerts(todaySales?: number, selectedStore?: Store, financ
       if (request !== requestId.current || scopeRef.current !== scope) return;
       setSource({ scope, stock, hasFixed, now, read });
       setState({ scope, loading: false, error: null });
+      return true;
     } catch {
       if (request !== requestId.current || scopeRef.current !== scope) return;
       setState({ scope, loading: false,
@@ -67,11 +68,21 @@ export function useHomeAlerts(todaySales?: number, selectedStore?: Store, financ
     }
     return false;
   }, [storeId, userId, scope]);
+  const restoreRead = useCallback(async (key: string) => {
+    if (!storeId || !userId) throw new UserFacingError('로그인과 매장을 확인해 주세요.');
+    await restoreHomeAlert(storeId, userId, key);
+    if (scopeRef.current !== scope) return false;
+    // 원인 조건이 이미 해결된 알림을 스냅샷으로 되살리지 않고 현재 원천을 다시 확인한다.
+    const refreshed = await refetch();
+    if (scopeRef.current !== scope) return false;
+    if (!refreshed) throw new UserFacingError('홈 알림을 다시 확인해 주세요.');
+    return true;
+  }, [storeId, userId, scope, refetch]);
   const visible = state.scope === scope;
   const alerts = useMemo(() => source?.scope === scope ? buildHomeAlerts({
     stock: source.stock, now: source.now, fixedExpenseMissing: financial ? !source.hasFixed : undefined,
     tossNotSynced: financial && tossLinked && todaySales === 0,
   }).filter(alert => !source.read.has(alert.key) && (alert.kind !== 'tossNotSynced' || todaySales === 0)) : [], [source, scope, financial, tossLinked, todaySales]);
-  return { alerts: visible ? alerts : [], loading: visible ? state.loading : !!storeId,
-    error: visible ? state.error : null, refetch, markRead };
+  return { scope, alerts: visible ? alerts : [], loading: visible ? state.loading : !!storeId,
+    error: visible ? state.error : null, refetch, markRead, restoreRead };
 }

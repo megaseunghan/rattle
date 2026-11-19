@@ -230,3 +230,43 @@ it('그래프/알림 내부 제스처가 끝날 때까지 Pager 가로 전환을
   act(() => context.setAlertGestureActive?.('alert', false));
   expect(view.getByTestId('pager').props.scrollEnabled).toBe(true);
 });
+
+it('다른 알림 정리로 진행 중 스와이프 잠금을 해제하지 않고 마지막 터치 종료에만 복원한다', () => {
+  mockRouteParams = {};
+  const view = renderTabs();
+  const lock = (mockPagerContext as any).setAlertGestureActive;
+  act(() => lock('row-a', true));
+  expect(mockPager.setScrollEnabled).toHaveBeenLastCalledWith(false);
+  act(() => lock('unmounted-row-b', false));
+  expect(view.getByTestId('pager').props.scrollEnabled).toBe(false);
+  act(() => lock('row-b', true));
+  act(() => lock('row-a', false));
+  expect(view.getByTestId('pager').props.scrollEnabled).toBe(false);
+  act(() => lock('row-b', false));
+  expect(mockPager.setScrollEnabled).toHaveBeenLastCalledWith(true);
+  expect(view.getByTestId('pager').props.scrollEnabled).toBe(true);
+  fireEvent.press(view.getByLabelText('더보기'));
+  act(() => { lock('row-a', true); lock('row-a', false); });
+  expect(mockPager.setScrollEnabled).toHaveBeenLastCalledWith(false);
+});
+it('실제 화면 전체 터치가 끝나면 동시배치에서 남은 모든 토큰을 해제한다', () => {
+  mockRouteParams = {};
+  const view = renderTabs(); const lock = (mockPagerContext as any).setAlertGestureActive;
+  act(() => { lock('a', true); lock('b', true); });
+  expect(view.getByTestId('pager').props.scrollEnabled).toBe(false);
+  act(() => lock('b', false, true));
+  expect(view.getByTestId('pager').props.scrollEnabled).toBe(true);
+  expect(mockPager.setScrollEnabled).toHaveBeenLastCalledWith(true);
+});
+it('알림 밖에서 마지막 터치가 끝나거나 취소돼도 스와이프 잠금이 남지 않는다', () => {
+  mockRouteParams = {};
+  const view = renderTabs(); const lock = (mockPagerContext as any).setAlertGestureActive;
+  const shell = view.getByTestId('tab-shell');
+  for (const event of ['onTouchEnd', 'onTouchCancel']) {
+    act(() => lock('alert-with-outside-touch', true));
+    act(() => shell.props[event]({ nativeEvent: { touches: [{ identifier: 'outside' }] } }));
+    expect(view.getByTestId('pager').props.scrollEnabled).toBe(false);
+    act(() => shell.props[event]({ nativeEvent: { touches: [] } }));
+    expect(view.getByTestId('pager').props.scrollEnabled).toBe(true);
+  }
+});
