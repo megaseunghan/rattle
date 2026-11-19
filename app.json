@@ -4,7 +4,7 @@
     "slug": "rattle",
     "privacyPolicyUrl": "https://megaseunghan.github.io/rattle/privacy-policy.html",
     "scheme": "rattle",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "orientation": "portrait",
     "icon": "./assets/Rattle_ios_1024.png",
     "userInterfaceStyle": "light",
