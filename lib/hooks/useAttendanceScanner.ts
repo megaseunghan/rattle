@@ -14,7 +14,7 @@ export interface ScannerUiService extends AttendanceScannerEnrollmentService {
 }
 const defaultService: ScannerUiService = Enrollment;
 const waiting = () => ({ state: 'waiting', title: '', body: '', time: '' });
-const feedbackStates = ['saved', 'registered', 'scanFailed', 'wrongQr', 'unknown', 'revoked'];
+const feedbackStates = ['saved', 'registered', 'scanFailed', 'wrongQr', 'repeatQr', 'unknown', 'revoked'];
 export function useAttendanceScanner(service: ScannerUiService = defaultService) {
   const mounted = useRef(false), busy = useRef(false);
   const registration = useRef<AttendanceScannerRegistration | null>(null);
@@ -32,7 +32,8 @@ export function useAttendanceScanner(service: ScannerUiService = defaultService)
     holdingResult.current = feedbackStates.includes(notice.state);
     setState(notice);
   }
-  const processed = useRef(new Set<string>());
+  const processed = useRef(new Map<string, 'seen' | 'saved'>());
+  const visibleQr = useRef({ qr: '', lastSeen: 0, warned: false });
   const revoked = useCallback(() => {
     registration.current = null;
     holdingResult.current = true;
@@ -72,18 +73,33 @@ export function useAttendanceScanner(service: ScannerUiService = defaultService)
     return () => { mounted.current = false; registration.current = null; unresolved.current.clear(); clearInterval(timer); listener.remove(); };
   }, [refresh]);
   const scan = useCallback(async (qr: string) => {
+    const now = Date.now();
+    const visible = visibleQr.current;
+    // Expo throttles identical detections for 500 ms. Only a new presentation rearms its warning.
+    if (visible.qr !== qr || now - visible.lastSeen >= 1200) {
+      visible.qr = qr;
+      visible.warned = false;
+    }
+    visible.lastSeen = now;
     if (holdingResult.current || !mounted.current || busy.current || pairingUnknown.current || AppState.currentState !== 'active') return;
     const isPunch = !!registration.current;
     // A registration QR can explain its purpose once in each mode, without a second exchange.
     const key = (isPunch ? 'registered:' : 'setup:') + qr;
-    if (processed.current.has(key)) return;
-    processed.current.add(key);
+    const previous = processed.current.get(key);
+    const pairingQr = qr.startsWith('rattle-scanner:v1.');
+    if (isPunch && (previous || pairingQr)) {
+      if (visible.warned) return;
+      visible.warned = true;
+      const title = pairingQr ? '이미 등록된 매장폰이에요'
+        : previous === 'saved' ? '이미 기록한 QR이에요' : '새 출퇴근 QR이 필요해요';
+      const body = pairingQr ? '직원 휴대폰의 출퇴근 QR을 보여주세요' : '직원 휴대폰에서 새 QR을 보여주세요';
+      present({ state: 'repeatQr', title, body, time: '' });
+      return;
+    }
+    if (previous) return;
+    processed.current.set(key, 'seen');
     busy.current = true;
     try {
-      if (isPunch && qr.startsWith('rattle-scanner:v1.')) {
-        present({ state: 'wrongQr', title: '이미 등록된 매장폰이에요', body: '직원 휴대폰의 출퇴근 QR을 보여주세요', time: '' });
-        return;
-      }
       if (!isPunch && qr.startsWith('rattle-punch:v1.')) {
         present({ state: 'wrongQr', title: '먼저 매장폰을 등록해주세요', body: '관리자 앱에서 매장폰 등록 QR을 열어주세요', time: '' });
         return;
@@ -109,6 +125,7 @@ export function useAttendanceScanner(service: ScannerUiService = defaultService)
       const result = await service.scan(qr, previousUnknown ? 'unknown' : undefined);
       if (!mounted.current) return;
       if (result.status === 'saved') {
+        processed.current.set(key, 'saved');
         unresolved.current.delete(qr); setUnresolvedCount(unresolved.current.size);
         present({ state: 'saved', title: `${result.data.employee_name}님, ${result.data.kind === 'clock_in' ? '출근했어요' : '퇴근했어요'}`, body: result.data.duplicate ? '이미 기록된 시각이에요' : '', time: attendanceTime(result.data.punched_at) });
       } else if (isAttendanceScannerRevoked(result) || getAttendanceScannerFailureState(result).revoked) {

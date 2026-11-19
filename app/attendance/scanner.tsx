@@ -1,5 +1,5 @@
 import { Component, ComponentType, ReactNode, memo, useCallback, useEffect, useRef, useState } from 'react';
-import { AccessibilityInfo, ActivityIndicator, Animated, AppState, Platform, Linking, Modal, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { AccessibilityInfo, ActivityIndicator, Animated, Easing, AppState, Platform, Linking, Modal, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 import { useKeepAwake } from 'expo-keep-awake';
@@ -63,12 +63,14 @@ export default function AttendanceScannerScreen() {
   const reduceTransparency = useReducedTransparency();
   const staticFrame = reduceMotion || (Platform.OS === 'ios' && reduceTransparency);
   const opacity = useRef(new Animated.Value(1)).current;
+  const sweep = useRef(new Animated.Value(0)).current;
+  const repeat = scanner.state === 'repeatQr';
   const success = scanner.state === 'saved' || scanner.state === 'registered';
   const failed = scanner.state === 'scanFailed' || scanner.state === 'wrongQr';
   const processing = scanner.state === 'processing' || scanner.state === 'pairing';
   const result = scanner.needsConfirmation;
   const waitingForQr = !processing && !result && scanner.canScan;
-  const frameColor = success ? Colors.success : failed ? Colors.danger
+  const frameColor = repeat ? Colors.warning : success ? Colors.success : failed ? Colors.danger
     : processing ? Colors.light : scanner.state === 'unknown' ? Colors.warning : Colors.white;
 
   useEffect(() => {
@@ -82,30 +84,37 @@ export default function AttendanceScannerScreen() {
     return () => { alive = false; motion.remove(); };
   }, []);
   useEffect(() => {
-    if (success || failed) {
-      const feedback = success ? Haptics.NotificationFeedbackType.Success : Haptics.NotificationFeedbackType.Error;
+    if (success || failed || repeat) {
+      const feedback = repeat ? Haptics.NotificationFeedbackType.Warning : success ? Haptics.NotificationFeedbackType.Success : Haptics.NotificationFeedbackType.Error;
       void Haptics.notificationAsync(feedback).catch(() => {});
     }
-  }, [success, failed, scanner.notice]);
+  }, [success, failed, repeat, scanner.notice]);
   useEffect(() => {
     opacity.setValue(1);
-    if (!cameraReady || staticFrame || (!waitingForQr && !success)) return;
-    const fade = (toValue: number, duration: number) =>
-      Animated.timing(opacity, { toValue, duration, useNativeDriver: true, isInteraction: false });
-    const animation = waitingForQr
-      ? Animated.loop(Animated.sequence([fade(0.6, 900), fade(1, 900)]))
-      : fade(1, 220);
-    if (success) opacity.setValue(0.4);
+    if (!cameraReady || staticFrame || !success) return;
+    opacity.setValue(0.4);
+    const animation = Animated.timing(opacity, { toValue: 1, duration: 220, useNativeDriver: true, isInteraction: false });
     animation.start();
     return () => animation.stop();
-  }, [cameraReady, staticFrame, waitingForQr, success, opacity]);
+  }, [cameraReady, staticFrame, success, opacity]);
+  useEffect(() => {
+    sweep.setValue(0);
+    if (!cameraReady || staticFrame || !waitingForQr) return;
+    const animation = Animated.loop(Animated.timing(sweep, {
+      toValue: 1, duration: 2400, easing: Easing.linear, useNativeDriver: true, isInteraction: false,
+    }));
+    animation.start();
+    return () => animation.stop();
+  }, [cameraReady, staticFrame, waitingForQr, sweep]);
   const size = Math.min(width - 80, 280, height * 0.32), top = Math.max(insets.top + 86, height * 0.19);
+  const lineOffset = sweep.interpolate({ inputRange: [0, 0.25, 0.75, 1], outputRange: [0, size * 0.40, -size * 0.40, 0] });
   const path = 'M1 60V20Q1 1 20 1H60M220 1H260Q279 1 279 20V60M279 220V260Q279 279 260 279H220M60 279H20Q1 279 1 260V220';
   return <View style={s.root}>
     <CameraSurface onAvailability={setCameraReady} onScan={scanner.scan} />
     {cameraReady && <Animated.View pointerEvents="none" style={{ opacity, alignItems: 'center', justifyContent: 'center', position: 'absolute', width: size, height: size, left: (width - size) / 2, top }}><Svg style={StyleSheet.absoluteFill} width="100%" height="100%" viewBox="0 0 280 280"><Path d={path} stroke={Colors.black} strokeWidth={4} fill="none" /><Path d={path} stroke={frameColor} strokeWidth={processing || result ? 5 : 3} fill="none" /></Svg>
+      {(waitingForQr || processing) && <Animated.View testID="scanner-line" style={[s.scanLine, { transform: [{ translateY: lineOffset }] }]} />}
       {processing && <ActivityIndicator size="large" color={Colors.white} />}
-      {(success || failed) && <Text accessible={false} style={[s.symbol, { color: frameColor }]}>{success ? '✓' : '!'}</Text>}
+      {(success || failed || repeat) && <Text accessible={false} style={[s.symbol, { color: frameColor }]}>{success ? '✓' : '!'}</Text>}
     </Animated.View>}
     {cameraReady && <Text pointerEvents="none" style={[s.caption, { top: top + size + 20 }]}>{processing ? 'QR을 인식했어요' : result ? '다음 QR을 찍으려면 확인을 눌러주세요' : scanner.ready ? '직원 QR을 스캔해주세요' : '관리자 앱의 등록 QR을 찍어주세요'}</Text>}
     {cameraReady && !!scanner.title && <View style={[s.noticeZone, { top: top + size + 60, bottom: insets.bottom + (result && scanner.unresolvedCount ? 140 : 84) }]}><View style={s.notice} accessibilityLiveRegion="polite"><Text style={[s.whiteTitle, success && s.receipt]}>{scanner.title}</Text>{!!scanner.time && <Text style={s.time}>{scanner.time}</Text>}{!!scanner.body && <Text style={s.whiteBody}>{scanner.body}</Text>}
@@ -120,6 +129,7 @@ export default function AttendanceScannerScreen() {
   </View>;
 }
 const s = StyleSheet.create({
+  scanLine: { position: 'absolute', top: '50%', left: 12, right: 12, height: 2, backgroundColor: Colors.light },
   confirm: { position: 'absolute', left: Spacing.screenX, right: Spacing.screenX, minHeight: 52, borderRadius: Radius.lg, backgroundColor: Colors.action, alignItems: 'center', justifyContent: 'center' },
   symbol: { fontSize: 42, fontFamily: Fonts.wantedSemiBold, backgroundColor: Colors.black, borderRadius: 32, width: 64, lineHeight: 64, textAlign: 'center', overflow: 'hidden' },
   receipt: { fontSize: 24, lineHeight: 32 },
