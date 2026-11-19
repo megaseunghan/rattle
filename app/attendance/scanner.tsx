@@ -1,5 +1,5 @@
 import { Component, ComponentType, ReactNode, memo, useCallback, useEffect, useRef, useState } from 'react';
-import { AccessibilityInfo, ActivityIndicator, Animated, Easing, AppState, Platform, Linking, Modal, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { AccessibilityInfo, Animated, Easing, AppState, Platform, Linking, Modal, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 import { useKeepAwake } from 'expo-keep-awake';
@@ -82,7 +82,6 @@ export default function AttendanceScannerScreen() {
     }
     lastAnnouncement.current = message;
   }, [noticeLabel, result, recoveryNotice]);
-  const waitingForQr = !processing && !result && scanner.canScan;
   const frameColor = repeat ? Colors.warning : success ? Colors.success : failed ? Colors.danger
     : processing ? Colors.light : scanner.state === 'unknown' ? Colors.warning : Colors.white;
 
@@ -112,13 +111,13 @@ export default function AttendanceScannerScreen() {
   }, [cameraReady, staticFrame, success, opacity]);
   useEffect(() => {
     sweep.setValue(0);
-    if (!cameraReady || staticFrame || !waitingForQr) return;
+    if (!cameraReady || staticFrame || !processing) return;
     const animation = Animated.loop(Animated.timing(sweep, {
       toValue: 1, duration: 2400, easing: Easing.linear, useNativeDriver: true, isInteraction: false,
     }));
     animation.start();
     return () => animation.stop();
-  }, [cameraReady, staticFrame, waitingForQr, sweep]);
+  }, [cameraReady, staticFrame, processing, sweep]);
   const size = Math.min(width - 80, 280, height * 0.32), top = Math.max(insets.top + 86, height * 0.19);
   const lineOffset = sweep.interpolate({ inputRange: [0, 0.25, 0.75, 1], outputRange: [0, size * 0.40, -size * 0.40, 0] });
   const path = 'M1 60V20Q1 1 20 1H60M220 1H260Q279 1 279 20V60M279 220V260Q279 279 260 279H220M60 279H20Q1 279 1 260V220';
@@ -127,10 +126,8 @@ export default function AttendanceScannerScreen() {
       <CameraSurface onAvailability={setCameraReady} onScan={scanner.scan} />
     </View>
     {cameraReady && <Animated.View pointerEvents="none" style={{ opacity, alignItems: 'center', justifyContent: 'center', position: 'absolute', width: size, height: size, left: (width - size) / 2, top }}><Svg style={StyleSheet.absoluteFill} width="100%" height="100%" viewBox="0 0 280 280"><Path d={path} stroke={Colors.black} strokeWidth={4} fill="none" /><Path d={path} stroke={frameColor} strokeWidth={processing || result ? 5 : 3} fill="none" /></Svg>
-      {(waitingForQr || processing) && <Animated.View testID="scanner-line" style={[s.scanLine, { transform: [{ translateY: lineOffset }] }]} />}
-      {processing && (staticFrame
-        ? <Text accessible={false} style={[s.symbol, { color: Colors.light }]}>…</Text>
-        : <ActivityIndicator size="large" color={Colors.white} />)}
+      {processing && <Animated.View testID="scanner-line" style={[s.scanLine, { transform: [{ translateY: lineOffset }] }]} />}
+      {processing && staticFrame && <Text accessible={false} style={[s.symbol, { color: Colors.light }]}>…</Text>}
       {(success || failed || repeat) && <Text accessible={false} style={[s.symbol, { color: frameColor }]}>{success ? '✓' : '!'}</Text>}
     </Animated.View>}
     {cameraReady && <Text pointerEvents="none" style={[s.caption, { top: top + size + 20 }]}>{processing ? 'QR을 인식했어요' : result ? nextAction : scanner.ready ? '직원 QR을 스캔해주세요' : '관리자 앱의 등록 QR을 찍어주세요'}</Text>}

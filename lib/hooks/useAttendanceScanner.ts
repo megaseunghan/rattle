@@ -97,9 +97,13 @@ export function useAttendanceScanner(service: ScannerUiService = defaultService)
     const key = (isPunch ? 'registered:' : 'setup:') + qr;
     const previous = processed.current.get(key);
     const pairingQr = qr.startsWith('rattle-scanner:v1.');
-    if (isPunch && (previous || pairingQr)) {
+    if ((isPunch && pairingQr) || (previous && (isPunch || pairingQr))) {
       if (visible.warned) return;
       visible.warned = true;
+      if (!isPunch) {
+        present({ state: 'repeatQr', title: '새 등록 QR이 필요해요', body: '관리자 앱에서 새 등록 QR을 열어주세요', time: '' });
+        return;
+      }
       const title = pairingQr ? '이미 등록된 매장폰이에요'
         : previous === 'saved' ? '이미 기록한 QR이에요' : '새 출퇴근 QR이 필요해요';
       const body = pairingQr ? '직원 휴대폰의 출퇴근 QR을 보여주세요' : '직원 휴대폰에서 새 QR을 보여주세요';

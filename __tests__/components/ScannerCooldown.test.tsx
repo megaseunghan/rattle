@@ -160,7 +160,7 @@ it.each([[true, false], [false, true]])('동작 줄이기 %s 또는 투명도 �
   const timing = jest.spyOn(Animated, 'timing');
   const view = render(<AttendanceScannerScreen />);
   await act(async () => {});
-  expect(view.getByTestId('scanner-line')).toBeTruthy();
+  expect(view.queryByTestId('scanner-line')).toBeNull();
   await detect(view, employeeQr);
   expect(view.queryByTestId('scanner-line')).toBeNull();
   expect(timing).not.toHaveBeenCalled();
@@ -172,25 +172,31 @@ it('서버 응답을 기다리는 동안 중복 검출과 다음 직원 검출�
   jest.spyOn(AccessibilityInfo, 'isReduceMotionEnabled').mockResolvedValue(false);
   const stop = jest.fn();
   const loop = jest.spyOn(Animated, 'loop').mockReturnValue({ start: jest.fn(), stop, reset: jest.fn() });
-  const timing = jest.spyOn(Animated, 'timing');
+  const timing = jest.spyOn(Animated, 'timing').mockImplementation(() => ({
+    start: jest.fn(), stop: jest.fn(), reset: jest.fn(),
+  }));
   const view = render(<AttendanceScannerScreen />);
   await act(async () => {});
   const camera = view.getByTestId('camera');
-  expect(view.getByTestId('scanner-line')).toBeTruthy();
-  expect(loop).toHaveBeenCalledTimes(1);
-  expect(timing).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ useNativeDriver: true }));
+  expect(view.queryByTestId('scanner-line')).toBeNull();
+  expect(loop).not.toHaveBeenCalled();
   const callback = camera.props.onBarcodeScanned;
   const renderCount = (CameraView as unknown as jest.Mock).mock.calls.length;
   await detect(view, employeeQr);
-  expect(stop).toHaveBeenCalledTimes(1);
   expect(view.getByTestId('scanner-line')).toBeTruthy();
+  expect(view.UNSAFE_queryByType(ActivityIndicator)).toBeNull();
+  expect(loop).toHaveBeenCalledTimes(1);
+  expect(timing).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ useNativeDriver: true }));
   expect(view.getByText('확인하고 있어요')).toBeTruthy();
   await detect(view, employeeQr);
   await detect(view, 'employee-B');
   expect(Enrollment.scan).toHaveBeenCalledTimes(1);
   await act(async () => { finish(receipt); });
   expect(view.getByText('가상 직원님, 출근했어요')).toBeTruthy();
+  expect(view.queryByTestId('scanner-line')).toBeNull();
+  expect(stop).toHaveBeenCalledTimes(1);
   confirm(view);
+  expect(view.queryByTestId('scanner-line')).toBeNull();
   expect(view.getByTestId('camera')).toBe(camera);
   expect(camera.props.onBarcodeScanned).toBe(callback);
   expect(CameraView).toHaveBeenCalledTimes(renderCount);
@@ -203,6 +209,7 @@ it('동작 줄이기에서는 서버 응답을 기다리는 동안 정적 아이
   await act(async () => {});
   await detect(view, employeeQr);
   expect(view.getByText('확인하고 있어요')).toBeTruthy();
+  expect(view.getByTestId('scanner-line')).toBeTruthy();
   expect(view.getByText('…')).toBeTruthy();
   expect(view.UNSAFE_queryByType(ActivityIndicator)).toBeNull();
   await act(async () => { finish(receipt); });
@@ -221,4 +228,27 @@ it('권한을 회수하고 복귀해도 결과를 읽고 확인할 수 있고 iO
   expect(announce).toHaveBeenCalledTimes(1);
   confirm(view);
   expect(view.queryByLabelText(label)).toBeNull();
+});
+
+it('미등록 매장폰에서 거절된 등록 QR을 다시 비추면 재교환 없이 경고를 한 번 표시한다', async () => {
+  (Enrollment.loadStoredAttendanceScannerRegistration as jest.Mock).mockResolvedValue(null);
+  (Enrollment.exchangeAndStoreAttendanceScannerPairingQr as jest.Mock).mockResolvedValueOnce({
+    status: 'server_rejected', error: { code: 'ATTENDANCE_SCANNER_REGISTRATION_EXPIRED' },
+  });
+  const view = render(<AttendanceScannerScreen />);
+  await act(async () => {});
+  await detect(view, pairingQr);
+  expect(view.getByText('등록 QR을 확인하지 못했어요')).toBeTruthy();
+  confirm(view);
+  await detect(view, pairingQr);
+  expect(view.getByText('새 등록 QR이 필요해요')).toBeTruthy();
+  expect(view.getByText('관리자 앱에서 새 등록 QR을 열어주세요')).toBeTruthy();
+  expect(Haptics.notificationAsync).toHaveBeenLastCalledWith(Haptics.NotificationFeedbackType.Warning);
+  confirm(view);
+  await detect(view, pairingQr);
+  expect(view.queryByText('새 등록 QR이 필요해요')).toBeNull();
+  expect(Haptics.notificationAsync).toHaveBeenCalledTimes(2);
+  expect(Enrollment.exchangeAndStoreAttendanceScannerPairingQr).toHaveBeenCalledTimes(1);
+  await detect(view, 'rattle-scanner:v1.fresh');
+  expect(view.getByText('매장폰을 등록했어요')).toBeTruthy();
 });
