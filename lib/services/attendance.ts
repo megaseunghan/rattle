@@ -132,3 +132,11 @@ export async function getAttendanceScanners(storeId: string, options: { offset?:
     .eq('store_id', storeId).order('created_at', { ascending: false }).order('id', { ascending: false }).range(offset, offset + pageSize), options, Array.isArray);
   return result.status === 'success' ? { status: 'success', data: page(result.data, offset, pageSize) } : result;
 }
+
+/** Resolve an in-app reminder target under the current employee/store RLS. */
+export function getAttendancePunch(storeId: string, employeeId: string, punchId: string, signal?: AbortSignal): Promise<AttendanceResult<AttendancePunchWithEmployee | null>> {
+  if (!storeId || !employeeId || !punchId) return Promise.resolve(attendancePreflight('ATTENDANCE_INPUT_INVALID'));
+  return executeAttendance<AttendancePunchWithEmployee | null>(() => supabase.from('attendance_effective_punches')
+    .select(`${PUNCH_COLUMNS},${EMPLOYEE_COLUMNS}`).eq('store_id', storeId).eq('employee_id', employeeId).eq('id', punchId).maybeSingle(), { signal },
+  data => data === null || !!data && typeof data === 'object' && typeof (data as AttendancePunchWithEmployee).id === 'string');
+}

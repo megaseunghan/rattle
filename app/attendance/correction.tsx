@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { Colors } from '../../constants/colors';
 import { Fonts } from '../../constants/fonts';
 import { CardStyle, Radius, Spacing, Type } from '../../constants/designTokens';
@@ -10,40 +10,50 @@ import { useAuth } from '../../lib/contexts/AuthContext';
 import { useEmployees } from '../../lib/hooks/useEmployees';
 import { useAttendanceToday } from '../../lib/hooks/useAttendanceToday';
 import { useAttendanceCorrections } from '../../lib/hooks/useAttendanceCorrections';
+import { useAttendanceCorrectionTarget } from '../../lib/hooks/useAttendanceCorrectionTarget';
 import { useConfirmLeave } from '../../lib/hooks/useConfirmLeave';
 import { resolveSelfEmployee } from '../../lib/utils/resolveSelfEmployee';
+import { ChipRow } from '../../lib/components/ui/ChipRow';
 import { AppBar } from '../../lib/components/ui';
 import { GlassBackdrop } from '../../lib/components/GlassBackdrop';
 import { LoadingSpinner } from '../../lib/components/LoadingSpinner';
 
 export default function AttendanceCorrectionScreen() {
   const { user, store, devPreviewMode, devPreviewEmployeeId, storeRole } = useAuth();
+  const { punchId } = useLocalSearchParams<{ punchId?: string }>();
   const employees = useEmployees(); const employee = resolveSelfEmployee(employees.employees, user?.id, devPreviewEmployeeId);
   const record = useAttendanceToday(employee?.id); const requests = useAttendanceCorrections(employee?.id);
+  const [targetKind, setTargetKind] = useState<'clock_in' | 'clock_out'>('clock_in');
   const [kind, setKind] = useState<'clock_in' | 'clock_out'>('clock_in');
   const [value, setValue] = useState(new Date()); const [reason, setReason] = useState(''); const [error, setError] = useState('');
   const [picker, setPicker] = useState<'date' | 'time' | null>(null);
-  const target = kind === 'clock_in' ? record.start : record.end;
+  const reminder = useAttendanceCorrectionTarget(employee?.id, typeof punchId === 'string' ? punchId : undefined);
+  const target = punchId ? reminder.row : targetKind === 'clock_in' ? record.start : record.end;
   const locked = ['saving', 'unknown', 'saved'].includes(requests.outcome);
   useConfirmLeave(!!reason.trim() && requests.outcome !== 'saved' || requests.outcome === 'saving', { blockLeave: requests.outcome === 'saving' });
-  useEffect(() => { setReason(''); setError(''); setValue(new Date()); }, [store?.id, user?.id, employee?.id, devPreviewMode]);
-  useEffect(() => { if (target) setValue(new Date(target.punched_at)); }, [target?.id]);
+  useEffect(() => { setReason(''); setError(''); setTargetKind('clock_in'); setKind('clock_in'); setValue(new Date()); }, [store?.id, user?.id, employee?.id, devPreviewMode]);
+  useEffect(() => { if (target) { setValue(new Date(target.punched_at)); setKind(target.kind); } }, [target?.id]);
   const dateText = value.toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul', year: 'numeric', month: 'long', day: 'numeric' });
   async function submit() {
-    if (locked || record.loading || record.error) return;
+    if (locked || (punchId ? reminder.loading || reminder.error : record.loading || record.error)) return;
     if (!employee || devPreviewMode !== 'self') { setError('사장님에게 직원 등록 상태를 확인해주세요'); return; }
     if (!target) { setError('정정할 기록을 다시 선택해주세요'); return; }
     if (!reason.trim()) { setError('기록 정정 사유를 적어주세요'); return; }
     if (reason.trim().length > 500) { setError('사유는 500자 이내로 적어주세요'); return; }
     if (Date.now() - value.getTime() > 366 * 86400000 || value.getTime() > Date.now() + 300000) { setError('날짜와 시간을 확인해주세요'); return; }
-    if (kind === 'clock_in' && record.end && value.getTime() >= Date.parse(record.end.punched_at) || kind === 'clock_out' && record.start && value.getTime() <= Date.parse(record.start.punched_at)) { setError('출근 시간이 퇴근 시간보다 늦어요. 날짜와 시간을 확인해주세요'); return; }
+    if (!punchId && kind === target.kind && (kind === 'clock_in' && record.end && value.getTime() > Date.parse(record.end.punched_at) || kind === 'clock_out' && record.start && value.getTime() < Date.parse(record.start.punched_at))) { setError('출근 시간이 퇴근 시간보다 늦어요. 날짜와 시간을 확인해주세요'); return; }
     setError(''); await requests.submit({ p_action: 'change', p_target_punch_id: target.id, p_kind: kind, p_time: value.toISOString(), p_reason: reason.trim() });
   }
   return <SafeAreaView style={s.root}><GlassBackdrop /><AppBar transparent title="기록 정정 요청" onBack={() => router.back()} />
     <KeyboardAvoidingView style={s.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={s.content}>
         <Text style={s.note}>{storeRole === 'manager' ? '사장님이 확인하면 기록이 바뀌어요' : '사장님이나 점장님이 확인하면 기록이 바뀌어요'}</Text>
-        <View style={s.choices}>{(['clock_in', 'clock_out'] as const).map(item => <Pressable key={item} accessibilityRole="radio" accessibilityState={{ selected: kind === item, disabled: locked }} disabled={locked} style={[s.choice, kind === item && s.selected]} onPress={() => setKind(item)}><Text style={s.label}>{item === 'clock_in' ? '출근' : '퇴근'}</Text></Pressable>)}</View>
+        <Text style={s.label}>기존 기록</Text>
+        {!punchId && <View style={s.choices}>{(['clock_in', 'clock_out'] as const).map(item => <Pressable key={item} accessibilityRole="radio" accessibilityLabel={`기존 ${item === 'clock_in' ? '출근' : '퇴근'} 기록`} accessibilityState={{ selected: targetKind === item, disabled: locked }} disabled={locked} style={[s.choice, targetKind === item && s.selected]} onPress={() => setTargetKind(item)}><Text style={s.label}>{item === 'clock_in' ? '출근' : '퇴근'}</Text></Pressable>)}</View>}
+        {!!reminder.error && <Text accessibilityRole="alert" style={s.error}>{reminder.error}</Text>}
+        <Text style={s.note}>{target ? `${target.kind === 'clock_in' ? '출근' : '퇴근'} · ${new Date(target.punched_at).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}` : '선택한 기록이 없어요'}</Text>
+        <Text style={s.label}>바꿀 종류</Text>
+        <View pointerEvents={locked ? 'none' : 'auto'} accessibilityElementsHidden={locked}><ChipRow options={[{ key: 'clock_in', label: '출근' }, { key: 'clock_out', label: '퇴근' }]} selectedKey={kind} onSelect={item => { if (!locked && (item === 'clock_in' || item === 'clock_out')) setKind(item); }} /></View>
         <Text style={s.label}>바꿀 시각</Text>
         <Pressable accessibilityRole="button" disabled={locked} onPress={() => setPicker('date')} style={s.field}><Text style={s.label}>{dateText}</Text></Pressable>
         <Pressable accessibilityRole="button" disabled={locked} onPress={() => setPicker('time')} style={s.field}><Text style={s.number}>{value.toLocaleTimeString('ko-KR', { timeZone: 'Asia/Seoul', hour: '2-digit', minute: '2-digit' })}</Text></Pressable>
