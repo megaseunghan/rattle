@@ -21,7 +21,7 @@ beforeEach(() => {
 afterEach(() => jest.restoreAllMocks());
 it('설정에서 거절을 허용으로 바꿔 복귀하면 버튼을 다시 누르지 않아도 카메라를 연다', async () => {
   mockGetPermission.mockResolvedValueOnce({ granted: false }).mockResolvedValue({ granted: true });
-  const view = render(<CameraSurface enabled onScan={jest.fn()} onAvailability={jest.fn()} />);
+  const view = render(<CameraSurface onScan={jest.fn()} onAvailability={jest.fn()} />);
   await waitFor(() => expect(view.getByText('카메라를 허용해주세요')).toBeTruthy());
   await foreground('background'); await foreground('active');
   await waitFor(() => expect(view.getByTestId('scanner-camera')).toBeTruthy());
@@ -29,7 +29,7 @@ it('설정에서 거절을 허용으로 바꿔 복귀하면 버튼을 다시 누
 });
 it('설정에서 권한을 회수하고 복귀하면 이전 카메라를 다시 마운트하지 않는다', async () => {
   mockGetPermission.mockResolvedValueOnce({ granted: true }).mockResolvedValue({ granted: false });
-  const view = render(<CameraSurface enabled onScan={jest.fn()} onAvailability={jest.fn()} />);
+  const view = render(<CameraSurface onScan={jest.fn()} onAvailability={jest.fn()} />);
   await waitFor(() => expect(view.getByTestId('scanner-camera')).toBeTruthy());
   await foreground('background'); expect(view.queryByTestId('scanner-camera')).toBeNull();
   await foreground('active'); await waitFor(() => expect(view.getByText('카메라를 허용해주세요')).toBeTruthy());
@@ -38,7 +38,7 @@ it('설정에서 권한을 회수하고 복귀하면 이전 카메라를 다시 
 it('복귀 뒤 늦은 이전 허용 응답은 새 거절 상태를 덮어쓰지 않는다', async () => {
   let finish!: (permission: { granted: boolean }) => void;
   mockGetPermission.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; })).mockResolvedValue({ granted: false });
-  const view = render(<CameraSurface enabled onScan={jest.fn()} onAvailability={jest.fn()} />);
+  const view = render(<CameraSurface onScan={jest.fn()} onAvailability={jest.fn()} />);
   await foreground('background'); await foreground('active');
   await waitFor(() => expect(view.getByText('카메라를 허용해주세요')).toBeTruthy());
   await act(async () => { finish({ granted: true }); }); expect(view.queryByTestId('scanner-camera')).toBeNull();

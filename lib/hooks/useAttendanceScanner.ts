@@ -14,7 +14,7 @@ export interface ScannerUiService extends AttendanceScannerEnrollmentService {
 }
 const defaultService: ScannerUiService = Enrollment;
 const waiting = () => ({ state: 'waiting', title: '', body: '', time: '' });
-const feedbackStates = ['saved', 'registered', 'scanFailed', 'wrongQr', 'unknown'];
+const feedbackStates = ['saved', 'registered', 'scanFailed', 'wrongQr', 'unknown', 'revoked'];
 export function useAttendanceScanner(service: ScannerUiService = defaultService) {
   const mounted = useRef(false), busy = useRef(false);
   const registration = useRef<AttendanceScannerRegistration | null>(null);
@@ -35,6 +35,7 @@ export function useAttendanceScanner(service: ScannerUiService = defaultService)
   const processed = useRef(new Set<string>());
   const revoked = useCallback(() => {
     registration.current = null;
+    holdingResult.current = true;
     setState({ state: 'revoked', title: '등록이 해제됐어요', body: '관리자 앱의 새 등록 QR을 찍어주세요', time: '' });
   }, []);
   const remember = (qr: string) => {
@@ -49,9 +50,8 @@ export function useAttendanceScanner(service: ScannerUiService = defaultService)
       const saved = await service.loadStoredAttendanceScannerRegistration();
       if (!mounted.current) return;
       if (!saved) {
-        const alreadyUnregistered = !registration.current;
         registration.current = null;
-        if (alreadyUnregistered && holdingResult.current) return;
+        if (holdingResult.current) return;
         setState({ state: pairingUnknown.current ? 'unknownSetup' : 'unregistered', title: pairingUnknown.current ? '등록됐는지 확인하고 있어요' : '매장폰 등록이 필요해요', body: pairingUnknown.current ? '관리자 앱의 매장폰 목록을 확인해주세요. 없으면 새 QR로 다시 등록해주세요' : '사장님이나 점장님 앱에서 매장폰 등록 QR을 열어주세요', time: '' });
         return;
       }
@@ -61,8 +61,8 @@ export function useAttendanceScanner(service: ScannerUiService = defaultService)
       else if (status.status === 'success') {
         registration.current = saved; pairingUnknown.current = false;
         setState(old => feedbackStates.includes(old.state) ? old : waiting());
-      } else setState(old => old.state === 'unknown' ? old : { state: 'error', title: '매장폰을 확인하지 못했어요', body: '인터넷 연결을 확인한 뒤 다시 시도해주세요', time: '' });
-    } catch { if (mounted.current) setState(old => old.state === 'unknown' ? old : { state: 'error', title: '매장폰을 확인하지 못했어요', body: '인터넷 연결을 확인한 뒤 다시 시도해주세요', time: '' }); }
+      } else setState(old => feedbackStates.includes(old.state) ? old : { state: 'error', title: '매장폰을 확인하지 못했어요', body: '인터넷 연결을 확인한 뒤 다시 시도해주세요', time: '' });
+    } catch { if (mounted.current) setState(old => feedbackStates.includes(old.state) ? old : { state: 'error', title: '매장폰을 확인하지 못했어요', body: '인터넷 연결을 확인한 뒤 다시 시도해주세요', time: '' }); }
     finally { busy.current = false; }
   }, [service, revoked]);
   useEffect(() => {
@@ -71,8 +71,8 @@ export function useAttendanceScanner(service: ScannerUiService = defaultService)
     const timer = setInterval(() => { if (AppState.currentState === 'active' && registration.current) void refresh(); }, 15000);
     return () => { mounted.current = false; registration.current = null; unresolved.current.clear(); clearInterval(timer); listener.remove(); };
   }, [refresh]);
-  const scan = useCallback(async (qr: string, screenReader = false) => {
-    if ((holdingResult.current && !screenReader) || !mounted.current || busy.current || pairingUnknown.current || AppState.currentState !== 'active') return;
+  const scan = useCallback(async (qr: string) => {
+    if (holdingResult.current || !mounted.current || busy.current || pairingUnknown.current || AppState.currentState !== 'active') return;
     const isPunch = !!registration.current;
     // A registration QR can explain its purpose once in each mode, without a second exchange.
     const key = (isPunch ? 'registered:' : 'setup:') + qr;
@@ -153,6 +153,6 @@ export function useAttendanceScanner(service: ScannerUiService = defaultService)
     holdingResult.current = false;
     setState(old => feedbackStates.includes(old.state) ? waiting() : old);
   }, []);
-  return { ...state, notice: state, scan, refresh, clearNotice, confirmRegistrationRecovery, unresolvedCount, ready: !!registration.current,
+  return { ...state, notice: state, needsConfirmation: feedbackStates.includes(state.state), scan, refresh, clearNotice, confirmRegistrationRecovery, unresolvedCount, ready: !!registration.current,
     canScan: !['loading', 'processing', 'pairing', 'unknownSetup'].includes(state.state) };
 }

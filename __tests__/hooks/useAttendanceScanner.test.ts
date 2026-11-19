@@ -32,7 +32,7 @@ it.each(['ATTENDANCE_SCANNER_INVALID', 'ATTENDANCE_SCANNER_REVOKED'])('status의
   const api = service(); (api.scannerStatus as jest.Mock).mockResolvedValue({ status: 'server_rejected', error: { code } });
   const { result } = renderHook(() => useAttendanceScanner(api)); await waitFor(() => expect(result.current.state).toBe('revoked'));
   expect(result.current.ready).toBe(false); expect(result.current.title).toBe('등록이 해제됐어요');
-  await act(async () => { await result.current.scan('new-registration'); });
+  await act(async () => { result.current.clearNotice(); await result.current.scan('new-registration'); });
   expect(api.exchangeAndStoreAttendanceScannerPairingQr).toHaveBeenCalledWith({ qr: 'new-registration' }); expect(api.scan).not.toHaveBeenCalled();
 });
 it.each(['ATTENDANCE_SCANNER_INVALID', 'ATTENDANCE_SCANNER_REVOKED'])('punch의 %s 뒤에도 이전 미확인 기록을 남긴다', async code => {
@@ -40,7 +40,7 @@ it.each(['ATTENDANCE_SCANNER_INVALID', 'ATTENDANCE_SCANNER_REVOKED'])('punch의 
   const { result } = renderHook(() => useAttendanceScanner(api)); await waitFor(() => expect(result.current.ready).toBe(true));
   await act(async () => { await result.current.scan('A'); result.current.clearNotice(); await result.current.scan('B'); });
   expect(result.current.state).toBe('revoked'); expect(result.current.ready).toBe(false); expect(result.current.unresolvedCount).toBe(1);
-  await act(async () => { await result.current.scan('new-registration'); }); expect(api.exchangeAndStoreAttendanceScannerPairingQr).toHaveBeenCalledTimes(1); expect(result.current.unresolvedCount).toBe(1);
+  await act(async () => { result.current.clearNotice(); await result.current.scan('new-registration'); }); expect(api.exchangeAndStoreAttendanceScannerPairingQr).toHaveBeenCalledTimes(1); expect(result.current.unresolvedCount).toBe(1);
 });
 it('등록 응답 유실 뒤 자동 재교환을 막고 관리자 확인 후 새 QR만 받는다', async () => {
   const api = service(); (api.loadStoredAttendanceScannerRegistration as jest.Mock).mockResolvedValue(null);
