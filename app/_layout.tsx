@@ -1,4 +1,4 @@
-import { SplashScreen, usePathname } from 'expo-router';
+import { Navigator, router, SplashScreen, usePathname } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -28,9 +28,19 @@ export default function RootLayout() {
 
   if (scannerLaunch.checking) return <LoadingSpinner />;
   if (scannerLaunch.error) return <ErrorMessage message="매장폰 등록 상태를 확인하지 못했어요. 다시 확인해주세요" onRetry={() => { void scannerLaunch.refetch(); }} />;
-  // Scanner mode has no app session, login controls, navigation, or app sync effects.
+  // Scanner mode has a navigator for replace(), with no route slot or app sync effects.
   // Rendering this surface for every incoming path also blocks links into other screens.
-  if (scannerLaunch.scanner) return <GestureHandlerRootView style={{ flex: 1 }}><StatusBar style="light" /><AttendanceScannerScreen /></GestureHandlerRootView>;
+  if (scannerLaunch.scanner) {
+    return <GestureHandlerRootView style={{ flex: 1 }}>
+      <StatusBar style="light" />
+      <Navigator>
+        <AttendanceScannerScreen onLeft={() => {
+          router.replace('/(auth)/login');
+          scannerLaunch.afterLeave();
+        }} />
+      </Navigator>
+    </GestureHandlerRootView>;
+  }
 
   // Metro defers evaluating this branch: scanner startup never imports app auth/query clients.
   const ApplicationRoot = (require('../lib/components/ApplicationRoot') as typeof import('../lib/components/ApplicationRoot')).default;

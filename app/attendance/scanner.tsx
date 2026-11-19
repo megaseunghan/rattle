@@ -92,7 +92,7 @@ function NoticeCard({ animate, color, children }: { animate: boolean; color: str
   }]}>{children}</Animated.View>;
 }
 
-export default function AttendanceScannerScreen() {
+export default function AttendanceScannerScreen({ onLeft }: { onLeft?: () => void } = {}) {
   useKeepAwake('rattle-attendance-scanner');
   const scanner = useAttendanceScanner(undefined, signalRecognition); const insets = useSafeAreaInsets(); const { width, height } = useWindowDimensions();
   const [recovery, setRecovery] = useState(false);
@@ -106,7 +106,8 @@ export default function AttendanceScannerScreen() {
   const processing = scanner.state === 'processing' || scanner.state === 'pairing';
   const result = scanner.needsConfirmation;
   const recoveryNotice = scanner.state === 'unknownSetup' || scanner.state === 'error';
-  const showNotice = !!scanner.title && (cameraReady || result || recoveryNotice);
+  const canLeave = !!onLeft && scanner.canLeave;
+  const showNotice = !!scanner.title && (cameraReady || result || recoveryNotice || canLeave || scanner.state === 'leaving');
   const nextAction = result ? '다음 QR을 찍으려면 확인을 눌러주세요' : '';
   const unresolvedLabel = scanner.unresolvedCount ? `확인할 기록 ${scanner.unresolvedCount}건이 있어요` : '';
   const noticeLabel = [scanner.title, scanner.time, scanner.body, unresolvedLabel, nextAction].filter(Boolean).join('. ');
@@ -165,6 +166,9 @@ export default function AttendanceScannerScreen() {
         </Pressable>}
         {result && <Pressable accessibilityRole="button" style={s.confirm} onPress={scanner.clearNotice}>
           <Text style={s.whiteTitle}>확인</Text>
+        </Pressable>}
+        {canLeave && <Pressable accessibilityRole="button" style={s.action} onPress={() => { void scanner.leave(onLeft); }}>
+          <Text style={s.whiteBody}>일반 앱으로 돌아가기</Text>
         </Pressable>}
       </NoticeCard>}
       {!!unresolvedLabel && <View accessibilityLiveRegion="polite">

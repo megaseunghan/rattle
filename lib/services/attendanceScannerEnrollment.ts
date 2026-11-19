@@ -2,7 +2,7 @@ import 'react-native-url-polyfill/auto';
 import { createClient } from '@supabase/supabase-js';
 import * as SecureStore from 'expo-secure-store';
 import { attendancePreflight, attendanceUnknown, executeAttendance, AttendanceCallOptions, AttendanceResult } from './attendanceTransport';
-import { attendanceScannerStatus, punchAttendance, AttendancePunchResult } from './attendanceScanner';
+import { attendanceScannerStatus, isAttendanceScannerRevoked, punchAttendance, AttendancePunchResult } from './attendanceScanner';
 import { ATTENDANCE_WORK_CACHE_DOMAINS } from './attendanceWorkCache';
 import { invalidateCachedStore } from './cacheInvalidation';
 import { scannerError } from './attendanceScannerErrors';
@@ -57,20 +57,20 @@ export async function issueAttendanceScannerPairingQr(input: { storeId: string; 
   });
   return result.status === 'success' ? { status: 'success', data: { qr: result.data.registration_qr, expiresAt: result.data.expires_at } } : result;
 }
-let exchanging = false;
+let changingRegistration = false;
 /** 익명 1회 교환. ok:false는 성공이 아니다. 응답 유실/USED는 관리자 확인·해제 후 새 QR로 복구한다. */
 export async function exchangeAndStoreAttendanceScannerPairingQr(input: { qr: string }, options?: AttendanceCallOptions): Promise<AttendanceResult<AttendanceScannerRegistration>> {
   const storeId = pairingStore(input.qr);
-  if (!storeId || exchanging) return attendancePreflight('ATTENDANCE_INPUT_INVALID');
+  if (!storeId || changingRegistration) return attendancePreflight('ATTENDANCE_INPUT_INVALID');
   const url = process.env.EXPO_PUBLIC_SUPABASE_URL; const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
   if (!url || !anonKey) return attendancePreflight('ATTENDANCE_CONFIG_REQUIRED');
-  exchanging = true;
+  changingRegistration = true;
   try {
     // 등록된 폰의 토큰을 새 교환으로 덮어쓰지 않는다. 원격 해제를 확인한 뒤에만 재등록한다.
     const previous = await loadCredential();
     if (previous) {
       const status = await attendanceScannerStatus({ p_scanner_token: previous.token }, options);
-      if (status.status !== 'server_rejected' || !['ATTENDANCE_SCANNER_REVOKED', 'ATTENDANCE_SCANNER_INVALID'].includes(status.error.code)) {
+      if (!isAttendanceScannerRevoked(status)) {
         return status.status === 'success' ? attendancePreflight('ATTENDANCE_INPUT_INVALID') : status;
       }
     }
@@ -97,7 +97,24 @@ export async function exchangeAndStoreAttendanceScannerPairingQr(input: { qr: st
     catch { return { status: 'success', data: metadata(saved), refreshRequired: true }; }
     return { status: 'success', data: metadata(saved) };
   } catch { return attendanceUnknown(); }
-  finally { exchanging = false; }
+  finally { changingRegistration = false; }
+}
+export async function leaveScannerMode(): Promise<'left' | 'active' | 'unknown'> {
+  if (changingRegistration) return 'unknown';
+  changingRegistration = true;
+  try {
+    const saved = await loadCredential();
+    if (!saved) return 'left';
+    const status = await attendanceScannerStatus({ p_scanner_token: saved.token });
+    if (status.status === 'success') return 'active';
+    if (!isAttendanceScannerRevoked(status)) return 'unknown';
+    await SecureStore.deleteItemAsync(REGISTRATION_KEY);
+    return 'left';
+  } catch {
+    return 'unknown';
+  } finally {
+    changingRegistration = false;
+  }
 }
 /** 로그인 없는 매장폰 어댑터. 공개 반환값에 토큰을 포함하지 않는다. */
 export async function scannerStatus(options?: AttendanceCallOptions): Promise<AttendanceResult<AttendanceScannerRegistration>> {
