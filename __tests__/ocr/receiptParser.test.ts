@@ -151,3 +151,33 @@ it.each(['5,000 -', '5,000 + ', '(5,000) -'])('OCR-R2: 금액 뒤에 떨어진 �
 it('OCR-R2: 한 셀에 두 금액이 있는 식에서 한 금액만 골라 확정하지 않는다', () => {
   expect(parseReceipt([line('금일합계 5,000 -1,000')]).selectedTotal).toBeNull();
 });
+
+describe('OCR-R7: 상품 소계와 결제액의 비교 범위', () => {
+  const base = () => [...row('공급가액', '20,000', .1), ...row('부가세', '2,000', .2), ...row('상품금액', '22,000', .3)];
+  it.each([
+    { adjustments: [...row('배송비', '3,000', .4)], payment: 25000 },
+    { adjustments: [...row('할인', '2,000', .4)], payment: 20000 },
+    { adjustments: [...row('배송비', '3,000', .4), ...row('할인', '2,000', .5)], payment: 23000 },
+  ])('배송/할인으로 설명되는 결제액 $payment원을 유지한다', ({ adjustments, payment }) => {
+    const parsed = parseReceipt([...base(), ...adjustments, ...row('결제금액', payment.toLocaleString('en-US'), .7)]);
+    expect(parsed.selectedTotal?.value).toBe(payment);
+    expect(parsed.warnings.some(w => w.includes('충돌'))).toBe(false);
+    expect(parsed.checks.goodsAdjustmentsMatchTotal).toBe(true);
+  });
+  it('명시 상품 소계와 최종 결제액을 서로 충돌로 처리하지 않는다', () => {
+    const parsed = parseReceipt([...base(), ...row('총합계', '22,000', .35), ...row('배송비', '3,000', .45), ...row('결제금액', '25,000', .7)]);
+    expect(parsed.selectedTotal?.value).toBe(25000);
+    expect(parsed.warnings.some(w => w.includes('충돌'))).toBe(false);
+  });
+  it('배송비 읽기 실패는 0원으로 비교하지 않고 명시 결제액과 경고를 보존한다', () => {
+    const parsed = parseReceipt([...base(), line('배송비', .1, .4), ...row('결제금액', '25,000', .7)]);
+    expect(parsed.selectedTotal?.value).toBe(25000);
+    expect(parsed.checks.goodsAdjustmentsMatchTotal).toBeNull();
+    expect(parsed.warnings.some(w => w.includes('배송비') && w.includes('읽지 못'))).toBe(true);
+  });
+  it('조정 금액으로도 설명되지 않는 결제액은 미확정이다', () => {
+    const parsed = parseReceipt([...base(), ...row('배송비', '3,000', .4), ...row('결제금액', '30,000', .7)]);
+    expect(parsed.selectedTotal).toBeNull();
+    expect(parsed.warnings.some(w => w.includes('충돌'))).toBe(true);
+  });
+});
