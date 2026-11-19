@@ -332,7 +332,13 @@ export function parseReceipt(lines: readonly RecognizedLine[], sourceImageId = '
   const printedTotals = [...totalCandidates];
   const payableTotals = printedTotals.filter(c => !/매출합계|매출총계/.test(compact(c.label)));
   const isFinalPayment = (candidate: TotalCandidate) => /금일합계|결제|청구/.test(compact(candidate.label));
-  type Equation = { value: number; operands: MoneyToken[][]; cells: RecognizedLine[]; label: string; score: number };
+  type Equation = {
+    value: number;
+    operands: MoneyToken[][];
+    // Auxiliary agreement is a constraint, not independent arithmetic evidence.
+    constraints?: { value: number; expected: number; tokens: MoneyToken[][] }[];
+    cells: RecognizedLine[]; label: string; score: number;
+  };
   const equations: Equation[] = [];
   const operandsFor = (...keys: (keyof typeof amounts)[]) => keys.filter(key => amountStatus[key] !== 'absent').map(key => amounts[key]?.moneyTokens ?? []);
   const cellsFor = (...keys: (keyof typeof amounts)[]) => keys.flatMap(key => amountCells.get(key) ?? []);
@@ -351,15 +357,22 @@ export function parseReceipt(lines: readonly RecognizedLine[], sourceImageId = '
   let totalConflict = items.some(i => i.arithmeticMatches === false);
   let supplyScopeUnknown = false;
   let supplyPayable: number | null = null;
+  let supplyOperandKeys: (keyof typeof amounts)[] = ['supply', 'vat', 'shipping', 'discount'];
+  const supplyConstraints: NonNullable<Equation['constraints']> = [];
   if (supplyPlusVat !== null && adjustment !== null) {
     if (amountStatus.goods === 'absent' && adjustment === 0) supplyPayable = supplyPlusVat;
     else if (amountStatus.goods === 'observed' && amounts.goods) {
-      if (supplyPlusVat === amounts.goods.value) supplyPayable = goodsAdjustments;
-      else if (supplyPlusVat === goodsAdjustments) supplyPayable = supplyPlusVat;
-      else totalConflict = true;
+      if (supplyPlusVat === amounts.goods.value) {
+        supplyPayable = supplyPlusVat + adjustment;
+        supplyConstraints.push({ value: amounts.goods.value, expected: supplyPlusVat, tokens: operandsFor('goods') });
+      } else if (supplyPlusVat === goodsAdjustments) {
+        supplyPayable = supplyPlusVat;
+        supplyOperandKeys = ['supply', 'vat'];
+        supplyConstraints.push({ value: goodsAdjustments!, expected: supplyPlusVat, tokens: operandsFor('goods', 'shipping', 'discount') });
+      } else totalConflict = true;
     } else supplyScopeUnknown = true;
   } else if (amountStatus.supply !== 'absent' || amountStatus.vat !== 'absent') incomplete = true;
-  if (supplyPayable !== null) equations.push({ value: supplyPayable, operands: operandsFor('supply', 'vat', 'goods', 'shipping', 'discount'), cells: cellsFor('supply', 'vat', 'goods', 'shipping', 'discount'),
+  if (supplyPayable !== null) equations.push({ value: supplyPayable, operands: operandsFor(...supplyOperandKeys), constraints: supplyConstraints, cells: cellsFor(...supplyOperandKeys),
     label: '공급가·부가세와 상품·조정 관계 (합계 라벨 확인)', score: 105 });
   if (goodsAdjustments !== null && amountStatus.returns === 'absent') equations.push({ value: goodsAdjustments, operands: operandsFor('goods', 'shipping', 'discount'),
     cells: cellsFor('goods', 'shipping', 'discount'), label: '상품 + 배송 − 할인 (합계 라벨 확인)', score: 105 });
@@ -387,6 +400,7 @@ export function parseReceipt(lines: readonly RecognizedLine[], sourceImageId = '
         label: '품목 합계 + 배송 − 할인 (합계 라벨 확인)', score: 105 });
     } else if (supplyPlusVat !== null && itemSum !== amounts.supply?.value && itemSum !== supplyPlusVat) totalConflict = true;
   }
+  if (equations.some(e => e.constraints?.some(constraint => constraint.value !== constraint.expected))) totalConflict = true;
   const equationValues = new Set(equations.map(e => e.value));
   if (equationValues.size > 1) totalConflict = true;
   const expected = equationValues.size === 1 ? equations[0].value : null;

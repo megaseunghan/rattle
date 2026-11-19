@@ -78,3 +78,31 @@ it('R11: 복합 라벨 구분자 처리가 단독 금액 뒤의 미완성 식을
   expect(parsed.selectedTotal).toBeNull();
   expect(parsed.suggestedTotal).toBeNull();
 });
+
+describe('OCR-R12: 계산 피연산자와 보조 일치 제약 분리', () => {
+  it.each([
+    { name: '공급가·VAT는 독립이고 상품·결제만 공유', input: [cell('공급가액 20,000'), cell('VAT 2,000', .05, .3), cell('상품금액/결제금액 22,000', .05, .5)], expected: 22000 },
+    { name: '동일 관측의 공유 별칭 연결 누락은 안전한 미확정 backlog', input: [cell('공급가액 20,000 / VAT 2,000 / 상품금액/결제금액 22,000')], expected: null },
+    { name: '공급가·VAT는 같은 관측의 독립 숫자이고 상품·결제는 공유', input: [cell('공급가액 20,000 / VAT 2,000'), cell('상품금액/결제금액 22,000', .05, .3)], expected: 22000 },
+    { name: '상품·결제 라벨 관측과 숫자 관측이 분리돼도 세금 검산 유지', input: [cell('공급가액 20,000'), cell('VAT 2,000', .05, .3), cell('상품금액/결제금액', .05, .5, .5), cell('22,000', .75, .5, .15)], expected: 22000 },
+    { name: '보조 상품액이 계산과 다름', input: [cell('공급가액 20,000'), cell('VAT 2,000', .05, .3), cell('상품금액/결제금액 23,000', .05, .5)], expected: null },
+    { name: '실제 공급가·VAT가 같은 토큰이면 계속 차단', input: [cell('공급가액/VAT 11,000'), cell('상품금액/결제금액 22,000', .05, .3)], expected: null },
+    { name: '독립 공급가·VAT 없이 상품·결제만 공유', input: [cell('상품금액/결제금액 22,000')], expected: null },
+  ])('$name → $expected', ({ input, expected }) => {
+    const parsed = parseReceipt(input, 'synthetic-r12');
+    expect(parsed.selectedTotal?.value ?? null).toBe(expected);
+    expect(parsed.suggestedTotal).toBeNull();
+    if (expected !== null) {
+      expect(parsed.checks.supplyVatMatchesTotal).toBe(true);
+      const printed = parsed.totalCandidates.find(c => c.source === 'observed' && c.value === expected)!;
+      expect(parsed.amounts.goods?.moneyTokens).toEqual(printed.moneyTokens);
+      const derived = parsed.totalCandidates.find(c => c.source === 'derived' && c.value === expected)!;
+      // The shared auxiliary goods value is not counted again as an operand.
+      const identities = derived.moneyTokens!.map(t => `${t.observationId}:${t.start}:${t.end}`);
+      expect(identities).toHaveLength(3);
+      expect(new Set(identities).size).toBe(3);
+    } else {
+      expect(parsed.checks.supplyVatMatchesTotal).toBeNull();
+    }
+  });
+});
