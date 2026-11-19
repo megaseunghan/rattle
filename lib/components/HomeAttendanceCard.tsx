@@ -23,12 +23,12 @@ export function HomeAttendanceCard({ employee, active, refreshKey }: { employee?
         <Text style={s.divider}>|</Text><Text style={s.affiliation}>{store?.name}</Text>
       </Pressable>
     </ScrollView>
-    {record.loading && employee ? <LoadingSpinner fullScreen={false} /> : record.error ? <ErrorMessage message={record.error} onRetry={() => { void record.refetch(); }} /> : <View style={s.times}>
+    {employee && <>{record.loading ? <LoadingSpinner fullScreen={false} /> : record.error ? <ErrorMessage message={record.error} onRetry={() => { void record.refetch(); }} /> : <View style={s.times}>
       <View style={s.row}><Text style={s.label}>{record.start ? '출근' : '출근 예정'}</Text><Text style={s.time}>{attendanceTime(record.start?.punched_at) || record.schedule?.start_time?.slice(0, 5) || '미정'}</Text></View>
       <View style={s.row}><Text style={s.label}>{record.end ? '퇴근' : '퇴근 예정'}</Text><Text style={s.time}>{attendanceTime(record.end?.punched_at) || record.schedule?.end_time?.slice(0, 5) || '미정'}</Text></View>
       {record.scheduleError && <Text style={s.label}>예정 시간을 불러오지 못했어요</Text>}
     </View>}
-    <Pressable accessibilityRole="button" accessibilityHint="내 출퇴근 QR을 열어요" onPress={() => router.push('/attendance/my-qr')} style={s.action}><Text style={s.actionText}>{record.start && !record.end ? '퇴근' : '출근'}</Text></Pressable>
+    <Pressable accessibilityRole="button" accessibilityHint="내 출퇴근 QR을 열어요" onPress={() => router.push('/attendance/my-qr')} style={s.action}><Text style={s.actionText}>{record.start && !record.end ? '퇴근' : '출근'}</Text></Pressable></>}
   </View>;
 }
 const s = StyleSheet.create({
