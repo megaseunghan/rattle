@@ -144,3 +144,10 @@ describe('OCR 독립 검토 1회차 회귀', () => {
 it.each(['합계 - 500', '총계 − 500', '합계 (500)', '총계 ‐500', '총계 ‑500'])('OCR-R2/R6: 일반 합계 라벨의 작은 음수 %s도 보존한다', text => {
   expect(parseReceipt([line(text)]).selectedTotal?.value).toBe(-500);
 });
+it.each(['5,000 -', '5,000 + ', '(5,000) -'])('OCR-R2: 금액 뒤에 떨어진 부호 %s는 미확정이다', value => {
+  expect(extractMoney(value)).toEqual([]);
+  expect(parseReceipt([line(`금일합계 ${value}`)]).selectedTotal).toBeNull();
+});
+it('OCR-R2: 한 셀에 두 금액이 있는 식에서 한 금액만 골라 확정하지 않는다', () => {
+  expect(parseReceipt([line('금일합계 5,000 -1,000')]).selectedTotal).toBeNull();
+});
