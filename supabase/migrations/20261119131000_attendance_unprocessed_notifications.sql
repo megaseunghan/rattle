@@ -49,10 +49,11 @@ BEGIN
  INSERT INTO public.notifications(store_id,category,type,title,message,dedupe_key,attendance_employee_id,attendance_punch_id,attendance_work_date,resolved_at)
  SELECT e.store_id,'attendance',e.reason,
   CASE WHEN e.reason='attendance_missing_checkout' THEN '퇴근 기록이 없어요' ELSE '인건비를 확인해주세요' END,
+  coalesce(nullif(btrim(person.name),''),'직원')||'님 · '||to_char(e.work_date,'FMMM월 FMDD일')||' · '||
   CASE WHEN e.reason='attendance_missing_checkout' THEN '출퇴근 기록을 확인하고 정정을 요청해주세요'
    ELSE '퇴근 기록의 인건비를 반영하지 못했어요. 급여 탭에서 확인해주세요' END,
   e.reason||':'||e.punch_id::text,e.employee_id,e.punch_id,e.work_date,NULL
- FROM private.attendance_unprocessed_events(p_employee_id) e
+ FROM private.attendance_unprocessed_events(p_employee_id) e JOIN public.employees person ON person.id=e.employee_id
  ON CONFLICT(store_id,dedupe_key) DO UPDATE SET resolved_at=NULL,attendance_work_date=excluded.attendance_work_date
  WHERE notifications.resolved_at IS NOT NULL;
 END $$;
