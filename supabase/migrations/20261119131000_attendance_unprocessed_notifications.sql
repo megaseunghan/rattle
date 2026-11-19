@@ -2,6 +2,10 @@
 -- existing notifications, personal dismissals and store visibility migrations.
 -- No push/mail/external delivery. Original work and payroll values remain unchanged.
 BEGIN;
+-- Ordinary CREATE INDEX takes SHARE locks and blocks attendance INSERTs while held.
+-- Fail fast on lock contention: ROLLBACK, then retry this entire file in a quiet window.
+-- Small development DB only; revisit CONCURRENTLY before a separate production rollout.
+SET LOCAL lock_timeout = '5s';
 ALTER TABLE public.notifications
  ADD COLUMN attendance_employee_id uuid REFERENCES public.employees(id) ON DELETE CASCADE,
  ADD COLUMN attendance_punch_id uuid REFERENCES public.attendance_punches(id) ON DELETE CASCADE,
@@ -20,12 +24,13 @@ ALTER TABLE private.attendance_notification_queue ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON private.attendance_notification_queue FROM PUBLIC,anon,authenticated,service_role;
 CREATE INDEX attendance_notification_queue_due ON private.attendance_notification_queue(next_check_at,employee_id);
 CREATE INDEX attendance_work_sync_failed_employee ON private.attendance_work_sync(employee_id,work_date) WHERE state='failed';
-CREATE INDEX attendance_punches_recent_checkins ON public.attendance_punches(punched_at,employee_id) WHERE kind='clock_in' AND NOT is_void;
 
--- One-time bootstrap only; the five-minute job never enumerates employee history.
+-- One-time backfill without an age cutoff, including staff with only old work.
+-- The five-minute job enumerates this queue only, never all employee history.
 INSERT INTO private.attendance_notification_queue(employee_id,next_check_at)
 SELECT employee_id,now() FROM (
- SELECT employee_id FROM public.attendance_punches WHERE kind='clock_in' AND NOT is_void AND punched_at>=now()-interval '62 days'
+ SELECT p.employee_id FROM public.attendance_effective_punches p
+ WHERE p.kind='clock_in' AND (public.attendance_shift_partner(p.id)).id IS NULL
  UNION SELECT employee_id FROM private.attendance_work_sync WHERE state='failed'
 ) candidates;
 
@@ -37,14 +42,7 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path=pg_catalog,public,private,p
  FROM public.attendance_effective_punches p JOIN public.employees e ON e.id=p.employee_id
  WHERE (p_employee_id IS NULL OR p.employee_id=p_employee_id) AND public.is_store_active(p.store_id)
   AND p.kind='clock_in' AND p.punched_at < now()-interval '16 hours'
-  -- Bounded discovery; existing unresolved reminders survive beyond this window.
-  AND p.id IN (
-   SELECT recent.id FROM public.attendance_punches recent
-   WHERE recent.kind='clock_in' AND NOT recent.is_void AND recent.punched_at>=now()-interval '62 days'
-    AND (p_employee_id IS NULL OR recent.employee_id=p_employee_id)
-   UNION
-   SELECT n.attendance_punch_id FROM public.notifications n WHERE n.resolved_at IS NULL
-    AND n.type='attendance_missing_checkout' AND (p_employee_id IS NULL OR n.attendance_employee_id=p_employee_id))
+  -- Employee-scoped discovery includes corrections/additions to arbitrarily old work.
   AND (public.attendance_shift_partner(p.id)).id IS NULL
  UNION ALL
  SELECT p.store_id,p.employee_id,p.id,s.work_date,'attendance_labor_failed'::text
@@ -72,7 +70,12 @@ BEGIN
   END LOOP;
   RETURN;
  END IF;
- IF NOT pg_try_advisory_xact_lock(hashtextextended('attendance_punch:'||p_employee_id::text,0)) THEN RETURN; END IF;
+ IF NOT pg_try_advisory_xact_lock(hashtextextended('attendance_punch:'||p_employee_id::text,0)) THEN
+  -- Rotate contended employees behind untouched due work instead of starving it.
+  INSERT INTO private.attendance_notification_queue VALUES(p_employee_id,clock_timestamp()+interval '1 minute')
+  ON CONFLICT(employee_id) DO UPDATE SET next_check_at=excluded.next_check_at;
+  RETURN;
+ END IF;
  UPDATE public.notifications n SET resolved_at=clock_timestamp()
  WHERE n.attendance_employee_id=p_employee_id AND n.resolved_at IS NULL
   AND n.type IN ('attendance_missing_checkout','attendance_labor_failed')
@@ -122,6 +125,9 @@ BEGIN
  ELSIF TG_TABLE_NAME='attendance_correction_requests' THEN
   IF NEW.status<>'approved' OR OLD.status='approved' THEN RETURN NEW; END IF;
  END IF;
+ -- Persist a targeted retry even when the immediate refresh cannot take its lock.
+ INSERT INTO private.attendance_notification_queue VALUES(NEW.employee_id,clock_timestamp())
+ ON CONFLICT(employee_id) DO UPDATE SET next_check_at=least(attendance_notification_queue.next_check_at,excluded.next_check_at);
  PERFORM private.refresh_attendance_notifications(NEW.employee_id);
  RETURN NEW;
 END $$;

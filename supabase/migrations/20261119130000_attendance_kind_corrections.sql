@@ -3,6 +3,10 @@
 -- Apply whole transaction; failure ROLLBACK, committed recovery uses a new forward migration.
 -- Original punches, wage snapshots and monthly slips are preserved. No remote execution here.
 BEGIN;
+-- Ordinary CREATE INDEX takes SHARE locks and blocks attendance INSERTs while held.
+-- Fail fast on lock contention: ROLLBACK, then retry this entire file in a quiet window.
+-- Small development DB only; revisit CONCURRENTLY before a separate production rollout.
+SET LOCAL lock_timeout = '5s';
 -- Stored ordinal is inherited by new corrections; adjacency uses the indexed value.
 CREATE INDEX attendance_punches_employee_order ON public.attendance_punches(employee_id,punched_at,event_order);
 CREATE OR REPLACE FUNCTION private.attendance_lineage_kind_changed(p_id uuid) RETURNS boolean

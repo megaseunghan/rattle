@@ -12,10 +12,22 @@ export async function validateQrNotifications({db,users,store,as,migration,uid,e
   GRANT SELECT,INSERT,UPDATE,DELETE ON public.notifications TO authenticated;
   CREATE POLICY notifications_write ON public.notifications FOR ALL TO authenticated
    USING(is_store_member(store_id)) WITH CHECK(is_store_member(store_id));`);
+ // Pre-upgrade history must be discovered without any recent activity or prior reminder.
+ const historicalEmployee=(await as(users.owner,"INSERT INTO employees(store_id,name,is_active,employment_type,hourly_wage,joined_at) VALUES($1,'QA-HISTORICAL-ONLY',true,'part_time',12000,'2026-01-01') RETURNING id",[store])).rows[0].id;
+ const historical=(await as(users.owner,"SELECT record_manual_attendance($1,$2,'clock_in','2026-08-01T00:00:00Z','QA-HISTORICAL-ONLY') id",[store,historicalEmployee])).rows[0].id;
  await db.exec(await migration('20261119131000_attendance_unprocessed_notifications.sql'));
  await db.exec(await migration('20261119132000_attendance_notification_schedule.sql'));
+ check('one-time backfill queues August unresolved work',(await db.query('SELECT EXISTS(SELECT 1 FROM private.attendance_notification_queue WHERE employee_id=$1) present',[historicalEmployee])).rows[0].present,true);
+ await db.exec('CALL private.process_attendance_notification_queue()');
+ check('August 1 unresolved work is discovered and notified',(await db.query("SELECT EXISTS(SELECT 1 FROM notifications WHERE attendance_punch_id=$1 AND resolved_at IS NULL AND type='attendance_missing_checkout') present",[historical])).rows[0].present,true);
+ check('August 1 appears in manager issues',(await as(users.owner,"SELECT * FROM get_admin_attendance_work_issues($1,'2026-08-01','2026-08-01')",[store])).rows.some(x=>x.employee_id===historicalEmployee&&x.error_code==='ATTENDANCE_CHECKOUT_MISSING'),true);
  const list=async(user)=>(await as(user,'SELECT id,type,attendance_employee_id,attendance_punch_id FROM notifications WHERE attendance_employee_id=$1 ORDER BY type,attendance_punch_id',[eid])).rows;
  const refresh=()=>db.query('SELECT private.refresh_attendance_notifications($1)',[eid]);
+ const addedHistorical=await manual('clock_in','2026-08-02T00:00:00Z');
+ check('past manual addition discovers missing checkout',(await list(uid)).some(x=>x.attendance_punch_id===addedHistorical),true);
+ const correctedHistorical=await change(addedHistorical,'clock_in','2026-08-02T01:00:00Z');
+ check('past correction discovers replacement checkout issue',(await list(uid)).some(x=>x.attendance_punch_id===correctedHistorical),true);
+ check('past correction resolves superseded reminder',(await list(uid)).some(x=>x.attendance_punch_id===addedHistorical),false);
  await refresh();
  const before=await list(users.owner);
  await refresh();
@@ -144,6 +156,33 @@ export async function validateQrNotifications({db,users,store,as,migration,uid,e
  check('cron leaves no employee advisory locks behind',(await db.query("SELECT count(*)::int n FROM pg_locks WHERE locktype='advisory' AND pid=pg_backend_pid()")).rows[0].n,0);
  await db.exec('CALL private.process_attendance_notification_queue()');
  check('next invocation drains remaining five',(await db.query('SELECT count(*)::int n FROM private.attendance_notification_queue')).rows[0].n,0);
+ // Single-connection PGlite cannot contend across backends. Replace only the lock
+ // primitive in the real function, then restore it; all queue/procedure SQL is real.
+ const refreshDefinition=(await db.query("SELECT pg_get_functiondef('private.refresh_attendance_notifications(uuid)'::regprocedure) sql")).rows[0].sql;
+ const ordered=[...batchEmployees].sort();
+ const blocked=ordered.slice(0,25), tail=ordered.slice(25);
+ await db.exec('CREATE TABLE private.qa_notification_lock_failures(lock_key bigint PRIMARY KEY)');
+ await db.query("INSERT INTO private.qa_notification_lock_failures SELECT hashtextextended('attendance_punch:'||e::text,0) FROM unnest($1::uuid[]) e",[blocked]);
+ await db.exec(`CREATE FUNCTION private.qa_notification_try_lock(k bigint) RETURNS boolean LANGUAGE sql AS $$
+  SELECT CASE WHEN EXISTS(SELECT 1 FROM private.qa_notification_lock_failures WHERE lock_key=k)
+   THEN false ELSE pg_catalog.pg_try_advisory_xact_lock(k) END $$`);
+ try {
+  assert.ok(refreshDefinition.includes('pg_try_advisory_xact_lock('));
+  await db.exec(refreshDefinition.replace('pg_try_advisory_xact_lock(','private.qa_notification_try_lock('));
+  await db.query("INSERT INTO private.attendance_notification_queue SELECT unnest($1::uuid[]),now()-interval '2 minutes'",[ordered]);
+  for(let round=0;round<3;round++) {
+   // Advance due times uniformly instead of sleeping; preserve the real queue ordering.
+   if(round>0) await db.exec("UPDATE private.attendance_notification_queue SET next_check_at=next_check_at-interval '61 seconds'");
+   await db.exec('CALL private.process_attendance_notification_queue()');
+   if(round===0) check('all 25 skipped locks reschedule into the future',(await db.query('SELECT count(*)::int n FROM private.attendance_notification_queue WHERE employee_id=ANY($1::uuid[]) AND next_check_at>now()',[blocked])).rows[0].n,25);
+  }
+  check('three contended batches still process the last five',(await db.query('SELECT count(*)::int n FROM private.attendance_notification_queue WHERE employee_id=ANY($1::uuid[])',[tail])).rows[0].n,0);
+  check('lock failures retain all 25 retry candidates',(await db.query('SELECT count(*)::int n FROM private.attendance_notification_queue WHERE employee_id=ANY($1::uuid[])',[blocked])).rows[0].n,25);
+ } finally {
+  await db.exec(refreshDefinition);
+  await db.exec('DROP FUNCTION private.qa_notification_try_lock(bigint); DROP TABLE private.qa_notification_lock_failures');
+ }
+ await db.query('DELETE FROM private.attendance_notification_queue WHERE employee_id=ANY($1::uuid[])',[blocked]);
  await db.query('DELETE FROM employees WHERE id=ANY($1::uuid[])',[batchEmployees]);
  console.log(`PASS QR notifications: ${checks} notification checks; PGlite cron unavailable branch only.`);
 
