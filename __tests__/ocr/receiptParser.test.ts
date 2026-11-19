@@ -72,7 +72,9 @@ describe('영수증 규칙 파서', () => {
   it('회전 보정은 복사본에서 수행해 원문 좌표를 보존한다', () => {
     const input = [line('금일합계 7,000', .2, .1, .02, .5)];
     const snapshot = JSON.stringify(input);
-    expect(parseReceipt(input).rotated).toBe(true);
+    const result = parseReceipt(input);
+    expect(result.rotated).toBe(true);
+    expect(result.selectedTotal?.sourceBoxes).toEqual([input[0].box]);
     expect(JSON.stringify(input)).toBe(snapshot);
   });
   it('동일 우선순위의 복수 합계는 경고한다', () => {

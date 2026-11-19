@@ -52,9 +52,14 @@ function scalar(line: RecognizedLine): boolean {
 /** Work on clones: native coordinates remain available in the exported OCR. */
 function prepare(lines: readonly RecognizedLine[]) {
   const rotated = lines.length > 0 && lines.filter(l => l.box.h > l.box.w * 1.2).length > lines.length * .55;
-  const transformed = lines.map(l => ({ ...l, box: rotated
-    ? { x: l.box.y, y: 1 - l.box.x - l.box.w, w: l.box.h, h: l.box.w }
-    : { ...l.box } }));
+  const sourceBoxes = new Map<RecognizedLine, TextBox>();
+  const transformed = lines.map(l => {
+    const cell = { ...l, box: rotated
+      ? { x: l.box.y, y: 1 - l.box.x - l.box.w, w: l.box.h, h: l.box.w }
+      : { ...l.box } };
+    sourceBoxes.set(cell, { ...l.box });
+    return cell;
+  });
   const name = transformed.find(l => /^(상품명|품목명(?:\[규격\])?)$/.test(compact(l.text)));
   const amount = name && transformed.filter(l => /^(금액|합계)$/.test(compact(l.text)) && cx(l) > cx(name) + .25 && Math.abs(cy(l) - cy(name)) < .04)
     .sort((a, b) => Math.abs(cy(a) - cy(name)) - Math.abs(cy(b) - cy(name)))[0];
@@ -71,14 +76,14 @@ function prepare(lines: readonly RecognizedLine[]) {
     const cells = g.cells.sort((a, b) => a.box.x - b.box.x);
     return { text: cells.map(l => l.text).join(' '), cells };
   });
-  return { rotated, slope, rows };
+  return { rotated, slope, rows, sourceBoxes };
 }
 
 export function parseReceipt(lines: readonly RecognizedLine[], sourceImageId = 'image'): ParsedReceipt {
-  const { rows, rotated, slope } = prepare(lines);
+  const { rows, rotated, slope, sourceBoxes } = prepare(lines);
   const field = <T,>(value: T, cells: RecognizedLine[], confidence = .7, source: 'observed' | 'derived' = 'observed'): ReceiptField<T> => {
     const known = cells.map(l => l.confidence).filter((n): n is number => n !== null);
-    return { value, sourceImageId, sourceBoxes: cells.map(l => ({ ...l.box })), rawText: cells.map(l => l.text).join(' '),
+    return { value, sourceImageId, sourceBoxes: cells.map(l => ({ ...(sourceBoxes.get(l) ?? l.box) })), rawText: cells.map(l => l.text).join(' '),
       ocrConfidence: known.length ? Math.min(...known) : null, parserConfidence: confidence, source, warnings: [] };
   };
   const totalCandidates: TotalCandidate[] = [];
