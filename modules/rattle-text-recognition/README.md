@@ -100,3 +100,14 @@ Mac 비교 스크립트는 저장소 밖 `/private/tmp/rattle-ocr-bench/compare-
 
 비교 코드는 저장소 밖 `/private/tmp/rattle-ocr-bench/android/evaluate-hardening.mjs`, 결과는 같은 폴더의 `parser-hardening-comparison.json`·`parser-hardening-report.md`. Git 기준 코드와 현재 코드를 동일 raw에 각각 실행하고 raw/파서 SHA-256을 남겼으며 기준 금액은 평가에서만 읽었다. 실제 영수증 원문·사업자번호·이미지는 저장소에 추가하지 않았다. 합성 Vision/ML Kit 분할 모양과 과거 R1~R6을 포함한 OCR 5 suites/72 tests는 기본 timeout으로 통과했다(`/tmp/rattle-ocr-engine-target.log`, 1.722초). 실제 iPhone/Android 새 실행·JS bridge·독립 검토와 다른 표본 검증은 후속이다.
 최종 typecheck 통과, 전체 Jest 기본 timeout **196 suites/1646 tests 전부 통과**(45.777초, 종료 0). 로그 `/tmp/rattle-ocr-engine-typecheck.log`, `/tmp/rattle-ocr-engine-full-jest.log`; `git diff --check`와 외부 비교 스크립트 `node --check`도 통과했다.
+
+## 독립 검토 2회차 반영 · OCR-R7/R8 (2026-11-19)
+
+기준 `12674dc`(Android/Vision 보완 포함). R1~R6 해소 확인 후 새 Medium 2건을 수용했다.
+
+- **OCR-R7 · `9712625`**: 공급가+VAT는 상품 소계, 최종 결제는 읽힌 배송·할인을 반영한 값으로 비교한다. 명시 상품 소계와 최종 결제가 각 범위에서 맞으면 충돌로 처리하지 않는다. 배송/할인 읽기 실패는 계산/비교를 null로 두고 명시 결제액과 경고를 보존하며, 조정 후에도 설명되지 않는 결제액·상품액 충돌은 계속 미확정이다. 직접 공급가+VAT/결제 비교는 조정이 0일 때만 판정한다. 배송·할인·복합 조정·소계/최종 병기·미확인 배송·진짜 충돌 회귀를 추가했다.
+- **OCR-R8 · `ad025ca`**: cleanupPending await 이후 current()를 다시 확인한 다음에만 사진 선택기를 호출한다. 정리 대기 중 unmount·관리 권한 상실·측정 중지 각각에서 선택기/OCR 호출이 없는 것을 deferred Promise로 검증했다. S53 manifest 소스 해시도 갱신했다.
+
+초기 회귀 실행은 2 suites/61 tests 중 8 실패로 두 결함을 재현했고, 수정 후 OCR **5 suites/81 tests 통과**(1.931초), typecheck 통과, 전체 기본 Jest **196 suites/1655 tests 전부 통과**(44.784초, 종료 0), diff 검사 통과. 로그는 `/tmp/rattle-ocr-r78-red.log`, `/tmp/rattle-ocr-r78-target.log`, `/tmp/rattle-ocr-r78-typecheck.log`, `/tmp/rattle-ocr-r78-full-jest.log`. 기존 10쌍 raw 재평가는 Android 6/10·Mac 7/10, 오선택 양쪽 0으로 유지했다(`/tmp/rattle-ocr-r78-evaluation.log`). 원문·이미지는 저장소에 넣지 않았다.
+
+다음: 같은 검토자의 3회차(6d55cdd 엔진 보완 및 9712625/ad025ca 포함), 실제 기기 선택기/권한 전환/정리 대기 E2E. 기기·빌드·EAS·원격 실행은 이번 작업에서 하지 않았다. 기존 S45/S46 색인 보정은 PM 범위로 유지한다.
