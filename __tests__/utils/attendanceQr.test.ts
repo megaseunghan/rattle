@@ -2,7 +2,7 @@ const { createHmac } = jest.requireActual('node:crypto');
 import { createAttendanceQr, parseAttendanceQr } from '../../lib/utils/attendanceQr';
 
 // Deterministic test vector: bytes 0x00..0x1f (not a real credential).
-const secret = Buffer.from(Array.from({ length: 32 }, (_, i) => i)).toString('base64');
+const secret = (jest.requireActual('node:buffer') as { Buffer: { from(v: number[]): { toString(e: string): string } } }).Buffer.from(Array.from({ length: 32 }, (_, i) => i)).toString('base64');
 const deviceId = '00000000-0000-0000-0000-000000000043';
 const nonce = '000102030405060708090a0b';
 const sig = '5c311dc26b6bd8664aa4845ac2972909';

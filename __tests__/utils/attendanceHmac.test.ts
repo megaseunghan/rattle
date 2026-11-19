@@ -4,7 +4,7 @@ import { createAttendanceQr } from '../../lib/utils/attendanceQr';
 it('noble 기본 어댑터도 서버 고정 벡터와 같은 서명을 만든다', () => {
   const qr = createAttendanceQr({
     // Deterministic test vector: bytes 0x00..0x1f (not a real credential).
-    secret: Buffer.from(Array.from({ length: 32 }, (_, i) => i)).toString('base64'),
+    secret: (jest.requireActual('node:buffer') as { Buffer: { from(v: number[]): { toString(e: string): string } } }).Buffer.from(Array.from({ length: 32 }, (_, i) => i)).toString('base64'),
     deviceId: '00000000-0000-0000-0000-000000000043',
     nonce: '000102030405060708090a0b',
   }, defaultAttendanceHmacSha256);
