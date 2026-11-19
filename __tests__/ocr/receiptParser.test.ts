@@ -26,15 +26,15 @@ describe('영수증 규칙 파서', () => {
     expect(parsed.selectedTotal).toBeNull();
   });
   it('공급가와 VAT를 더한 숫자가 인쇄돼 있을 때만 합계 후보로 만든다', () => {
-    const input = [...row('공급가액', '20,000', .2), ...row('부가세', '2,000', .3), line('22,000', .75, .4, .15)];
+    const input = [...row('공급가액', '20,000', .2), ...row('부가세', '2,000', .3), ...row('총합계', '22,000', .4)];
     const result = parseReceipt(input);
     expect(result.selectedTotal?.value).toBe(22000);
     expect(result.selectedTotal?.source).toBe('derived');
     expect(result.checks.supplyVatMatchesTotal).toBe(true);
-    expect(parseReceipt(input.slice(0, -1)).selectedTotal).toBeNull();
+    expect(parseReceipt(input.slice(0, -2)).selectedTotal).toBeNull();
   });
   it('보증금과 회수를 분리하고 인쇄된 순액을 확인해도 회계 정책 경고를 유지한다', () => {
-    const result = parseReceipt([...row('매출총계', '30,000', .1), ...row('보증금', '2,000', .2), ...row('회수', '5,000', .3), line('25,000', .75, .4, .15)]);
+    const result = parseReceipt([...row('매출총계', '30,000', .1), ...row('보증금', '2,000', .2), ...row('회수', '5,000', .3), ...row('결제금액', '25,000', .4)]);
     expect(result.amounts.deposit?.value).toBe(2000);
     expect(result.amounts.returns?.value).toBe(5000);
     expect(result.selectedTotal?.value).toBe(25000);
@@ -97,4 +97,50 @@ it('금액 열이 비면 단가를 금액으로 복제하지 않는다', () => {
   const result = parseReceipt(table().slice(0, -1));
   expect(result.items[0].amount).toBeNull();
   expect(result.checks.itemSum).toBeNull();
+});
+
+describe('OCR 독립 검토 1회차 회귀', () => {
+  it('OCR-R1: 단가와 같은 순액이 있어도 명시 결제액을 덮어쓰지 않는다', () => {
+    const result = parseReceipt([...row('매출총계', '30,000', .1), ...row('회수', '5,000', .2), ...row('결제금액', '30,000', .3), ...row('단가', '25,000', .4)]);
+    expect(result.selectedTotal).toBeNull();
+    expect(result.totalCandidates.some(c => c.source === 'derived')).toBe(false);
+    expect(result.warnings.some(w => w.includes('충돌'))).toBe(true);
+  });
+  it('OCR-R1: 현금받음은 공급가+VAT와 같아도 합계 근거가 아니다', () => {
+    const result = parseReceipt([...row('공급가', '20,000', .1), ...row('부가세', '2,000', .2), ...row('총합계', '30,000', .3), ...row('현금받음', '22,000', .4)]);
+    expect(result.selectedTotal).toBeNull();
+    expect(result.totalCandidates.some(c => c.source === 'derived')).toBe(false);
+    expect(result.warnings.some(w => w.includes('충돌'))).toBe(true);
+  });
+  it.each(['- 5,000', '−5,000', '－ 5,000', '(5,000)', '( 5,000원 )'])('OCR-R2: 반품 %s의 음수를 유지한다', value => {
+    expect(extractMoney(value)).toEqual([-5000]);
+    expect(parseReceipt(row('금일합계', value, .1)).selectedTotal?.value).toBe(-5000);
+  });
+  it.each(['--5,000', '+-5,000', '(5,000', '5,000)', '(+5,000)', '5,000-'])('OCR-R2: 모호한 부호 %s를 양수로 확정하지 않는다', value => {
+    expect(extractMoney(value)).toEqual([]);
+    expect(parseReceipt(row('금일합계', value, .1)).selectedTotal).toBeNull();
+  });
+  it('OCR-R2: 별도 OCR 셀로 떨어진 마이너스와 할인 음수를 보존한다', () => {
+    const result = parseReceipt([line('금일합계', .1), line('−', .6, .1, .03), line('5,000', .75, .1, .15), ...row('할인', '- 1,000', .3)]);
+    expect(result.selectedTotal?.value).toBe(-5000);
+    expect(result.amounts.discount?.value).toBe(-1000);
+  });
+  it.each(['배송비', '할인'])('OCR-R3: %s 라벨이 있지만 금액을 못 읽으면 검산을 중단한다', label => {
+    const result = parseReceipt([...row('상품금액', '10,000', .1), line(label, .1, .2), ...row('결제금액', '10,000', .3)]);
+    expect(result.checks.goodsAdjustments).toBeNull();
+    expect(result.checks.goodsAdjustmentsMatchTotal).toBeNull();
+    expect(result.warnings.some(w => w.includes(label) && w.includes('읽지 못'))).toBe(true);
+  });
+  it('OCR-R3: 라벨 부재와 읽힌 0원은 읽기 실패와 구분한다', () => {
+    const absent = parseReceipt([...row('상품금액', '10,000', .1), ...row('결제금액', '10,000', .3)]);
+    const zero = parseReceipt([...row('상품금액', '10,000', .1), ...row('배송비', '0', .2), ...row('결제금액', '10,000', .3)]);
+    expect(absent.checks.goodsAdjustmentsMatchTotal).toBe(true);
+    expect(zero.checks.goodsAdjustmentsMatchTotal).toBe(true);
+  });
+  it.each([0, 50, 500, 999])('OCR-R6: 한 셀 안의 작은 합계 %s원을 읽는다', value => {
+    expect(parseReceipt([line(`금일합계 ${value}`)]).selectedTotal?.value).toBe(value);
+  });
+});
+it.each(['합계 - 500', '총계 − 500', '합계 (500)', '총계 ‐500', '총계 ‑500'])('OCR-R2/R6: 일반 합계 라벨의 작은 음수 %s도 보존한다', text => {
+  expect(parseReceipt([line(text)]).selectedTotal?.value).toBe(-500);
 });
