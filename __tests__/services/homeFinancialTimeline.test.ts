@@ -88,3 +88,13 @@ describe('영업일 합계 RPC 경로', () => {
     expect(readAllRows).not.toHaveBeenCalled();
   });
 });
+it('정렬되지 않은 일별 원본에서도 매일의 누적·수수료·누락을 보존한다', async () => {
+  (readAllRows as jest.Mock).mockResolvedValueOnce([]).mockResolvedValueOnce([
+    { date: '2026-11-03', card_amount: 40, cash_amount: 3 },
+    { date: '2026-11-01', card_amount: 40, cash_amount: 1 },
+    { date: '2026-11-02', card_amount: 40, cash_amount: 2 },
+  ]).mockResolvedValueOnce([]).mockResolvedValue([]);
+  const result = await getHomeFinancialTimeline('store', '23:00', new Date('2026-11-03T10:00:00Z'));
+  expect(result.current.map(row => row.values.revenue)).toEqual([41, 83, 126]);
+  expect(result.current.map(row => row.values.expense)).toEqual([21, 41, 62]);
+});

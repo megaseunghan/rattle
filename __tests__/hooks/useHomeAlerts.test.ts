@@ -6,10 +6,11 @@ let mockAlerts: { key: string; kind: string }[] = [];
 const mockBuild = jest.fn();
 const mockRead = jest.fn();
 const mockGetReads = jest.fn();
+const mockStock = jest.fn().mockResolvedValue([]);
 jest.mock('../../lib/contexts/AuthContext', () => ({ useAuth: () => ({ user: mockUser, store: mockStore }) }));
 jest.mock('../../lib/services/homeAlerts', () => ({
   buildHomeAlerts: (input: unknown) => { mockBuild(input); return mockAlerts; },
-  getHomeAlertStock: async () => [], hasMonthlyFixedExpense: async () => true,
+  getHomeAlertStock: (...args: unknown[]) => mockStock(...args), hasMonthlyFixedExpense: async () => true,
   getHomeAlertReads: (...args: unknown[]) => mockGetReads(...args),
   markHomeAlertRead: (...args: unknown[]) => mockRead(...args),
 }));
@@ -63,4 +64,13 @@ it('토스 미동기화 알림은 현재 오늘 매출이 0원일 때만 보인�
   expect(result.current.alerts.map(alert => alert.kind)).toEqual(['stock', 'tossNotSynced']);
   rerender({ sales: 5000 });
   expect(result.current.alerts.map(alert => alert.kind)).toEqual(['stock']);
+
+});
+
+it('오늘 매출만 바뀌면 원본 재조회 없이 경고를 다시 계산한다', async () => {
+  const { result, rerender } = renderHook(({ sales }: { sales: number }) => useHomeAlerts(sales), { initialProps: { sales: 0 } });
+  await act(async () => { await result.current.refetch(); });
+  const callback = result.current.refetch;
+  rerender({ sales: 100 });
+  expect(result.current.refetch).toBe(callback);
 });

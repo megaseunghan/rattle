@@ -38,10 +38,14 @@ try {
     INSERT INTO stores VALUES('${store}','${owner}','매장');
     INSERT INTO store_members VALUES('${store}','${member}','approved');`);
   const before = await policies();
-  const migration = await readFile(new URL('../supabase/migrations/20261118120000_rls_auth_initplan.sql', import.meta.url), 'utf8');
+  const migration = await readFile(new URL('../supabase/migrations/20261118121000_rls_auth_initplan.sql', import.meta.url), 'utf8');
   await db.exec(migration);
+  const forwardRepair = await readFile(new URL('../supabase/migrations/20261119120000_release_rls_auth_initplan.sql', import.meta.url), 'utf8');
+  // A policy imported/applied after the original fix must also be repaired.
+  await db.exec('ALTER POLICY already ON already_wrapped USING (user_id = auth.uid())');
+  await db.exec(forwardRepair);
   const once = await policies();
-  await db.exec(migration);
+  await db.exec(forwardRepair);
   assert.deepEqual(await policies(), once, 'migration replay must not change policies again');
 
   assert.equal(once.length, before.length);

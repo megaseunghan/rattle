@@ -7,7 +7,7 @@ import { invalidateStoreData, queryClient } from '../../lib/query/client';
 const mockGet = jest.fn();
 const mockCreate = jest.fn();
 let mockStore: { id: string } | null = { id: 'a' };
-let mockIdentity = { user: { id: 'user-a' }, realRole: 'owner', currentRole: 'owner', devPreviewMode: 'self', devPreviewEmployeeId: null, memberRoles: {} };
+let mockIdentity = { user: { id: 'user-a' }, canManageStore: true, access: { is_owner: true, employee_id: null }, realRole: 'owner', currentRole: 'owner', devPreviewMode: 'self', devPreviewEmployeeId: null, memberRoles: {} };
 jest.mock('../../lib/contexts/AuthContext', () => ({ useAuth: () => ({ store: mockStore, ...mockIdentity }) }));
 jest.mock('../../lib/services/employees', () => ({
   getEmployees: (...args: unknown[]) => mockGet(...args),
@@ -18,7 +18,7 @@ function deferred<T>() { let resolve!: (value: T) => void; const promise = new P
 
 beforeEach(() => {
   queryClient.clear(); mockGet.mockReset(); mockCreate.mockReset(); mockStore = { id: 'a' };
-  mockIdentity = { user: { id: 'user-a' }, realRole: 'owner', currentRole: 'owner', devPreviewMode: 'self', devPreviewEmployeeId: null, memberRoles: {} };
+  mockIdentity = { user: { id: 'user-a' }, canManageStore: true, access: { is_owner: true, employee_id: null }, realRole: 'owner', currentRole: 'owner', devPreviewMode: 'self', devPreviewEmployeeId: null, memberRoles: {} };
 });
 afterEach(() => { queryClient.clear(); });
 

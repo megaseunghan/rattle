@@ -26,7 +26,7 @@ test('approved snapshot cost survives corrected pending revision without double 
  expect(run(s, 1).total).toBe(167); expect(run(s, 1).days[0].workStates).toEqual(['applied_changed']);
  expect(run(s, 2).total).toBeNull();
 });
-test.each(['pending', 'rejected', 'approved'])('unapplied %s work stays unknown', status => {
+test.each(['pending', 'rejected'])('unapplied %s work stays unknown', status => {
  const result = run(source({ employees: [employee({ employment_type: 'part_time' })], dailyWork: [{ ...day({ status }), store_id: 's', employee_id: 'e' } as any] }), 1);
  expect(result.total).toBeNull(); expect(result.days[0].workStates).toContain(status === 'approved' ? 'approved_unapplied' : status);
 });
@@ -75,4 +75,23 @@ test('out-of-order RPC resolutions preserve each request scope without shared mu
  resolveFirst({ data: source(), error: null });
  expect(second.storeId).toBe('other'); expect(second.month).toBe('2026-10');
  expect((await first).storeId).toBe('s');
+});
+
+test('명세 없는 PT는 승인 일별 당시 금액을 반영하고 현재 시급으로 덮지 않는다', () => {
+ const s=source({employees:[employee({employment_type:'part_time',hourly_wage:99999})],dailyWork:[{...day(),store_id:'s',employee_id:'e',record_source:'qr_auto',auto_applied_at:'2026-11-01T01:00:00Z'} as any]});
+ expect(run(s,1).total).toBe(167);
+ expect(run(s,1).days[0].workStates).toContain('applied');
+ expect(run(s,2).total).toBeNull();
+});
+test('DB projection은 실제 명세와 중복 합산하지 않으며 실패 날짜는 snapshot이 있어도 미확인이다', () => {
+ const s=source({employees:[employee({employment_type:'part_time'})],payrolls:[payroll({gross:167,daily_work_snapshot:[day()],source_kind:'approved_daily_projection'})],dailyWork:[{...day(),store_id:'s',employee_id:'e'} as any],attendanceWorkFailures:[{store_id:'s',employee_id:'e',work_date:'2026-11-02',state:'failed',error_code:'DAILY_WORK_RATE_REQUIRED',updated_at:'2026-11-02T01:00:00Z'}],monthlyLaborCost:null});
+ expect(run(s,1).total).toBe(167);
+ const result=run(s,2); expect(result.days[1].amount).toBeNull();
+ expect(result.days[1].gaps).toContain('attendance_work_failed');
+ expect(result.total).toBeNull(); expect(result.reconciliation.monthlyLaborCost).toBeNull();
+});
+test('일별 행이 없는 실패 날짜와 명세 보존 날짜도 0원/확정액으로 위조하지 않는다', () => {
+ const s=source({payrolls:[payroll({gross:167,daily_work_snapshot:[day()]})],attendanceWorkFailures:[{store_id:'s',employee_id:'e',work_date:'2026-11-01',state:'failed',error_code:'ATTENDANCE_WORK_WRITE_FAILED',updated_at:'2026-11-01T01:00:00Z'}]});
+ expect(run(s,1).total).toBeNull(); expect(run(s,1).days[0].gaps).toContain('attendance_work_failed');
+ expect(()=>run({...s,attendanceWorkFailures:[{...s.attendanceWorkFailures![0],store_id:'other'}]})).toThrow('SCOPE');
 });

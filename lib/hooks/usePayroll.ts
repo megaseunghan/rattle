@@ -17,14 +17,14 @@ import { buildRegularWageSnapshot, regularSnapshotGross, regularSnapshotNonTaxab
 import { probationFactor } from '../services/payroll';
 
 export function usePayroll(yearMonth: string) {
-  const { store, user, currentRole } = useAuth();
+  const { store, user, currentRole, access, canManageStore, permissionRevision } = useAuth();
   const [payrolls, setPayrolls] = useState<Payroll[]>([]);
   const [loading, setLoading] = useState(false);
   const [calculating, setCalculating] = useState<string | null>(null); // employeeId
   const [savingDeductions, setSavingDeductions] = useState<string | null>(null); // employeeId
   const [error, setError] = useState<string | null>(null);
   const requestId = useRef(0);
-  const scope = useMemo(() => ({}), [user?.id, currentRole, store?.id, yearMonth]);
+  const scope = useMemo(() => ({}), [user?.id, permissionRevision, currentRole, store?.id, yearMonth]);
   const currentScope = useRef(scope);
   currentScope.current = scope;
   const deductionSave = useRef<object | null>(null);
@@ -56,15 +56,17 @@ export function usePayroll(yearMonth: string) {
   }, [store, yearMonth, scope]);
 
   const calculate = useCallback(async (employee: Employee) => {
-    if (!store) throw new UserFacingError('매장 정보가 없습니다');
+    if (!store || !canManageStore || currentScope.current !== scope) throw new UserFacingError('사장님이나 점장님에게 요청해주세요.');
     setCalculating(employee.id);
     try {
       // Recalculation is explicit; the stored timeline never follows later employee edits.
       const history = await getWageHistory(employee.id);
+      if (currentScope.current !== scope) throw new UserFacingError('선택한 매장과 권한을 다시 확인해주세요.');
       const snapshot = buildRegularWageSnapshot(employee, history, yearMonth, probationFactor(employee));
       const result = { ...await calculatePayroll({ ...employee, non_taxable: regularSnapshotNonTaxable(snapshot) }, undefined, yearMonth, regularSnapshotGross(snapshot)), regular_wage_snapshot: snapshot };
+      if (currentScope.current !== scope) throw new UserFacingError('선택한 매장과 권한을 다시 확인해주세요.');
       const saved = await upsertPayroll(store.id, employee.id, yearMonth, result);
-      setPayrolls(prev => {
+      if (currentScope.current === scope) setPayrolls(prev => {
         const exists = prev.findIndex(p => p.employee_id === employee.id);
         return exists >= 0
           ? prev.map((p, i) => i === exists ? saved : p)
@@ -72,29 +74,31 @@ export function usePayroll(yearMonth: string) {
       });
       return saved;
     } finally {
-      setCalculating(null);
+      if (currentScope.current === scope) setCalculating(null);
     }
-  }, [store, yearMonth]);
+  }, [store, yearMonth, scope, canManageStore, access, user?.id]);
 
   const remove = useCallback(async (id: string) => {
+    if (!canManageStore || currentScope.current !== scope) throw new UserFacingError('사장님이나 점장님에게 요청해주세요.');
     await deletePayroll(id);
-    setPayrolls(prev => prev.filter(p => p.id !== id));
-  }, []);
+    if (currentScope.current === scope) setPayrolls(prev => prev.filter(p => p.id !== id));
+  }, [canManageStore, scope]);
 
   const saveWork = useCallback(async (employee: Employee, input: WorkedMinutesInput, previous?: Payroll) => {
-    if (!store) throw new UserFacingError('매장 정보가 없습니다');
+    if (!access.is_owner && (employee.user_id === user?.id || employee.id === access.employee_id)) throw new UserFacingError('본인 근무시간은 사장님에게 요청해주세요.');
+    if (!store || !canManageStore || currentScope.current !== scope) throw new UserFacingError('사장님이나 점장님에게 요청해주세요.');
     setCalculating(employee.id);
     try {
       const saved = await saveWorkedMinutes(store.id, employee, yearMonth, input, previous);
-      setPayrolls(prev => [...prev.filter(row => row.employee_id !== employee.id), saved]);
+      if (currentScope.current === scope) setPayrolls(prev => [...prev.filter(row => row.employee_id !== employee.id), saved]);
       return saved;
     } finally {
-      setCalculating(null);
+      if (currentScope.current === scope) setCalculating(null);
     }
-  }, [store, yearMonth]);
+  }, [store, yearMonth, scope, canManageStore, access, user?.id]);
 
   const saveDeductions = useCallback(async (payroll: Payroll, deductions: PayrollDeductions) => {
-    if (!store || payroll.store_id !== store.id || payroll.year_month !== yearMonth || currentScope.current !== scope) {
+    if (!canManageStore || !store || payroll.store_id !== store.id || payroll.year_month !== yearMonth || currentScope.current !== scope) {
       throw new UserFacingError('선택한 매장과 월의 급여를 다시 확인해주세요.');
     }
     if (deductionSave.current === scope) throw new UserFacingError('공제 저장이 진행 중이에요.');
@@ -112,16 +116,19 @@ export function usePayroll(yearMonth: string) {
       if (deductionSave.current === scope) deductionSave.current = null;
       if (currentScope.current === scope) setSavingDeductions(null);
     }
-  }, [store?.id, yearMonth, scope]);
+  }, [canManageStore, store?.id, yearMonth, scope]);
 
-  const totalLaborCost = payrolls.reduce((sum, p) => sum + p.gross, 0);
-  const totalNetPay = payrolls.reduce((sum, p) => sum + p.net_pay, 0);
-  const totalInsurance = payrolls.reduce((sum, p) =>
+  const visiblePayrolls = readScope.current === scope ? payrolls : [];
+  const totalLaborCost = visiblePayrolls.reduce((sum, p) => sum + p.gross, 0);
+  const totalNetPay = visiblePayrolls.reduce((sum, p) => sum + p.net_pay, 0);
+  const totalInsurance = visiblePayrolls.reduce((sum, p) =>
     sum + p.national_pension + p.health_insurance + p.long_term_care + p.employment_insurance, 0);
 
   return {
-    payrolls, loading, calculating, savingDeductions, error,
+    payrolls: visiblePayrolls, loading, calculating, savingDeductions, error,
     refetch, calculate, saveWork, saveDeductions, remove,
-    totalLaborCost, totalNetPay, totalInsurance,
+    totalLaborCost: readScope.current === scope ? totalLaborCost : null,
+    totalNetPay: readScope.current === scope ? totalNetPay : null,
+    totalInsurance: readScope.current === scope ? totalInsurance : null,
   };
 }

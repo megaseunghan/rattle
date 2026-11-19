@@ -26,7 +26,7 @@ const mockRefetch = jest.fn();
 const mockPager = { setPage: jest.fn(), setPageWithoutAnimation: jest.fn(), setScrollEnabled: jest.fn() };
 let mockRouteParams: Record<string, string | undefined> = {};
 const mockStores = [{ id: 'a', name: '가매장' }, { id: 'b', name: '나매장' }];
-jest.mock('../../lib/contexts/AuthContext', () => ({ useAuth: () => ({ user: { id: 'owner' }, store: mockStores[0], stores: mockStores, switchStore: mockSwitchStore, currentRole: 'admin', realRole: 'admin', canReadFinancials: true, devPreviewMode: 'self' }) }));
+jest.mock('../../lib/contexts/AuthContext', () => ({ useAuth: () => ({ user: { id: 'owner' }, store: mockStores[0], stores: mockStores, switchStore: mockSwitchStore, currentRole: 'admin', canManageStore: true, realRole: 'admin', storeRole: 'owner', canViewOwnerDashboard: true, canReadFinancials: true, devPreviewMode: 'self' }) }));
 jest.mock('../../lib/hooks/useEmployees', () => ({ useEmployees: () => ({ employees: [], refetch: mockRefetch }) }));
 jest.mock('expo-router', () => ({ useLocalSearchParams: () => mockRouteParams, useRouter: () => mockRouter }));
 jest.mock('react-native-pager-view', () => {

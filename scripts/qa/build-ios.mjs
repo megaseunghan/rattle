@@ -1,6 +1,7 @@
-import { readFile, open, writeFile } from 'node:fs/promises';
+import { readFile, open, writeFile, mkdir } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
-const config = JSON.parse(await readFile(new URL('../../.qa/accounts.json', import.meta.url), 'utf8'));
+const config = JSON.parse(await readFile(process.env.RATTLE_QA_ACCOUNTS_PATH ?? new URL('../../.qa/accounts.json', import.meta.url), 'utf8'));
+await mkdir(new URL('../../.qa/', import.meta.url), { recursive: true, mode: 0o700 });
 const log = await open(new URL('../../.qa/build-ios.log', import.meta.url), 'w', 0o600);
 const derived = process.env.RATTLE_QA_DERIVED_DATA ?? '.qa/build';
 const destination = process.env.RATTLE_QA_DEVICE_ID ? `id=${process.env.RATTLE_QA_DEVICE_ID}` : 'generic/platform=iOS Simulator';

@@ -10,7 +10,7 @@ import { getErrorMessage } from '../utils/error';
 import { subscribeNotificationPolling } from '../query/notificationPolling';
 
 export function useNotifications() {
-  const { store, user, currentRole, canReadFinancials, devPreviewMode } = useAuth();
+  const { store, user, canManageStore, canReadFinancials, devPreviewMode } = useAuth();
   const scope = useQueryScope();
   const storeId = store?.id;
   const scopeId = `${scope}:${storeId ?? ''}`;
@@ -46,7 +46,7 @@ export function useNotifications() {
   }, [scopeId, storeId, user?.id, load]));
 
   const changeRead = useCallback(async (id?: string) => {
-    if (!storeId || !user) return;
+    if (!storeId || !user || devPreviewMode !== 'self' || scopeRef.current !== scopeId) return;
     try {
       if (id) await markNotificationRead(id);
       else await markAllNotificationsRead(storeId);
@@ -60,11 +60,11 @@ export function useNotifications() {
     } catch {
       if (scopeRef.current === scopeId) setWriteError({ scope: scopeId, message: '알림을 읽음으로 바꾸지 못했어요. 다시 시도해주세요.' });
     }
-  }, [scope, scopeId, storeId, user?.id]);
+  }, [scope, scopeId, storeId, user?.id, devPreviewMode]);
   const dismiss = useCallback(async (id: string) => {
     if (!storeId || !user || devPreviewMode !== 'self' || scopeRef.current !== scopeId) return false;
     const notice = queryClient.getQueryData<AppNotification[]>(queryKeys.store(scope, storeId, 'notifications'))?.find(n => n.id === id);
-    if (!notice || (notice.category === 'members' && currentRole !== 'admin') || (!canReadFinancials && ['sales', 'profit'].includes(notice.category))) return false;
+    if (!notice || (notice.category === 'members' && !canManageStore) || (!canReadFinancials && ['sales', 'profit'].includes(notice.category))) return false;
     const request = `${scopeId}:${id}`;
     if (removing.current.has(request)) return false;
     removing.current.add(request); setDeleting({ scope: scopeId, id });
@@ -83,11 +83,11 @@ export function useNotifications() {
       removing.current.delete(request);
       if (scopeRef.current === scopeId) setDeleting(null);
     }
-  }, [scope, scopeId, storeId, user?.id, currentRole, canReadFinancials, devPreviewMode]);
+  }, [scope, scopeId, storeId, user?.id, canManageStore, canReadFinancials, devPreviewMode]);
   const markRead = useCallback((id: string) => changeRead(id), [changeRead]);
   const markAllRead = useCallback(() => changeRead(), [changeRead]);
   const notifications = !storeId || !user || isAccessDenied(query.error) ? []
-    : (query.data ?? []).filter(n => (n.category !== 'members' || currentRole === 'admin') && (canReadFinancials || !['sales', 'profit'].includes(n.category)));
+    : (query.data ?? []).filter(n => (n.category !== 'members' || canManageStore) && (canReadFinancials || !['sales', 'profit'].includes(n.category)));
   return { notifications, loading: query.isFetching,
     error: writeError?.scope === scopeId ? writeError.message : query.error ? '알림을 불러오지 못했어요. 다시 시도해주세요.' : null,
     dismiss, deletingId: deleting?.scope === scopeId ? deleting.id : null,

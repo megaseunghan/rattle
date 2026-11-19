@@ -5,8 +5,8 @@ import type { StoreMember } from '../../types';
 import { getErrorMessage } from '../utils/error';
 
 export function useStoreMembers() {
-  const { store, user } = useAuth();
-  const scope = `${store?.id ?? ''}:${user?.id ?? ''}`;
+  const { store, user, permissionRevision } = useAuth();
+  const scope = `${permissionRevision}:${store?.id ?? ''}:${user?.id ?? ''}`;
   const scopeRef = useRef(scope);
   scopeRef.current = scope;
   const request = useRef(0);

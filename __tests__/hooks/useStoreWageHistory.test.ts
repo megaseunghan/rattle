@@ -62,3 +62,16 @@ it('같은 매장에서는 조회가 끝나도 refetch 함수가 바뀌지 않�
   rerender({ id: 's2' });
   expect(result.current.refetch).not.toBe(first);
 });
+it('같은 매장도 계정·권한 범위가 바뀌면 캐시를 숨기고 이전 응답을 버린다', async () => {
+  mockGet.mockResolvedValueOnce([row('saved', 'e1')]);
+  const { result, rerender } = renderHook(({ scope }: { scope: string }) => useStoreWageHistory('s1', scope), { initialProps: { scope: 'owner:1' } });
+  await act(async () => { await result.current.refetch(); });
+  let done!: (rows: unknown) => void;
+  mockGet.mockImplementationOnce(() => new Promise(resolve => { done = resolve; }));
+  let pending!: Promise<void>;
+  act(() => { pending = result.current.refetch(); });
+  rerender({ scope: 'employee:2' });
+  expect(result.current.map).toEqual({});
+  await act(async () => { done([row('stale', 'e1')]); await pending; });
+  expect(result.current.map).toEqual({});
+});

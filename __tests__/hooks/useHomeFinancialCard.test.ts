@@ -4,7 +4,7 @@ import { useHomeFinancialCard } from '../../lib/hooks/useHomeFinancialCard';
 import { clearQueryData } from '../../lib/query/client';
 const mockBatch = jest.fn(), mockTimeline = jest.fn();
 let mockRole = 'admin', mockCanRead = true;
-jest.mock('../../lib/contexts/AuthContext', () => ({ useAuth: () => ({ store:{id:'store',closing_time:'23:00'}, user:{id:'u'}, currentRole:mockRole, realRole:mockRole, canReadFinancials:mockCanRead }) }));
+jest.mock('../../lib/contexts/AuthContext', () => ({ useAuth: () => ({ store:{id:'store',closing_time:'23:00'}, user:{id:'u'}, currentRole: mockRole, canManageStore: mockRole === 'admin', realRole:mockRole, canReadFinancials:mockCanRead }) }));
 jest.mock('../../lib/services/homeFinancialSummary', () => ({ getFinancialSummaries: (...args:unknown[]) => mockBatch(...args) }));
 jest.mock('../../lib/services/homeFinancialTimeline', () => ({ getHomeFinancialTimeline: (...args:unknown[]) => mockTimeline(...args) }));
 beforeAll(()=>notifyManager.setNotifyFunction(fn=>act(()=>fn())));
@@ -16,3 +16,27 @@ it('공유 구성원은 월 RPC만 읽고 관리자 일별 자료를 읽지 않�
 it('갱신 실패에는 자료를 남기고 권한 거절이면 숨긴다',async()=>{const {result}=renderHook(()=>useHomeFinancialCard(true));await waitFor(()=>expect(result.current.data).not.toBeNull());mockBatch.mockRejectedValue(new Error('offline'));await act(async()=>{await result.current.refetch();});await waitFor(()=>expect(result.current.error).toBe(true));expect(result.current.data?.totals.revenue).toBe(1000);mockBatch.mockRejectedValue({code:'42501',message:'permission denied'});await act(async()=>{await result.current.refetch();});await waitFor(()=>expect(result.current.data).toBeNull());});
 it('공유 해제 시 즉시 숨기고 재조회도 차단한다',async()=>{const {result,rerender}=renderHook(()=>useHomeFinancialCard(true));await waitFor(()=>expect(result.current.data).not.toBeNull());mockCanRead=false;rerender({});expect(result.current.data).toBeNull();const calls=mockBatch.mock.calls.length;await act(async()=>{await result.current.refetch();});expect(mockBatch).toHaveBeenCalledTimes(calls);});
 it('일별 차트 조회는 월 요약을 받은 뒤에 시작한다',async()=>{let done!:(rows:unknown)=>void;mockBatch.mockImplementation((ids,months)=>new Promise(resolve=>{done=()=>resolve([{storeId:ids[0],yearMonth:months[0],revenue:1000,purchaseCost:200,laborCost:300,fixedExpense:100,variableExpense:100,operatingProfit:300}]);}));const {result}=renderHook(()=>useHomeFinancialCard(true));await waitFor(()=>expect(mockBatch).toHaveBeenCalled());expect(mockTimeline).not.toHaveBeenCalled();await act(async()=>{done(null);});await waitFor(()=>expect(result.current.data?.current.length).toBe(1));expect(mockTimeline).toHaveBeenCalledTimes(1);});
+
+it('홈 첫 표시를 넘긴 idle 차례 전에는 비교 그래프 원본을 읽지 않는다', async () => {
+  let idle!: () => void;
+  const oldRequest = globalThis.requestIdleCallback, oldCancel = globalThis.cancelIdleCallback;
+  globalThis.requestIdleCallback = jest.fn(callback => { idle = () => callback({ didTimeout: false, timeRemaining: () => 50 }); return 1; });
+  globalThis.cancelIdleCallback = jest.fn();
+  try {
+    const { result, unmount } = renderHook(() => useHomeFinancialCard(true));
+    await waitFor(() => expect(result.current.data).not.toBeNull());
+    expect(mockTimeline).not.toHaveBeenCalled();
+    act(() => idle());
+    await waitFor(() => expect(mockTimeline).toHaveBeenCalledTimes(1));
+    unmount();
+  } finally { globalThis.requestIdleCallback = oldRequest; globalThis.cancelIdleCallback = oldCancel; }
+});
+it('인건비 확인 필요는 월 카드와 차트에서 0원으로 바뀌지 않는다', async () => {
+  mockBatch.mockImplementation((ids, months) => Promise.resolve([{ storeId: ids[0], yearMonth: months[0], revenue: 1000, purchaseCost: 200, laborCost: null, fixedExpense: 100, variableExpense: 100, operatingProfit: null }]));
+  const { result } = renderHook(() => useHomeFinancialCard(true));
+  await waitFor(() => expect(result.current.data?.current.length).toBe(1));
+  expect(result.current.data?.totals.labor).toBeNull();
+  expect(result.current.data?.totals.profit).toBeNull();
+  expect(result.current.data?.current[0].values.labor).toBeNull();
+  expect(result.current.data?.current[0].values.profit).toBeNull();
+});

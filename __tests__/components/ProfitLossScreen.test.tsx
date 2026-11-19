@@ -20,9 +20,10 @@ jest.mock('react-native-worklets', () => ({ scheduleOnRN: (callback: () => void)
 
 const mockLoad = jest.fn();
 let mockRole = 'admin';
+let mockManagementCapability: boolean | null = null;
 let mockStore = { id: 'a', closing_time: '23:00' };
 jest.mock('expo-router', () => ({ router: { back: jest.fn() }, useLocalSearchParams: () => ({}) }));
-jest.mock('../../lib/contexts/AuthContext', () => ({ useAuth: () => ({ currentRole: mockRole, store: mockStore }) }));
+jest.mock('../../lib/contexts/AuthContext', () => ({ useAuth: () => ({ currentRole: mockRole, canManageStore: mockManagementCapability ?? mockRole === 'admin', store: mockStore }) }));
 jest.mock('../../lib/services/profitLoss', () => ({ getYearlyProfitLoss: (...args: unknown[]) => mockLoad(...args) }));
 jest.mock('react-native-safe-area-context', () => ({
   ...jest.requireActual('react-native-safe-area-context'),
@@ -32,7 +33,7 @@ const annual = (amount: number) => [{ month: 1, data: { yearMonth: '2026-01', re
   cardRevenue: amount, cashRevenue: 0, grossProfit: amount,
   fixedExpense: 0, variableExpense: 0, partTimeGross: 0,
   operatingProfit: amount, laborCost: 0, purchaseCost: 0 } }];
-beforeEach(async () => { await act(async () => { await clearQueryData(); }); jest.clearAllMocks(); mockRole = 'admin'; mockStore = { id: 'a', closing_time: '23:00' }; });
+beforeEach(async () => { await act(async () => { await clearQueryData(); }); jest.clearAllMocks(); mockRole = 'admin'; mockManagementCapability = null; mockStore = { id: 'a', closing_time: '23:00' }; });
 
 afterEach(async () => { await act(async () => { await clearQueryData(); }); });
 
@@ -115,4 +116,11 @@ it('월별 상세 본문을 눌러도 유지하고 닫은 뒤 다른 월을 열 
   expect(screen.getByText('2026년 2월 손익계산서')).toBeTruthy();
   fireEvent.press(screen.getByLabelText('월별 손익계산서 배경 닫기', { includeHiddenElements: true }));
   await waitFor(() => expect(screen.queryByText('2026년 2월 손익계산서')).toBeNull());
+});
+
+it('이전 역할 값이 관리자여도 현재 관리 권한이 없으면 손익을 조회하지 않는다', () => {
+  mockManagementCapability = false;
+  render(<ProfitLossScreen />);
+  expect(screen.getByText('관리자만 확인할 수 있어요.')).toBeTruthy();
+  expect(mockLoad).not.toHaveBeenCalled();
 });

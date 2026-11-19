@@ -4,8 +4,8 @@ import { getDailyWork } from '../services/dailyWork';
 import { useAuth } from '../contexts/AuthContext';
 
 export function useDailyWork(storeId: string, employeeId: string, month: string) {
-  const { user, currentRole, devPreviewMode } = useAuth();
-  const scope = `${user?.id}:${currentRole}:${devPreviewMode}:${storeId}:${employeeId}:${month}`;
+  const { user, currentRole, devPreviewMode, permissionRevision } = useAuth();
+  const scope = `${permissionRevision}:${user?.id}:${currentRole}:${devPreviewMode}:${storeId}:${employeeId}:${month}`;
   const currentScope = useRef(scope); currentScope.current = scope;
   const request = useRef(0);
   const [state, setState] = useState<{ scope: string; rows: DailyWorkRecord[]; loading: boolean; error: string | null }>({ scope: '', rows: [], loading: true, error: null });

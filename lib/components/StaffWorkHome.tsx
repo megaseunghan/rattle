@@ -37,7 +37,7 @@ export function StaffWorkHome({ employee, active, onStock, isPartTime = false, r
   const cards = [
     { title: '오늘 체크리스트', value: data ? `${data.done} / ${data.count} 완료` : '불러오는 중', hint: '오픈부터 마감까지 챙겨요', icon: 'checkbox-outline' as const, onPress: () => router.push('/cleaning') },
     { title: '내 스케줄', value: scheduleText, hint: '주간 스케줄 확인·변경 요청', icon: 'calendar-outline' as const, onPress: () => router.push('/mypage/schedule') },
-    { title: `${Number(month.slice(5))}월 내 급여`, value: !employee ? '계정 연결을 확인해주세요' : !data ? '불러오는 중' : data.payroll ? `${data.payroll.net_pay.toLocaleString('ko-KR')}원` : '아직 작성되지 않았어요', hint: isPartTime ? '실근무 시간 제출·명세 확인' : '내 급여 명세 확인', icon: 'wallet-outline' as const, onPress: () => router.push('/mypage/payslip') },
+    { title: `${Number(month.slice(5))}월 내 급여`, value: !employee ? '계정 연결을 확인해주세요' : !data ? '불러오는 중' : data.payroll ? `${data.payroll.net_pay.toLocaleString('ko-KR')}원` : '아직 작성되지 않았어요', hint: '내 급여 명세 확인', icon: 'wallet-outline' as const, onPress: () => router.push('/mypage/payslip') },
     { title: '재고 확인·수정', value: '남은 수량을 업데이트해요', hint: '품절 임박 품목도 함께 확인해요', icon: 'cube-outline' as const, onPress: onStock },
   ];
   return <View style={{ gap: 12 }}>
@@ -48,7 +48,6 @@ export function StaffWorkHome({ employee, active, onStock, isPartTime = false, r
       <View style={{ flex: 1, gap: 5 }}><Text style={styles.label}>{card.title}</Text><Text style={styles.value}>{query.isError ? '다시 확인해주세요' : card.value}</Text><Text style={styles.hint}>{card.hint}</Text></View>
       <AppIcon name="chevron-forward" size={18} color={Colors.gray400} />
     </Pressable>)}
-    {isPartTime && <Pressable style={styles.submit} onPress={() => router.push('/mypage/work-minutes')} accessibilityRole="button"><Text style={{ color: Colors.primary, fontWeight: '700' }}>이번 달 실근무 시간 제출하기 →</Text></Pressable>}
   </View>;
 }
 const styles = StyleSheet.create({

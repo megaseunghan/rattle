@@ -66,7 +66,7 @@ try {
   for (const m of manual) await db.query('INSERT INTO manual_sales(store_id,date,card_amount,cash_amount) VALUES($1,$2,$3,$4)', [m.store_id, m.date, m.card_amount, m.cash_amount]);
   for (const p of purchases) await db.query('INSERT INTO purchases(store_id,date,amount) VALUES($1,$2,$3)', [p.store_id, p.date, p.amount]);
 
-  const migration = await readFile(new URL('../supabase/migrations/20261118140000_home_daily_sources.sql', import.meta.url), 'utf8');
+  const migration = await readFile(new URL('../supabase/migrations/20261118141000_home_daily_sources.sql', import.meta.url), 'utf8');
   await db.exec(migration); await db.exec(migration);
   const call = (user, r, closing) => as(user, 'SELECT * FROM get_home_daily_sources($1,$2,$3,$4,$5,$6)',
     [store, r.start, r.end, r.from, r.to, Number(closing.slice(0, 2)) * 60 + Number(closing.slice(3, 5))]);

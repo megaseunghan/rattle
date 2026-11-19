@@ -122,6 +122,8 @@ export default function LoginScreen() {
           </View>
         </View>}
 
+        <Pressable accessibilityRole="button" disabled={loading !== null} onPress={() => router.push('/attendance/scanner')} style={styles.scannerEntry}><Text style={styles.scannerLabel}>매장폰으로 사용하기</Text></Pressable>
+
         <View style={styles.legal}>
           <Text style={styles.legalText}>계속 진행 시</Text>
           <View style={styles.legalLinks}>
@@ -141,6 +143,8 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
+  scannerEntry: { minHeight: 44, marginTop: 16, justifyContent: 'center', alignItems: 'center' },
+  scannerLabel: { fontSize: Type.base, color: Colors.gray600 },
   qaPanel: { width: '100%', marginTop: 24, padding: 16, borderRadius: 12, backgroundColor: Colors.gray50, gap: 12 },
   qaTitle: { fontSize: 13, color: Colors.gray600, fontWeight: '600' },
   qaButtons: { flexDirection: 'row', gap: 8 },

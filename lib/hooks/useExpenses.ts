@@ -1,3 +1,4 @@
+import { usePreviewWriteGuard } from './usePreviewWriteGuard';
 import { getErrorMessage, UserFacingError } from '../utils/error';
 import { useState, useCallback, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
@@ -6,8 +7,9 @@ import { ExpenseCategory } from '../../types';
 import { DatedExpense as Expense } from '../types/expenses';
 
 export function useExpenses(yearMonth: string) {
-  const { store, user, currentRole, devPreviewMode } = useAuth();
-  const identity = `${user?.id ?? ''}:${store?.id ?? ''}:${currentRole}:${devPreviewMode}:${yearMonth}`;
+  const { assertCanWrite } = usePreviewWriteGuard();
+  const { store, user, canManageStore, permissionRevision, devPreviewMode } = useAuth();
+  const identity = `${permissionRevision}:${user?.id ?? ''}:${store?.id ?? ''}:${canManageStore}:${devPreviewMode}:${yearMonth}`;
   const currentIdentity = useRef(identity);
   currentIdentity.current = identity;
   const requestVersion = useRef(0);
@@ -28,7 +30,7 @@ export function useExpenses(yearMonth: string) {
       const result = await getExpensesByMonth(store.id, yearMonth);
       if (!current()) return;
       const carried = result.some(e => e.category === '고정비') ? [] :
-        (await (currentRole === 'admin' ? getEffectiveFixedExpenses : getLegacyEffectiveFixedExpenses)(store.id, yearMonth)).filter(e => e.year_month !== yearMonth);
+        (await (canManageStore ? getEffectiveFixedExpenses : getLegacyEffectiveFixedExpenses)(store.id, yearMonth)).filter(e => e.year_month !== yearMonth);
       if (!current()) return;
       setExpenses(result);
       setCarriedFixedExpenses(carried);
@@ -46,6 +48,7 @@ export function useExpenses(yearMonth: string) {
     amount: number;
     occurred_on: string;
   }) => {
+    assertCanWrite();
     if (!store) throw new UserFacingError('매장 정보가 없습니다');
     if (mutationBusy.current) throw new UserFacingError('저장 중입니다. 잠시 기다려주세요.');
     mutationBusy.current = true;
@@ -60,6 +63,7 @@ export function useExpenses(yearMonth: string) {
   }, [store, yearMonth, identity, refetch]);
 
   const update = useCallback(async (id: string, data: { name: string; amount: number; occurred_on?: string }) => {
+    assertCanWrite();
     if (mutationBusy.current) throw new UserFacingError('저장 중입니다. 잠시 기다려주세요.');
     mutationBusy.current = true;
     try {
@@ -73,6 +77,7 @@ export function useExpenses(yearMonth: string) {
   }, [identity, yearMonth, refetch]);
 
   const remove = useCallback(async (id: string) => {
+    assertCanWrite();
     if (mutationBusy.current) throw new UserFacingError('저장 중입니다. 잠시 기다려주세요.');
     mutationBusy.current = true;
     try {
@@ -85,6 +90,7 @@ export function useExpenses(yearMonth: string) {
   }, [identity, yearMonth, refetch]);
 
   const copyCarriedFixedExpenses = useCallback(async (dates: { id: string; occurred_on: string }[]) => {
+    assertCanWrite();
     if (!store) throw new UserFacingError('매장 정보가 없습니다');
     if (mutationBusy.current) throw new UserFacingError('저장 중입니다. 잠시 기다려주세요.');
     mutationBusy.current = true;

@@ -12,7 +12,7 @@ const mockGetIngredients = jest.fn();
 const mockGetRecipes = jest.fn();
 const mockMutate = jest.fn();
 const mockBatch = jest.fn();
-jest.mock('../../lib/contexts/AuthContext', () => ({ useAuth: () => ({ store: mockStore, user: { id: mockUserId } }) }));
+jest.mock('../../lib/contexts/AuthContext', () => ({ useAuth: () => ({ store: mockStore, devPreviewMode: 'self', user: { id: mockUserId } }) }));
 jest.mock('../../lib/services/ingredients', () => ({ getIngredients: (...args: unknown[]) => mockGetIngredients(...args), updateIngredientCategories: (...args: unknown[]) => mockBatch(...args), createIngredient: (...args: unknown[]) => mockMutate(...args), deleteIngredient: (...args: unknown[]) => mockMutate(...args) }));
 jest.mock('../../lib/services/recipes', () => ({ getRecipes: (...args: unknown[]) => mockGetRecipes(...args), updateRecipeCategories: (...args: unknown[]) => mockBatch(...args), createRecipeWithIngredients: (...args: unknown[]) => mockMutate(...args), deleteRecipe: (...args: unknown[]) => mockMutate(...args) }));
 const wrapper = ({ children }: { children: React.ReactNode }) => React.createElement(QueryClientProvider, { client: queryClient }, children);

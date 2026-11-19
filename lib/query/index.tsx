@@ -14,7 +14,7 @@ export function RattleQueryProvider({ children }: { children: ReactNode }) {
   return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
 }
 export function useQueryScope(): string {
-  const { user, realRole, currentRole, devPreviewMode, devPreviewEmployeeId, memberRoles, canReadFinancials } = useAuth();
-  return JSON.stringify([user?.id ?? null, realRole, currentRole, devPreviewMode, devPreviewEmployeeId, canReadFinancials,
+  const { user, realRole, currentRole, devPreviewMode, devPreviewEmployeeId, memberRoles, canReadFinancials, permissionRevision } = useAuth();
+  return JSON.stringify([user?.id ?? null, realRole, currentRole, devPreviewMode, devPreviewEmployeeId, canReadFinancials, permissionRevision,
     Object.entries(memberRoles ?? {}).sort(([a], [b]) => a.localeCompare(b))]);
 }

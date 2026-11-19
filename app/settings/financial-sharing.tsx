@@ -1,3 +1,4 @@
+import { getMyStoreVisibility } from '../../lib/services/storeVisibility';
 /* Hallmark · genre: modern-minimal · macrostructure: Workbench · design-system: DESIGN.md · designed-as-app */
 import { useEffect, useRef, useState } from 'react';
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
@@ -8,17 +9,33 @@ import { FinancialShareScope } from '../../types';
 import { useAuth } from '../../lib/contexts/AuthContext';
 import { FinancialSharingChoices } from '../../lib/components/FinancialSharingChoices';
 import { AppBar, Button } from '../../lib/components/ui';
-import { updateFinancialSharing } from '../../lib/services/stores';
+import { FinancialSharingWriteError, updateFinancialSharing } from '../../lib/services/stores';
 import { clearQueryData } from '../../lib/query/client';
 import { useConfirmLeave } from '../../lib/hooks/useConfirmLeave';
 import { FINANCIAL_SHARE_OPTIONS } from '../../lib/utils/financialSharing';
 
 export default function FinancialSharingScreen() {
-  const { store, user, refreshStore, devPreviewMode } = useAuth();
+  const { user, store } = useAuth();
+  // 요청·저장 잠금·결과 확인 상태는 이 계정과 매장에서만 소유한다.
+  return <FinancialSharingForm key={JSON.stringify([user?.id ?? null, store?.id ?? null])} />;
+}
+
+function FinancialSharingForm() {
+  const { store, user, refreshStore, access, devPreviewMode } = useAuth();
   const [value, setValue] = useState<FinancialShareScope | null>(store?.financial_share_scope ?? null);
   const [applied, setApplied] = useState<FinancialShareScope | null>(store?.financial_share_scope ?? null);
   const [saving, setSaving] = useState(false), [error, setError] = useState<string | null>(null), [saved, setSaved] = useState(false);
   const [refreshFailed, setRefreshFailed] = useState(false);
+  const [reconcile, setReconcile] = useState<'unknown' | 'conflict' | null>(null);
+  const requestLock = useRef(false);
+  const identity = JSON.stringify([user?.id, store?.id]);
+  const target = useRef({ identity });
+  if (target.current.identity !== identity) target.current = { identity };
+  const captured = target.current;
+  const mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  const isCurrent = () => mounted.current && target.current === captured;
+  const reconcileRef = useRef<'unknown' | 'conflict' | null>(null);
   const lastWrite = useRef<{ storeId: string; scope: FinancialShareScope } | null>(null);
   useEffect(() => {
     setValue(store?.financial_share_scope ?? null); setApplied(store?.financial_share_scope ?? null); setError(null);
@@ -26,23 +43,44 @@ export default function FinancialSharingScreen() {
       setSaved(false); setRefreshFailed(false); lastWrite.current = null;
     }
   }, [store?.id, store?.financial_share_scope]);
-  const owner = !!store && store.owner_id === user?.id && devPreviewMode === 'self';
+  const owner = access.can_manage_visibility && !!store && store.owner_id === user?.id && devPreviewMode === 'self';
+  useEffect(() => { reconcileRef.current = null; setReconcile(null); }, [user?.id, store?.id]);
   const dirty = value !== applied;
   useConfirmLeave(owner && (dirty || saving), { blockLeave: saving });
   const titleFor = (scope: FinancialShareScope | null) => FINANCIAL_SHARE_OPTIONS.find(option => option.value === scope)?.title ?? '확인 필요';
+  async function readCurrent() {
+    if (!isCurrent() || !store || !owner || requestLock.current) return;
+    requestLock.current = true; setSaving(true);
+    try {
+      const result = await getMyStoreVisibility(store.id);
+      if (!isCurrent()) return;
+      if (result.status !== 'success') { setError('현재 설정을 확인하지 못했어요. 다시 불러와주세요.'); return; }
+      setValue(result.data.financial_share_scope); setApplied(result.data.financial_share_scope);
+      reconcileRef.current = null; setReconcile(null); setSaved(false);
+      setError('현재 설정을 확인했어요. 바꾸려면 공유 대상을 선택하고 저장해주세요.');
+    } catch { if (isCurrent()) setError('현재 설정을 확인하지 못했어요. 다시 불러와주세요.'); }
+    finally { requestLock.current = false; if (isCurrent()) setSaving(false); }
+  }
   async function save() {
-    if (!store || !owner || !value || !dirty || saving) return;
+    if (!isCurrent() || !store || !owner || !value || !dirty || saving || reconcileRef.current || reconcile || requestLock.current) return;
+    requestLock.current = true;
     const id = store.id;
     setSaving(true); setError(null); setSaved(false); setRefreshFailed(false);
     try {
       await updateFinancialSharing(id, value);
-    } catch { setError('공유 설정을 저장하지 못했어요. 선택한 내용을 유지했으니 다시 시도해주세요.'); setSaving(false); return; }
+    } catch (e) {
+      if (!isCurrent()) { requestLock.current = false; return; }
+      if (e instanceof FinancialSharingWriteError) { reconcileRef.current = e.status; setReconcile(e.status); setError(e.message); }
+      else setError('공유 설정을 저장하지 못했어요. 선택한 내용을 유지했으니 다시 시도해주세요.');
+      requestLock.current = false; setSaving(false); return;
+    }
+    if (!isCurrent()) { requestLock.current = false; return; }
     // The write succeeded. A later cache/read failure must not invite a second write.
     lastWrite.current = { storeId: id, scope: value };
     setApplied(value); setSaved(true);
-    try { await clearQueryData(); await refreshStore(); }
-    catch { setRefreshFailed(true); }
-    finally { setSaving(false); }
+    try { await clearQueryData(); if (isCurrent()) await refreshStore(); }
+    catch { if (isCurrent()) setRefreshFailed(true); }
+    finally { requestLock.current = false; if (isCurrent()) setSaving(false); }
   }
   return <SafeAreaView style={styles.page}>
     <AppBar title="손익 공유" onBack={() => router.back()} />
@@ -50,11 +88,11 @@ export default function FinancialSharingScreen() {
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.context}><Text style={styles.store}>{store.name}</Text><Text style={styles.body}>적용 중 · {titleFor(applied)}</Text></View>
         <View style={styles.intro}><Text style={styles.heading}>매장 손익을 누구와 공유할까요?</Text><Text style={styles.body}>선택한 구성원에게 손익 요약과 영업이익을 보여줘요.</Text></View>
-        <FinancialSharingChoices value={value} onChange={next => { setValue(next); setSaved(false); setError(null); }} disabled={saving} />
+        <FinancialSharingChoices value={value} onChange={next => { setValue(next); setSaved(false); setError(null); }} disabled={saving || !!reconcile} />
         <View style={styles.notice}><Text style={styles.noteTitle}>공유 범위가 바뀌어도</Text><Text style={styles.body}>체크리스트·스케줄·본인 급여·재고 업무는 계속 이용할 수 있어요. 고용형태는 관리자가 확정한 직원 정보를 기준으로 적용해요.</Text></View>
         {error && <View style={styles.error} accessibilityRole="alert"><Text style={styles.body}>{error}</Text></View>}
         {saved && <Text accessibilityRole="alert" style={styles.body}>{refreshFailed ? '설정은 저장됐어요. 화면 갱신이 지연되고 있어요. 다시 진입해 적용 상태를 확인해주세요.' : '공유 설정을 저장했어요.'}</Text>}
-      </ScrollView><View style={styles.footer}><Text style={styles.footerHint}>{dirty ? `저장 후 · ${titleFor(value)}` : '현재 적용 중인 설정이에요'}</Text><Button label="공유 설정 저장" disabled={!value || !dirty || saving} loading={saving} onPress={save} /></View>
+      </ScrollView><View style={styles.footer}><Text style={styles.footerHint}>{dirty ? `저장 후 · ${titleFor(value)}` : '현재 적용 중인 설정이에요'}</Text><Button label={reconcile ? "현재 설정 확인" : "공유 설정 저장"} disabled={saving || (!reconcile && (!value || !dirty))} loading={saving} onPress={reconcile ? readCurrent : save} /></View>
     </>}
   </SafeAreaView>;
 }

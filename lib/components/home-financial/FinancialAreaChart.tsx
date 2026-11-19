@@ -21,16 +21,20 @@ export function FinancialAreaChart({ current: cumulativeCurrent, previous: cumul
   const [selection, setSelection] = useState<{ day: number; x: number; y: number } | null>(null);
   const inspectRef = useRef(onInspect); inspectRef.current = onInspect;
   const through = Number(date.slice(8)), month = Number(date.slice(5, 7));
-  const values = [...current, ...previous].flatMap(row => row.values[metric] == null ? [] : [row.values[metric]!]);
-  const min = Math.min(0, ...values), max = Math.max(1, ...values), range = max - min;
-  const power = 10 ** Math.floor(Math.log10(Math.max(1, range / 4)));
-  const step = [1, 2, 5, 10].map(n => n * power).find(n => n >= range / 4) ?? power;
-  const low = min < 0 ? Math.floor((min - range * 0.04) / step) * step : 0;
-  const high = Math.ceil((max + range * 0.04) / step) * step;
-  const x = (day: number) => (day - 1) / Math.max(1, through - 1) * 322;
-  const y = (value: number) => 208 - (value - low) / Math.max(1, high - low) * 192;
-  const points = (rows: FinancialDay[]) => rows.filter(row => row.day <= through && row.values[metric] != null).map(row => ({ x: x(row.day), y: y(row.values[metric]!) }));
-  const nowPoints = points(current), previousPoints = points(previous);
+  const geometry = useMemo(() => {
+    const values = [...current, ...previous].flatMap(row => row.values[metric] == null ? [] : [row.values[metric]!]);
+    const min = Math.min(0, ...values), max = Math.max(1, ...values), range = max - min;
+    const power = 10 ** Math.floor(Math.log10(Math.max(1, range / 4)));
+    const step = [1, 2, 5, 10].map(n => n * power).find(n => n >= range / 4) ?? power;
+    const low = min < 0 ? Math.floor((min - range * 0.04) / step) * step : 0;
+    const high = Math.ceil((max + range * 0.04) / step) * step;
+    const x = (day: number) => (day - 1) / Math.max(1, through - 1) * 322;
+    const y = (value: number) => 208 - (value - low) / Math.max(1, high - low) * 192;
+    const points = (rows: FinancialDay[]) => rows.filter(row => row.day <= through && row.values[metric] != null).map(row => ({ x: x(row.day), y: y(row.values[metric]!) }));
+    const nowPoints = points(current), previousPoints = points(previous);
+    return { min, low, high, x, y, nowPoints, previousPoints, currentPath: basisPath(nowPoints), previousPath: basisPath(previousPoints) };
+  }, [current, previous, metric, through]);
+  const { min, low, high, x, y, nowPoints, previousPoints, currentPath, previousPath } = geometry;
   const hasTimeline = nowPoints.length > 0;
   const entryEnabled = useRef(animateEntry).current;
   const entrance = useRef(new Animated.Value(entryEnabled && !reduced ? 0 : 1)).current;
@@ -56,13 +60,27 @@ export function FinancialAreaChart({ current: cumulativeCurrent, previous: cumul
       onInspect?.(false);
     }
   }, [hasTimeline, setPagerGestureActive, gestureOwner, onInspect]);
-  const currentPath = basisPath(nowPoints), previousPath = basisPath(previousPoints);
   const color = financialTheme[metric];
   const latest = useRef({ width, through }); latest.current = { width, through };
+  const pendingSelection = useRef<{ day: number; x: number; y: number } | null>(null);
+  const frame = useRef<ReturnType<typeof requestAnimationFrame> | null>(null);
+  const cancelSelection = () => {
+    if (frame.current !== null) cancelAnimationFrame(frame.current);
+    frame.current = null; pendingSelection.current = null;
+  };
+  useEffect(() => cancelSelection, []);
+  useEffect(() => { cancelSelection(); setSelection(null); }, [date, metric, cumulativeCurrent, cumulativePrevious]);
   const gesture = useMemo(() => {
-    const select = (locationX: number, locationY: number) => {
+    const select = (locationX: number, locationY: number, immediate = false) => {
       const day = Math.max(1, Math.min(latest.current.through, 1 + Math.round(locationX / latest.current.width * (latest.current.through - 1))));
-      setSelection({ day, x: locationX, y: locationY });
+      const next = { day, x: locationX, y: locationY };
+      if (immediate) { setSelection(next); return; }
+      pendingSelection.current = next;
+      if (frame.current === null) frame.current = requestAnimationFrame(() => {
+        frame.current = null;
+        if (pendingSelection.current) setSelection(pendingSelection.current);
+        pendingSelection.current = null;
+      });
     };
     return Gesture.Pan()
       .withTestId('financial-chart-pan')
@@ -71,12 +89,13 @@ export function FinancialAreaChart({ current: cumulativeCurrent, previous: cumul
       .runOnJS(true)
       .onBegin(event => {
         setPagerGestureActive?.(gestureOwner, true);
-        select(event.x, event.y);
+        select(event.x, event.y, true);
         inspectRef.current?.(true);
         void Haptics.selectionAsync().catch(() => {});
       })
       .onUpdate(event => select(event.x, event.y))
       .onFinalize(() => {
+        cancelSelection();
         setSelection(null);
         inspectRef.current?.(false);
         setPagerGestureActive?.(gestureOwner, false);

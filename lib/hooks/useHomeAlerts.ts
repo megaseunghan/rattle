@@ -1,7 +1,9 @@
 import { UserFacingError } from '../utils/error';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { HomeAlert, Store } from '../../types';
+import { AppState } from 'react-native';
+import { koreanDate } from '../utils/regularWages';
+import { Store } from '../../types';
 import { buildHomeAlerts, getHomeAlertReads, getHomeAlertStock, hasMonthlyFixedExpense, markHomeAlertRead } from '../services/homeAlerts';
 
 export function useHomeAlerts(todaySales?: number, selectedStore?: Store, financial = true) {
@@ -10,48 +12,66 @@ export function useHomeAlerts(todaySales?: number, selectedStore?: Store, financ
   const storeId = targetStore?.id;
   const userId = user?.id;
   const tossLinked = !!targetStore?.toss_merchant_id;
-  const scope = `${userId}:${storeId}:${financial}`;
+  const [, setDateTick] = useState(0);
+  const date = koreanDate(new Date());
+  const scope = `${userId}:${storeId}:${financial}:${date}`;
+  useEffect(() => {
+    // One boundary wakeup, not periodic network polling. Resume also catches
+    // midnight passed while the native app suspended its timers.
+    const nextMidnight = Date.parse(`${date}T00:00:00+09:00`) + 86_400_000;
+    const tick = () => setDateTick(value => value + 1);
+    const timer = setTimeout(tick, Math.max(1, nextMidnight - Date.now()));
+    const listener = AppState.addEventListener('change', state => { if (state === 'active') tick(); });
+    return () => { clearTimeout(timer); listener.remove(); };
+  }, [date]);
   const scopeRef = useRef(scope);
   scopeRef.current = scope;
   const requestId = useRef(0);
-  const [state, setState] = useState<{ scope: string; alerts: HomeAlert[]; loading: boolean; error: string | null }>({
-    scope: '', alerts: [], loading: false, error: null,
+  const [source, setSource] = useState<{ scope: string; stock: Awaited<ReturnType<typeof getHomeAlertStock>>; hasFixed: boolean | undefined; now: Date; read: Set<string> } | null>(null);
+  const [state, setState] = useState<{ scope: string; loading: boolean; error: string | null }>({
+    scope: '', loading: false, error: null,
   });
   useEffect(() => () => { requestId.current += 1; }, []);
   const refetch = useCallback(async () => {
     const request = ++requestId.current;
     if (!storeId || !userId) return;
-    setState(previous => ({ scope, alerts: previous.scope === scope ? previous.alerts : [], loading: true, error: null }));
+    setState({ scope, loading: true, error: null });
     try {
-      const now = new Date();
-      const yearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+      // buildHomeAlerts uses local calendar getters. Construct the Korean
+      // calendar day at local noon so device timezone cannot change alert keys.
+      const now = new Date(`${date}T12:00:00`);
+      const yearMonth = date.slice(0, 7);
       const [stock, hasFixed] = await Promise.all([
         getHomeAlertStock(storeId), financial ? hasMonthlyFixedExpense(storeId, yearMonth) : undefined,
       ]);
       const alerts = buildHomeAlerts({ stock, now, fixedExpenseMissing: financial ? !hasFixed : undefined,
-        // 오늘 매출 0원 여부는 화면에서 현재 값으로 판단한다. 매출이 바뀔 때마다 알림 원본을 다시 읽지 않는다.
         tossNotSynced: financial && tossLinked });
       const read = new Set(await getHomeAlertReads(storeId, userId, alerts.map(alert => alert.key)));
       if (request !== requestId.current || scopeRef.current !== scope) return;
-      setState({ scope, alerts: alerts.filter(alert => !read.has(alert.key)), loading: false, error: null });
+      setSource({ scope, stock, hasFixed, now, read });
+      setState({ scope, loading: false, error: null });
     } catch {
       if (request !== requestId.current || scopeRef.current !== scope) return;
-      setState(previous => ({ scope, alerts: previous.scope === scope ? previous.alerts : [], loading: false,
-        error: '홈 알림을 불러오지 못했어요. 다시 시도해 주세요.' }));
+      setState({ scope, loading: false,
+        error: '홈 알림을 불러오지 못했어요. 다시 시도해 주세요.' });
     }
-  }, [storeId, userId, scope, financial, tossLinked]);
+  }, [storeId, userId, scope, financial, tossLinked, date]);
   const markRead = useCallback(async (key: string) => {
     if (!storeId || !userId) throw new UserFacingError('로그인과 매장을 확인해 주세요.');
     await markHomeAlertRead(storeId, userId, key);
     if (scopeRef.current === scope) {
       requestId.current += 1;
-      setState(previous => previous.scope === scope ? { ...previous, loading: false, alerts: previous.alerts.filter(alert => alert.key !== key) } : previous);
+      setSource(previous => previous?.scope === scope ? { ...previous, read: new Set([...previous.read, key]) } : previous);
+      setState(previous => previous.scope === scope ? { ...previous, loading: false } : previous);
       return true;
     }
     return false;
   }, [storeId, userId, scope]);
   const visible = state.scope === scope;
-  const shown = visible ? state.alerts.filter(alert => alert.kind !== 'tossNotSynced' || todaySales === 0) : [];
-  return { alerts: shown, loading: visible ? state.loading : !!storeId,
+  const alerts = useMemo(() => source?.scope === scope ? buildHomeAlerts({
+    stock: source.stock, now: source.now, fixedExpenseMissing: financial ? !source.hasFixed : undefined,
+    tossNotSynced: financial && tossLinked && todaySales === 0,
+  }).filter(alert => !source.read.has(alert.key) && (alert.kind !== 'tossNotSynced' || todaySales === 0)) : [], [source, scope, financial, tossLinked, todaySales]);
+  return { alerts: visible ? alerts : [], loading: visible ? state.loading : !!storeId,
     error: visible ? state.error : null, refetch, markRead };
 }

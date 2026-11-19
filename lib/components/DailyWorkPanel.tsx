@@ -1,3 +1,5 @@
+import { useAuth } from '../contexts/AuthContext';
+import { useScopedWriteGuard } from '../hooks/useScopedWriteGuard';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, Keyboard, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Employee, Payroll, DailyWorkHistory, DailyWorkRecord } from '../../types';
@@ -18,6 +20,8 @@ export function DailyWorkPanel({ employee, yearMonth, payroll, isAdmin, readOnly
   employee: Employee; yearMonth: string; payroll?: Payroll; isAdmin: boolean; readOnly?: boolean;
   onApplied?: () => Promise<unknown>; onClose?: () => void; closeRequested?: number; onBusyChange?: (value: boolean) => void;
 }) {
+  const { canManageStore } = useAuth();
+  const canWrite = useScopedWriteGuard([employee.store_id, employee.id, yearMonth, isAdmin, readOnly]);
   const { rows, loading, error, refetch } = useDailyWork(employee.store_id, employee.id, yearMonth);
   const [date, setDate] = useState(kstToday().startsWith(yearMonth) ? kstToday() : `${yearMonth}-01`);
   const [minutes, setMinutes] = useState('');
@@ -58,7 +62,7 @@ export function DailyWorkPanel({ employee, yearMonth, payroll, isAdmin, readOnly
     if (dirty) Alert.alert('작성 중인 내용을 바꿀까요?', '저장하지 않은 입력은 사라져요.', [{ text: '계속 작성', style: 'cancel' }, { text: '바꾸기', onPress: change }]); else change();
   }
   async function save() {
-    if (readOnly || lock.current || loading || error) return;
+    if (!canWrite() || (isAdmin && !canManageStore) || readOnly || lock.current || loading || error) return;
     try { if (!date.startsWith(`${yearMonth}-`)) throw new Error('선택한 월의 날짜를 입력해 주세요.'); if (date > kstToday()) throw new Error('미래 날짜의 근무시간은 입력할 수 없어요.'); parseDailyMinutes(minutes); if (!note.trim()) throw new Error('입력 근거나 수정 사유를 적어 주세요.'); }
     catch (e) { setMessage(e instanceof Error ? e.message : '입력값을 확인해 주세요.'); return; }
     lock.current = true; setBusy(true); setMessage(null);
@@ -73,7 +77,7 @@ export function DailyWorkPanel({ employee, yearMonth, payroll, isAdmin, readOnly
     finally { lock.current = false; setBusy(false); }
   }
   async function review(row: DailyWorkRecord, status: 'approved' | 'rejected') {
-    if (readOnly || lock.current) return;
+    if (!canWrite() || (isAdmin && !canManageStore) || readOnly || lock.current) return;
     lock.current = true; setBusy(true); setMessage(null);
     try {
       const saved = await reviewDailyWork(row, status, reviewNotes[row.id] ?? '');
@@ -85,7 +89,7 @@ export function DailyWorkPanel({ employee, yearMonth, payroll, isAdmin, readOnly
     finally { lock.current = false; setBusy(false); }
   }
   async function apply() {
-    if (readOnly || lock.current) return;
+    if (!canWrite() || (isAdmin && !canManageStore) || readOnly || lock.current) return;
     lock.current = true; setBusy(true); setMessage(null);
     try {
       const saved = await applyDailyPayroll(employee, yearMonth, rows, savedPayroll);

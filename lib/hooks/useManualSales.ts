@@ -1,3 +1,4 @@
+import { usePreviewWriteGuard } from './usePreviewWriteGuard';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../contexts/AuthContext';
@@ -7,6 +8,7 @@ import { getManualSalesByMonth, deleteManualSale } from '../services/manualSales
 import { ManualSale } from '../../types';
 const EMPTY: ManualSale[] = [];
 export function useManualSales(yearMonth: string) {
+  const { assertCanWrite } = usePreviewWriteGuard();
   const { store } = useAuth();
   const accessScope = useQueryScope();
   const storeId = store?.id;
@@ -34,6 +36,7 @@ export function useManualSales(yearMonth: string) {
     } finally { reads.current.set(scope, Math.max(0, (reads.current.get(scope) ?? 1) - 1)); }
   }, [storeId, scope, query.refetch]);
   const remove = useCallback(async (id: string) => {
+    assertCanWrite();
     if (!storeId || active.current !== scope || lock.current || uncertain.current.has(scope) || (reads.current.get(scope) ?? 0) > 0 || !query.isSuccess || query.isFetching || actionError || !sales.some(row => row.id === id)) return;
     lock.current = scope; setAction({ scope, id, error: null });
     try {

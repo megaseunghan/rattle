@@ -1,5 +1,5 @@
 {
-  "note": "20261118120000_rls_auth_initplan.sql이 적용 시점에 이 파일들의 정책을 보정했다. 새 파일을 여기에 추가하지 말고 정책에서 (select auth.uid())로 감싼다.",
+  "note": "20261118121000_rls_auth_initplan.sql이 적용 시점에 이 파일들의 정책을 보정했다. 새 파일을 여기에 추가하지 말고 정책에서 (select auth.uid())로 감싼다.",
   "files": [
     "20260403_toss_sales.sql",
     "20260407_pos_catalog.sql",

@@ -5,7 +5,7 @@ import SalesSettingsScreen from '../../app/settings/sales';
 const mockSave = jest.fn(), mockRefresh = jest.fn(), mockUpdate = jest.fn();
 let mockRole = 'admin', mockUser = 'owner';
 let mockStore = { id: 's', name: '매장', address: '', owner_id: 'owner', closing_time: '23:00' };
-jest.mock('../../lib/contexts/AuthContext', () => ({ useAuth: () => ({ store: mockStore, user: { id: mockUser }, currentRole: mockRole, refreshStore: mockRefresh }) }));
+jest.mock('../../lib/contexts/AuthContext', () => ({ useAuth: () => ({ store: mockStore, user: { id: mockUser }, currentRole: mockRole, canManageStore: mockRole === 'admin', access: { can_delete_store: mockRole === 'admin' && mockStore?.owner_id === mockUser, can_manage_visibility: mockRole === 'admin' && mockStore?.owner_id === mockUser }, refreshStore: mockRefresh }) }));
 jest.mock('../../lib/services/stores', () => ({ updateStoreInfo: (...args: unknown[]) => mockSave(...args), updateStoreClosingTime: async (id: string, time: string) => { mockUpdate({ closing_time: time }); const result = await mockSave('id', id); if (result?.error) throw result.error; }, deleteOwnedStore: jest.fn() }));
 jest.mock('../../lib/supabase', () => ({ supabase: { from: () => ({ update: (...args: unknown[]) => { mockUpdate(...args); return { eq: mockSave }; } }) } }));
 jest.mock('../../lib/icons/AppIcon', () => ({ AppIcon: () => null }));

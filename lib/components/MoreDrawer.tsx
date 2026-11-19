@@ -1,3 +1,4 @@
+import { useScopedWriteGuard } from '../hooks/useScopedWriteGuard';
 import Animated, { cancelAnimation, ReduceMotion, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
 import { useEffect, useRef, useState } from 'react';
@@ -130,6 +131,7 @@ export function MoreDrawer({ visible, onClose, onOpen, allSelected = false, onSe
     });
 
   const isAdmin = currentRole === 'admin';
+  const canWrite = useScopedWriteGuard([]);
   const provider = (user?.app_metadata?.provider as string | undefined) ?? 'email';
   const isEmailUser = provider === 'email';
 
@@ -148,6 +150,7 @@ export function MoreDrawer({ visible, onClose, onOpen, allSelected = false, onSe
   }
 
   function go(path: string) {
+    if (['/(auth)/select-store', '/settings/password', '/settings/account'].includes(path) && !canWrite()) return;
     onClose();
     router.push(path as any);
   }
@@ -167,6 +170,7 @@ export function MoreDrawer({ visible, onClose, onOpen, allSelected = false, onSe
   }
 
   function handleDeleteAccount() {
+    if (!canWrite()) return;
     Alert.alert(
       '회원 탈퇴',
       '계정을 삭제할까요? 매장의 급여·매입 기록은 보존돼요.',
@@ -177,6 +181,7 @@ export function MoreDrawer({ visible, onClose, onOpen, allSelected = false, onSe
           style: 'destructive',
           onPress: async () => {
             try {
+              if (!canWrite()) return;
               await deleteAccount();
               onClose();
               await signOut();
@@ -252,15 +257,17 @@ export function MoreDrawer({ visible, onClose, onOpen, allSelected = false, onSe
             })}
           </AccordionSection>
 
-          <SettingRow icon="store-add" label="매장 추가·참여" onPress={() => go('/(auth)/select-store')} />
+          {canWrite() && <SettingRow icon="store-add" label="매장 추가·참여" onPress={() => go('/(auth)/select-store')} />}
           <AccordionSection title="설정">
             {isAdmin && <SettingRow icon="store-settings" label="매장 정보" onPress={() => go('/settings/store')} />}
-            {isAdmin && currentStore?.owner_id === user?.id && <SettingRow icon="profit-loss" label="손익 공유" withBorder onPress={() => go('/settings/financial-sharing')} />}
+            {isAdmin && currentStore?.owner_id === user?.id && <SettingRow icon="profit-loss" label="열람 설정" withBorder onPress={() => go('/settings/store-visibility')} />}
+            {isAdmin && currentStore?.owner_id === user?.id && <SettingRow icon="staff" label="점장 지정" withBorder onPress={() => go('/settings/store-manager')} />}
+            {isAdmin && <SettingRow icon="work-time" label="매장폰 등록" withBorder onPress={() => go('/settings/scanner-pairing')} />}
             {isAdmin && <SettingRow icon="staff" label="멤버 관리" withBorder onPress={() => go('/settings/members')} />}
             {isAdmin && <SettingRow icon="pos-connect" label="TossPos 연동" withBorder onPress={() => go('/settings/pos-sync')} />}
             {isAdmin && <SettingRow icon="review-pending" label="알림 설정" withBorder onPress={() => go('/notifications/settings')} />}
             <SettingRow icon="checklist" label="청소 체크리스트" withBorder={isAdmin} onPress={() => go('/cleaning')} />
-            {isEmailUser && (
+            {isEmailUser && canWrite() && (
               <SettingRow icon="access-denied" label="비밀번호 변경" withBorder onPress={() => go('/settings/password')} />
             )}
             <SettingRow icon="payroll" label="이용약관" withBorder onPress={() => go('/legal/terms')} />
@@ -268,9 +275,9 @@ export function MoreDrawer({ visible, onClose, onOpen, allSelected = false, onSe
             <SettingRow label="로그아웃" withBorder onPress={handleSignOut} />
           </AccordionSection>
 
-          <TouchableOpacity style={styles.dangerTextRow} onPress={handleDeleteAccount} activeOpacity={0.7}>
+          {canWrite() && <TouchableOpacity style={styles.dangerTextRow} onPress={handleDeleteAccount} activeOpacity={0.7}>
             <Text style={styles.dangerText}>회원 탈퇴</Text>
-          </TouchableOpacity>
+          </TouchableOpacity>}
         </ScrollView>
       </Animated.View>
     </View>}

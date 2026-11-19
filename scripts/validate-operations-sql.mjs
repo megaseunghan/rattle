@@ -287,5 +287,6 @@ try {
   check('실패 시 신청 대기 상태 유지',(await db.query('SELECT status FROM store_members WHERE id=$1',[rollbackMember])).rows[0].status,'pending');
   check('실패 시 검토 확정도 롤백',(await db.query('SELECT reviewed_revision FROM store_join_profiles WHERE member_id=$1',[rollbackMember])).rows[0].reviewed_revision,null);
   await db.exec('DROP TRIGGER fixture_fail_join_wage ON employee_wage_history');
+  await (await import('./validate-join-wage-required-sql.mjs')).validateJoinWageRequired({db,as,owner:onOwner,store:onStore});
   console.log(`PASS local PostgreSQL migrations and ${checks} workflow/security checks`);
 } catch (error) { console.error('FAIL local SQL:', error.message); process.exitCode = 1; } finally { await db.close(); }

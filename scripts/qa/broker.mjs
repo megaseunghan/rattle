@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { timingSafeEqual } from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
 
-const config = JSON.parse(await readFile(new URL('../../.qa/accounts.json', import.meta.url), 'utf8'));
+const config = JSON.parse(await readFile(process.env.RATTLE_QA_ACCOUNTS_PATH ?? new URL('../../.qa/accounts.json', import.meta.url), 'utf8'));
 const roles = ['admin', 'regular', 'part_time'];
 function authorized(value) {
   const actual = Buffer.from(value ?? '');
@@ -27,7 +27,10 @@ const server = createServer(async (req, res) => {
     const { data, error } = await client.auth.signInWithPassword({ email: config.accounts[role].email, password: config.accounts[role].password });
     if (error || data.user?.id !== config.accounts[role].id || data.user.app_metadata.qa_fixture !== config.storeId) throw new Error('QA auth failed');
     const membership = await client.from('store_members').select('role,status').eq('store_id', config.storeId).eq('user_id', data.user.id).single();
-    if (membership.error || membership.data.status !== 'approved' || membership.data.role !== (role === 'admin' ? 'admin' : 'member')) throw new Error('QA membership mismatch');
+    // Managers remain members; their assignment is stored separately by the server.
+    // The historical admin fixture name grants no permissions of its own.
+    const allowedRoles = role === 'admin' ? ['member', 'admin'] : ['member'];
+    if (membership.error || membership.data.status !== 'approved' || !allowedRoles.includes(membership.data.role)) throw new Error('QA membership mismatch');
     if (role !== 'admin') {
       const employee = await client.from('employees').select('employment_type').eq('store_id', config.storeId).eq('user_id', data.user.id).eq('is_active', true).single();
       if (employee.error || employee.data.employment_type !== role) throw new Error('QA employee mismatch');

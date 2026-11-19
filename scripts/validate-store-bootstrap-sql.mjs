@@ -61,7 +61,7 @@ try {
       ('${s(3)}','${users.owner}','member','approved');
     INSERT INTO employees(store_id,user_id,is_active,employment_type) VALUES
       ('${s(2)}','${users.regular}',true,'regular'), ('${s(2)}','${users.part}',true,'part_time'), ('${s(3)}','${users.owner}',true,'regular');`);
-  const migration = await readFile(new URL('../supabase/migrations/20261118130000_store_bootstrap.sql', import.meta.url), 'utf8');
+  const migration = await readFile(new URL('../supabase/migrations/20261118131000_store_bootstrap.sql', import.meta.url), 'utf8');
   await db.exec(migration); await db.exec(migration);
 
   for (const [name, user] of Object.entries(users)) {

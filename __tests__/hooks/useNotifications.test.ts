@@ -10,7 +10,7 @@ let mockPreview = 'self';
 jest.mock('expo-router', () => ({ useFocusEffect: (callback: () => void | (() => void)) => {
   const React = require('react'); React.useEffect(callback, [callback]);
 } }));
-jest.mock('../../lib/contexts/AuthContext', () => ({ useAuth: () => ({ store: { id: 'a' }, user: mockUser, realRole: 'admin', canReadFinancials: true, currentRole: mockRole, memberRoles: {}, devPreviewMode: mockPreview }) }));
+jest.mock('../../lib/contexts/AuthContext', () => ({ useAuth: () => ({ store: { id: 'a' }, user: mockUser, realRole: 'admin', canReadFinancials: true, currentRole: mockRole, canManageStore: mockRole === 'admin', memberRoles: {}, devPreviewMode: mockPreview }) }));
 jest.mock('../../lib/services/notifications', () => ({ dismissNotification: (...args: unknown[]) => mockDismiss(...args), getNotifications: (...args: unknown[]) => mockGet(...args), markNotificationRead: (...args: unknown[]) => mockRead(...args), markAllNotificationsRead: (...args: unknown[]) => mockAll(...args) }));
 const notifications = [{ id: 'n1', category: 'stock', is_read: false }, { id: 'n2', category: 'members', is_read: false }];
 beforeAll(() => { notifyManager.setNotifyFunction(callback => { act(() => callback()); }); });
@@ -28,7 +28,7 @@ it('두 화면은 한 조회·타이머를 공유하고 읽음 상태가 동시�
   const first = renderHook(() => useNotifications());
   const second = renderHook(() => useNotifications());
   await waitFor(() => expect(second.result.current.unreadCount).toBe(2));
-  expect(mockGet).toHaveBeenCalledTimes(1); expect(timer.mock.calls.filter(call => call[1] === 30_000)).toHaveLength(1);
+  expect(mockGet).toHaveBeenCalledTimes(1); expect(timer.mock.calls.filter(call => call[1] === 60_000)).toHaveLength(1);
   await act(async () => { await first.result.current.markRead('n1'); });
   await waitFor(() => expect(second.result.current.unreadCount).toBe(1));
   await act(async () => { await second.result.current.markAllRead(); });
@@ -81,4 +81,12 @@ it('같은 알림의 중복 삭제와 미리보기 삭제를 차단한다',async
  let done!:()=>void;mockDismiss.mockImplementation(()=>new Promise<void>(resolve=>{done=resolve}));const view=renderHook(()=>useNotifications());await waitFor(()=>expect(view.result.current.unreadCount).toBe(2));
  let request!:Promise<boolean>;act(()=>{request=view.result.current.dismiss('n1')});await act(async()=>{await view.result.current.dismiss('n1')});expect(mockDismiss).toHaveBeenCalledTimes(1);await act(async()=>{done();await request});
  mockPreview='regular';view.rerender({});await waitFor(()=>expect(view.result.current.notifications).toHaveLength(2));await act(async()=>{await view.result.current.dismiss('n2')});expect(mockDismiss).toHaveBeenCalledTimes(1);
+});
+
+it('미리보기에서 실제 계정의 알림을 읽음으로 바꾸지 않는다', async () => {
+ mockPreview='regular'; const view=renderHook(()=>useNotifications());
+ await waitFor(()=>expect(view.result.current.notifications).toHaveLength(2));
+ await act(async()=>{await view.result.current.markRead('n1'); await view.result.current.markAllRead();});
+ expect(mockRead).not.toHaveBeenCalled();
+ expect(mockAll).not.toHaveBeenCalled();
 });

@@ -1,5 +1,5 @@
 import { getErrorMessage, UserFacingError } from '../utils/error';
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { queryClient, queryKeys, useQueryScope, isAccessDenied } from '../query';
 import { useAuth } from '../contexts/AuthContext';
@@ -9,8 +9,12 @@ import {
 import { Employee, EmploymentType } from '../../types';
 
 export function useEmployees(includeInactive = false) {
-  const { store } = useAuth();
+  const { store, access, canManageStore } = useAuth();
   const scope = useQueryScope();
+  const activeScope = useRef(scope); activeScope.current = scope;
+  const assertManage = () => {
+    if (!canManageStore || activeScope.current !== scope) throw new UserFacingError('사장님이나 점장님에게 요청해주세요.');
+  };
   const key = useMemo(() => queryKeys.store(scope, store?.id ?? '', 'employees', includeInactive), [scope, store?.id, includeInactive]);
   const query = useQuery({ queryKey: key, queryFn: () => getEmployees(store!.id, includeInactive),
     enabled: !!store, staleTime: 60_000 }, queryClient);
@@ -36,26 +40,32 @@ export function useEmployees(includeInactive = false) {
     dependents: number;
     user_id?: string | null;
   }) => {
-    if (!store) throw new UserFacingError('매장 정보가 없습니다');
+    assertManage();
+    if (!store) throw new UserFacingError('매장 정보를 다시 확인해주세요.');
     const created = await createEmployee({ is_probation: false, ...data, store_id: store.id });
     return created;
-  }, [store]);
+  }, [store, scope, canManageStore]);
 
   const update = useCallback(async (
     id: string,
     updates: Partial<Omit<Employee, 'id' | 'store_id' | 'created_at'>>,
   ) => {
+    assertManage();
     const updated = await updateEmployee(id, updates);
     return updated;
-  }, []);
+  }, [scope, canManageStore, access]);
 
   const deactivate = useCallback(async (id: string) => {
+    assertManage();
+    if (!access.is_owner && id === access.employee_id) throw new UserFacingError('본인 직원 정보 해제는 사장님에게 요청해주세요.');
     await deactivateEmployee(id);
-  }, []);
+  }, [scope, canManageStore, access]);
 
   const remove = useCallback(async (id: string) => {
+    assertManage();
+    if (!access.is_owner && id === access.employee_id) throw new UserFacingError('본인 직원 정보 삭제는 사장님에게 요청해주세요.');
     await deleteEmployee(id);
-  }, []);
+  }, [scope, canManageStore, access]);
 
   return { employees, loading, error, refetch, add, update, deactivate, remove };
 }

@@ -30,6 +30,6 @@ export async function savePosOrders(storeId: string, orders: TossOrder[]): Promi
     }
   } finally {
     // Earlier chunks may have committed even when a later chunk failed.
-    if (attempted) await invalidateStoreData(storeId);
+    if (attempted) await invalidateStoreData(storeId, ['pos', 'financial']);
   }
 }

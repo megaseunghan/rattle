@@ -3,7 +3,7 @@ import { readAllRows } from './readAllRows';
 import { getDailyLaborSeries } from './dailyLaborSeries';
 import { getDailyExpenseSeries } from './dailyExpenseSeries';
 import { getBusinessDayRange } from './posAnalytics';
-import { buildCumulativeDays, financialPeriod, type DailyAmount } from '../utils/homeFinancialCard';
+import { financialPeriod, type DailyAmount } from '../utils/homeFinancialCard';
 /** Admin-only detail reads. Shared members keep the existing aggregate RPC contract. */
 export async function getHomeFinancialTimeline(storeId: string, closingTime: string, asOf = new Date()) {
   const { error: denied } = await supabase.rpc('assert_store_finance_access', { p_store_id: storeId });
@@ -42,18 +42,27 @@ export async function getHomeFinancialTimeline(storeId: string, closingTime: str
       getDailyExpenseSeries(storeId, month),
     ]);
     if (rows.some(row => !Number.isFinite(row.revenue) || !Number.isFinite(row.purchase) || !Number.isFinite(row.cardRevenue ?? 0))) throw new Error('INVALID_FINANCIAL_AMOUNT');
-    const cumulative = buildCumulativeDays(month, through, rows);
-    return cumulative.map(day => {
-      const date = `${month}-${String(day.day).padStart(2, '0')}`;
-      const laborCost = labor.days.find(row => row.date === date)?.cumulative ?? null;
-      const expenseCost = expense.days.find(row => row.date === date)?.cumulativeAmount ?? null;
-      const cards = rows.filter(row => row.date <= date).reduce((sum, row) => sum + (row.cardRevenue ?? 0), 0);
+    const byDate = new Map<string, { revenue: number; purchase: number; card: number }>();
+    for (const row of rows) {
+      const bucket = byDate.get(row.date) ?? { revenue: 0, purchase: 0, card: 0 };
+      bucket.revenue += row.revenue; bucket.purchase += row.purchase; bucket.card += row.cardRevenue ?? 0;
+      byDate.set(row.date, bucket);
+    }
+    const laborByDate = new Map(labor.days.map(row => [row.date, row.cumulative]));
+    const expenseByDate = new Map(expense.days.map(row => [row.date, row.cumulativeAmount]));
+    let revenue = 0, purchase = 0, cards = 0, hasRecords = false;
+    return Array.from({ length: through }, (_, index) => {
+      const date = `${month}-${String(index + 1).padStart(2, '0')}`;
+      const bucket = byDate.get(date);
+      if (bucket) { revenue += bucket.revenue; purchase += bucket.purchase; cards += bucket.card; hasRecords = true; }
+      const laborCost = laborByDate.get(date) ?? null;
+      const expenseCost = expenseByDate.get(date) ?? null;
       // Difference of rounded cumulative fees keeps every prefix aligned with monthly round(card/80).
       const cardFee = Math.sign(cards) * Math.round(Math.abs(cards) / 80);
       const cost = expenseCost == null ? null : expenseCost + cardFee;
-      const profit = laborCost == null || cost == null ? null : day.values.revenue! - day.values.purchase! - laborCost - cost;
-      return { ...day, hasRecords: day.hasRecords || labor.savedMonthlyGross > 0 || expense.monthlyTotal > 0,
-        values: { ...day.values, labor: laborCost, expense: cost, profit } };
+      const profit = laborCost == null || cost == null ? null : revenue - purchase - laborCost - cost;
+      return { day: index + 1, hasRecords: hasRecords || labor.savedMonthlyGross > 0 || expense.monthlyTotal > 0,
+        values: { revenue, purchase, labor: laborCost, expense: cost, profit } };
     });
   }
   const [current, previous] = await Promise.all([read(period.month, period.day, true), read(period.previousMonth, period.previousDay, false)]);

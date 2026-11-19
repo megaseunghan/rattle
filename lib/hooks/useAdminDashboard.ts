@@ -13,9 +13,9 @@ import {
 export type DashboardPeriod = 'month' | 'year';
 
 export function useAdminDashboard(sharedMonth?: string, onMonthChange?: (month: string) => void, focusedStoreId?: string | null) {
-  const { user, stores, memberRoles } = useAuth();
-  // 실제 owner_id 기준 오너 매장 + admin 역할로 참여 중인 매장까지 포함 (다매장 최고관리자 시나리오)
-  const ownedStores = useMemo(() => stores.filter(s => s.owner_id === user?.id || memberRoles[s.id] === 'admin'), [stores, user?.id, memberRoles]);
+  const { user, stores, canViewOwnerDashboard, devPreviewMode } = useAuth();
+  const ownedStores = useMemo(() => canViewOwnerDashboard && devPreviewMode === 'self'
+    ? stores.filter(s => s.owner_id === user?.id) : [], [stores, user?.id, canViewOwnerDashboard, devPreviewMode]);
 
   const now = new Date();
   const [period, setPeriod] = useState<DashboardPeriod>('month');
@@ -67,6 +67,7 @@ export function useAdminDashboard(sharedMonth?: string, onMonthChange?: (month: 
     if (scheduleQueries[i].isError) errors.schedule[store.id] = true;
   });
   const refetch = useCallback(async () => {
+    if (!enabled) return;
     // Invalidate/cancel underlying summaries before observers request their replacement.
     const filters = { predicate: (query: { queryKey: readonly unknown[] }) =>
       query.queryKey[0] === 'rattle' && query.queryKey[1] === identity && query.queryKey[3] === 'financial' };
@@ -76,7 +77,7 @@ export function useAdminDashboard(sharedMonth?: string, onMonthChange?: (month: 
       queryClient.refetchQueries({ queryKey: ['rattle', identity, 'integrated', 'financial'], type: 'active' }),
       ...operationsStores.flatMap(store => ['cleaning', 'schedule'].map(domain => queryClient.refetchQueries({ queryKey: queryKeys.store(identity, store.id, domain, today) }))),
     ]);
-  }, [identity, storeScope, focusedStoreId, period, yearMonth, today]);
+  }, [enabled, identity, storeScope, focusedStoreId, period, yearMonth, today]);
 
   function goPrev() {
     if (period === 'year') { setAnchor(anchorYear - 1, anchorMonth); return; }
@@ -93,8 +94,8 @@ export function useAdminDashboard(sharedMonth?: string, onMonthChange?: (month: 
 
   return {
     ownedStores, period, setPeriod, anchorYear, anchorMonth, yearMonth, isCurrentMonth,
-    pnl: isAccessDenied(pnlQuery.error) ? null : pnlQuery.data ?? null,
-    trend: isAccessDenied(trendQuery.error) ? null : trendQuery.data ?? null,
+    pnl: !enabled || isAccessDenied(pnlQuery.error) ? null : pnlQuery.data ?? null,
+    trend: !enabled || isAccessDenied(trendQuery.error) ? null : trendQuery.data ?? null,
     financialError: pnlQuery.error ? getErrorMessage(pnlQuery.error, '손익을 불러오지 못했어요. 다시 확인해주세요.') : null,
     weeklyCleaning, weeklySchedule, errors,
     loading: enabled && (pnlQuery.isFetching || trendQuery.isFetching || cleaningQueries.some(q => q.isFetching) || scheduleQueries.some(q => q.isFetching)),

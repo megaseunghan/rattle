@@ -1,7 +1,8 @@
 // Static check, no database. RLS 정책 식의 auth.uid()/jwt()/role()/email()은 (SELECT auth.<fn>())로 감싼다.
 // 감싸지 않으면 행마다 다시 계산된다(Supabase Advisor: auth_rls_initplan).
-// baseline 파일들은 20261118120000_rls_auth_initplan.sql이 적용 시점에 보정했다. 새 파일은 처음부터 감싸야 한다.
+// baseline 파일들은 20261118121000_rls_auth_initplan.sql이 적용 시점에 보정했다. 새 파일은 처음부터 감싸야 한다.
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { readdir, readFile } from 'node:fs/promises';
 const dir = new URL('../supabase/migrations/', import.meta.url);
 const baseline = new Set(JSON.parse(await readFile(new URL('./rls-auth-wrapping-baseline.json', import.meta.url), 'utf8')).files);
@@ -23,10 +24,27 @@ assert.deepEqual(unwrappedPolicies('CREATE POLICY a ON t USING (is_store_member(
 assert.deepEqual(unwrappedPolicies('-- CREATE POLICY old ON t USING (auth.uid() = x);'), []);
 
 const files = (await readdir(dir)).filter(f => f.endsWith('.sql')).sort();
+// Imported QR files are already deployed and immutable. Only these exact bytes
+// may rely on the ordered forward repair; do not extend the old baseline.
+const repairedQrFiles = new Map([
+  ['20261117150000_role_model_core.sql', '36f6f4fbc11eb397599d7be37053542dc05e8e18e19410962a30be0413bedc4d'],
+  ['20261117160000_store_visibility.sql', '31d14a9ebf79314f1f92e50cecb1c93560ed1014876d5db1e71805d5047851a7'],
+  ['20261117170000_manager_rpc_policy.sql', 'f9ef7eb3628c8bf0d851e341968738a01176aeaabe0dbe05c1588b124b22ad45'],
+]);
+const repairName = '20261119120000_release_rls_auth_initplan.sql';
+const repair = await readFile(new URL(repairName, dir), 'utf8');
+const original = await readFile(new URL('20261118121000_rls_auth_initplan.sql', dir), 'utf8');
+assert.ok(repair.endsWith(original), 'forward repair must preserve the verified initPlan transformation');
 const offenders = [];
 for (const file of files) {
   if (baseline.has(file)) continue;
-  const policies = unwrappedPolicies(await readFile(new URL(file, dir), 'utf8'));
+  const sql = await readFile(new URL(file, dir), 'utf8');
+  if (repairedQrFiles.has(file)) {
+    assert.equal(createHash('sha256').update(sql).digest('hex'), repairedQrFiles.get(file), `${file}: immutable deployed QR file changed`);
+    assert.ok(file < repairName, 'repair must run after the imported policy');
+    continue;
+  }
+  const policies = unwrappedPolicies(sql);
   if (policies.length) offenders.push(`${file}: ${policies.join(', ')}`);
 }
 if (process.argv.includes('--print-offending-files')) {

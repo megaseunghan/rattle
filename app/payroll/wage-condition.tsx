@@ -19,10 +19,10 @@ import { WageHistory } from '../../types';
 
 export default function WageConditionScreen() {
   const params = useLocalSearchParams<{ storeId: string; employeeId: string; targetMonth: string; returnScope?: string }>();
-  const { store, currentRole, user } = useAuth();
+  const { store, canManageStore, user } = useAuth();
   const { employees, loading, error: employeeError, refetch } = useEmployees();
   const employee = employees.find(row => row.id === params.employeeId);
-  const allowed = typeof params.employeeId === 'string' && !!params.employeeId && currentRole === 'admin' && store?.id === params.storeId && /^\d{4}-(0[1-9]|1[0-2])$/.test(params.targetMonth ?? '');
+  const allowed = typeof params.employeeId === 'string' && !!params.employeeId && canManageStore && store?.id === params.storeId && /^\d{4}-(0[1-9]|1[0-2])$/.test(params.targetMonth ?? '');
   const [history, setHistory] = useState<WageHistory[] | null>(null);
   const [loadError, setLoadError] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
@@ -77,7 +77,7 @@ export default function WageConditionScreen() {
   const initialDraft = useRef({ date: '', amount: '', nonTax: '', memo: '' });
   const dirty = date !== initialDraft.current.date || amount !== initialDraft.current.amount || nonTax !== initialDraft.current.nonTax || memo !== initialDraft.current.memo;
   const bypass = useConfirmLeave(!saved && dirty, { message: '입력한 급여 조건은 아직 저장되지 않았어요.', discardLabel: '내용 버리고 나가기', blockLeave: saving });
-  const scope = `${user?.id}:${store?.id}:${params.employeeId}:${currentRole}`;
+  const scope = `${user?.id}:${store?.id}:${params.employeeId}:${canManageStore}`;
   const scopeRef = useRef(scope); scopeRef.current = scope;
   useEffect(() => () => { scopeRef.current = ''; }, []);
   const historyRequest = useRef(0);

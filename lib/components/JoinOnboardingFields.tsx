@@ -1,8 +1,14 @@
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Field } from './ui';
 import { Colors } from '../../constants/colors';
-import type { OnboardingDraft } from '../utils/joinOnboarding';
-export function JoinOnboardingFields({ value, onChange, admin = false, disabled = false }: { admin?: boolean; disabled?: boolean; value: OnboardingDraft; onChange: (value: OnboardingDraft) => void }) {
+import { validateOnboardingField, type OnboardingDraft } from '../utils/joinOnboarding';
+export function getAdminJoinWageError(value: OnboardingDraft) {
+  const field = value.employmentType === 'part_time' ? 'hourlyWage' : 'baseSalary';
+  try { validateOnboardingField(field, value); return ''; }
+  catch { return field === 'hourlyWage' ? '시급을 입력해주세요' : '월급을 입력해주세요'; }
+}
+export function JoinOnboardingFields({ value, onChange, admin = false, disabled = false, requireWage = true }: { admin?: boolean; disabled?: boolean; requireWage?: boolean; value: OnboardingDraft; onChange: (value: OnboardingDraft) => void }) {
+  const wageError = admin && requireWage ? getAdminJoinWageError(value) : '';
   const set = (key: keyof OnboardingDraft, text: string) => onChange({ ...value, [key]: text });
   return <View style={styles.fields}>
     <Text style={styles.title}>근무 형태</Text>
@@ -12,9 +18,11 @@ export function JoinOnboardingFields({ value, onChange, admin = false, disabled 
     </View>
     {value.employmentType === 'part_time' ? <>
       <Field editable={!disabled} label="시급 (원)" accessibilityLabel="시급" placeholder="예: 12,000" keyboardType="number-pad" value={value.hourlyWage} onChangeText={text => set('hourlyWage', text)} maxLength={12} />
+      {!!wageError && <Text accessibilityRole="alert" style={styles.error}>{wageError}</Text>}
       <Field editable={!disabled} label="주 근무시간 (시간)" accessibilityLabel="주 근무시간" placeholder="예: 20" helpText="일주일에 예정된 근무시간을 정수로 입력해주세요." keyboardType="number-pad" value={value.weeklyHours} onChangeText={text => set('weeklyHours', text)} maxLength={3} />
     </> : <>
       <Field editable={!disabled} label="월 기본급 (세전·원)" accessibilityLabel="월 기본급" placeholder="예: 3,000,000" helpText="비과세를 포함한 월 세전 총액을 입력해주세요." keyboardType="number-pad" value={value.baseSalary} onChangeText={text => set('baseSalary', text)} maxLength={15} />
+      {!!wageError && <Text accessibilityRole="alert" style={styles.error}>{wageError}</Text>}
       <Field editable={!disabled} label="월 비과세 금액 (원)" accessibilityLabel="월 비과세 금액" placeholder="없으면 0" helpText="기본급에 포함된 비과세 금액이에요." keyboardType="number-pad" value={value.nonTaxable} onChangeText={text => set('nonTaxable', text)} maxLength={15} />
     </>}
     <Field editable={!disabled} label="입사일" accessibilityLabel="입사일" placeholder="YYYY-MM-DD" value={value.joinedAt} onChangeText={text => set('joinedAt', text)} keyboardType="numbers-and-punctuation" maxLength={10} />
@@ -24,6 +32,7 @@ export function JoinOnboardingFields({ value, onChange, admin = false, disabled 
   </View>;
 }
 const styles = StyleSheet.create({
+  error: { color: Colors.negative, fontSize: 13, lineHeight: 20 },
   fields: { gap: 16 }, title: { fontSize: 14, fontWeight: '600', color: Colors.black },
   types: { flexDirection: 'row', gap: 8 }, type: { flex: 1, minHeight: 44, justifyContent: 'center', backgroundColor: Colors.white, padding: 12, borderRadius: 12, borderWidth: 1, borderColor: Colors.gray200 },
   selected: { borderColor: Colors.primary, backgroundColor: Colors.tinted }, typeLabel: { fontSize: 13, color: Colors.black },
