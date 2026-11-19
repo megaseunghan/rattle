@@ -210,3 +210,39 @@ Mac 비교 스크립트는 저장소 밖 `/private/tmp/rattle-ocr-bench/compare-
 - 기존 R4/R5 Swift helper를 합쳐 `swift /tmp/rattle-ocr-r4-temporary-tests.swift` 실행: **통과**, 지속 삭제 실패·재시도·소유 경계·스트리밍 SHA 확인(`/tmp/rattle-ocr-r4-swift.log`).
 - `git diff --check`, 외부 비교 스크립트 `node --check`: **통과**. 비교 결과의 파서 SHA가 최종 소스와 같은지 재확인했다.
 - 최종 전체 Jest: `npx jest --runInBand --no-coverage --testPathIgnorePatterns='/node_modules/' '/__tests__/setup\.ts' '<rootDir>/supabase/functions/' '<rootDir>/dev/'` — **197 suites/1701 tests 통과**, 기본 timeout, 46.287초, 종료 0(`/tmp/rattle-ocr-r4-full-jest-final.log`). 2026-11-19 22:06 KST 완료. 실행 전후 파서·핵심 회귀 소스의 SHA가 같음을 `/tmp/rattle-ocr-r4-final-source.sha256`으로 대조했다.
+
+## 독립 검토 5회차 반영 · OCR-R11 금액 토큰 독립성 (2026-11-19)
+
+작업 `task_0c2be31a3ecf`, 기준 `feature/evidence-attachments@51421c0`, 지적 `msg_7cd20e03274e`의 R11. 4회차 판정의 수치 일치만으로는 같은 숫자를 상품액과 결제액에 재사용한 자기 검산을 구분하지 못했다. 숫자의 값이나 관측 전체가 같은지를 비교하는 대신 **각 금액이 실제 소비한 원본 숫자 구간**을 추적한다.
+
+금액 필드와 합계 후보의 `moneyTokens`에는 `{ observationId, start, end }`를 보관한다. `observationId`는 해당 `sourceImageId`의 원본 OCR `lines` 배열에서 0부터 시작하는 관측 인덱스다. `start`·`end`는 그 관측의 원문 `text`에서 숫자 부분을 가리키는 UTF-16 위치이며 end는 포함하지 않는다. 전각 숫자·쉼표를 정규화하거나 앞에 이모지가 있어도 `text.slice(start, end)`는 원문의 실제 숫자 구간을 반환한다. 원문 텍스트·관측 순서·좌표는 바꾸지 않는다.
+
+- 각 검산식은 피연산자별 토큰 그룹을 갖는다. 피연산자끼리 또는 후보 합계와 토큰 구간이 겹치면 독립 검산으로 인정하지 않는다. 토큰 출처가 비어 있어도 인정하지 않는다. 공유 입력의 후보는 보존하고 selected/suggested 및 검산 일치 판정은 null로 둔다.
+- 관측 ID가 같아도 숫자 위치가 다르면 독립 근거가 될 수 있다. 같은 행의 별도 금액 관측, 같은 관측 안의 두 숫자를 모두 지원한다. 합계 후보마다 유효한 독립 검산을 찾아 높은 점수의 공유 후보가 별도 정상 후보를 막지 않게 한다.
+- 합쳐진 관측에서는 라벨별로 실제 소비한 숫자 구간을 연결한다. 반복·충돌하는 합계 라벨을 모두 후보에 남기며, 반복 상품액의 불일치도 숨기지 않는다. 구분자 처리가 단독 금액 뒤의 미완성 식을 유효한 제안값으로 만들지 않도록 검사했다.
+- 전일잔액과 금일액으로 일반 누적 합계의 범위를 설명하는 관계도 토큰 독립성을 확인한다. 파생 합계의 토큰은 검산 피연산자와 대응하는 명시 합계의 실제 구간을 함께 보관한다.
+
+### R11 합성 재현·대조군
+
+새 `__tests__/ocr/moneyEvidence.test.ts`의 20개 회귀로 아래 입력과 토큰 ID·위치, 원문 불변성까지 확인했다. 기존 R1~R10 회귀·표는 유지했다.
+
+| 가상 입력 / 원 단위 | 기대값 |
+| --- | --- |
+| 한 관측 `상품금액/결제금액 10,000` | 동일 토큰 재사용, 후보만 보존, selected/suggested null |
+| 라벨 관측 `상품금액 / 결제금액` + 숫자 관측 `10,000` 하나 | 동일 토큰 재사용, 후보만 보존, selected/suggested null |
+| 별도 행의 `상품금액 10,000`과 `결제금액 10,000` | 서로 다른 관측 ID, selected 10,000 |
+| 같은 행의 상품·숫자·결제·숫자 네 관측 | 서로 다른 숫자 ID, selected 10,000 |
+| 한 관측 `상품금액 10,000 / 결제금액 10,000` | 같은 ID의 다른 숫자 위치, selected 10,000 |
+| 한 관측의 공급가 20,000 / VAT 2,000 / 결제 22,000 | 서로 다른 숫자 위치, selected 22,000 |
+| 공급가/VAT가 숫자 5,000 하나를 공유, 결제 10,000 | 피연산자 공유 차단, 두 값 null |
+| 배송/할인이 숫자 5,000 하나를 공유 | 피연산자 공유 차단, 두 값 null |
+| 0원 상품과 배송/결제가 숫자 3,000 하나를 공유 | 0원도 누락으로 처리하지 않고 공유 토큰 차단, 두 값 null |
+| 한 관측의 다른 결제액·반복 상품액 또는 검산 없는 반복 합계 | 충돌·복수 라벨을 보존, 두 값 null |
+
+최초 8개 핵심 재현 실행에서 6개 실패로 공유 토큰 오확정과 한 관측의 독립 숫자 미지원을 확인했다(`/tmp/rattle-ocr-r11-red.log`). 수정 후 OCR 대상은 **7 suites/147 tests 통과**, 기본 timeout, 1.982초(`/tmp/rattle-ocr-r11-target.log`). 기존 127개에 R11 20개를 추가했다.
+
+외부 `node /private/tmp/rattle-ocr-bench/android/compare-r11.mjs`로 같은 Android/Mac raw 10쌍을 51421c0와 수정본에 각각 실행했다. 결과 `/private/tmp/rattle-ocr-bench/android/parser-r11-comparison.json`, 로그 `/tmp/rattle-ocr-r11-comparison.log`에 파서·원문 SHA와 원문 불변성을 남겼다. selected/suggested/null은 **Android 3/0/7, Mac 4/0/6으로 유지**, 오선택 양쪽 0이다. 같은 개발 표본 재평가이며 독립·운영 정확도가 아니다. 영수증 원문·사진·사업자정보는 저장소에 넣지 않았다.
+
+구현자 자체 검토다. 같은 검토자의 독립 재검토와 제안값의 화면 연결은 PL 후속이며, 이번에 화면·네이티브·기기 조작·빌드·설치·EAS·원격 변경은 하지 않았다.
+
+최종 검증(2026-11-19 22:24 KST 확인, macOS 로컬, 기준 51421c0 위 이 과제의 미커밋 코드·합성 테스트): `npm run typecheck` **통과**(`/tmp/rattle-ocr-r11-typecheck-final.log`), 전체 `npx jest --runInBand --no-coverage --testPathIgnorePatterns='/node_modules/' '/__tests__/setup\.ts' '<rootDir>/supabase/functions/' '<rootDir>/dev/'` **198 suites/1721 tests 통과**, 기본 timeout, 45.944초, 종료 0(`/tmp/rattle-ocr-r11-full-jest-final.log`). 실행 전후 파서·R11 회귀 소스의 SHA가 같음을 `/tmp/rattle-ocr-r11-final-source.sha256`으로 대조했고, 외부 비교 결과의 파서 SHA도 최종 소스와 일치했다. `git diff --check`와 외부 스크립트 `node --check`도 통과했다.
