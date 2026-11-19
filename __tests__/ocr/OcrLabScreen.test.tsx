@@ -10,16 +10,16 @@ jest.mock('expo-document-picker', () => ({ getDocumentAsync: jest.fn() }));
 jest.mock('expo-file-system/legacy', () => ({ cacheDirectory: 'file:///cache/', deleteAsync: jest.fn() }));
 jest.mock('expo-router', () => ({ router: { back: jest.fn() } }));
 jest.mock('../../modules/rattle-text-recognition', () => ({ getTextRecognitionModule: jest.fn(), recognizeText: jest.fn() }));
-const mockPick = jest.fn(), mockRelease = jest.fn(), mockShare = jest.fn();
+const mockPick = jest.fn(), mockRelease = jest.fn(), mockShare = jest.fn(), mockCleanup = jest.fn();
 const access = { user: { id: 'synthetic-user' }, store: { id: 'synthetic-store' }, canManageStore: true, permissionsReady: true, devPreviewMode: 'self', permissionRevision: 1 };
 const recognition = { engine: 'apple-vision', elapsedMs: 12, lines: [{ text: '금일합계 8,000', confidence: .9, box: { x: .1, y: .1, w: .4, h: .05 } }] };
 beforeEach(() => {
   jest.clearAllMocks();
   Object.defineProperty(Platform, 'OS', { configurable: true, value: 'ios' });
   (useAuth as jest.Mock).mockReturnValue(access);
-  (getTextRecognitionModule as jest.Mock).mockReturnValue({ pickImages: mockPick, releaseImages: mockRelease, shareJson: mockShare });
+  (getTextRecognitionModule as jest.Mock).mockReturnValue({ pickImages: mockPick, releaseImages: mockRelease, shareJson: mockShare, cleanupTemporaryFiles: mockCleanup });
   mockPick.mockResolvedValue([{ uri: 'file:///synthetic.jpg', fileName: 'synthetic.jpg' }]);
-  mockRelease.mockResolvedValue(undefined); mockShare.mockResolvedValue(undefined);
+  mockRelease.mockResolvedValue(undefined); mockShare.mockResolvedValue(undefined); mockCleanup.mockResolvedValue(undefined);
   (recognizeText as jest.Mock).mockResolvedValue(recognition);
 });
 it('실제 관리 권한 없는 계정과 역할 미리보기는 사진을 읽지 못한다', () => {
@@ -75,4 +75,35 @@ it('Android에서도 기존 파일 선택기로 인식할 수 있다', async () 
   fireEvent.press(screen.getByText('사진 선택'));
   await waitFor(() => expect(screen.getByText('선택 합계 8,000원')).toBeTruthy());
   expect(recognizeText).toHaveBeenCalledWith('file:///cache/DocumentPicker/synthetic.jpg');
+});
+it('OCR-R4: 삭제 실패를 표시하고 다시 정리에서 해당 URI를 재시도한다', async () => {
+  mockRelease.mockRejectedValueOnce({ code: 'ERR_OCR_CLEANUP' });
+  const screen = render(<OcrLabScreen />);
+  fireEvent.press(screen.getByText('사진 선택'));
+  await waitFor(() => expect(screen.getByText('임시 사진을 지우지 못했어요. 다시 정리해 주세요')).toBeTruthy());
+  fireEvent.press(screen.getByText('다시 정리'));
+  await waitFor(() => expect(mockRelease).toHaveBeenCalledTimes(2));
+  expect(mockRelease.mock.calls[1][0]).toEqual(['file:///synthetic.jpg']);
+  await waitFor(() => expect(screen.queryByText('다시 정리')).toBeNull());
+});
+it('OCR-R4: 이전 임시파일 회수 실패를 숨기지 않고 재시도한다', async () => {
+  mockCleanup.mockRejectedValueOnce({ code: 'ERR_OCR_CLEANUP' });
+  const screen = render(<OcrLabScreen />);
+  await waitFor(() => expect(screen.getByText('이전 임시 파일을 지우지 못했어요. 다시 정리해 주세요')).toBeTruthy());
+  fireEvent.press(screen.getByText('다시 정리'));
+  await waitFor(() => expect(mockCleanup).toHaveBeenCalledTimes(2));
+  await waitFor(() => expect(screen.queryByText('다시 정리')).toBeNull());
+});
+it('OCR-R4: 공유 후 삭제 실패는 공유 자체 실패와 구분한다', async () => {
+  mockShare.mockRejectedValueOnce({ code: 'ERR_OCR_CLEANUP' });
+  const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+  const screen = render(<OcrLabScreen />);
+  fireEvent.press(screen.getByText('사진 선택'));
+  await waitFor(() => expect(screen.getByText('선택 합계 8,000원')).toBeTruthy());
+  await waitFor(() => expect(mockRelease).toHaveBeenCalled());
+  fireEvent.press(screen.getByText('JSON 공유'));
+  await act(async () => { alert.mock.calls[0][2]?.find(b => b.text === '공유')?.onPress?.(); });
+  await waitFor(() => expect(screen.getByText('공유 후 임시 파일을 지우지 못했어요. 다시 정리해 주세요')).toBeTruthy());
+  expect(screen.getByText('다시 정리')).toBeTruthy();
+  alert.mockRestore();
 });

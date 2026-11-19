@@ -13,7 +13,7 @@ export interface RecognitionResult {
 export type RecognitionErrorCode =
   | 'ERR_OCR_UNAVAILABLE' | 'ERR_OCR_INVALID_URI' | 'ERR_OCR_IMAGE'
   | 'ERR_OCR_LANGUAGE' | 'ERR_OCR_RECOGNITION' | 'ERR_OCR_BUSY'
-  | 'ERR_OCR_PICKER' | 'ERR_OCR_SHARE';
+  | 'ERR_OCR_PICKER' | 'ERR_OCR_SHARE' | 'ERR_OCR_CLEANUP';
 export interface PickedImage { uri: string; fileName: string }
 export interface TextRecognitionNativeModule {
   /** file:// only; the caller materializes ph:// before recognition. Reject with a RecognitionErrorCode. */
@@ -21,6 +21,8 @@ export interface TextRecognitionNativeModule {
   /** iOS lab helpers, optional on other platforms. Copies selected originals to temporary file:// URLs. */
   pickImages?(): Promise<PickedImage[]>;
   releaseImages?(uris: string[]): Promise<void>;
+  /** Retry failed removals and reclaim only old module-owned temporary files. */
+  cleanupTemporaryFiles?(): Promise<void>;
   shareJson?(json: string): Promise<void>;
 }
 export function getTextRecognitionModule(): TextRecognitionNativeModule | null {
