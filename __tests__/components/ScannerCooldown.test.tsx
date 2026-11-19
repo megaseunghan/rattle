@@ -1,7 +1,7 @@
 import { act, fireEvent, render } from '@testing-library/react-native';
-import { AccessibilityInfo, Animated, AppState, type AppStateStatus } from 'react-native';
+import { AccessibilityInfo, ActivityIndicator, Animated, AppState, type AppStateStatus } from 'react-native';
 import AttendanceScannerScreen from '../../app/attendance/scanner';
-import { CameraView } from 'expo-camera';
+import { Camera, CameraView } from 'expo-camera';
 import * as Haptics from 'expo-haptics';
 import * as Enrollment from '../../lib/services/attendanceScannerEnrollment';
 
@@ -194,4 +194,31 @@ it('서버 응답을 기다리는 동안 중복 검출과 다음 직원 검출�
   expect(view.getByTestId('camera')).toBe(camera);
   expect(camera.props.onBarcodeScanned).toBe(callback);
   expect(CameraView).toHaveBeenCalledTimes(renderCount);
+});
+
+it('동작 줄이기에서는 서버 응답을 기다리는 동안 정적 아이콘을 표시한다', async () => {
+  let finish!: (value: typeof receipt) => void;
+  (Enrollment.scan as jest.Mock).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+  const view = render(<AttendanceScannerScreen />);
+  await act(async () => {});
+  await detect(view, employeeQr);
+  expect(view.getByText('확인하고 있어요')).toBeTruthy();
+  expect(view.getByText('…')).toBeTruthy();
+  expect(view.UNSAFE_queryByType(ActivityIndicator)).toBeNull();
+  await act(async () => { finish(receipt); });
+});
+it('권한을 회수하고 복귀해도 결과를 읽고 확인할 수 있고 iOS 알림은 한 번만 읽는다', async () => {
+  const announce = jest.spyOn(AccessibilityInfo, 'announceForAccessibility');
+  const view = await successfulPunch();
+  const label = '가상 직원님, 출근했어요. 09:00. 다음 QR을 찍으려면 확인을 눌러주세요';
+  expect(view.getByLabelText(label)).toBeTruthy();
+  expect(announce).toHaveBeenCalledWith(label);
+  await act(async () => { listeners.forEach(listener => listener('background')); });
+  (Camera.getCameraPermissionsAsync as jest.Mock).mockResolvedValueOnce({ granted: false });
+  await refreshStatus();
+  expect(view.getByText('카메라를 허용해주세요')).toBeTruthy();
+  expect(view.getByLabelText(label)).toBeTruthy();
+  expect(announce).toHaveBeenCalledTimes(1);
+  confirm(view);
+  expect(view.queryByLabelText(label)).toBeNull();
 });

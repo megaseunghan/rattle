@@ -69,6 +69,19 @@ export default function AttendanceScannerScreen() {
   const failed = scanner.state === 'scanFailed' || scanner.state === 'wrongQr';
   const processing = scanner.state === 'processing' || scanner.state === 'pairing';
   const result = scanner.needsConfirmation;
+  const recoveryNotice = scanner.state === 'unknownSetup' || scanner.state === 'error';
+  const showNotice = !!scanner.title && (cameraReady || result || recoveryNotice);
+  const nextAction = result ? '다음 QR을 찍으려면 확인을 눌러주세요' : '';
+  const unresolvedLabel = scanner.unresolvedCount ? `확인할 기록 ${scanner.unresolvedCount}건이 있어요` : '';
+  const noticeLabel = [scanner.title, scanner.time, scanner.body, unresolvedLabel, nextAction].filter(Boolean).join('. ');
+  const lastAnnouncement = useRef('');
+  useEffect(() => {
+    const message = result || recoveryNotice ? noticeLabel : '';
+    if (Platform.OS === 'ios' && message && lastAnnouncement.current !== message) {
+      AccessibilityInfo.announceForAccessibility(message);
+    }
+    lastAnnouncement.current = message;
+  }, [noticeLabel, result, recoveryNotice]);
   const waitingForQr = !processing && !result && scanner.canScan;
   const frameColor = repeat ? Colors.warning : success ? Colors.success : failed ? Colors.danger
     : processing ? Colors.light : scanner.state === 'unknown' ? Colors.warning : Colors.white;
@@ -110,18 +123,22 @@ export default function AttendanceScannerScreen() {
   const lineOffset = sweep.interpolate({ inputRange: [0, 0.25, 0.75, 1], outputRange: [0, size * 0.40, -size * 0.40, 0] });
   const path = 'M1 60V20Q1 1 20 1H60M220 1H260Q279 1 279 20V60M279 220V260Q279 279 260 279H220M60 279H20Q1 279 1 260V220';
   return <View style={s.root}>
-    <CameraSurface onAvailability={setCameraReady} onScan={scanner.scan} />
+    <View style={[StyleSheet.absoluteFill, !cameraReady && showNotice && s.cameraAboveNotice]}>
+      <CameraSurface onAvailability={setCameraReady} onScan={scanner.scan} />
+    </View>
     {cameraReady && <Animated.View pointerEvents="none" style={{ opacity, alignItems: 'center', justifyContent: 'center', position: 'absolute', width: size, height: size, left: (width - size) / 2, top }}><Svg style={StyleSheet.absoluteFill} width="100%" height="100%" viewBox="0 0 280 280"><Path d={path} stroke={Colors.black} strokeWidth={4} fill="none" /><Path d={path} stroke={frameColor} strokeWidth={processing || result ? 5 : 3} fill="none" /></Svg>
       {(waitingForQr || processing) && <Animated.View testID="scanner-line" style={[s.scanLine, { transform: [{ translateY: lineOffset }] }]} />}
-      {processing && <ActivityIndicator size="large" color={Colors.white} />}
+      {processing && (staticFrame
+        ? <Text accessible={false} style={[s.symbol, { color: Colors.light }]}>…</Text>
+        : <ActivityIndicator size="large" color={Colors.white} />)}
       {(success || failed || repeat) && <Text accessible={false} style={[s.symbol, { color: frameColor }]}>{success ? '✓' : '!'}</Text>}
     </Animated.View>}
-    {cameraReady && <Text pointerEvents="none" style={[s.caption, { top: top + size + 20 }]}>{processing ? 'QR을 인식했어요' : result ? '다음 QR을 찍으려면 확인을 눌러주세요' : scanner.ready ? '직원 QR을 스캔해주세요' : '관리자 앱의 등록 QR을 찍어주세요'}</Text>}
-    {cameraReady && !!scanner.title && <View style={[s.noticeZone, { top: top + size + 60, bottom: insets.bottom + (result && scanner.unresolvedCount ? 140 : 84) }]}><View style={s.notice} accessibilityLiveRegion="polite"><Text style={[s.whiteTitle, success && s.receipt]}>{scanner.title}</Text>{!!scanner.time && <Text style={s.time}>{scanner.time}</Text>}{!!scanner.body && <Text style={s.whiteBody}>{scanner.body}</Text>}
+    {cameraReady && <Text pointerEvents="none" style={[s.caption, { top: top + size + 20 }]}>{processing ? 'QR을 인식했어요' : result ? nextAction : scanner.ready ? '직원 QR을 스캔해주세요' : '관리자 앱의 등록 QR을 찍어주세요'}</Text>}
+    {showNotice && <View style={[s.noticeZone, { top: cameraReady ? top + size + 60 : height * 0.44, bottom: insets.bottom + (result && scanner.unresolvedCount ? 140 : 84) }]}><View style={s.notice}><View style={s.noticeText} accessible accessibilityLabel={noticeLabel} accessibilityLiveRegion="polite"><Text style={[s.whiteTitle, success && s.receipt]}>{scanner.title}</Text>{!!scanner.time && <Text style={s.time}>{scanner.time}</Text>}{!!scanner.body && <Text style={s.whiteBody}>{scanner.body}</Text>}</View>
       {['error', 'unknownSetup'].includes(scanner.state) && <Pressable accessibilityRole="button" style={s.action} onPress={() => { void scanner.refresh(); }}><Text style={s.whiteBody}>다시 확인</Text></Pressable>}
       {scanner.state === 'unknownSetup' && <Pressable accessibilityRole="button" style={s.action} onPress={() => setRecovery(true)}><Text style={s.whiteBody}>새 등록 준비하기</Text></Pressable>}
     </View></View>}
-    {!!scanner.unresolvedCount && <View style={[s.unresolved, { bottom: insets.bottom + (result ? 76 : 12) }]} accessibilityLiveRegion="polite"><Text style={s.whiteBody}>확인할 기록 {scanner.unresolvedCount}건이 있어요</Text><Text style={s.whiteBody}>해당 직원 휴대폰에서 기록을 확인해주세요</Text></View>}
+    {!!scanner.unresolvedCount && <View style={[s.unresolved, { bottom: insets.bottom + (result ? 76 : 12) }]} accessibilityLiveRegion="polite"><Text style={s.whiteBody}>{unresolvedLabel}</Text><Text style={s.whiteBody}>해당 직원 휴대폰에서 기록을 확인해주세요</Text></View>}
     {result && <Pressable accessibilityRole="button" style={[s.confirm, { bottom: insets.bottom + 12 }]} onPress={scanner.clearNotice}>
       <Text style={s.whiteTitle}>확인</Text>
     </Pressable>}
@@ -129,6 +146,8 @@ export default function AttendanceScannerScreen() {
   </View>;
 }
 const s = StyleSheet.create({
+  noticeText: { gap: 8, alignItems: 'center' },
+  cameraAboveNotice: { bottom: '56%' },
   scanLine: { position: 'absolute', top: '50%', left: 12, right: 12, height: 2, backgroundColor: Colors.light },
   confirm: { position: 'absolute', left: Spacing.screenX, right: Spacing.screenX, minHeight: 52, borderRadius: Radius.lg, backgroundColor: Colors.action, alignItems: 'center', justifyContent: 'center' },
   symbol: { fontSize: 42, fontFamily: Fonts.wantedSemiBold, backgroundColor: Colors.black, borderRadius: 32, width: 64, lineHeight: 64, textAlign: 'center', overflow: 'hidden' },

@@ -48,6 +48,11 @@ it('등록 복구는 관리자 확인 안내를 거친 명시적 행동이고 �
   mockRecovery.mockClear(); mockGetPermission.mockResolvedValue({ granted: true });
   const view = render(<AttendanceScannerScreen />);
   await waitFor(() => expect(view.getByText('새 등록 준비하기')).toBeTruthy());
+  await foreground('background');
+  mockGetPermission.mockResolvedValue({ granted: false });
+  await foreground('active');
+  expect(view.getByText('카메라를 허용해주세요')).toBeTruthy();
+  expect(view.getByText('등록됐는지 확인하고 있어요')).toBeTruthy();
   expect(view.getByText('확인할 기록 2건이 있어요')).toBeTruthy();
   fireEvent.press(view.getByText('새 등록 준비하기'));
   expect(view.getByText('관리자 앱에서 확인했나요?')).toBeTruthy(); expect(mockRecovery).not.toHaveBeenCalled();

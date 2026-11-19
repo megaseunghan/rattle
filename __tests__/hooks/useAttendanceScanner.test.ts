@@ -68,3 +68,40 @@ it('등록 복구 중 저장소 확인이 실패하면 새 교환을 열지 않�
   await act(async () => { await result.current.confirmRegistrationRecovery(); await result.current.scan('new-registration'); });
   expect(result.current.state).toBe('unknownSetup'); expect(api.exchangeAndStoreAttendanceScannerPairingQr).toHaveBeenCalledTimes(1);
 });
+
+it('등록 응답 유실 뒤 이전 기기의 해제를 확인하면 옛 QR을 재교환하지 않고 새 QR을 받는다', async () => {
+  const api = service();
+  (api.loadStoredAttendanceScannerRegistration as jest.Mock).mockResolvedValueOnce(null);
+  (api.exchangeAndStoreAttendanceScannerPairingQr as jest.Mock).mockResolvedValueOnce(unknown);
+  (api.scannerStatus as jest.Mock).mockResolvedValue({ status: 'server_rejected', error: { code: 'ATTENDANCE_SCANNER_REVOKED' } });
+  const { result } = renderHook(() => useAttendanceScanner(api));
+  await waitFor(() => expect(result.current.state).toBe('unregistered'));
+  await act(async () => { await result.current.scan('lost'); });
+  expect(result.current.state).toBe('unknownSetup');
+  await act(async () => { await result.current.refresh(); });
+  expect(result.current.state).toBe('revoked');
+  await act(async () => { await result.current.scan('fresh'); });
+  expect(api.exchangeAndStoreAttendanceScannerPairingQr).toHaveBeenCalledTimes(1);
+  await act(async () => { result.current.clearNotice(); await result.current.scan('lost'); });
+  expect(api.exchangeAndStoreAttendanceScannerPairingQr).toHaveBeenCalledTimes(1);
+  await act(async () => { result.current.clearNotice(); await result.current.scan('fresh'); });
+  expect(api.exchangeAndStoreAttendanceScannerPairingQr).toHaveBeenCalledTimes(2);
+  expect(result.current.state).toBe('registered');
+});
+
+it.each(['refresh', 'confirmRegistrationRecovery'] as const)('%s에서 등록이 복구되면 확인 전까지 직원 기록을 차단한다', async method => {
+  const api = service();
+  (api.loadStoredAttendanceScannerRegistration as jest.Mock).mockResolvedValueOnce(null);
+  (api.exchangeAndStoreAttendanceScannerPairingQr as jest.Mock).mockResolvedValueOnce(unknown);
+  const { result } = renderHook(() => useAttendanceScanner(api));
+  await waitFor(() => expect(result.current.state).toBe('unregistered'));
+  await act(async () => { await result.current.scan('lost'); });
+  (api.scannerStatus as jest.Mock).mockResolvedValueOnce(unknown);
+  await act(async () => { await result.current.refresh(); });
+  expect(result.current.state).toBe('unknownSetup');
+  await act(async () => { await result.current[method](); await result.current.scan('employee'); });
+  expect(result.current.state).toBe('registered');
+  expect(api.scan).not.toHaveBeenCalled();
+  await act(async () => { result.current.clearNotice(); await result.current.scan('employee'); });
+  expect(api.scan).toHaveBeenCalledTimes(1);
+});

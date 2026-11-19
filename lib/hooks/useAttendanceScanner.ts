@@ -36,8 +36,15 @@ export function useAttendanceScanner(service: ScannerUiService = defaultService)
   const visibleQr = useRef({ qr: '', lastSeen: 0, warned: false });
   const revoked = useCallback(() => {
     registration.current = null;
+    pairingUnknown.current = false;
     holdingResult.current = true;
     setState({ state: 'revoked', title: '등록이 해제됐어요', body: '관리자 앱의 새 등록 QR을 찍어주세요', time: '' });
+  }, []);
+  const registered = useCallback((saved: AttendanceScannerRegistration) => {
+    registration.current = saved;
+    pairingUnknown.current = false;
+    holdingResult.current = true;
+    setState({ state: 'registered', title: '매장폰을 등록했어요', body: '이제 직원 QR을 스캔해주세요', time: '' });
   }, []);
   const remember = (qr: string) => {
     if (!unresolved.current.has(qr)) unresolved.current.set(qr, Date.now());
@@ -60,12 +67,15 @@ export function useAttendanceScanner(service: ScannerUiService = defaultService)
       if (!mounted.current) return;
       if (isAttendanceScannerRevoked(status)) revoked();
       else if (status.status === 'success') {
-        registration.current = saved; pairingUnknown.current = false;
-        setState(old => feedbackStates.includes(old.state) ? old : waiting());
-      } else setState(old => feedbackStates.includes(old.state) ? old : { state: 'error', title: '매장폰을 확인하지 못했어요', body: '인터넷 연결을 확인한 뒤 다시 시도해주세요', time: '' });
-    } catch { if (mounted.current) setState(old => feedbackStates.includes(old.state) ? old : { state: 'error', title: '매장폰을 확인하지 못했어요', body: '인터넷 연결을 확인한 뒤 다시 시도해주세요', time: '' }); }
+        if (pairingUnknown.current) registered(saved);
+        else {
+          registration.current = saved;
+          setState(old => feedbackStates.includes(old.state) ? old : waiting());
+        }
+      } else setState(old => old.state === 'unknownSetup' || feedbackStates.includes(old.state) ? old : { state: 'error', title: '매장폰을 확인하지 못했어요', body: '인터넷 연결을 확인한 뒤 다시 시도해주세요', time: '' });
+    } catch { if (mounted.current) setState(old => old.state === 'unknownSetup' || feedbackStates.includes(old.state) ? old : { state: 'error', title: '매장폰을 확인하지 못했어요', body: '인터넷 연결을 확인한 뒤 다시 시도해주세요', time: '' }); }
     finally { busy.current = false; }
-  }, [service, revoked]);
+  }, [service, revoked, registered]);
   useEffect(() => {
     mounted.current = true; void refresh();
     const listener = AppState.addEventListener('change', next => { if (next === 'active') void refresh(); });
@@ -112,7 +122,7 @@ export function useAttendanceScanner(service: ScannerUiService = defaultService)
         present({ state: 'pairing', title: '확인하고 있어요', body: '', time: '' });
         const result = await service.exchangeAndStoreAttendanceScannerPairingQr({ qr });
         if (!mounted.current) return;
-        if (result.status === 'success') { registration.current = result.data; present({ state: 'registered', title: '매장폰을 등록했어요', body: '이제 직원 QR을 스캔해주세요', time: '' }); }
+        if (result.status === 'success') registered(result.data);
         else {
           pairingUnknown.current = result.status === 'unknown';
           if (pairingUnknown.current) uncertainPairings.current.add(qr);
@@ -145,7 +155,7 @@ export function useAttendanceScanner(service: ScannerUiService = defaultService)
       if (unresolved.current.has(qr) || pairingUnknown.current) processed.current.delete(key);
       busy.current = false;
     }
-  }, [service, revoked]);
+  }, [service, revoked, registered]);
   /** Called only after the operator confirms the manager checked/revoked the old registration. */
   const confirmRegistrationRecovery = useCallback(async () => {
     if (!mounted.current || busy.current || !pairingUnknown.current) return;
@@ -156,8 +166,8 @@ export function useAttendanceScanner(service: ScannerUiService = defaultService)
       if (saved) {
         const status = await service.scannerStatus();
         if (!mounted.current) return;
-        if (isAttendanceScannerRevoked(status)) { pairingUnknown.current = false; revoked(); }
-        else if (status.status === 'success') { registration.current = saved; pairingUnknown.current = false; setState(waiting()); }
+        if (isAttendanceScannerRevoked(status)) revoked();
+        else if (status.status === 'success') registered(saved);
         else setState({ state: 'unknownSetup', title: '등록됐는지 확인하고 있어요', body: '지금은 등록 상태를 불러올 수 없어요. 잠시 후 다시 확인해주세요', time: '' });
         return;
       }
@@ -165,7 +175,7 @@ export function useAttendanceScanner(service: ScannerUiService = defaultService)
       setState({ state: 'unregistered', title: '새 등록 QR을 찍어주세요', body: '관리자 앱에서 새로 받은 QR을 보여주세요', time: '' });
     } catch { if (mounted.current) setState({ state: 'unknownSetup', title: '등록됐는지 확인하고 있어요', body: '등록 상태를 불러오지 못했어요. 잠시 후 다시 확인해주세요', time: '' }); }
     finally { busy.current = false; }
-  }, [service, revoked]);
+  }, [service, revoked, registered]);
   const clearNotice = useCallback(() => {
     holdingResult.current = false;
     setState(old => feedbackStates.includes(old.state) ? waiting() : old);
