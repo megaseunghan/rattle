@@ -63,3 +63,16 @@ it('시스템이 드래그를 취소하면 서랍을 열린 상태로 남기지 
   expect(onOpen).not.toHaveBeenCalled();
   expect(view.queryByText('더보기')).toBeNull();
 });
+
+it('직원 메뉴의 소제목과 펼침을 유지하고 관리자 설정은 숨긴다', () => {
+  const { fireEvent } = require('@testing-library/react-native');
+  const view = render(<MoreDrawer visible onClose={jest.fn()} />);
+  expect(view.getByText('매장 관리')).toBeTruthy();
+  expect(view.queryByText('매장 정보')).toBeNull();
+  expect(view.queryByText('손익 공유')).toBeNull();
+  fireEvent.press(view.getByText('설정'));
+  expect(view.queryByText('청소 체크리스트')).toBeNull();
+  fireEvent.press(view.getByText('설정'));
+  fireEvent.press(view.getByText('청소 체크리스트'));
+  expect(require('expo-router').router.push).toHaveBeenCalledWith('/cleaning');
+});

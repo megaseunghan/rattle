@@ -19,7 +19,7 @@ export async function deleteAccount(): Promise<void> {
     if (error.context instanceof Response) {
       const body = await error.context.clone().json().catch(() => null);
       if (body?.code === 'ACCOUNT_OWNS_STORES') {
-        throw new UserFacingError('매장 정보에서 빈 매장을 삭제하거나, 멤버 관리에서 소유권을 이전한 뒤 탈퇴해주세요.');
+        throw new UserFacingError('소유한 매장이 있어요. 매장을 삭제하거나 멤버 관리에서 소유권을 이전한 뒤 탈퇴해주세요. 삭제한 매장은 7일 뒤 완전히 삭제된 다음 탈퇴할 수 있어요.');
       }
       if (body?.code === 'APPLE_REAUTH_REQUIRED' || body?.code === 'APPLE_ACCOUNT_MISMATCH') {
         throw new UserFacingError('가입할 때 사용한 Apple 계정으로 다시 인증해주세요.');

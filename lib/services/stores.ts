@@ -35,21 +35,67 @@ export async function updateStoreInfo(
   if (error) throw new Error(error.message);
 }
 
-/** Only a sole owner of a store without operational records can remove it. */
-export async function deleteEmptyOwnedStore(storeId: string): Promise<void> {
-  const { error } = await supabase.rpc('delete_empty_owned_store', { p_store_id: storeId });
-  if (!error) return;
-  const messages: Record<string, string> = {
-    STORE_DELETE_AUTH_REQUIRED: '다시 로그인한 뒤 시도해주세요.',
-    STORE_DELETE_OWNER_REQUIRED: '매장 소유자만 삭제할 수 있어요.',
-    STORE_DELETE_POS_CONNECTED: 'POS 연결을 해제한 뒤 삭제해주세요.',
-    STORE_DELETE_HAS_MEMBERS: '다른 구성원이 있어요. 멤버 관리를 확인해주세요.',
-    STORE_DELETE_HAS_DATA: '매장에 기록이 있어 삭제할 수 없어요. 소유권을 이전하거나 문의해주세요.',
-    STORE_DELETE_UNCHECKED_REFERENCE: '매장 자료를 안전하게 확인하지 못했어요. 고객센터에 문의해주세요.',
-  };
+/** Whole-hour closing boundary; existing stores update contract. */
+export async function updateStoreClosingTime(storeId: string, closingTime: string): Promise<void> {
+  const { error } = await supabase.from('stores').update({ closing_time: closingTime }).eq('id', storeId);
+  if (error) throw error;
+}
+
+export type StoreDeleteResult =
+  | { mode: 'deleted'; purgeAfter: null }
+  | { mode: 'scheduled'; purgeAfter: string };
+
+export interface DeletedStore {
+  id: string;
+  name: string;
+  deletedAt: string;
+  purgeAfter: string;
+}
+
+function toUserFacing(error: { message: string }, messages: Record<string, string>): Error {
   const message = Object.entries(messages).find(([code]) => error.message.includes(code))?.[1];
-  if (message) throw new UserFacingError(message);
-  throw error;
+  return message ? new UserFacingError(message) : new Error(error.message);
+}
+
+/**
+ * Owner-only. A store without records is removed at once; any other store is
+ * hidden from everyone and kept restorable for 7 days before it is purged.
+ */
+export async function deleteOwnedStore(storeId: string): Promise<StoreDeleteResult> {
+  const { data, error } = await supabase.rpc('delete_owned_store', { p_store_id: storeId });
+  if (error) {
+    throw toUserFacing(error, {
+      STORE_DELETE_AUTH_REQUIRED: '다시 로그인한 뒤 시도해주세요.',
+      STORE_DELETE_OWNER_REQUIRED: '매장 소유자만 삭제할 수 있어요.',
+      STORE_DELETE_ALREADY_SCHEDULED: '이미 삭제 예정인 매장이에요.',
+      STORE_DELETE_POS_CONNECTED: 'POS 연결을 해제한 뒤 삭제해주세요.',
+      STORE_DELETE_UNCHECKED_REFERENCE: '매장 자료를 안전하게 확인하지 못했어요. 고객센터에 문의해주세요.',
+    });
+  }
+  if (data?.mode === 'deleted') return { mode: 'deleted', purgeAfter: null };
+  if (data?.mode === 'scheduled' && typeof data.purge_after === 'string') {
+    return { mode: 'scheduled', purgeAfter: data.purge_after };
+  }
+  throw new Error('Store deletion returned an unexpected result');
+}
+
+/** Stores the caller owns that are waiting to be purged and can still be restored. */
+export async function listMyDeletedStores(): Promise<DeletedStore[]> {
+  const { data, error } = await supabase.rpc('list_my_deleted_stores');
+  if (error) throw new Error(error.message);
+  return (data ?? []).map((row: { id: string; name: string; deleted_at: string; purge_after: string }) => ({
+    id: row.id, name: row.name, deletedAt: row.deleted_at, purgeAfter: row.purge_after,
+  }));
+}
+
+export async function restoreDeletedStore(storeId: string): Promise<void> {
+  const { error } = await supabase.rpc('restore_deleted_store', { p_store_id: storeId });
+  if (!error) return;
+  throw toUserFacing(error, {
+    STORE_RESTORE_AUTH_REQUIRED: '다시 로그인한 뒤 시도해주세요.',
+    STORE_RESTORE_NOT_FOUND: '복구할 수 있는 매장이 아니에요.',
+    STORE_RESTORE_EXPIRED: '복구 기간 7일이 지나 복구할 수 없어요.',
+  });
 }
 
 /** Idempotent owner setup; no business number or payroll changes. */
