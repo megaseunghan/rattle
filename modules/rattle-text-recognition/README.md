@@ -78,3 +78,25 @@ Mac 비교 스크립트는 저장소 밖 `/private/tmp/rattle-ocr-bench/compare-
 
 최종 코드의 추가 경계 검증: 파서의 라벨/값을 분리해 한 셀의 복수 금액·금액 뒤 떨어진 부호를 한 값으로 확정하지 않는다. 원본 사진이 오래됐어도 새 사본을 즉시 회수하지 않도록 import 시 modificationDate를 현재 시각으로 설정했다. OCR 최종 4 suites/58 tests 통과(23.243초), 일반 합계/뒤 부호까지 포함한 전체 Jest 195 suites/1629 tests 통과(480.645초, 기본 timeout)이며 이 로그는 `/tmp/rattle-ocr-r1-full-jest-final.log`다. 같은 코드의 커밋 후 반복 전체 검사는 `/tmp/rattle-ocr-r1-full-jest-committed.log`에 별도로 남긴다. 타입 검사 로그는 오류 없이 종료했고 Swift 구문 parse와 helper 실제 실행도 통과했다. 실제 iOS 앱 빌드·설치·20장 메모리·파일 보호·공유는 PL/QA 검증 대기다.
 커밋 후 최종 전체 Jest도 **195 suites/1632 tests 전부 통과**, 114.217초, 종료 0이다(`/tmp/rattle-ocr-r1-full-jest-committed.log`). 같은 실행 직전 최종 typecheck도 오류 없이 끝났다. 기본 timeout을 유지했으며 이 작업에서 timeout 설정을 늘리지 않았다. 다른 증빙 작업의 추가 테스트를 포함한 현재 공유 작업 공간 결과이며, 미실행인 iOS 네이티브 확인을 완료로 바꾸지 않는다.
+
+## Android·Vision 분할 차이 보완 · 2026-11-19
+
+작업 기준 `c7bf0d5`, 구현 `6d55cdd`. Android 에뮬레이터 ML Kit와 Mac Vision의 기존 raw 10쌍을 다시 파싱했다. 이번 작업은 새 OCR·기기/앱 조작·빌드·설치·원격 실행 없이 TS 파서와 합성 회귀만 변경했다.
+
+- 여러 표 머리글이 한 관측에 합쳐진 경우 사전에 아는 열 이름만 분리하고, 여러 머리글 기준 기울기의 중앙값으로 행을 정렬한다. 분리 열의 내부 위치는 추정이며 출처 상자로 사용하지 않는다.
+- 같은 행의 조각난 금융 라벨을 제한된 어휘·거리 안에서 결합한다. 라벨·금액의 행 간격 허용치를 무작정 넓히거나 잔액 행을 건너뛰어 숫자를 연결하지 않는다.
+- 명시 금액 옆 `총`, 카드/일시불, 인수 표시만 분리해 읽는다. 단가·현금받음·무라벨 숫자는 파생 합계 근거로 만들지 않는다. 공급가액/세액 값이 있는 요약 행을 머리글로 건너뛰지 않는다.
+- 하나의 원문 금액 셀 안에만 있는 공백 천단위는 명시 라벨 문맥에서 해석하고 `source=derived`, 낮은 규칙 confidence, 공백 확인 경고를 남긴다. 서로 다른 숫자 셀·복수 금액 식·단가/수량은 붙이지 않는다.
+- 회수액이 미확인인데 매출총계만 있는 경우 결제 합계는 null로 남긴다. 품목 표 뒤의 합계/안내 영역은 품목에 넣지 않는다.
+- 필드 rawText·sourceBoxes는 정규화 문자열·분리 머리글 상자가 아닌 원본 관측 텍스트·상자를 보관한다. 원문 관측 배열을 변경하지 않는 것도 raw 20개로 검사했다.
+
+| 같은 10장 재평가 | Android 전 → 후 | Mac 전 → 후 |
+| --- | --- | --- |
+| 기준 합계와 선택 합계 일치 | 2/10 → 6/10 | 5/10 → 7/10 |
+| 잘못된 합계 선택 | 0 → 0 | 1 → 0 |
+| 합계 미확정 | 8 → 4 | 4 → 3 |
+
+규칙 작성에 사용한 10장 재평가이므로 독립 검증/운영 정확도가 아니다. Android 1/7/10/12, Mac 1/7/10은 라벨 오독·누락/부분 원본/금액 열 의미 문제로 미확정이다. Android 11의 공백 천단위는 숫자를 새로 만든 것이 아니라 원문 숫자의 구분자 추정이며 사용자가 확인해야 한다. 품목 수는 후보 감지 수로, 전체 품목 정확도를 측정한 것이 아니다.
+
+비교 코드는 저장소 밖 `/private/tmp/rattle-ocr-bench/android/evaluate-hardening.mjs`, 결과는 같은 폴더의 `parser-hardening-comparison.json`·`parser-hardening-report.md`. Git 기준 코드와 현재 코드를 동일 raw에 각각 실행하고 raw/파서 SHA-256을 남겼으며 기준 금액은 평가에서만 읽었다. 실제 영수증 원문·사업자번호·이미지는 저장소에 추가하지 않았다. 합성 Vision/ML Kit 분할 모양과 과거 R1~R6을 포함한 OCR 5 suites/72 tests는 기본 timeout으로 통과했다(`/tmp/rattle-ocr-engine-target.log`, 1.722초). 실제 iPhone/Android 새 실행·JS bridge·독립 검토와 다른 표본 검증은 후속이다.
+최종 typecheck 통과, 전체 Jest 기본 timeout **196 suites/1646 tests 전부 통과**(45.777초, 종료 0). 로그 `/tmp/rattle-ocr-engine-typecheck.log`, `/tmp/rattle-ocr-engine-full-jest.log`; `git diff --check`와 외부 비교 스크립트 `node --check`도 통과했다.
