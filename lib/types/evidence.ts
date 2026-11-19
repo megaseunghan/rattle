@@ -11,7 +11,7 @@ export interface EvidenceFile {
   occurrence_month: string | null;
   name: string;
   mime_type: 'image/jpeg' | 'application/pdf';
-  status: 'pending' | 'ready' | 'discarding';
+  status: 'pending' | 'ready' | 'discarding' | 'deleting';
   created_by: string;
   created_at: string;
 }

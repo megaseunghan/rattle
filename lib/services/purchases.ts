@@ -1,3 +1,4 @@
+import { UserFacingError } from '../utils/error';
 import { discardParentEvidence } from './evidence';
 import { readAllRows } from './readAllRows';
 import { invalidateCachedStore } from './cacheInvalidation';
@@ -148,8 +149,9 @@ export async function createPurchase(data: {
 
 export async function deletePurchase(id: string): Promise<void> {
   await discardParentEvidence('purchase', id);
-  const { error } = await supabase.from('purchases').delete().eq('id', id);
+  const { count, error } = await supabase.from('purchases').delete({ count: 'exact' }).eq('id', id);
   if (error) throw new Error(error.message);
+  if (count !== 1) throw new UserFacingError('삭제를 확인하지 못했어요. 목록을 새로고침해주세요.');
   await invalidateCachedStore();
 }
 

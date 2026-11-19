@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-
 import { Alert } from 'react-native';
 import { EvidencePanel } from '../../lib/components/EvidencePanel';
 const mockList = jest.fn(), mockReserve = jest.fn(), mockUpload = jest.fn(), mockPick = jest.fn(), mockSign = jest.fn(), mockCleanup = jest.fn(), mockDiscard = jest.fn();
+const mockCacheDelete = jest.fn();
 let mockUser = 'user';
 let mockMode = 'self';
 let mockAccess = true;
@@ -12,7 +13,7 @@ jest.mock('../../lib/media/evidenceUpload', () => ({ uploadEvidence: (...a: unkn
 jest.mock('expo-document-picker', () => ({ getDocumentAsync: (...a: unknown[]) => mockPick(...a) }));
 jest.mock('expo-crypto', () => ({ randomUUID: () => 'selection-id' }));
 jest.mock('expo-web-browser', () => ({ openBrowserAsync: jest.fn() }));
-jest.mock('expo-file-system', () => ({ File: jest.fn().mockImplementation(() => ({ open: () => ({ readBytes: () => new Uint8Array(), close: jest.fn() }) })) }));
+jest.mock('expo-file-system', () => ({ Paths: { cache: {uri:'file:///cache'} }, File: jest.fn().mockImplementation(() => ({ delete: mockCacheDelete, open: () => ({ readBytes: () => new Uint8Array(), close: jest.fn() }) })) }));
 jest.mock('expo-image', () => ({ Image: 'Image' }));
 const target = { kind: 'expense' as const, storeId: 'store', id: 'expense' };
 const readyFile = { id:'file',store_id:'store',name:'receipt.jpg',mime_type:'image/jpeg',status:'ready',created_by:'user' };
@@ -103,11 +104,26 @@ test.each([
 
 test.each([['image/jpeg', true], ['application/pdf', false]])('reselection preserves source cap for %s', async (mime_type, accepted) => {
  mockList.mockResolvedValue([{ ...readyFile, status: 'pending', mime_type }]);
- mockPick.mockResolvedValue({ canceled: false, assets: [{ uri: 'file:///reselected', name: mime_type === 'application/pdf' ? 'source.pdf' : 'source.jpg', size: 12 * 1024 * 1024 }] });
+ mockPick.mockResolvedValue({ canceled: false, assets: [{ uri: 'file:///cache/reselected', name: mime_type === 'application/pdf' ? 'source.pdf' : 'source.jpg', size: 12 * 1024 * 1024 }] });
  render(<EvidencePanel target={target} initiallyExpanded />);
  await waitFor(()=>expect(screen.getByText('업로드 미완료 · 파일 다시 선택')).toBeTruthy());
  await act(async()=>{fireEvent.press(screen.getByText('업로드 미완료 · 파일 다시 선택'));});
+ expect(mockCacheDelete).toHaveBeenCalledTimes(1);
  expect(mockReserve).toHaveBeenCalledTimes(accepted ? 1 : 0);
+});
+
+test('계정 교체 후 도착한 재선택 사본을 바로 정리한다', async () => {
+ mockList.mockResolvedValue([{ ...readyFile, status: 'pending' }]);
+ let finish!: (result: unknown) => void;
+ mockPick.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+ const view = render(<EvidencePanel target={target} initiallyExpanded />);
+ const reselect = await screen.findByText('업로드 미완료 · 파일 다시 선택');
+ fireEvent.press(reselect);
+ mockUser = 'other';
+ view.rerender(<EvidencePanel target={target} initiallyExpanded />);
+ await act(async () => finish({canceled:false,assets:[{uri:'file:///cache/late',name:'late.jpg',size:10}]}));
+ expect(mockCacheDelete).toHaveBeenCalledTimes(1);
+ expect(mockReserve).not.toHaveBeenCalled();
 });
 
 test('generic MIME PDF extension is normalized before reservation', async () => {

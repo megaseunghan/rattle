@@ -15,9 +15,9 @@ async function reserve(file, overrides={}) {
 }
 async function rejected(fn) { let failed=false; try { await fn(); } catch { failed=true; } ok(failed); }
 try {
- await db.exec(`CREATE ROLE anon; CREATE ROLE authenticated; ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon,authenticated; CREATE SCHEMA private; CREATE SCHEMA auth; CREATE SCHEMA storage;
+ await db.exec(`CREATE ROLE service_role; CREATE ROLE anon; CREATE ROLE authenticated; ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon,authenticated; CREATE SCHEMA private; CREATE SCHEMA auth; CREATE SCHEMA storage;
  CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$ SELECT nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;
- CREATE TABLE stores(id uuid PRIMARY KEY, deleted_at timestamptz,financial_share_scope text DEFAULT 'all_staff',attendance_share_scope text,payroll_share_scope text); CREATE TABLE purchases(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),store_id uuid,date date,supplier text,amount numeric,category text,type text,note text);
+ CREATE TABLE stores(id uuid PRIMARY KEY, deleted_at timestamptz,purge_after timestamptz,financial_share_scope text DEFAULT 'all_staff',attendance_share_scope text,payroll_share_scope text); CREATE TABLE purchases(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),store_id uuid,date date,supplier text,amount numeric,category text,type text,note text);
  CREATE TABLE ingredients(id uuid PRIMARY KEY,store_id uuid,current_stock numeric,last_price numeric,updated_at timestamptz);
  CREATE TABLE purchase_items(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),purchase_id uuid REFERENCES purchases(id),store_id uuid,ingredient_id uuid,name text,quantity numeric,unit text,unit_price numeric,subtotal numeric,category text);
  CREATE FUNCTION is_store_member(s uuid) RETURNS boolean LANGUAGE sql STABLE AS $$ SELECT s='${store}' AND auth.uid() IN ('${admin}','${member}','${part}') $$;
@@ -27,7 +27,14 @@ try {
  CREATE TABLE store_members(store_id uuid,user_id uuid,status text);
  CREATE TABLE recurring_fixed_expense_versions(rule_id uuid,revision integer,effective_month text,active boolean,end_month text);
  CREATE TABLE storage.buckets(id text PRIMARY KEY,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);
- CREATE TABLE storage.objects(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),bucket_id text,name text, UNIQUE(bucket_id,name));
+ CREATE TABLE auth.users(id uuid PRIMARY KEY);
+ CREATE FUNCTION storage.allow_any_operation(operations text[]) RETURNS boolean LANGUAGE sql STABLE AS $$
+ SELECT current_setting('qa.storage_operation',true)=ANY(operations) $$;
+ SELECT set_config('qa.storage_operation','object.upload',false);
+ CREATE TABLE store_purge_failures(store_id uuid,sqlstate text,message text);
+ CREATE TABLE payroll(store_id uuid); CREATE TABLE payroll_work_submissions(store_id uuid);
+ CREATE TABLE payroll_daily_work_history(store_id uuid); CREATE TABLE payroll_daily_work(store_id uuid);
+ CREATE TABLE storage.objects(owner uuid REFERENCES auth.users,owner_id text,id uuid PRIMARY KEY DEFAULT gen_random_uuid(),bucket_id text,name text, UNIQUE(bucket_id,name));
  ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;
  CREATE POLICY qa_broad_storage ON storage.objects FOR ALL TO PUBLIC USING(true) WITH CHECK(true);
  CREATE FUNCTION is_store_admin(s uuid) RETURNS boolean LANGUAGE sql STABLE AS $$ SELECT s='${store}' AND auth.uid() IN ('${admin}','${id(610)}') AND EXISTS(SELECT 1 FROM stores WHERE id=s AND deleted_at IS NULL) $$;
@@ -58,7 +65,13 @@ try {
  const softDelete = await readFile(new URL('../supabase/migrations/20261114120000_store_soft_delete.sql',import.meta.url),'utf8');
  await db.exec(softDelete.slice(softDelete.indexOf('CREATE OR REPLACE FUNCTION public.deleted_store_ids'),softDelete.indexOf('CREATE OR REPLACE FUNCTION public.guard_deleted_store_row')));
  await db.exec(await readFile(new URL('../supabase/migrations/20261119140000_evidence_review_fixes.sql',import.meta.url),'utf8'));
+ await db.query('INSERT INTO auth.users VALUES($1),($2)',[id(981),id(982)]);
+ await db.query("INSERT INTO storage.objects(bucket_id,name,owner,owner_id) VALUES('transaction-evidence','legacy-proof',$1,$1::uuid::text),('other','keep',$2,$2::uuid::text)",[id(981),id(982)]);
  await db.exec(await readFile(new URL('../supabase/migrations/20261119141000_evidence_cleanup_purchase_rpc.sql',import.meta.url),'utf8'));
+ await db.query('DELETE FROM auth.users WHERE id=$1',[id(981)]);
+ ok((await db.query("SELECT id FROM storage.objects WHERE name='legacy-proof' AND owner IS NULL AND owner_id IS NULL")).rows.length===1);
+ await rejected(()=>db.query('DELETE FROM auth.users WHERE id=$1',[id(982)]));
+ await db.exec("DELETE FROM storage.objects WHERE name IN ('keep','legacy-proof')");
  const policyExpressions = (await db.query(
    "SELECT qual,with_check FROM pg_policies WHERE tablename='transaction_evidence' OR (schemaname='storage' AND policyname LIKE 'evidence_%')"
  )).rows;
@@ -77,6 +90,12 @@ try {
  await db.query('SELECT finish_transaction_evidence($1)',[row.id]);
  ok((await db.query('SELECT status FROM transaction_evidence WHERE id=$1',[row.id])).rows[0].status==='ready');
  await db.query('SELECT finish_transaction_evidence($1)',[row.id]); // Lost finish response.
+ for (const operation of ['object.sign','object.sign_many','object.list']) {
+   await db.query("SELECT set_config('qa.storage_operation',$1,false)",[operation]);
+   ok((await db.query('SELECT id FROM storage.objects')).rows.length===0);
+ }
+ await db.exec("SELECT set_config('qa.storage_operation','object.delete_many',false)");
+ ok((await db.query("DELETE FROM storage.objects WHERE name=$1 RETURNING id",[base+'image.jpg'])).rows.length===0);
  await rejected(()=>db.query('UPDATE storage.objects SET name=name WHERE name=$1 RETURNING id',[base+'image.jpg']).then(r=>{ if (!r.rows.length) throw Error('Denied'); }));
  await rejected(()=>db.query('SELECT begin_pending_evidence_discard($1)',[row.id]));
  ok((await db.query('SELECT status FROM transaction_evidence WHERE id=$1',[row.id])).rows[0].status==='ready');
@@ -156,9 +175,14 @@ try {
  await as(member);
  ok(!(await db.query('SELECT evidence_target_access($1,$2,NULL,NULL,NULL,true) AS allowed',[store,purchase])).rows[0].allowed);
  await as(admin);
+ await db.query('SELECT begin_ready_evidence_delete($1)',[id(20)]);
+ await rejected(()=>db.query('SELECT finish_transaction_evidence($1)',[id(20)]));
  await db.query("DELETE FROM storage.objects WHERE bucket_id='transaction-evidence' AND name LIKE $1",[`${store}/${id(20)}/%`]);
  const proofs=(await db.query("SELECT get_evidence_for_parent_delete('purchase',$1) AS proofs",[purchase])).rows[0].proofs;
- for(const file of proofs) await db.query('SELECT discard_transaction_evidence_metadata($1)',[file.id]);
+ for(const file of proofs) {
+   if (file.status==='pending') await db.query('SELECT begin_pending_evidence_discard($1)',[file.id]);
+   await db.query('SELECT discard_transaction_evidence_metadata($1)',[file.id]);
+ }
  await db.exec('RESET ROLE');await db.query('DELETE FROM purchases WHERE id=$1',[purchase]);
  ok((await db.query('SELECT id FROM purchases WHERE id=$1',[purchase])).rows.length===0);
 
@@ -213,5 +237,22 @@ try {
  ok(normalize(core) === normalize(body(priorSql,'create_purchase_with_items')));
  const wrapper = (await db.query("SELECT prosrc FROM pg_proc WHERE oid='public.create_purchase_with_items(uuid,date,text,text,jsonb)'::regprocedure")).rows[0].prosrc;
  ok(wrapper.includes('PERFORM public.create_purchase_with_evidence(') && !wrapper.includes('INSERT INTO'));
+ await db.exec('RESET ROLE');
+ await db.query("INSERT INTO stores(id,deleted_at,purge_after) VALUES($1,now(),now()+interval '1 day')",[id(990)]);
+ await db.query('UPDATE stores SET deleted_at=NULL WHERE id=$1',[id(990)]);
+ await db.query('INSERT INTO expenses VALUES($1,$2)',[id(991),id(990)]);
+ await db.query("INSERT INTO transaction_evidence(id,store_id,expense_id,name,mime_type,created_by) VALUES($1,$2,$3,'receipt','image/jpeg',$4)",[id(992),id(990),id(991),id(982)]);
+ await db.query('UPDATE stores SET deleted_at=now() WHERE id=$1',[id(990)]);
+ await db.query("INSERT INTO storage.objects(bucket_id,name,owner,owner_id) VALUES('transaction-evidence',$1,$2,$2::uuid::text)",[id(990)+'/proof/image.jpg',id(982)]);
+ ok((await db.query("SELECT owner,owner_id FROM storage.objects WHERE name=$1",[id(990)+'/proof/image.jpg'])).rows.every(r=>r.owner===null && r.owner_id===null));
+ ok((await db.query('SELECT * FROM claim_expired_evidence_paths()')).rows.length===0);
+ await db.query("UPDATE stores SET purge_after=now()-interval '1 second' WHERE id=$1",[id(990)]);
+ ok((await db.query('SELECT * FROM claim_expired_evidence_paths()')).rows.length===1);
+ ok((await db.query('SELECT * FROM claim_expired_evidence_paths()')).rows.length===0);
+ ok((await db.query('SELECT purge_expired_deleted_stores() AS n')).rows[0].n===0);
+ await db.query("DELETE FROM storage.objects WHERE name=$1",[id(990)+'/proof/image.jpg']);
+ ok((await db.query('SELECT purge_expired_deleted_stores() AS n')).rows[0].n===1);
+ ok((await db.query('SELECT id FROM stores WHERE id=$1',[id(990)])).rows.length===0);
+ ok((await db.query('SELECT id FROM transaction_evidence WHERE id=$1',[id(992)])).rows.length===0);
  console.log(`Evidence SQL: ${checks} assertions passed (PGlite reduced schema; remote JWT/Storage not tested).`);
 } finally { await db.close(); }
