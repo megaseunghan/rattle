@@ -94,5 +94,6 @@
     "jest-expo": "^55.0.11",
     "typescript": "~5.9.2"
   },
+  "expo": { "autolinking": { "nativeModulesDir": "./modules" } },
   "private": true
 }
