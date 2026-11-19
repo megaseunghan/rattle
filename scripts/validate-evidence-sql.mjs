@@ -90,15 +90,20 @@ try {
  `);
  await installationFails(/EVIDENCE_PURGE_VAULT_CONFIGURATION_REQUIRED/);
  await db.exec(`INSERT INTO vault.decrypted_secrets VALUES('evidence_project_url','https://qa.invalid'),('evidence_purge_token','qa-secret')`);
- await installationFails(/schema "cron" does not exist/);
+ await installationFails(/cron.job|schema "cron" does not exist/);
  await db.exec(`
    CREATE SCHEMA cron;
-   CREATE TABLE cron.test_jobs(name text PRIMARY KEY,schedule text,command text);
+   CREATE TABLE cron.job(jobname text PRIMARY KEY,schedule text,command text,active boolean DEFAULT true,
+     database text DEFAULT current_database(),username name DEFAULT current_user);
    CREATE FUNCTION cron.schedule(text,text,text) RETURNS bigint LANGUAGE sql AS $$
-     INSERT INTO cron.test_jobs VALUES($1,$2,$3) RETURNING 1::bigint $$;
+     INSERT INTO cron.job(jobname,schedule,command) VALUES($1,$2,$3) RETURNING 1::bigint $$;
  `);
+ await installationFails(/EVIDENCE_DAILY_PURGE_JOB_REQUIRED/);
+ await db.exec("INSERT INTO cron.job(jobname,schedule,command,active) VALUES('rattle-purge-deleted-stores','17 3 * * *','SELECT public.purge_expired_deleted_stores()',false)");
+ await installationFails(/EVIDENCE_DAILY_PURGE_JOB_REQUIRED/);
+ await db.exec('UPDATE cron.job SET active=true');
  await db.exec(reviewMigration);
- ok((await db.query('SELECT * FROM cron.test_jobs')).rows.length===2);
+ ok((await db.query('SELECT * FROM cron.job')).rows.length===3);
  await db.query('DELETE FROM auth.users WHERE id=$1',[id(981)]);
  ok((await db.query("SELECT id FROM storage.objects WHERE name='legacy-proof' AND owner IS NULL AND owner_id IS NULL")).rows.length===1);
  await rejected(()=>db.query('DELETE FROM auth.users WHERE id=$1',[id(982)]));
@@ -302,6 +307,29 @@ try {
    SELECT private.check_evidence_purge_responses();`);
  assert.deepEqual((await db.query('SELECT result FROM private.evidence_purge_requests ORDER BY request_id')).rows.map(r=>r.result),
    ['success','failed','timeout','missing']);
+ const automaticPath=id(990)+'/another/image.jpg';
+ await db.query("INSERT INTO storage.objects(bucket_id,name) VALUES('transaction-evidence',$1)",[automaticPath]);
+ ok((await db.query('SELECT claim_expired_evidence_paths() AS path')).rows[0].path===automaticPath);
+ await db.query('DELETE FROM storage.objects WHERE name=$1',[automaticPath]);
+ await db.query("SELECT record_evidence_purge_result($1,'confirmed')",[automaticPath]);
+ ok((await db.query('SELECT purge_expired_deleted_stores() AS n')).rows[0].n===0);
+ const operatorSql='SELECT private.confirm_reconciled_evidence_purge($1,$2,$3,$4,$5)';
+ const object=(await db.query('SELECT object_id,object_version FROM private.evidence_purge_attempts WHERE path=$1',[expiredPath])).rows[0];
+ const args=[id(990),expiredPath,object.object_id,object.object_version,'QA-provider-receipt'];
+ await db.exec("UPDATE private.evidence_purge_attempts SET first_attempted_at=now()-interval '20 minutes'");
+ ok((await db.query('SELECT * FROM private.evidence_purge_alerts WHERE path=$1',[expiredPath])).rows.length===1);
+ ok((await db.query('SELECT * FROM private.evidence_purge_alerts WHERE request_id IS NOT NULL')).rows.length===3);
+ await db.exec('SET ROLE service_role');
+ await rejected(()=>db.query(operatorSql,args));
+ await db.exec('RESET ROLE');
+ await assert.rejects(db.query(operatorSql,[...args.slice(0,4),'   ']),/PROVIDER_REFERENCE_REQUIRED/);
+ await assert.rejects(db.query(operatorSql,[...args.slice(0,3),'wrong-version',args[4]]),/UNRESOLVED_OBJECT_NOT_FOUND/);
+ await db.query("INSERT INTO storage.objects(bucket_id,name) VALUES('transaction-evidence',$1)",[expiredPath]);
+ await assert.rejects(db.query(operatorSql,args),/STORAGE_OBJECT_PRESENT/);
+ await db.query("DELETE FROM storage.objects WHERE name=$1",[expiredPath]);
+ await db.query(operatorSql,args);
+ ok((await db.query('SELECT * FROM private.evidence_purge_alerts WHERE path=$1',[expiredPath])).rows.length===0);
+ ok((await db.query('SELECT provider_reference FROM private.evidence_purge_attempts WHERE path=$1',[expiredPath])).rows[0].provider_reference===args[4]);
  await record('confirmed');
  await record('failed'); // A stale result cannot downgrade an acknowledgement.
  ok((await db.query('SELECT purge_expired_deleted_stores() AS n')).rows[0].n===1);

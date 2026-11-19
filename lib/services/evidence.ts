@@ -1,4 +1,5 @@
 import { supabase } from '../supabase';
+import { EvidenceReuploadRequired } from '../utils/evidenceError';
 import { UserFacingError } from '../utils/error';
 import { EvidenceTarget, EvidenceFile, EvidenceSelection, EVIDENCE_BUCKET, evidencePath } from '../types/evidence';
 
@@ -61,7 +62,14 @@ export async function discardPendingEvidence(file: EvidenceFile): Promise<void> 
 export async function signEvidence(file: EvidenceFile, thumbnail = false): Promise<string> {
   if (file.status !== 'ready') throw new UserFacingError('아직 업로드가 끝나지 않았어요.');
   const { data, error } = await supabase.functions.invoke('evidence-sign', { body: { id: file.id, thumbnail } });
-  if (error) throw error;
+  if (error) {
+    const response = error.context;
+    if (response?.status === 409 && typeof response.json === 'function') {
+      const body = await response.json().catch(() => null);
+      if (body?.code === 'EVIDENCE_CACHE_POLICY_REQUIRES_REUPLOAD') throw new EvidenceReuploadRequired();
+    }
+    throw error;
+  }
   return data.signedUrl;
 }
 

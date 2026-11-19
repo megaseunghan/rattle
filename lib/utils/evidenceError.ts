@@ -1,5 +1,7 @@
 import { UserFacingError } from './error';
 
+export class EvidenceReuploadRequired extends Error {}
+
 export interface EvidenceFailure { kind: string; message: string; retryable: boolean }
 export function evidenceFailure(error: unknown): EvidenceFailure {
   const value = error && typeof error === 'object' ? error as { message?: unknown; code?: unknown; status?: unknown; statusCode?: unknown } : {};

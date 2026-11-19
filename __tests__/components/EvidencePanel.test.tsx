@@ -1,5 +1,6 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { Alert } from 'react-native';
+import { EvidenceReuploadRequired } from '../../lib/utils/evidenceError';
 import { EvidencePanel } from '../../lib/components/EvidencePanel';
 const mockList = jest.fn(), mockReserve = jest.fn(), mockUpload = jest.fn(), mockPick = jest.fn(), mockSign = jest.fn(), mockCleanup = jest.fn(), mockDiscard = jest.fn();
 const mockCacheDelete = jest.fn();
@@ -230,4 +231,32 @@ it.each([
   if (shared) await waitFor(() => expect(mockList).toHaveBeenCalled());
   else expect(mockList).not.toHaveBeenCalled();
   expect(Boolean(screen.queryByText('증빙 여러 개 첨부'))).toBe(writable);
+});
+
+test('예전 썸네일은 원본 열기를 제공하고 재첨부는 새 예약으로 진행한다', async () => {
+  const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+  try {
+    mockList.mockResolvedValue([readyFile]);
+    mockSign.mockRejectedValue(new EvidenceReuploadRequired());
+    render(<EvidencePanel target={target} initiallyExpanded />);
+    fireEvent.press(await screen.findByLabelText('receipt.jpg 원본 열기'));
+    await waitFor(() => expect(alert).toHaveBeenCalledWith('원본을 다시 첨부해주세요', expect.any(String), expect.any(Array)));
+    await act(async () => { alert.mock.calls[0][2]?.find(b => b.text === '원본 선택')?.onPress?.(); });
+    await waitFor(() => expect(mockReserve).toHaveBeenCalled());
+    expect(mockReserve.mock.calls[0][1].id).not.toBe(readyFile.id);
+    expect(mockDiscard).not.toHaveBeenCalled();
+  } finally { alert.mockRestore(); }
+});
+
+test('읽기 전용 PDF의 재첨부는 관리자에게 안내한다', async () => {
+  const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+  try {
+    mockRole = 'employee';
+    mockList.mockResolvedValue([{ ...readyFile, name: 'receipt.pdf', mime_type: 'application/pdf' }]);
+    mockSign.mockRejectedValueOnce(new EvidenceReuploadRequired());
+    render(<EvidencePanel target={target} initiallyExpanded />);
+    fireEvent.press(await screen.findByLabelText('receipt.pdf 열기'));
+    await waitFor(() => expect(alert).toHaveBeenCalledWith('원본을 다시 첨부해주세요', expect.stringContaining('매장 관리자')));
+    expect(mockPick).not.toHaveBeenCalled();
+  } finally { alert.mockRestore(); }
 });
