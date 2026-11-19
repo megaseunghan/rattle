@@ -32,6 +32,7 @@
       "favicon": "./assets/Rattle_192x192.png"
     },
     "plugins": [
+      "./plugins/withExpoCameraBarcodeScanning",
       "expo-router",
       "expo-font",
       [
