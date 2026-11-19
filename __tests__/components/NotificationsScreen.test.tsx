@@ -3,8 +3,8 @@ import { Alert } from 'react-native';
 import NotificationsScreen from '../../app/notifications';
 jest.mock('react-native-gesture-handler', () => ({ Gesture: { Native: () => ({}) }, GestureDetector: ({ children }: any) => children }));
 const mockDismiss = jest.fn(), mockRead = jest.fn(), mockAll = jest.fn();
-let mockStore = 's', mockState: any;
-jest.mock('../../lib/contexts/AuthContext', () => ({ useAuth: () => ({ user: { id: 'u' }, store: { id: mockStore }, currentRole: 'admin', devPreviewMode: 'self' }) }));
+let mockStore = 's', mockState: any, mockRole = 'owner';
+jest.mock('../../lib/contexts/AuthContext', () => ({ useAuth: () => ({ user: { id: 'u' }, store: { id: mockStore }, currentRole: 'admin', storeRole: mockRole, devPreviewMode: 'self' }) }));
 jest.mock('../../lib/hooks/useNotifications', () => ({ useNotifications: () => mockState }));
 jest.mock('expo-router', () => ({ router: { back: jest.fn(), push: jest.fn() } }));
 jest.mock('../../lib/components/NotificationSwipeRow', () => ({ NotificationSwipeRow: ({ item, onPress, onDeleteRequest }: any) => {
@@ -12,7 +12,7 @@ jest.mock('../../lib/components/NotificationSwipeRow', () => ({ NotificationSwip
 } }));
 jest.mock('../../lib/components/ui', () => ({ AppBar: ({ title, rightSlot }: any) => { const { Text } = require('react-native'); return <><Text>{title}</Text>{rightSlot}</>; }, EmptyState: ({ title }: any) => { const { Text } = require('react-native'); return <Text>{title}</Text>; } }));
 const items = [{ id: 'n1', category: 'stock', message: '재고 확인', is_read: false, created_at: new Date().toISOString() }, { id: 'n2', category: 'members', message: '참여 신청', is_read: true, created_at: new Date(Date.now() - 86400000).toISOString() }];
-beforeEach(() => { jest.clearAllMocks(); mockStore='s'; mockState={ notifications: items, loading: false, error: null, unreadCount: 1, refetch: jest.fn(), markRead: mockRead, markAllRead: mockAll, dismiss: mockDismiss, deletingId: null }; jest.spyOn(Alert,'alert').mockImplementation(() => {}); });
+beforeEach(() => { jest.clearAllMocks(); mockStore='s'; mockRole='owner'; mockState={ notifications: items, loading: false, error: null, unreadCount: 1, refetch: jest.fn(), markRead: mockRead, markAllRead: mockAll, dismiss: mockDismiss, deletingId: null }; jest.spyOn(Alert,'alert').mockImplementation(() => {}); });
 afterEach(() => jest.restoreAllMocks());
 it('날짜별 미니멀 목록은 분류칩 없이 표시하고 기존 읽음을 유지한다', () => {
  render(<NotificationsScreen />);expect(screen.getByText('오늘')).toBeTruthy();expect(screen.getByText('어제')).toBeTruthy();expect(screen.queryByText('전체')).toBeNull();
@@ -38,4 +38,15 @@ it('응답 대기 중 연속 삭제를 차단한다', async () => {
  fireEvent.press(screen.getByLabelText('n2 삭제 확인'));
  expect(mockDismiss).toHaveBeenCalledTimes(1);
  await act(async () => { finish(); });
+});
+
+it('관리자 미처리 알림은 급여 탭으로 이동한다', () => {
+ mockState.notifications=[{ ...items[0], type: 'attendance_labor_failed', message: '인건비 확인' }];
+ render(<NotificationsScreen />); fireEvent.press(screen.getByLabelText('인건비 확인'));
+ expect(require('expo-router').router.push).toHaveBeenCalledWith({ pathname: '/(tabs)', params: { targetTab: 'payroll', homeScope: 'store' } });
+});
+it('직원 퇴근 누락 알림은 해당 원본 정정으로 이동한다', () => {
+ mockRole='employee'; mockState.notifications=[{ ...items[0], type: 'attendance_missing_checkout', attendance_punch_id: 'old-in', message: '퇴근 기록 확인' }];
+ render(<NotificationsScreen />); fireEvent.press(screen.getByLabelText('퇴근 기록 확인'));
+ expect(require('expo-router').router.push).toHaveBeenCalledWith({ pathname: '/attendance/correction', params: { punchId: 'old-in' } });
 });

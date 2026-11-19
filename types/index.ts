@@ -513,6 +513,10 @@ export interface AppNotification {
   title: string;
   message: string;
   dedupe_key: string | null;
+  attendance_employee_id?: string | null;
+  attendance_punch_id?: string | null;
+  attendance_work_date?: string | null;
+  resolved_at?: string | null;
   is_read: boolean;
   created_at: string;
 }

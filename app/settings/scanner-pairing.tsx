@@ -23,6 +23,7 @@ export default function ScannerPairingScreen() {
       {state.expired && <Text style={s.note}>QR 시간이 지났어요. 새로 열어주세요.</Text>}
       {!!state.error && <ErrorMessage message={state.error} />}
       <Pressable accessibilityRole="button" disabled={state.loading} accessibilityState={{ disabled: state.loading }} style={[s.button, state.loading && { opacity: 0.5 }]} onPress={() => { void state.issue(); }}><Text style={s.buttonText}>{state.qr || state.expired ? '다시 열기' : '열어보기'}</Text></Pressable>
+      <Text style={s.note}>등록됐는지 모르겠다면 매장폰 목록을 확인해주세요. 없으면 새 QR로 다시 등록해주세요.</Text>
       <Text style={s.note}>한 번만 등록할 수 있어요. 등록할 매장폰에만 보여주세요.</Text>
     </ScrollView>}
   </SafeAreaView>;

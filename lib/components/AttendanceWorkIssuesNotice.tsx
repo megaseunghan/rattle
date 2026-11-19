@@ -7,7 +7,7 @@ import { LoadingSpinner } from './LoadingSpinner';
 
 export interface AttendanceWorkIssueItem { id: string; employeeId: string; employeeName: string; workDate: string; reason: string; retryPunchId?: string | null; retryUnknown?: boolean }
 export function attendanceWorkFailureReason(code: string | null) {
-  return code === 'DAILY_WORK_RATE_REQUIRED' ? '시급을 등록해주세요' : '인건비에 반영하지 못했어요. 급여 조건을 확인해주세요';
+  return code === 'ATTENDANCE_CHECKOUT_MISSING' ? '퇴근 기록이 없어요. 출퇴근 기록을 확인해주세요' : code === 'DAILY_WORK_RATE_REQUIRED' ? '시급을 등록해주세요' : '인건비에 반영하지 못했어요. 급여 조건을 확인해주세요';
 }
 /** Mounted only in the existing owner/manager payroll screen. No employee retry flow. */
 export function AttendanceWorkIssuesNotice({ rows, loading, error, onReload, onEmployee, hasMore = false, onMore, limitReached = false, onRetry, retryingId = '', retryMessage = '' }: {
@@ -26,7 +26,7 @@ export function AttendanceWorkIssuesNotice({ rows, loading, error, onReload, onE
       </Pressable>
         {row.retryPunchId ? <Pressable accessibilityRole="button" accessibilityLabel={`${row.employeeName}님 ${row.retryUnknown ? '반영 상태 확인하기' : '인건비 다시 반영하기'}`} disabled={!!retryingId} onPress={() => onRetry?.(row.id)} style={s.row}>
           <Text style={s.body}>{retryingId === row.id ? '반영하고 있어요' : row.retryUnknown ? '반영 상태 확인하기' : '인건비 다시 반영하기'}</Text>
-        </Pressable> : <Text style={s.body}>다시 반영하려면 퇴근 원본을 확인해주세요</Text>}
+        </Pressable> : <Text style={s.body}>{row.reason.startsWith('퇴근 기록이 없어요') ? '출퇴근 기록에서 정정해주세요' : '다시 반영하려면 퇴근 원본을 확인해주세요'}</Text>}
       </View>;
     })}
     {!!retryMessage && <Text accessibilityLiveRegion="polite" style={s.body}>{retryMessage}</Text>}

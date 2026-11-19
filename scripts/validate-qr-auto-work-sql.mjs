@@ -328,4 +328,6 @@ try{
  check('release forward repair preserves all QR policy names roles and commands',shape(policiesAfterRepair),shape(policiesBeforeRepair));
  check('release final policies have no bare auth calls',policiesAfterRepair.filter(p=>/(?<!SELECT )auth\.(uid|jwt|role|email)\(\)/.test((p.qual??'')+(p.with_check??''))).length,0);
  console.log(`PASS release ordered QR/performance chain: ${checks} cumulative assertions; initPlan, bootstrap, home daily, final policies.`);
+ const followups=await (await import('./validate-qr-followups-sql.mjs')).validateQrFollowups({db,users,store,emp,as,migration});
+ await (await import('./validate-qr-notifications-sql.mjs')).validateQrNotifications({db,users,store,as,migration,...followups});
 } finally { await db.close(); }

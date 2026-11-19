@@ -35,3 +35,9 @@ it('홈은 최신 퇴근 시각과 기존 출퇴근 행동만 표시한다', () 
   mockToday.end = end; view.rerender(<HomeAttendanceCard employee={employee} active refreshKey={1} />);
   expect(view.getByText('12:00')).toBeTruthy(); expect(view.getAllByText('출근')).toHaveLength(2); expectNoProcessingUi(view);
 });
+it('직원 행이 없으면 이름·역할은 유지하고 출퇴근 시각과 행동을 숨긴다', () => {
+  const view = render(<HomeAttendanceCard employee={null} active refreshKey={0} />);
+  expect(view.getByLabelText('내 정보 보기')).toBeTruthy();
+  expect(view.queryByText('출근 예정')).toBeNull(); expect(view.queryByText('퇴근 예정')).toBeNull();
+  expect(view.queryByHintText('내 출퇴근 QR을 열어요')).toBeNull();
+});

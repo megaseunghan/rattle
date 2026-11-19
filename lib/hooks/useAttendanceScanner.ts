@@ -40,7 +40,7 @@ export function useAttendanceScanner(service: ScannerUiService = defaultService)
       if (!mounted.current) return;
       if (!saved) {
         registration.current = null;
-        setState({ state: pairingUnknown.current ? 'unknownSetup' : 'unregistered', title: pairingUnknown.current ? '등록됐는지 확인하고 있어요' : '관리자 앱의 등록 QR을 찍어주세요', body: pairingUnknown.current ? '관리자 앱에서 등록을 확인하고 해제한 뒤 새 QR을 받아주세요' : '사장님이나 점장님 앱에서 매장폰 등록 QR을 열어주세요', time: '' });
+        setState({ state: pairingUnknown.current ? 'unknownSetup' : 'unregistered', title: pairingUnknown.current ? '등록됐는지 확인하고 있어요' : '관리자 앱의 등록 QR을 찍어주세요', body: pairingUnknown.current ? '관리자 앱의 매장폰 목록을 확인해주세요. 없으면 새 QR로 다시 등록해주세요' : '사장님이나 점장님 앱에서 매장폰 등록 QR을 열어주세요', time: '' });
         return;
       }
       const status = await service.scannerStatus();
@@ -76,7 +76,7 @@ export function useAttendanceScanner(service: ScannerUiService = defaultService)
         else {
           pairingUnknown.current = result.status === 'unknown';
           if (pairingUnknown.current) uncertainPairings.current.add(qr);
-          setState({ state: pairingUnknown.current ? 'unknownSetup' : 'unregistered', title: pairingUnknown.current ? '등록됐는지 확인하고 있어요' : '등록 QR을 확인하지 못했어요', body: pairingUnknown.current ? '관리자 앱에서 등록을 확인하고 해제한 뒤 새 QR을 받아주세요' : '관리자 앱에서 등록 QR을 새로 열어주세요', time: '' });
+          setState({ state: pairingUnknown.current ? 'unknownSetup' : 'unregistered', title: pairingUnknown.current ? '등록됐는지 확인하고 있어요' : '등록 QR을 확인하지 못했어요', body: pairingUnknown.current ? '관리자 앱의 매장폰 목록을 확인해주세요. 없으면 새 QR로 다시 등록해주세요' : '관리자 앱에서 등록 QR을 새로 열어주세요', time: '' });
         }
         return;
       }
@@ -98,7 +98,7 @@ export function useAttendanceScanner(service: ScannerUiService = defaultService)
       if (isPunch) { remember(qr); showUnknown(); }
       else {
         uncertainPairings.current.add(qr); pairingUnknown.current = true;
-        setState({ state: 'unknownSetup', title: '등록됐는지 확인하고 있어요', body: '관리자 앱에서 등록을 확인하고 해제한 뒤 새 QR을 받아주세요', time: '' });
+        setState({ state: 'unknownSetup', title: '등록됐는지 확인하고 있어요', body: '관리자 앱의 매장폰 목록을 확인해주세요. 없으면 새 QR로 다시 등록해주세요', time: '' });
       }
     } finally { busy.current = false; }
   }, [service, revoked]);
