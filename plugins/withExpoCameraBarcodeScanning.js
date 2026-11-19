@@ -3,7 +3,11 @@
 // Autolinking does not add that podspec, so the QR scanner never fired on device.
 const { withPodfile } = require('expo/config-plugins');
 
-const POD_LINE = "  pod 'ExpoCameraBarcodeScanning', :path => '../node_modules/expo-camera/ios'";
+// ZXingObjC needs module maps to be imported from the Swift provider in static builds.
+const POD_LINE = [
+  "  pod 'ZXingObjC', :modular_headers => true",
+  "  pod 'ExpoCameraBarcodeScanning', :path => '../node_modules/expo-camera/ios'",
+].join('\n');
 
 module.exports = function withExpoCameraBarcodeScanning(config) {
   return withPodfile(config, mod => {
