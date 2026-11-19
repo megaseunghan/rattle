@@ -42,3 +42,16 @@ Mac 실험의 구조를 이식하되 잔액 오연결을 막기 위해 행 연�
 Mac 비교 스크립트는 저장소 밖 `/private/tmp/rattle-ocr-bench/compare-iphone.mjs`. 실행: `node /private/tmp/rattle-ocr-bench/compare-iphone.mjs <공유 JSON 경로> <Rattle 저장소 경로>`. Mac과 iPhone 원문을 동일한 현재 TS 파서에 넣고 truth/금액/품목/날짜/시간/원문 관측 일치를 비교한다. SHA-256이 다른 사진이나 키 미입력·중복은 controlledPairs 분모에서 제외한다. iPhone 실측 파일이 오기 전 인식 정확도를 산출하지 않는다.
 
 공식 참고: [Expo local modules](https://docs.expo.dev/modules/get-started/), [Expo AsyncFunction](https://docs.expo.dev/modules/module-api/), [Apple Vision](https://developer.apple.com/documentation/vision/vnrecognizetextrequest), [PHPicker](https://developer.apple.com/documentation/photosui/phpickerviewcontroller).
+
+## 이 작업자의 검증 기록 · 2026-11-19
+
+작업 기준: `feature/evidence-attachments`, 시작 HEAD `6a1eb5e`; 역할 지침은 `44308ed`와 차이 없음. 코드 커밋: 계약 `1f6d23f`, iOS 모듈 `aae2a7d`, 파서 `7bd1208`, 실측 화면/Android 입출력 `d9ffcbf`, 원본 출처 좌표 보존 `a037877`. 독립 검토 없이 직접 구현·자체 검토했다.
+
+- 최종 `npm run typecheck`: 통과. 로그 `/tmp/rattle-ocr-final-typecheck.log`.
+- 최종 OCR 대상 Jest: 4 suites / 25 tests 통과, 기본 제한, 5.901초. 로그 `/tmp/rattle-ocr-target-jest-final.log`. 중간 실행에서 부하 중 화면 1건이 5초 timeout으로 실패했고 30초 제한 재실행 25개 통과 후 기본 제한으로도 25개 통과했다.
+- 전체 Jest 첫 실행: 192 suites 중 185 통과/7 실패, 1579 tests 중 1561 통과/18 실패, 897.219초. 실패는 기존 화면의 5초 timeout·후속 화면 조회 실패였고 해당 7 suites를 30초 제한으로 재실행해 95 tests 모두 통과(12.122초). 로그 `/tmp/rattle-ocr-full-jest.log`, `/tmp/rattle-ocr-failed-suites-retry.log`.
+- Expo autolinking `search` 및 `resolve --platform apple`: RattleTextRecognition pod·Swift 클래스 발견, `debugOnly=false`. 실제 pod 설치/링크 검증은 미실행.
+- Swift `-frontend -parse`, podspec `ruby -c`, `git diff --check`, 비교 스크립트 `node --check`: 통과. 합성 입력을 사용한 비교 스크립트 smoke에서 Mac 결과 읽기·TS 파서 실행·해시 불일치 분모 제외를 확인했다. iPhone 측정 결과를 생성하거나 정확도를 측정한 것은 아니다.
+- `node scripts/validate-screen-coverage.mjs`: 실패. 새 `app/dev/ocr-lab.tsx`가 명세 색인에 없고 기존 색인에도 현재 라우트와 차이가 있다. 명세/manifest는 허용 파일 밖이므로 PL에게 갱신을 넘긴다. 로그 `/tmp/rattle-ocr-screen-coverage.log`.
+- iOS/Android 네이티브 빌드·설치·기기 조작·실제 사진 OCR·AirDrop/Android Share·EAS·원격 작업: 미실행, PL/QA 담당. 실기기 인식률과 1.1.0 포함 여부는 빌드 후 확인할 항목이다.
+- 전체 Jest 최종 재실행(요청된 기본 명령): **194 suites / 1587 tests 전부 통과**, 412.33초, 종료 0. 로그 `/tmp/rattle-ocr-full-jest-final.log`. 같은 작업 공간의 다른 증빙 작업자 변경이 동시에 존재하는 로컬 기준이며, 원격이나 네이티브 런타임 검증을 뜻하지 않는다.
