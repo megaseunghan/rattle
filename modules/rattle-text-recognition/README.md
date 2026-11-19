@@ -246,3 +246,38 @@ Mac 비교 스크립트는 저장소 밖 `/private/tmp/rattle-ocr-bench/compare-
 구현자 자체 검토다. 같은 검토자의 독립 재검토와 제안값의 화면 연결은 PL 후속이며, 이번에 화면·네이티브·기기 조작·빌드·설치·EAS·원격 변경은 하지 않았다.
 
 최종 검증(2026-11-19 22:24 KST 확인, macOS 로컬, 기준 51421c0 위 이 과제의 미커밋 코드·합성 테스트): `npm run typecheck` **통과**(`/tmp/rattle-ocr-r11-typecheck-final.log`), 전체 `npx jest --runInBand --no-coverage --testPathIgnorePatterns='/node_modules/' '/__tests__/setup\.ts' '<rootDir>/supabase/functions/' '<rootDir>/dev/'` **198 suites/1721 tests 통과**, 기본 timeout, 45.944초, 종료 0(`/tmp/rattle-ocr-r11-full-jest-final.log`). 실행 전후 파서·R11 회귀 소스의 SHA가 같음을 `/tmp/rattle-ocr-r11-final-source.sha256`으로 대조했고, 외부 비교 결과의 파서 SHA도 최종 소스와 일치했다. `git diff --check`와 외부 스크립트 `node --check`도 통과했다.
+
+## 독립 검토 6회차 반영 · OCR-R12 계산·보조 제약 분리 (2026-11-19)
+
+작업 `task_09c7c469c8ee`, 기준 `feature/evidence-attachments@f1272f7`, PL 결정 `msg_1f16de53e2e0`. R11은 해소됐으나 공급가·VAT 식에 보조 상품액까지 계산 피연산자로 넣어, 정상적인 독립 식도 차단했다. 원본 관측 0의 공급가 20,000 + 관측 1의 VAT 2,000 = 관측 2의 결제 22,000이면 독립 검산이다. 관측 2가 상품액 라벨도 공유한다는 이유로 이 식을 무효화하지 않는다.
+
+`Equation`의 실제 `operands`와 보조 일치 `constraints`를 분리했다. 상품액이 공급가+VAT와 같은 경우 계산은 공급가+VAT+배송−할인이고, 상품액은 세금 소계와의 일치 제약이다. 공급가+VAT가 상품+배송−할인과 같은 경우 계산은 공급가+VAT이며, 상품·배송·할인은 이미 반영됐다는 별도 일치 제약이다. 보조 제약이 불일치하면 계속 차단하고, 실제 피연산자끼리 또는 합계와 토큰이 겹치는 R11 차단도 유지했다. 보조 상품액이 공유돼도 독립 공급가·VAT 식이 있으면 selected를 확정할 수 있다. 이때 상품 검산 표시는 숫자의 일치 제약이며 독립 근거는 공급가·VAT다.
+
+`moneyEvidence.test.ts`에 R12 7개 회귀를 추가했다. 기존 R1~R11과 정상·오확정 차단 기대값은 변경하지 않았다.
+
+| 가상 입력 / 원 단위 | 기대값 |
+| --- | --- |
+| 공급가 20,000 / VAT 2,000 / 상품액·결제액 공유 22,000 | selected 22,000, suggested null, 실제 피연산자+합계의 토큰 3개만 보존 |
+| 한 관측에 공급가·VAT의 별도 숫자, 다른 관측에 공유 상품·결제 | selected 22,000, 서로 다른 토큰 위치 유지 |
+| 상품·결제 라벨 관측과 숫자 관측이 분리 | selected 22,000, 공유 상품액은 보조 제약으로만 사용 |
+| 상품액·결제액 공유 23,000, 독립 공급가+VAT는 22,000 | 보조 제약 불일치, selected/suggested null |
+| 공급가·VAT가 숫자 11,000 하나를 공유, 상품·결제 22,000 | 실제 피연산자 재사용, R11 차단 유지·두 값 null |
+| 독립 세금 식 없이 상품·결제만 공유 22,000 | R11 차단 유지·두 값 null |
+| 공급가·VAT·공유 상품/결제 라벨이 모두 한 관측에 합쳐진 형태 | 현재 별칭 연결이 불완전하므로 두 값 null, 아래 backlog로 이관 |
+
+처음 5개 실행에서 2개가 실패했다(`/tmp/rattle-ocr-r12-red.log`). 요청된 R12의 독립 식은 복구했고, 한 관측의 복합 별칭 연결 실패는 안전한 null임을 확인해 종료 기준에 따라 확장 수정하지 않았다. 최종 OCR 대상 **7 suites/154 tests 통과**, 기본 timeout, 2.043초(`/tmp/rattle-ocr-r12-target.log`).
+
+외부 `compare-r12.mjs`로 f1272f7과 최종 소스를 같은 raw 10쌍에 재평가했다. 결과 `/private/tmp/rattle-ocr-bench/android/parser-r12-comparison.json`, 로그 `/tmp/rattle-ocr-r12-comparison.log`에 파서·raw SHA와 불변성 검사를 남겼다. selected/suggested/null **Android 3/0/7·Mac 4/0/6, 오선택 양쪽 0 유지**다. 원문은 저장소 밖에 유지했고 이 개발 표본 재평가를 독립 holdout 정확도로 보지 않는다.
+
+### PL 종료 기준과 보류 backlog
+
+**이번 R12 이후 파서 검토의 차단 대상은 잘못된 금액을 selected 또는 suggested로 확정하는 경로다.** 확정하지 못하고 null로 남기는 안전한 누락은 차단 지적을 추가하거나 이번 범위를 확장해 고치지 않는다. 아래 항목은 새로운 holdout·실기기 자료를 모은 후 별도 과제에서 조정한다.
+
+| backlog | 현재 근거·상태 | 다음 판단 조건 |
+| --- | --- | --- |
+| 한 관측 `공급가액 20,000 / VAT 2,000 / 상품금액/결제금액 22,000`의 공유 별칭 연결 | 상품액 구간을 읽지 못해 null, R12 합성 회귀에 안전한 미확정으로 고정 | 같은 형태의 실제 holdout·기기 OCR 원문에서 연결 유일성과 오확정 위험 확인 |
+| 공통 불완전 자료·공유 근거 차단으로 남는 미확정 | 기존 raw의 Android 7장·Mac 6장은 두 값 null로 유지. 현재 규칙의 재조정을 이 개발 표본에 맞추지 않음 | 별도 수집한 holdout 및 실기기 결과를 기준으로 원인별 재현·오확정/누락 분리 평가 |
+
+구현자 자체 검토이며, 이후 검토에서도 안전한 누락을 완료 차단으로 취급하지 않는다. 화면·제안값 입력 연결·실기기 수집·빌드·설치·EAS·원격 변경은 이번 범위에서 실행하지 않았다.
+
+최종 검증(2026-11-19, macOS 로컬, 기준 f1272f7 위 이 과제의 미커밋 코드·합성 회귀): `npm run typecheck` **통과**(`/tmp/rattle-ocr-r12-typecheck.log`), 전체 `npx jest --runInBand --no-coverage --testPathIgnorePatterns='/node_modules/' '/__tests__/setup\.ts' '<rootDir>/supabase/functions/' '<rootDir>/dev/'` **198 suites/1728 tests 통과**, 기본 timeout, 45.990초, 종료 0(`/tmp/rattle-ocr-r12-full-jest.log`). 실행 전후 파서·회귀 소스 SHA가 같음을 `/tmp/rattle-ocr-r12-final-source.sha256`으로 확인했고 외부 비교의 파서 SHA도 최종 코드와 일치했다. `git diff --check`와 외부 비교 스크립트 `node --check` 통과.
