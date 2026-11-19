@@ -7,7 +7,8 @@ import UniformTypeIdentifiers
 
 public class RattleTextRecognitionModule: Module {
   private var pickerDelegate: ReceiptPickerDelegate?
-  private let recognitionQueue = DispatchQueue(label: "rattle.ocr", qos: .userInitiated)
+  private let temporaryFiles = OCRTemporaryFiles()
+  private let recognitionQueue = DispatchQueue(label: "rattle.ocr", qos: .userInitiated, autoreleaseFrequency: .workItem)
 
   public func definition() -> ModuleDefinition {
     Name("RattleTextRecognition")
@@ -53,7 +54,7 @@ public class RattleTextRecognitionModule: Module {
                        "usesLanguageCorrection": true, "orientation": orientationRaw,
                        "width": image.width, "height": image.height,
                        "coordinateOrigin": "top-left", "preprocessing": "none",
-                       "sha256": try SHA256.hash(data: Data(contentsOf: url)).map { String(format: "%02x", $0) }.joined()]
+                       "sha256": try self.temporaryFiles.imageSHA256(url)]
         ])
       } catch {
         promise.reject("ERR_OCR_RECOGNITION", "Text recognition failed")
@@ -75,11 +76,13 @@ public class RattleTextRecognitionModule: Module {
       configuration.selection = .ordered
       configuration.preferredAssetRepresentationMode = .current
       let picker = PHPickerViewController(configuration: configuration)
-      let delegate = ReceiptPickerDelegate { [weak self] result in
+      let delegate = ReceiptPickerDelegate(temporaryFiles: self.temporaryFiles) { [weak self] result in
         self?.pickerDelegate = nil
         switch result {
         case .success(let images): promise.resolve(images)
-        case .failure: promise.reject("ERR_OCR_PICKER", "Selected images could not be opened")
+        case .failure(let error):
+          if error is OCRTemporaryFileError { promise.reject("ERR_OCR_CLEANUP", "Temporary files could not be removed") }
+          else { promise.reject("ERR_OCR_PICKER", "Selected images could not be opened") }
         }
       }
       self.pickerDelegate = delegate
@@ -87,13 +90,14 @@ public class RattleTextRecognitionModule: Module {
       presenter.present(picker, animated: true)
     }.runOnQueue(.main)
 
-    AsyncFunction("releaseImages") { (uris: [String]) in
-      let root = FileManager.default.temporaryDirectory.appendingPathComponent("rattle-ocr-images").standardizedFileURL
-      for uri in uris {
-        guard let url = URL(string: uri), url.isFileURL,
-              url.standardizedFileURL.deletingLastPathComponent() == root else { continue }
-        try? FileManager.default.removeItem(at: url)
-      }
+    AsyncFunction("releaseImages") { (uris: [String], promise: Promise) in
+      do { try self.temporaryFiles.releaseImages(uris); promise.resolve(nil) }
+      catch { promise.reject("ERR_OCR_CLEANUP", "Temporary images could not be removed") }
+    }.runOnQueue(recognitionQueue)
+
+    AsyncFunction("cleanupTemporaryFiles") { (promise: Promise) in
+      do { try self.temporaryFiles.cleanup(); promise.resolve(nil) }
+      catch { promise.reject("ERR_OCR_CLEANUP", "Temporary files could not be removed") }
     }.runOnQueue(recognitionQueue)
 
     AsyncFunction("shareJson") { (json: String, promise: Promise) in
@@ -102,14 +106,21 @@ public class RattleTextRecognitionModule: Module {
         promise.reject("ERR_OCR_SHARE", "The results could not be shared")
         return
       }
-      let url = FileManager.default.temporaryDirectory.appendingPathComponent("rattle-ocr-\(UUID().uuidString).json")
-      do { try data.write(to: url, options: [.atomic, .completeFileProtection]) }
+      let url: URL
+      do { url = try self.temporaryFiles.newExportURL() }
       catch { promise.reject("ERR_OCR_SHARE", "The results could not be shared"); return }
+      do { try data.write(to: url, options: [.atomic, .completeFileProtection]) }
+      catch {
+        do { try self.temporaryFiles.remove(url) }
+        catch { promise.reject("ERR_OCR_CLEANUP", "Temporary results could not be removed"); return }
+        promise.reject("ERR_OCR_SHARE", "The results could not be shared"); return
+      }
       let sheet = UIActivityViewController(activityItems: [url], applicationActivities: nil)
       sheet.popoverPresentationController?.sourceView = presenter.view
       sheet.popoverPresentationController?.sourceRect = CGRect(x: presenter.view.bounds.midX, y: presenter.view.bounds.midY, width: 1, height: 1)
       sheet.completionWithItemsHandler = { _, _, _, error in
-        try? FileManager.default.removeItem(at: url)
+        do { try self.temporaryFiles.remove(url) }
+        catch { promise.reject("ERR_OCR_CLEANUP", "Temporary results could not be removed"); return }
         if error != nil { promise.reject("ERR_OCR_SHARE", "Sharing failed") }
         else { promise.resolve(nil) }
       }
@@ -120,7 +131,10 @@ public class RattleTextRecognitionModule: Module {
 
 private final class ReceiptPickerDelegate: NSObject, PHPickerViewControllerDelegate {
   private let completion: (Result<[[String: String]], Error>) -> Void
-  init(completion: @escaping (Result<[[String: String]], Error>) -> Void) { self.completion = completion }
+  private let temporaryFiles: OCRTemporaryFiles
+  init(temporaryFiles: OCRTemporaryFiles, completion: @escaping (Result<[[String: String]], Error>) -> Void) {
+    self.temporaryFiles = temporaryFiles; self.completion = completion
+  }
 
   func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
     picker.dismiss(animated: true)
@@ -129,8 +143,9 @@ private final class ReceiptPickerDelegate: NSObject, PHPickerViewControllerDeleg
     let lock = NSLock()
     var images: [Int: [String: String]] = [:]
     var failed = false
-    let directory = FileManager.default.temporaryDirectory.appendingPathComponent("rattle-ocr-images")
-    do { try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true) }
+    var cleanupFailed = false
+    let directory: URL
+    do { directory = try temporaryFiles.imageDirectory() }
     catch { completion(.failure(error)); return }
     for (index, result) in results.enumerated() {
       group.enter()
@@ -146,7 +161,8 @@ private final class ReceiptPickerDelegate: NSObject, PHPickerViewControllerDeleg
           images[index] = ["uri": destination.absoluteString, "fileName": result.itemProvider.suggestedName ?? url.lastPathComponent]
           lock.unlock()
         } catch {
-          try? FileManager.default.removeItem(at: destination)
+          do { try self.temporaryFiles.remove(destination) }
+          catch { lock.lock(); cleanupFailed = true; lock.unlock() }
           lock.lock(); failed = true; lock.unlock()
         }
       }
@@ -154,9 +170,11 @@ private final class ReceiptPickerDelegate: NSObject, PHPickerViewControllerDeleg
     group.notify(queue: .main) {
       if failed {
         for image in images.values {
-          if let uri = image["uri"], let url = URL(string: uri) { try? FileManager.default.removeItem(at: url) }
+          if let uri = image["uri"], let url = URL(string: uri) {
+            do { try self.temporaryFiles.remove(url) } catch { cleanupFailed = true }
+          }
         }
-        self.completion(.failure(NSError(domain: "RattleOCR", code: 1)))
+        self.completion(.failure(cleanupFailed ? OCRTemporaryFileError.cleanupFailed : NSError(domain: "RattleOCR", code: 1)))
       } else { self.completion(.success(images.keys.sorted().compactMap { images[$0] })) }
     }
   }
