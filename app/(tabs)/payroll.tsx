@@ -27,12 +27,9 @@ import { WorkMinutesForm } from '../../lib/components/WorkMinutesForm';
 import { ErrorMessage } from '../../lib/components/ErrorMessage';
 import { formatWorkedMinutes } from '../../lib/utils/workMinutes';
 import { getPayrollSettlementGaps, PayrollDeductions, probationFactor } from '../../lib/services/payroll';
-import {
-  getStoreWageHistory,
-} from '../../lib/services/wageHistory';
+import { useStoreWageHistory } from '../../lib/hooks/useStoreWageHistory';
 import { isWageDate } from '../../lib/utils/wageCondition';
 import { accruedRegularPayroll, regularEmployeesForAccrual } from '../../lib/utils/regularWages';
-import { WageHistory } from '../../types';
 import { animateListChange } from '../../lib/utils/layoutAnimation';
 import { Badge, EmptyState, Field } from '../../lib/components/ui';
 
@@ -390,29 +387,12 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
   const [workTarget, setWorkTarget] = useState<Employee | null>(null);
   const [workSubmission, setWorkSubmission] = useState<PayrollWorkSubmission | undefined>();
   useEffect(() => { setWorkTarget(null); setWorkSubmission(undefined); }, [workScope]);
-  const [histMap, setHistMap] = useState<Record<string, WageHistory[]>>({});
-  const [histLoading, setHistLoading] = useState(true);
-  const [histError, setHistError] = useState(false);
-  const historyRequest = useRef(0);
+  const { map: histMap, loading: histLoading, error: histError, refetch: refetchHist } = useStoreWageHistory(store?.id);
 
   // 급여 이력 보기 모달
   const [histTarget, setHistTarget] = useState<Employee | null>(null);
   useEffect(() => { setHistTarget(null); setModalVisible(false); }, [store?.id]);
 
-  const refetchHist = useCallback(async () => {
-    const request = ++historyRequest.current;
-    if (!store) { setHistMap({}); setHistLoading(false); return; }
-    setHistLoading(true); setHistError(false); setHistMap({});
-    try {
-      const rows = await getStoreWageHistory(store.id);
-      if (request !== historyRequest.current) return;
-      const map: Record<string, WageHistory[]> = {};
-      for (const row of rows) (map[row.employee_id] ??= []).push(row);
-      setHistMap(map);
-    } catch { if (request === historyRequest.current) setHistError(true); }
-    finally { if (request === historyRequest.current) setHistLoading(false); }
-  }, [store?.id]);
-  useEffect(() => () => { historyRequest.current += 1; }, []);
 
   useFocusEffect(useCallback(() => {
     if (!active) return;

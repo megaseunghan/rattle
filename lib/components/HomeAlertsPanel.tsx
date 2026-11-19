@@ -16,13 +16,18 @@ export function HomeAlertsPanel({ active = true, refreshKey = 0, todaySales, sto
   useEffect(() => { if (active) void refetch(); }, [active, refreshKey, refetch]);
   async function read(alert: HomeAlert, open: boolean) {
     if (saving) return;
+    if (open) {
+      // 이동은 읽음 저장을 기다리지 않는다. 저장에 실패하면 알림이 그대로 남아 다음에 다시 보인다.
+      router.push(alert.route as never);
+      markRead(alert.key).catch(() => {});
+      return;
+    }
     setSaving(alert.key);
     try {
-      const current = await markRead(alert.key);
-      if (open && current && mounted.current) router.push(alert.route as never);
+      await markRead(alert.key);
     } catch {
       Alert.alert('읽음 처리 실패', '읽음 상태를 저장하지 못했어요. 다시 시도해 주세요.');
-    } finally { setSaving(null); }
+    } finally { if (mounted.current) setSaving(null); }
   }
   if (!error && alerts.length === 0) return null;
   return <View style={styles.list}>
