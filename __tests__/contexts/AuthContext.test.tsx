@@ -11,7 +11,7 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
   getItem: jest.fn(), setItem: jest.fn(), removeItem: jest.fn(),
 }));
 jest.mock('../../lib/supabase', () => ({ supabase: {
-  from: jest.fn(), auth: { onAuthStateChange: jest.fn(), signOut: jest.fn() },
+  from: jest.fn(), rpc: jest.fn(), auth: { onAuthStateChange: jest.fn(), signOut: jest.fn() },
 } }));
 
 const stores = [{ id: 'a', name: '첫 매장', owner_id: 'user' }, { id: 'b', name: '둘째 매장', owner_id: 'user' }];
@@ -43,6 +43,8 @@ beforeEach(() => {
     notify = callback;
     return { data: { subscription: { unsubscribe: jest.fn() } } };
   });
+  // 기본은 시작 RPC 미배포 상태: 기존 조회 경로를 검사한다.
+  (supabase.rpc as jest.Mock).mockResolvedValue({ data: null, error: { code: 'PGRST202', message: 'missing' } });
   queries();
 });
 
@@ -204,5 +206,17 @@ it('생성 선택 요청이 일반 목록 갱신에 밀리면 성공 대신 재�
   await act(async () => { await result.current.refreshStore(); });
   await act(async () => { release({ data: [...stores, { id: 'new', owner_id: 'user' }], error: null }); });
   expect((await outcome as Error).message).toContain('같은 설정으로 다시 시도');
+  expect(result.current.store?.id).toBe('a');
+});
+
+it('시작 RPC가 있으면 한 번의 호출로 매장·역할·권한을 채우고 개별 테이블을 조회하지 않는다', async () => {
+  (supabase.rpc as jest.Mock).mockResolvedValue({ data: [
+    { store: stores[0], member_role: null, financial_access: true },
+    { store: { id: 'c', name: '참여 매장', owner_id: 'other' }, member_role: 'member', financial_access: false },
+  ], error: null });
+  const { result } = await login();
+  expect(supabase.rpc).toHaveBeenCalledWith('get_my_store_bootstrap');
+  expect(supabase.from).not.toHaveBeenCalled();
+  expect(result.current.stores.map(store => store.id)).toEqual(['a', 'c']);
   expect(result.current.store?.id).toBe('a');
 });
