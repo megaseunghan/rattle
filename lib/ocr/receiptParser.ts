@@ -223,10 +223,11 @@ export function parseReceipt(lines: readonly RecognizedLine[], sourceImageId = '
   let selectedTotal: TotalCandidate | null = totalCandidates[0] ?? null;
   const observedTotals = totalCandidates.filter(c => !/매출합계|매출총계|주문금액/.test(compact(c.label)));
   let totalConflict = false;
-  const verifyDerived = (value: number, cells: RecognizedLine[], label: string, score: number) => {
+  const verifyDerived = (value: number, cells: RecognizedLine[], label: string, score: number,
+    compatible: (candidate: TotalCandidate) => boolean = candidate => candidate.value === value) => {
     // A unit price, cash received or an unlabelled number cannot corroborate a total.
     const matching = observedTotals.find(candidate => candidate.value === value);
-    if (observedTotals.some(candidate => candidate.value !== value)) totalConflict = true;
+    if (observedTotals.some(candidate => !compatible(candidate))) totalConflict = true;
     if (!matching) return;
     const candidate: TotalCandidate = { ...field(value, cells, .75, 'derived'), label, score };
     candidate.sourceBoxes.push(...matching.sourceBoxes);
@@ -236,9 +237,18 @@ export function parseReceipt(lines: readonly RecognizedLine[], sourceImageId = '
   };
   const supplyPlusVat = amounts.supply && amounts.vat && amountStatus.supply === 'observed' && amountStatus.vat === 'observed'
     ? amounts.supply.value + amounts.vat.value : null;
+  const adjustmentsKnown = amountStatus.shipping !== 'unreadable' && amountStatus.discount !== 'unreadable';
+  const adjustment = adjustmentsKnown ? (amounts.shipping?.value ?? 0) - Math.abs(amounts.discount?.value ?? 0) : null;
   if (supplyPlusVat !== null) {
-    const cells = [...(amountCells.get('supply') ?? []), ...(amountCells.get('vat') ?? [])];
-    verifyDerived(supplyPlusVat, cells, '공급가 + 부가세 (합계 라벨 확인)', 105);
+    const goodsConsistent = amountStatus.goods === 'absent' || (amountStatus.goods === 'observed' && amounts.goods?.value === supplyPlusVat);
+    if (adjustment !== null && goodsConsistent) {
+      const payable = supplyPlusVat + adjustment;
+      const cells = ['supply', 'vat', 'shipping', 'discount'].flatMap(key => amountCells.get(key as keyof typeof amounts) ?? []);
+      // Supply+VAT is a goods subtotal. Compare final payments only after readable shipping/discount.
+      verifyDerived(payable, cells, adjustment === 0 ? '공급가 + 부가세 (합계 라벨 확인)' : '공급가 + 부가세 + 배송 − 할인 (결제 라벨 확인)', 105,
+        candidate => /결제|청구|금일합계/.test(compact(candidate.label)) ? candidate.value === payable
+          : candidate.value === supplyPlusVat || candidate.value === payable);
+    } else if (amountStatus.goods === 'observed' && !goodsConsistent) totalConflict = true;
   }
   const grossRow = rows.find(r => /매출합계|매출총계/.test(compact(r.text)) && !excluded.test(compact(r.text)));
   if (grossRow && amounts.returns && amountStatus.returns === 'observed') {
@@ -298,6 +308,6 @@ export function parseReceipt(lines: readonly RecognizedLine[], sourceImageId = '
   if (new Set(totalCandidates.filter(c => c.score === selectedTotal?.score).map(c => c.value)).size > 1) warnings.push('같은 우선순위의 합계가 여러 개예요');
   if (amounts.deposit || amounts.returns) warnings.push('보증금·회수액의 매입 반영 기준은 별도 확인이 필요해요');
   return { version: 1, sourceImageId, rotated, slope, rows, totalCandidates, selectedTotal, dateCandidates: dates, vendorCandidates: vendors,
-    amounts, amountStatus, items, checks: { itemSum, itemsMatchTotal, supplyPlusVat, supplyVatMatchesTotal: supplyPlusVat !== null && selectedTotal ? supplyPlusVat === selectedTotal.value : null,
+    amounts, amountStatus, items, checks: { itemSum, itemsMatchTotal, supplyPlusVat, supplyVatMatchesTotal: supplyPlusVat !== null && selectedTotal && adjustment === 0 ? supplyPlusVat === selectedTotal.value : null,
       goodsAdjustments, goodsAdjustmentsMatchTotal: goodsAdjustments !== null && selectedTotal ? goodsAdjustments === selectedTotal.value : null }, warnings };
 }
