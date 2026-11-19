@@ -27,6 +27,7 @@ const files = (await readdir(dir)).filter(f => f.endsWith('.sql')).sort();
 // Imported historical files are already deployed and immutable. Only these exact bytes
 // may rely on the ordered forward repair; do not extend the old baseline.
 const repairedHistoricalFiles = new Map([
+  ['20261114025150_transaction_evidence.sql', '34ad706fccee4f6841e452530d6674602503ae1bb8442e1a5cdae532929e3d8b'],
   ['20261103180000_home_alert_undo.sql', '8636739a331c03b2475150028edbdea5569696468c12f74c3927c9c4faaca1ad'],
   ['20261117150000_role_model_core.sql', '36f6f4fbc11eb397599d7be37053542dc05e8e18e19410962a30be0413bedc4d'],
   ['20261117160000_store_visibility.sql', '31d14a9ebf79314f1f92e50cecb1c93560ed1014876d5db1e71805d5047851a7'],
