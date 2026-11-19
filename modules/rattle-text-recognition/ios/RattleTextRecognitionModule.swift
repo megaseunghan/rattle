@@ -156,7 +156,8 @@ private final class ReceiptPickerDelegate: NSObject, PHPickerViewControllerDeleg
         do {
           // Copy inside the provider callback, before its temporary URL expires; no re-encoding.
           try FileManager.default.copyItem(at: url, to: destination)
-          try FileManager.default.setAttributes([.protectionKey: FileProtectionType.complete], ofItemAtPath: destination.path)
+          // Retention age belongs to this temporary copy, not the original photograph.
+          try FileManager.default.setAttributes([.protectionKey: FileProtectionType.complete, .modificationDate: Date()], ofItemAtPath: destination.path)
           lock.lock()
           images[index] = ["uri": destination.absoluteString, "fileName": result.itemProvider.suggestedName ?? url.lastPathComponent]
           lock.unlock()
