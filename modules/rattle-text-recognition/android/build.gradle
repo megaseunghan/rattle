@@ -1,0 +1,21 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'expo.modules.rattletextrecognition'
+version = '1.0.0'
+
+android {
+  namespace 'expo.modules.rattletextrecognition'
+  defaultConfig {
+    versionCode 1
+    versionName "1.0.0"
+    testInstrumentationRunner 'expo.modules.rattletextrecognition.ReceiptBenchmark'
+  }
+}
+
+dependencies {
+  // Bundled Korean model: recognition works without a Play Services model download.
+  implementation 'com.google.mlkit:text-recognition-korean:16.0.1'
+}
