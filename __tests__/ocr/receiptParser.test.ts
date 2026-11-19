@@ -14,12 +14,13 @@ describe('영수증 규칙 파서', () => {
     expect(extractMoney('12.300 / 24, 600 / 0원 / -1,000')).toEqual([12300, 24600, 0, -1000]);
     expect(extractMoney('2.28 / 2026-11-19')).toEqual([]);
   });
-  it('같은 높이 셀을 묶고 금일합계를 우선하며 전일·미수잔액을 제외한다', () => {
+  it('같은 높이 셀을 묶고 금일합계 후보를 우선하며 검산 없는 복수 합계를 확정하지 않는다', () => {
     const parsed = parseReceipt([...row('총합계', '99,000', .1), ...row('금일합계', '15.000', .3), ...row('전일잔액 합계', '600,000', .5), ...row('미수잔액', '800,000', .7)], 'synthetic');
-    expect(parsed.selectedTotal?.value).toBe(15000);
+    expect(parsed.selectedTotal).toBeNull();
+    expect(parsed.suggestedTotal).toBeNull();
     expect(parsed.totalCandidates.map(c => c.value)).toEqual([15000, 99000]);
     expect(parsed.amounts.balance?.value).toBe(600000);
-    expect(parsed.selectedTotal?.sourceImageId).toBe('synthetic');
+    expect(parsed.totalCandidates[0].sourceImageId).toBe('synthetic');
   });
   it('합계 라벨 아래 다른 행의 미수금 숫자를 연결하지 않는다', () => {
     const parsed = parseReceipt([line('총계', .1, .2), ...row('미수잔액', '900,000', .23)]);
@@ -66,15 +67,16 @@ describe('영수증 규칙 파서', () => {
     const empty = parseReceipt([]);
     expect(empty.selectedTotal).toBeNull(); expect(empty.checks.itemSum).toBeNull();
     const result = parseReceipt([{ ...line('금일합계 4,000'), confidence: null }]);
-    expect(result.selectedTotal?.ocrConfidence).toBeNull();
-    expect(result.selectedTotal?.value).toBe(4000);
+    expect(result.suggestedTotal?.ocrConfidence).toBeNull();
+    expect(result.selectedTotal).toBeNull();
+    expect(result.suggestedTotal?.value).toBe(4000);
   });
   it('회전 보정은 복사본에서 수행해 원문 좌표를 보존한다', () => {
     const input = [line('금일합계 7,000', .2, .1, .02, .5)];
     const snapshot = JSON.stringify(input);
     const result = parseReceipt(input);
     expect(result.rotated).toBe(true);
-    expect(result.selectedTotal?.sourceBoxes).toEqual([input[0].box]);
+    expect(result.suggestedTotal?.sourceBoxes).toEqual([input[0].box]);
     expect(JSON.stringify(input)).toBe(snapshot);
   });
   it('동일 우선순위의 복수 합계는 경고한다', () => {
@@ -114,7 +116,7 @@ describe('OCR 독립 검토 1회차 회귀', () => {
   });
   it.each(['- 5,000', '−5,000', '－ 5,000', '(5,000)', '( 5,000원 )'])('OCR-R2: 반품 %s의 음수를 유지한다', value => {
     expect(extractMoney(value)).toEqual([-5000]);
-    expect(parseReceipt(row('금일합계', value, .1)).selectedTotal?.value).toBe(-5000);
+    expect(parseReceipt(row('금일합계', value, .1)).suggestedTotal?.value).toBe(-5000);
   });
   it.each(['--5,000', '+-5,000', '(5,000', '5,000)', '(+5,000)', '5,000-'])('OCR-R2: 모호한 부호 %s를 양수로 확정하지 않는다', value => {
     expect(extractMoney(value)).toEqual([]);
@@ -122,7 +124,9 @@ describe('OCR 독립 검토 1회차 회귀', () => {
   });
   it('OCR-R2: 별도 OCR 셀로 떨어진 마이너스와 할인 음수를 보존한다', () => {
     const result = parseReceipt([line('금일합계', .1), line('−', .6, .1, .03), line('5,000', .75, .1, .15), ...row('할인', '- 1,000', .3)]);
-    expect(result.selectedTotal?.value).toBe(-5000);
+    expect(result.totalCandidates[0].value).toBe(-5000);
+    expect(result.selectedTotal).toBeNull();
+    expect(result.suggestedTotal).toBeNull();
     expect(result.amounts.discount?.value).toBe(-1000);
   });
   it.each(['배송비', '할인'])('OCR-R3: %s 라벨이 있지만 금액을 못 읽으면 검산을 중단한다', label => {
@@ -138,11 +142,11 @@ describe('OCR 독립 검토 1회차 회귀', () => {
     expect(zero.checks.goodsAdjustmentsMatchTotal).toBe(true);
   });
   it.each([0, 50, 500, 999])('OCR-R6: 한 셀 안의 작은 합계 %s원을 읽는다', value => {
-    expect(parseReceipt([line(`금일합계 ${value}`)]).selectedTotal?.value).toBe(value);
+    expect(parseReceipt([line(`금일합계 ${value}`)]).suggestedTotal?.value).toBe(value);
   });
 });
 it.each(['합계 - 500', '총계 − 500', '합계 (500)', '총계 ‐500', '총계 ‑500'])('OCR-R2/R6: 일반 합계 라벨의 작은 음수 %s도 보존한다', text => {
-  expect(parseReceipt([line(text)]).selectedTotal?.value).toBe(-500);
+  expect(parseReceipt([line(text)]).suggestedTotal?.value).toBe(-500);
 });
 it.each(['5,000 -', '5,000 + ', '(5,000) -'])('OCR-R2: 금액 뒤에 떨어진 부호 %s는 미확정이다', value => {
   expect(extractMoney(value)).toEqual([]);
@@ -169,9 +173,11 @@ describe('OCR-R7: 상품 소계와 결제액의 비교 범위', () => {
     expect(parsed.selectedTotal?.value).toBe(25000);
     expect(parsed.warnings.some(w => w.includes('충돌'))).toBe(false);
   });
-  it('배송비 읽기 실패는 0원으로 비교하지 않고 명시 결제액과 경고를 보존한다', () => {
+  it('배송비 읽기 실패는 0원으로 비교하지 않고 명시 후보·경고만 보존한다', () => {
     const parsed = parseReceipt([...base(), line('배송비', .1, .4), ...row('결제금액', '25,000', .7)]);
-    expect(parsed.selectedTotal?.value).toBe(25000);
+    expect(parsed.selectedTotal).toBeNull();
+    expect(parsed.suggestedTotal).toBeNull();
+    expect(parsed.totalCandidates.some(c => c.value === 25000)).toBe(true);
     expect(parsed.checks.goodsAdjustmentsMatchTotal).toBeNull();
     expect(parsed.warnings.some(w => w.includes('배송비') && w.includes('읽지 못'))).toBe(true);
   });

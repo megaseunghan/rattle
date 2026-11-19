@@ -12,7 +12,10 @@ jest.mock('expo-router', () => ({ router: { back: jest.fn() } }));
 jest.mock('../../modules/rattle-text-recognition', () => ({ getTextRecognitionModule: jest.fn(), recognizeText: jest.fn() }));
 const mockPick = jest.fn(), mockRelease = jest.fn(), mockShare = jest.fn(), mockCleanup = jest.fn();
 const access = { user: { id: 'synthetic-user' }, store: { id: 'synthetic-store' }, canManageStore: true, permissionsReady: true, devPreviewMode: 'self', permissionRevision: 1 };
-const recognition = { engine: 'apple-vision', elapsedMs: 12, lines: [{ text: '금일합계 8,000', confidence: .9, box: { x: .1, y: .1, w: .4, h: .05 } }] };
+const recognition = { engine: 'apple-vision', elapsedMs: 12, lines: [
+  { text: '금일합계 8,000', confidence: .9, box: { x: .1, y: .3, w: .4, h: .05 } },
+  { text: '상품금액 8,000', confidence: .9, box: { x: .1, y: .1, w: .4, h: .05 } },
+] };
 beforeEach(() => {
   jest.clearAllMocks();
   Object.defineProperty(Platform, 'OS', { configurable: true, value: 'ios' });
@@ -36,7 +39,7 @@ it('사진을 인식하고 원문·합계·시간을 표시한 뒤 임시 사본
   const screen = render(<OcrLabScreen />);
   fireEvent.press(screen.getByText('사진 선택'));
   await waitFor(() => expect(screen.getByText('선택 합계 8,000원')).toBeTruthy());
-  expect(screen.getByText('apple-vision · 12 ms · 1줄')).toBeTruthy();
+  expect(screen.getByText('apple-vision · 12 ms · 2줄')).toBeTruthy();
   expect(recognizeText).toHaveBeenCalledWith('file:///synthetic.jpg');
   await waitFor(() => expect(mockRelease).toHaveBeenCalledWith(['file:///synthetic.jpg']));
 });

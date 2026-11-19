@@ -9,26 +9,31 @@ describe('OCR 엔진 분할 차이 · 합성 원문만 사용', () => {
       : [cell('상품명', .2, .25), cell('단 가 금 액', .68, .237, .22)];
     const input = [...header, cell('안내', .1, .405), cell('금일합계', .55, .396), cell('31,450', .84, .389),
       cell('전일잔액', .55, .42), cell('700,000', .84, .413)];
-    expect(parseReceipt(input).selectedTotal?.value).toBe(31450);
+    const parsed = parseReceipt(input);
+    expect(parsed.totalCandidates[0].value).toBe(31450);
+    expect(parsed.selectedTotal).toBeNull();
+    expect(parsed.suggestedTotal).toBeNull();
   });
   it('띄어진 합·계·금·액 라벨을 합치되 출처 상자는 원본 그대로 보관한다', () => {
     const input = [cell('합', .1, .2, .02), cell('계', .14, .2, .02), cell('금', .18, .2, .02), cell('액', .22, .2, .02), cell('48,620', .7, .2)];
     const parsed = parseReceipt(input, 'synthetic');
-    expect(parsed.selectedTotal?.value).toBe(48620);
-    expect(parsed.selectedTotal?.rawText).toBe('합 계 금 액 48,620');
-    expect(parsed.selectedTotal?.sourceBoxes).toEqual(expect.arrayContaining(input.map(l => l.box)));
+    expect(parsed.suggestedTotal?.value).toBe(48620);
+    expect(parsed.suggestedTotal?.rawText).toBe('합 계 금 액 48,620');
+    expect(parsed.suggestedTotal?.sourceBoxes).toEqual(expect.arrayContaining(input.map(l => l.box)));
   });
   it.each(['총 87,650원', '가상카드/일시불 87,650 원', '가상카드/일시물 87,650 원'])('결제 값에 합쳐진 주석 %s를 분리한다', text => {
-    expect(parseReceipt([cell('총 결제금액', .1, .2), cell(text, .5, .2, .4)]).selectedTotal?.value).toBe(87650);
+    expect(parseReceipt([cell('총 결제금액', .1, .2), cell(text, .5, .2, .4)]).suggestedTotal?.value).toBe(87650);
   });
   it('별도 또는 같은 값 셀의 인수 표시는 금액에 합치지 않는다', () => {
-    expect(parseReceipt([cell('총합계', .1, .2), cell('48,620 인수', .6, .2, .25)]).selectedTotal?.value).toBe(48620);
+    expect(parseReceipt([cell('총합계', .1, .2), cell('48,620 인수', .6, .2, .25)]).suggestedTotal?.value).toBe(48620);
   });
-  it('명시 합계의 공백 천단위는 금액 열 경계가 있을 때 확인 경고와 함께 해석한다', () => {
+  it('명시 합계의 공백 천단위는 금액 열에 있어도 검산 없이는 후보만 남긴다', () => {
     const parsed = parseReceipt([cell('품목명', .1, .1), cell('수량', .5, .1), cell('금액', .7, .1),
       cell('금일합계', .1, .2), cell('38 760', .7, .2)]);
-    expect(parsed.selectedTotal?.value).toBe(38760);
-    expect(parsed.selectedTotal?.source).toBe('derived');
+    expect(parsed.selectedTotal).toBeNull();
+    expect(parsed.suggestedTotal).toBeNull();
+    expect(parsed.totalCandidates[0].value).toBe(38760);
+    expect(parsed.totalCandidates[0].source).toBe('derived');
     expect(parsed.warnings.some(w => w.includes('공백'))).toBe(true);
   });
   it('서로 다른 숫자 셀을 공백 천단위로 합치지 않는다', () => {
