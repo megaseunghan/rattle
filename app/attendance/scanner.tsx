@@ -1,5 +1,5 @@
 import { Component, ComponentType, ReactNode, useEffect, useRef, useState } from 'react';
-import { AccessibilityInfo, AppState, Linking, Modal, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { AccessibilityInfo, ActivityIndicator, Animated, AppState, Platform, Linking, Modal, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 import { useKeepAwake } from 'expo-keep-awake';
@@ -8,7 +8,11 @@ import { Colors } from '../../constants/colors';
 import { Fonts } from '../../constants/fonts';
 import { Radius, Spacing, Type } from '../../constants/designTokens';
 import { useAttendanceScanner } from '../../lib/hooks/useAttendanceScanner';
+import * as Haptics from 'expo-haptics';
+import { useReducedTransparency } from '../../lib/hooks/useReducedTransparency';
 import { LoadingSpinner } from '../../lib/components/LoadingSpinner';
+
+const QR_ABSENCE_MS = 1200;
 
 class CameraBoundary extends Component<{ children: ReactNode; fallback: ReactNode }, { failed: boolean }> {
   state = { failed: false };
@@ -18,7 +22,7 @@ class CameraBoundary extends Component<{ children: ReactNode; fallback: ReactNod
 export function CameraSurface({ onScan, enabled, onAvailability }: { onScan: (data: string) => void; enabled: boolean; onAvailability: (ready: boolean) => void }) {
   const [camera, setCamera] = useState<ComponentType<CameraViewProps> | null>(null);
   const [status, setStatus] = useState('loading'); const [active, setActive] = useState(AppState.currentState === 'active');
-  useEffect(() => { onAvailability(status === 'ready'); }, [status, onAvailability]);
+  useEffect(() => { onAvailability(active && status === 'ready'); }, [active, status, onAvailability]);
   const current = useRef(false), permissionRequest = useRef(0);
   async function readPermission(request = false) {
     const version = ++permissionRequest.current;
@@ -52,35 +56,98 @@ export default function AttendanceScannerScreen() {
   const scanner = useAttendanceScanner(); const insets = useSafeAreaInsets(); const { width, height } = useWindowDimensions();
   const [recovery, setRecovery] = useState(false);
   const [cameraReady, setCameraReady] = useState(false);
-  const [cooldown, setCooldown] = useState(false);
-  const [reader, setReader] = useState(true);
-  useEffect(() => { let alive = true; void AccessibilityInfo.isScreenReaderEnabled().then(value => { if (alive) setReader(value); }).catch(() => {}); const listener = AccessibilityInfo.addEventListener('screenReaderChanged', setReader); return () => { alive = false; listener.remove(); }; }, []);
+  const [reader, setReader] = useState(false);
+  const [reduceMotion, setReduceMotion] = useState(true);
+  const reduceTransparency = useReducedTransparency();
+  const staticFrame = reduceMotion || (Platform.OS === 'ios' && reduceTransparency);
+  const opacity = useRef(new Animated.Value(1)).current;
+  const lastDetection = useRef({ qr: '', time: 0 });
+  const success = scanner.state === 'saved' || scanner.state === 'registered';
+  const failed = scanner.state === 'scanFailed' || scanner.state === 'wrongQr';
+  const processing = scanner.state === 'processing' || scanner.state === 'pairing';
+  const result = success || failed || scanner.state === 'unknown';
+  const waitingForQr = !processing && !result && scanner.canScan;
+  const frameColor = success ? Colors.success : failed ? Colors.danger
+    : processing ? Colors.light : scanner.state === 'unknown' ? Colors.warning : Colors.white;
+
   useEffect(() => {
-    // A status change or screen-reader activation can cancel the saved timer early.
-    // Release the scan gate on those paths as well as normal timer completion.
-    if (scanner.state !== 'saved' || reader) { setCooldown(false); return; }
-    setCooldown(true);
-    const timer = setTimeout(() => { setCooldown(false); scanner.clearNotice(); }, 4000);
+    let alive = true, motionChanged = false, readerChanged = false;
+    const motion = AccessibilityInfo.addEventListener('reduceMotionChanged', value => {
+      motionChanged = true; setReduceMotion(value);
+    });
+    const readerListener = AccessibilityInfo.addEventListener('screenReaderChanged', value => {
+      readerChanged = true; setReader(value);
+    });
+    void AccessibilityInfo.isReduceMotionEnabled().then(value => {
+      if (alive && !motionChanged) setReduceMotion(value);
+    }).catch(() => {});
+    void AccessibilityInfo.isScreenReaderEnabled().then(value => {
+      if (alive && !readerChanged) setReader(value);
+    }).catch(() => {});
+    return () => { alive = false; motion.remove(); readerListener.remove(); };
+  }, []);
+  useEffect(() => {
+    if (!cameraReady || !result || reader) return;
+    const displayUntil = Date.now() + (success ? 3000 : 4000);
+    let timer: ReturnType<typeof setTimeout>;
+    function releaseWhenClear() {
+      // Expo throttles repeated detections for 500 ms. Allow several frames to go missing.
+      const remaining = Math.max(displayUntil, lastDetection.current.time + QR_ABSENCE_MS) - Date.now();
+      if (remaining > 0) timer = setTimeout(releaseWhenClear, remaining);
+      else scanner.clearNotice();
+    }
+    releaseWhenClear();
     return () => clearTimeout(timer);
-  }, [scanner.state, scanner.time, reader, scanner.clearNotice]);
+  }, [cameraReady, result, success, reader, scanner.clearNotice, scanner.notice]);
+  useEffect(() => {
+    if (success || failed) {
+      const feedback = success ? Haptics.NotificationFeedbackType.Success : Haptics.NotificationFeedbackType.Error;
+      void Haptics.notificationAsync(feedback).catch(() => {});
+    }
+  }, [success, failed, scanner.notice]);
+  useEffect(() => {
+    opacity.setValue(1);
+    if (!cameraReady || staticFrame || (!waitingForQr && !success)) return;
+    const fade = (toValue: number, duration: number) =>
+      Animated.timing(opacity, { toValue, duration, useNativeDriver: true, isInteraction: false });
+    const animation = waitingForQr
+      ? Animated.loop(Animated.sequence([fade(0.6, 900), fade(1, 900)]))
+      : fade(1, 220);
+    if (success) opacity.setValue(0.4);
+    animation.start();
+    return () => animation.stop();
+  }, [cameraReady, staticFrame, waitingForQr, success, opacity]);
+  function detect(qr: string) {
+    const previous = lastDetection.current;
+    const now = Date.now();
+    lastDetection.current = { qr, time: now };
+    if (!scanner.canScan || (result && !reader)) return;
+    if (reader && result && previous.qr === qr && now - previous.time < QR_ABSENCE_MS) return;
+    void scanner.scan(qr, reader);
+  }
   const size = Math.min(width - 80, 280, height * 0.32), top = Math.max(insets.top + 86, height * 0.19);
   const path = 'M1 60V20Q1 1 20 1H60M220 1H260Q279 1 279 20V60M279 220V260Q279 279 260 279H220M60 279H20Q1 279 1 260V220';
   return <View style={s.root}>
-    {<CameraSurface onAvailability={setCameraReady} enabled={!cooldown && scanner.canScan} onScan={data => { void scanner.scan(data); }} />}
-    {cameraReady && <View pointerEvents="none" style={{ position: 'absolute', width: size, height: size, left: (width - size) / 2, top }}><Svg width="100%" height="100%" viewBox="0 0 280 280"><Path d={path} stroke={Colors.black} strokeWidth={4} fill="none" /><Path d={path} stroke={Colors.white} strokeWidth={2} fill="none" /></Svg></View>}
-    {cameraReady && <Text pointerEvents="none" style={[s.caption, { top: top + size + 20 }]}>{scanner.state === 'processing' ? 'QR을 잠시 그대로 보여주세요' : scanner.state === 'unknown' ? '같은 QR이나 다음 직원 QR을 보여주세요' : scanner.ready ? '직원 QR을 스캔해주세요' : '관리자 앱의 등록 QR을 찍어주세요'}</Text>}
-    {cameraReady && scanner.title && <View style={[s.noticeZone, { top: top + size + 60, bottom: insets.bottom + 84 }]}><View style={s.notice} accessibilityLiveRegion="polite"><Text style={s.whiteTitle}>{scanner.title}</Text>{!!scanner.time && <Text style={s.time}>{scanner.time}</Text>}<Text style={s.whiteBody}>{scanner.body}</Text>
+    <CameraSurface onAvailability={setCameraReady} enabled onScan={detect} />
+    {cameraReady && <Animated.View pointerEvents="none" style={{ opacity, alignItems: 'center', justifyContent: 'center', position: 'absolute', width: size, height: size, left: (width - size) / 2, top }}><Svg style={StyleSheet.absoluteFill} width="100%" height="100%" viewBox="0 0 280 280"><Path d={path} stroke={Colors.black} strokeWidth={4} fill="none" /><Path d={path} stroke={frameColor} strokeWidth={processing || result ? 5 : 3} fill="none" /></Svg>
+      {processing && <ActivityIndicator size="large" color={Colors.white} />}
+      {(success || failed) && <Text accessible={false} style={[s.symbol, { color: frameColor }]}>{success ? '✓' : '!'}</Text>}
+    </Animated.View>}
+    {cameraReady && <Text pointerEvents="none" style={[s.caption, { top: top + size + 20 }]}>{processing ? 'QR을 인식했어요' : result ? 'QR을 화면 밖으로 옮겨주세요' : scanner.ready ? '직원 QR을 스캔해주세요' : '관리자 앱의 등록 QR을 찍어주세요'}</Text>}
+    {cameraReady && !!scanner.title && <View style={[s.noticeZone, { top: top + size + 60, bottom: insets.bottom + 84 }]}><View style={s.notice} accessibilityLiveRegion="polite"><Text style={[s.whiteTitle, success && s.receipt]}>{scanner.title}</Text>{!!scanner.time && <Text style={s.time}>{scanner.time}</Text>}{!!scanner.body && <Text style={s.whiteBody}>{scanner.body}</Text>}
       {['error', 'unknownSetup'].includes(scanner.state) && <Pressable accessibilityRole="button" style={s.action} onPress={() => { void scanner.refresh(); }}><Text style={s.whiteBody}>다시 확인</Text></Pressable>}
       {scanner.state === 'unknownSetup' && <Pressable accessibilityRole="button" style={s.action} onPress={() => setRecovery(true)}><Text style={s.whiteBody}>새 등록 준비하기</Text></Pressable>}
     </View></View>}
     {!!scanner.unresolvedCount && <View style={[s.unresolved, { bottom: insets.bottom + 12 }]} accessibilityLiveRegion="polite"><Text style={s.whiteBody}>확인할 기록 {scanner.unresolvedCount}건이 있어요</Text><Text style={s.whiteBody}>해당 직원 휴대폰에서 기록을 확인해주세요</Text></View>}
-    <Modal visible={recovery} transparent animationType="fade" onRequestClose={() => setRecovery(false)}><View style={s.shade}><View style={s.recoveryCard} accessibilityViewIsModal><Text style={s.recoveryTitle}>관리자 앱에서 확인했나요?</Text><Text style={s.recoveryBody}>등록돼 있다면 먼저 해제해주세요. 그다음 관리자 앱에서 새 등록 QR을 받아주세요.</Text><View style={s.actions}><Pressable accessibilityRole="button" style={s.action} onPress={() => setRecovery(false)}><Text style={s.recoveryAction}>닫기</Text></Pressable><Pressable accessibilityRole="button" style={s.action} onPress={() => { setRecovery(false); void scanner.confirmRegistrationRecovery(); }}><Text style={s.recoveryAction}>새 QR 찍기</Text></Pressable></View></View></View></Modal>
+    <Modal visible={recovery} transparent animationType={staticFrame ? 'none' : 'fade'} onRequestClose={() => setRecovery(false)}><View style={s.shade}><View style={s.recoveryCard} accessibilityViewIsModal><Text style={s.recoveryTitle}>관리자 앱에서 확인했나요?</Text><Text style={s.recoveryBody}>등록돼 있다면 먼저 해제해주세요. 그다음 관리자 앱에서 새 등록 QR을 받아주세요.</Text><View style={s.actions}><Pressable accessibilityRole="button" style={s.action} onPress={() => setRecovery(false)}><Text style={s.recoveryAction}>닫기</Text></Pressable><Pressable accessibilityRole="button" style={s.action} onPress={() => { setRecovery(false); void scanner.confirmRegistrationRecovery(); }}><Text style={s.recoveryAction}>새 QR 찍기</Text></Pressable></View></View></View></Modal>
   </View>;
 }
 const s = StyleSheet.create({
+  symbol: { fontSize: 42, fontFamily: Fonts.wantedSemiBold, backgroundColor: Colors.black, borderRadius: 32, width: 64, lineHeight: 64, textAlign: 'center', overflow: 'hidden' },
+  receipt: { fontSize: 24, lineHeight: 32 },
   unresolved: { position: 'absolute', left: 20, right: 20, alignItems: 'center' },
   shade: { flex: 1, justifyContent: 'center', padding: Spacing.screenX, backgroundColor: Colors.overlayDetail }, recoveryCard: { padding: Spacing.screenX, gap: 16, borderRadius: Radius.xl, backgroundColor: Colors.white }, recoveryTitle: { fontFamily: Fonts.wantedSemiBold, fontSize: Type.lg, color: Colors.black }, recoveryBody: { fontFamily: Fonts.wantedRegular, fontSize: Type.base, lineHeight: 22, color: Colors.gray600 }, recoveryAction: { color: Colors.action, fontFamily: Fonts.wantedMedium, fontSize: Type.base }, actions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 12 },
   root: { flex: 1, backgroundColor: Colors.black },
-  caption: { position: 'absolute', left: 20, right: 20, textAlign: 'center', fontFamily: Fonts.wantedMedium, fontSize: Type.lg, color: Colors.white }, noticeZone: { position: 'absolute', left: 20, right: 20, justifyContent: 'center' }, notice: { backgroundColor: Colors.overlayDetail, borderRadius: Radius.xl, padding: Spacing.screenX, gap: 8, alignItems: 'center' },
+  caption: { position: 'absolute', left: 20, right: 20, textAlign: 'center', fontFamily: Fonts.wantedMedium, fontSize: Type.lg, color: Colors.white }, noticeZone: { position: 'absolute', left: 20, right: 20, justifyContent: 'center' }, notice: { backgroundColor: Colors.gray900, borderRadius: Radius.xl, padding: Spacing.screenX, gap: 8, alignItems: 'center' },
   whiteTitle: { fontFamily: Fonts.wantedSemiBold, fontSize: Type.lg, lineHeight: 26, textAlign: 'center', color: Colors.white }, whiteBody: { fontFamily: Fonts.wantedRegular, fontSize: Type.base, lineHeight: 22, textAlign: 'center', color: Colors.white }, time: { fontFamily: Fonts.geistMedium, fontSize: 24, color: Colors.white }, action: { minHeight: 44, paddingHorizontal: 16, alignItems: 'center', justifyContent: 'center' },
   cameraFallback: { ...StyleSheet.absoluteFillObject, justifyContent: 'center', padding: 32, gap: 12 } });

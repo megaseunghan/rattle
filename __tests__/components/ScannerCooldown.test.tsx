@@ -1,5 +1,5 @@
 import { act, fireEvent, render } from '@testing-library/react-native';
-import { AccessibilityInfo, AppState, type AppStateStatus } from 'react-native';
+import { AccessibilityInfo, Animated, AppState, type AppStateStatus } from 'react-native';
 import AttendanceScannerScreen from '../../app/attendance/scanner';
 import * as Enrollment from '../../lib/services/attendanceScannerEnrollment';
 
@@ -7,6 +7,7 @@ jest.mock('../../lib/services/attendanceScannerEnrollment', () => ({
   loadStoredAttendanceScannerRegistration: jest.fn(), scannerStatus: jest.fn(), scan: jest.fn(),
   exchangeAndStoreAttendanceScannerPairingQr: jest.fn(),
 }));
+jest.mock('expo-haptics', () => ({ notificationAsync: jest.fn().mockResolvedValue(undefined), NotificationFeedbackType: { Success: 'success', Error: 'error' } }));
 jest.mock('expo-camera', () => ({
   Camera: { getCameraPermissionsAsync: jest.fn().mockResolvedValue({ granted: true }) },
   CameraView: (props: object) => require('react').createElement(require('react-native').View, { ...props, testID: 'camera' }),
@@ -23,9 +24,10 @@ beforeEach(() => {
   Object.defineProperty(AppState, 'currentState', { configurable: true, value: 'active' });
   jest.spyOn(AppState, 'addEventListener').mockImplementation((_, listener) => { listeners.add(listener); return { remove: () => { listeners.delete(listener); } }; });
   jest.spyOn(AccessibilityInfo, 'isScreenReaderEnabled').mockResolvedValue(false);
-  // React Native overloads this API; this screen subscribes only to the boolean reader event.
-  jest.spyOn(AccessibilityInfo, 'addEventListener').mockImplementation(((_: string, listener: (enabled: boolean) => void) => {
-    readerChanged = listener; return { remove: jest.fn() };
+  jest.spyOn(AccessibilityInfo, 'isReduceMotionEnabled').mockResolvedValue(true);
+  jest.spyOn(AccessibilityInfo, 'isReduceTransparencyEnabled').mockResolvedValue(false);
+  jest.spyOn(AccessibilityInfo, 'addEventListener').mockImplementation(((event: string, listener: (enabled: boolean) => void) => {
+    if (event === 'screenReaderChanged') readerChanged = listener; return { remove: jest.fn() };
   }) as unknown as typeof AccessibilityInfo.addEventListener);
   (Enrollment.loadStoredAttendanceScannerRegistration as jest.Mock).mockResolvedValue(registration);
   (Enrollment.scannerStatus as jest.Mock).mockResolvedValue(statusOk);
@@ -40,7 +42,7 @@ async function successfulPunch() {
   await act(async () => { fireEvent(view.getByTestId('camera'), 'barcodeScanned', { data: 'employee-A' }); });
   expect(Enrollment.scan).toHaveBeenCalledWith('employee-A', undefined);
   expect(view.getByText('가상 직원님, 출근했어요')).toBeTruthy();
-  expect(view.getByTestId('camera').props.onBarcodeScanned).toBeUndefined();
+  expect(Enrollment.scan).toHaveBeenCalledTimes(1);
   return view;
 }
 async function refreshStatus() { await act(async () => { listeners.forEach(listener => listener('active')); }); }
@@ -71,4 +73,78 @@ it('saved 중 스크린리더가 켜지면 안내는 남기고 다음 QR 스캔�
   expect(view.getByText('가상 직원님, 출근했어요')).toBeTruthy();
   await act(async () => { fireEvent(view.getByTestId('camera'), 'barcodeScanned', { data: 'employee-B' }); });
   expect(Enrollment.scan).toHaveBeenLastCalledWith('employee-B', undefined);
+});
+
+const pairingQr = 'rattle-scanner:v1.test-registration';
+const employeeQr = 'rattle-punch:v1.test-employee';
+type ScannerView = ReturnType<typeof render>;
+async function detect(view: ScannerView, data: string) {
+  await act(async () => { fireEvent(view.getByTestId('camera'), 'barcodeScanned', { data }); });
+}
+async function advance(ms: number) {
+  await act(async () => { jest.advanceTimersByTime(ms); });
+}
+it('결과 시간과 QR 미검출이 모두 충족되어야 새 직원 QR을 처리한다', async () => {
+  const view = await successfulPunch();
+  await advance(2000);
+  await detect(view, 'employee-B');
+  await advance(900);
+  await detect(view, 'employee-A');
+  await advance(1199);
+  expect(view.getByText('가상 직원님, 출근했어요')).toBeTruthy();
+  expect(Enrollment.scan).toHaveBeenCalledTimes(1);
+  await advance(1);
+  expect(view.queryByText('가상 직원님, 출근했어요')).toBeNull();
+  await detect(view, 'employee-A');
+  expect(Enrollment.scan).toHaveBeenCalledTimes(1);
+  await detect(view, 'employee-B');
+  expect(Enrollment.scan).toHaveBeenCalledTimes(2);
+});
+it('등록 QR을 계속 대면 등록 성공을 유지하고 다시 비추면 한 번만 안내한다', async () => {
+  (Enrollment.loadStoredAttendanceScannerRegistration as jest.Mock).mockResolvedValue(null);
+  const view = render(<AttendanceScannerScreen />);
+  await act(async () => {});
+  await detect(view, pairingQr);
+  for (let i = 0; i < 8; i++) { await advance(500); await detect(view, pairingQr); }
+  expect(view.getByText('매장폰을 등록했어요')).toBeTruthy();
+  await advance(1200);
+  await detect(view, pairingQr);
+  expect(view.getByText('이미 등록된 매장폰이에요')).toBeTruthy();
+  await advance(3999);
+  expect(view.getByText('이미 등록된 매장폰이에요')).toBeTruthy();
+  await advance(1);
+  await detect(view, pairingQr);
+  expect(view.queryByText('이미 등록된 매장폰이에요')).toBeNull();
+  expect(Enrollment.exchangeAndStoreAttendanceScannerPairingQr).toHaveBeenCalledTimes(1);
+  expect(Enrollment.scan).not.toHaveBeenCalled();
+});
+it('미등록 매장폰에 직원 QR을 보여주면 등록 방법을 안내한다', async () => {
+  (Enrollment.loadStoredAttendanceScannerRegistration as jest.Mock).mockResolvedValue(null);
+  const view = render(<AttendanceScannerScreen />);
+  await act(async () => {});
+  await detect(view, employeeQr);
+  expect(view.getByText('먼저 매장폰을 등록해주세요')).toBeTruthy();
+  expect(Enrollment.exchangeAndStoreAttendanceScannerPairingQr).not.toHaveBeenCalled();
+  expect(Enrollment.scan).not.toHaveBeenCalled();
+});
+it.each([[true, false], [false, true]])('동작 줄이기 %s 또는 투명도 줄이기 %s이면 프레임은 정적으로 유지한다', async (motion, transparency) => {
+  jest.spyOn(AccessibilityInfo, 'isReduceMotionEnabled').mockResolvedValue(motion);
+  jest.spyOn(AccessibilityInfo, 'isReduceTransparencyEnabled').mockResolvedValue(transparency);
+  const timing = jest.spyOn(Animated, 'timing');
+  await successfulPunch();
+  expect(timing).not.toHaveBeenCalled();
+});
+
+it('서버 응답을 기다리는 동안 중복 검출과 다음 직원 검출을 모두 무시한다', async () => {
+  let finish!: (value: typeof receipt) => void;
+  (Enrollment.scan as jest.Mock).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+  const view = render(<AttendanceScannerScreen />);
+  await act(async () => {});
+  await detect(view, employeeQr);
+  expect(view.getByText('확인하고 있어요')).toBeTruthy();
+  await detect(view, employeeQr);
+  await detect(view, 'employee-B');
+  expect(Enrollment.scan).toHaveBeenCalledTimes(1);
+  await act(async () => { finish(receipt); });
+  expect(view.getByText('가상 직원님, 출근했어요')).toBeTruthy();
 });

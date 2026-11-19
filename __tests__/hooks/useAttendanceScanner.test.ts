@@ -18,15 +18,15 @@ it('A 결과불명을 보존하면서 B를 기록하고 A의 같은 QR에는 이
   const api = service(); (api.scan as jest.Mock).mockResolvedValueOnce(unknown).mockResolvedValueOnce(receipt).mockResolvedValueOnce({ ...receipt, data: { ...receipt.data, duplicate: true } });
   const { result } = renderHook(() => useAttendanceScanner(api)); await waitFor(() => expect(result.current.ready).toBe(true));
   await act(async () => { await result.current.scan('A'); }); expect(result.current.state).toBe('unknown'); expect(result.current.unresolvedCount).toBe(1);
-  await act(async () => { await result.current.scan('B'); }); expect(api.scan).toHaveBeenLastCalledWith('B', undefined); expect(result.current.unresolvedCount).toBe(1);
-  await act(async () => { await result.current.scan('A'); }); expect(api.scan).toHaveBeenLastCalledWith('A', 'unknown'); expect(result.current.unresolvedCount).toBe(0);
+  await act(async () => { result.current.clearNotice(); await result.current.scan('B'); }); expect(api.scan).toHaveBeenLastCalledWith('B', undefined); expect(result.current.unresolvedCount).toBe(1);
+  await act(async () => { result.current.clearNotice(); await result.current.scan('A'); }); expect(api.scan).toHaveBeenLastCalledWith('A', 'unknown'); expect(result.current.unresolvedCount).toBe(0);
 });
 it('A의 QR 만료 거절이 이전 결과를 실패로 확정하지 않고 B는 계속 받는다', async () => {
   const api = service(); (api.scan as jest.Mock).mockResolvedValueOnce(unknown).mockResolvedValueOnce({ status: 'server_rejected', error: { code: 'ATTENDANCE_QR_EXPIRED' } }).mockResolvedValue(receipt);
   const { result } = renderHook(() => useAttendanceScanner(api)); await waitFor(() => expect(result.current.ready).toBe(true));
-  await act(async () => { await result.current.scan('A'); await result.current.scan('A'); });
+  await act(async () => { await result.current.scan('A'); result.current.clearNotice(); await result.current.scan('A'); });
   expect(result.current.state).toBe('unknown'); expect(result.current.unresolvedCount).toBe(1);
-  await act(async () => { await result.current.scan('B'); }); expect(result.current.state).toBe('saved'); expect(result.current.unresolvedCount).toBe(1);
+  await act(async () => { result.current.clearNotice(); await result.current.scan('B'); }); expect(result.current.state).toBe('saved'); expect(result.current.unresolvedCount).toBe(1);
 });
 it.each(['ATTENDANCE_SCANNER_INVALID', 'ATTENDANCE_SCANNER_REVOKED'])('status의 %s 해제를 확인하면 새 등록 경로로 바꾼다', async code => {
   const api = service(); (api.scannerStatus as jest.Mock).mockResolvedValue({ status: 'server_rejected', error: { code } });
@@ -38,7 +38,7 @@ it.each(['ATTENDANCE_SCANNER_INVALID', 'ATTENDANCE_SCANNER_REVOKED'])('status의
 it.each(['ATTENDANCE_SCANNER_INVALID', 'ATTENDANCE_SCANNER_REVOKED'])('punch의 %s 뒤에도 이전 미확인 기록을 남긴다', async code => {
   const api = service(); (api.scan as jest.Mock).mockResolvedValueOnce(unknown).mockResolvedValueOnce({ status: 'server_rejected', error: { code } });
   const { result } = renderHook(() => useAttendanceScanner(api)); await waitFor(() => expect(result.current.ready).toBe(true));
-  await act(async () => { await result.current.scan('A'); await result.current.scan('B'); });
+  await act(async () => { await result.current.scan('A'); result.current.clearNotice(); await result.current.scan('B'); });
   expect(result.current.state).toBe('revoked'); expect(result.current.ready).toBe(false); expect(result.current.unresolvedCount).toBe(1);
   await act(async () => { await result.current.scan('new-registration'); }); expect(api.exchangeAndStoreAttendanceScannerPairingQr).toHaveBeenCalledTimes(1); expect(result.current.unresolvedCount).toBe(1);
 });
@@ -50,7 +50,7 @@ it('등록 응답 유실 뒤 자동 재교환을 막고 관리자 확인 후 새
   await act(async () => { await result.current.scan('old-registration'); await result.current.scan('new-registration'); }); expect(api.exchangeAndStoreAttendanceScannerPairingQr).toHaveBeenCalledTimes(1);
   await act(async () => { await result.current.confirmRegistrationRecovery(); });
   await act(async () => { await result.current.scan('old-registration'); }); expect(api.exchangeAndStoreAttendanceScannerPairingQr).toHaveBeenCalledTimes(1);
-  await act(async () => { await result.current.scan('new-registration'); }); expect(api.exchangeAndStoreAttendanceScannerPairingQr).toHaveBeenCalledTimes(2); expect(result.current.ready).toBe(true);
+  await act(async () => { result.current.clearNotice(); await result.current.scan('new-registration'); }); expect(api.exchangeAndStoreAttendanceScannerPairingQr).toHaveBeenCalledTimes(2); expect(result.current.ready).toBe(true);
 });
 
 it('해제와 이전 punch 결과불명이 동시에 오면 등록 경로와 미확인 기록을 분리한다', async () => {
