@@ -9,5 +9,5 @@ BEGIN
  END IF;
  CREATE EXTENSION IF NOT EXISTS pg_cron;
  PERFORM cron.schedule('rattle-attendance-unprocessed','*/5 * * * *',
-  'SELECT private.refresh_attendance_notifications()');
+  'CALL private.process_attendance_notification_queue()');
 END $$;

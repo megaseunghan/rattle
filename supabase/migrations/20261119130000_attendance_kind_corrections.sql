@@ -3,6 +3,8 @@
 -- Apply whole transaction; failure ROLLBACK, committed recovery uses a new forward migration.
 -- Original punches, wage snapshots and monthly slips are preserved. No remote execution here.
 BEGIN;
+-- Stored ordinal is inherited by new corrections; adjacency uses the indexed value.
+CREATE INDEX attendance_punches_employee_order ON public.attendance_punches(employee_id,punched_at,event_order);
 CREATE OR REPLACE FUNCTION private.attendance_lineage_kind_changed(p_id uuid) RETURNS boolean
 LANGUAGE sql STABLE SECURITY DEFINER SET search_path=pg_catalog,public,private,pg_temp AS $$
  WITH RECURSIVE lineage AS (
@@ -52,13 +54,13 @@ BEGIN
   END IF;
   IF target.kind='clock_in' THEN
     SELECT * INTO partner FROM public.attendance_effective_punches p
-    WHERE p.employee_id=target.employee_id AND (p.punched_at,private.attendance_root_order(p.id))>(target.punched_at,private.attendance_root_order(target.id))
-    ORDER BY p.punched_at,private.attendance_root_order(p.id) LIMIT 1;
+    WHERE p.employee_id=target.employee_id AND (p.punched_at,p.event_order)>(target.punched_at,target.event_order)
+    ORDER BY p.punched_at,p.event_order LIMIT 1;
     IF partner.kind='clock_out' AND partner.punched_at-target.punched_at <= interval '16 hours' THEN RETURN partner; END IF;
   ELSE
     SELECT * INTO partner FROM public.attendance_effective_punches p
-    WHERE p.employee_id=target.employee_id AND (p.punched_at,private.attendance_root_order(p.id))<(target.punched_at,private.attendance_root_order(target.id))
-    ORDER BY p.punched_at DESC,private.attendance_root_order(p.id) DESC LIMIT 1;
+    WHERE p.employee_id=target.employee_id AND (p.punched_at,p.event_order)<(target.punched_at,target.event_order)
+    ORDER BY p.punched_at DESC,p.event_order DESC LIMIT 1;
     IF partner.kind='clock_in' AND target.punched_at-partner.punched_at <= interval '16 hours' THEN RETURN partner; END IF;
   END IF;
   RETURN NULL;
@@ -95,12 +97,12 @@ BEGIN
       (target.kind='clock_in' AND p_time>partner.punched_at) OR
       (target.kind='clock_out' AND p_time<partner.punched_at)) THEN RAISE EXCEPTION 'ATTENDANCE_ORDER_INVALID'; END IF;
   SELECT * INTO adjacent FROM public.attendance_effective_punches p
-  WHERE p.employee_id=p_employee_id AND p.id IS DISTINCT FROM partner.id AND (p.punched_at,private.attendance_root_order(p.id))<(target.punched_at,private.attendance_root_order(target.id))
-  ORDER BY p.punched_at DESC,private.attendance_root_order(p.id) DESC LIMIT 1;
+  WHERE p.employee_id=p_employee_id AND p.id IS DISTINCT FROM partner.id AND (p.punched_at,p.event_order)<(target.punched_at,target.event_order)
+  ORDER BY p.punched_at DESC,p.event_order DESC LIMIT 1;
   IF adjacent.id IS NOT NULL AND p_time<adjacent.punched_at THEN RAISE EXCEPTION 'ATTENDANCE_ORDER_INVALID'; END IF;
   SELECT * INTO adjacent FROM public.attendance_effective_punches p
-  WHERE p.employee_id=p_employee_id AND p.id IS DISTINCT FROM partner.id AND (p.punched_at,private.attendance_root_order(p.id))>(target.punched_at,private.attendance_root_order(target.id))
-  ORDER BY p.punched_at,private.attendance_root_order(p.id) LIMIT 1;
+  WHERE p.employee_id=p_employee_id AND p.id IS DISTINCT FROM partner.id AND (p.punched_at,p.event_order)>(target.punched_at,target.event_order)
+  ORDER BY p.punched_at,p.event_order LIMIT 1;
   IF adjacent.id IS NOT NULL AND p_time>adjacent.punched_at THEN RAISE EXCEPTION 'ATTENDANCE_ORDER_INVALID'; END IF;
   RETURN partner;
 END $$;
@@ -181,7 +183,15 @@ BEGIN
  SELECT * INTO emp FROM public.employees WHERE id=p_employee_id;
  IF emp.id IS NULL OR emp.employment_type<>'part_time' THEN RETURN; END IF;
  UPDATE private.attendance_work_shifts SET active=false WHERE employee_id=emp.id AND work_date=ANY(p_work_dates) AND active;
- FOR o IN SELECT p.* FROM public.attendance_effective_punches p WHERE p.employee_id=emp.id AND p.work_date=ANY(p_work_dates) AND p.kind='clock_out'
+ -- Reconstructed shifts can belong to a different day than the immutable checkout.
+ -- Include prior shift attribution even after deactivation, so later scans/retries
+ -- cannot discard that source. Superseded/void punches remain excluded by the view.
+ FOR o IN SELECT p.* FROM public.attendance_effective_punches p
+ WHERE p.employee_id=emp.id AND p.kind='clock_out' AND p.id IN (
+  SELECT q.id FROM public.attendance_punches q WHERE q.employee_id=emp.id AND q.work_date=ANY(p_work_dates)
+  UNION
+  SELECT sh.clock_out_id FROM private.attendance_work_shifts sh WHERE sh.employee_id=emp.id AND sh.work_date=ANY(p_work_dates)
+ )
  LOOP
   i:=public.attendance_shift_partner(o.id);
   IF i.id IS NULL OR i.kind<>'clock_in' OR o.punched_at<i.punched_at OR NOT (i.work_date=ANY(p_work_dates)) THEN CONTINUE; END IF;
@@ -286,17 +296,17 @@ BEGIN
    SELECT p.id,p.work_date FROM anchors a CROSS JOIN LATERAL (
     SELECT p.* FROM public.attendance_effective_punches p
      WHERE p.employee_id=NEW.employee_id AND p.punched_at>=a.punched_at-interval '16 hours'
-      AND (p.punched_at,private.attendance_root_order(p.id))
-      <(a.punched_at,private.attendance_root_order(a.id))
-     ORDER BY p.punched_at DESC,private.attendance_root_order(p.id) DESC LIMIT 1
+      AND (p.punched_at,p.event_order)
+      <(a.punched_at,a.event_order)
+     ORDER BY p.punched_at DESC,p.event_order DESC LIMIT 1
    ) p
    UNION
    SELECT p.id,p.work_date FROM anchors a CROSS JOIN LATERAL (
     SELECT p.* FROM public.attendance_effective_punches p
      WHERE p.employee_id=NEW.employee_id AND p.punched_at<=a.punched_at+interval '16 hours'
-      AND (p.punched_at,private.attendance_root_order(p.id))
-      >(a.punched_at,private.attendance_root_order(a.id))
-     ORDER BY p.punched_at,private.attendance_root_order(p.id) LIMIT 1
+      AND (p.punched_at,p.event_order)
+      >(a.punched_at,a.event_order)
+     ORDER BY p.punched_at,p.event_order LIMIT 1
    ) p
   ), affected_dates AS (
    SELECT a.work_date FROM affected a

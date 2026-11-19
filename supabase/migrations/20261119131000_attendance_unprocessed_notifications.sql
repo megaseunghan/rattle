@@ -10,6 +10,25 @@ ALTER TABLE public.notifications
 CREATE INDEX notifications_attendance_employee ON public.notifications(attendance_employee_id) WHERE attendance_employee_id IS NOT NULL;
 CREATE INDEX notifications_attendance_punch ON public.notifications(attendance_punch_id) WHERE attendance_punch_id IS NOT NULL;
 
+-- Only changed staff and timed checks enter the private queue. An inactive staff
+-- member is deliberately retained: unfinished former staff work still needs an admin.
+CREATE TABLE private.attendance_notification_queue (
+ employee_id uuid PRIMARY KEY REFERENCES public.employees(id) ON DELETE CASCADE,
+ next_check_at timestamptz NOT NULL
+);
+ALTER TABLE private.attendance_notification_queue ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON private.attendance_notification_queue FROM PUBLIC,anon,authenticated,service_role;
+CREATE INDEX attendance_notification_queue_due ON private.attendance_notification_queue(next_check_at,employee_id);
+CREATE INDEX attendance_work_sync_failed_employee ON private.attendance_work_sync(employee_id,work_date) WHERE state='failed';
+CREATE INDEX attendance_punches_recent_checkins ON public.attendance_punches(punched_at,employee_id) WHERE kind='clock_in' AND NOT is_void;
+
+-- One-time bootstrap only; the five-minute job never enumerates employee history.
+INSERT INTO private.attendance_notification_queue(employee_id,next_check_at)
+SELECT employee_id,now() FROM (
+ SELECT employee_id FROM public.attendance_punches WHERE kind='clock_in' AND NOT is_void AND punched_at>=now()-interval '62 days'
+ UNION SELECT employee_id FROM private.attendance_work_sync WHERE state='failed'
+) candidates;
+
 -- One canonical event per original punch/reason. Current recipients are evaluated at read time.
 CREATE OR REPLACE FUNCTION private.attendance_unprocessed_events(p_employee_id uuid DEFAULT NULL)
 RETURNS TABLE(store_id uuid,employee_id uuid,punch_id uuid,work_date date,reason text)
@@ -18,29 +37,42 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path=pg_catalog,public,private,p
  FROM public.attendance_effective_punches p JOIN public.employees e ON e.id=p.employee_id
  WHERE (p_employee_id IS NULL OR p.employee_id=p_employee_id) AND public.is_store_active(p.store_id)
   AND p.kind='clock_in' AND p.punched_at < now()-interval '16 hours'
+  -- Bounded discovery; existing unresolved reminders survive beyond this window.
+  AND p.id IN (
+   SELECT recent.id FROM public.attendance_punches recent
+   WHERE recent.kind='clock_in' AND NOT recent.is_void AND recent.punched_at>=now()-interval '62 days'
+    AND (p_employee_id IS NULL OR recent.employee_id=p_employee_id)
+   UNION
+   SELECT n.attendance_punch_id FROM public.notifications n WHERE n.resolved_at IS NULL
+    AND n.type='attendance_missing_checkout' AND (p_employee_id IS NULL OR n.attendance_employee_id=p_employee_id))
   AND (public.attendance_shift_partner(p.id)).id IS NULL
  UNION ALL
  SELECT p.store_id,p.employee_id,p.id,s.work_date,'attendance_labor_failed'::text
  FROM private.attendance_work_sync s JOIN public.attendance_effective_punches p
   ON p.employee_id=s.employee_id AND p.store_id=s.store_id AND p.kind='clock_out'
-  AND (p.work_date=s.work_date OR EXISTS(SELECT 1 FROM private.attendance_work_shifts sh
-    WHERE sh.clock_out_id=p.id AND sh.work_date=s.work_date AND sh.active))
+  AND p.id IN (
+   SELECT q.id FROM public.attendance_punches q WHERE q.employee_id=s.employee_id AND q.work_date=s.work_date
+   UNION SELECT sh.clock_out_id FROM private.attendance_work_shifts sh
+    WHERE sh.employee_id=s.employee_id AND sh.work_date=s.work_date AND sh.active)
  WHERE (p_employee_id IS NULL OR s.employee_id=p_employee_id) AND s.state='failed' AND public.is_store_active(s.store_id);
 $$;
 REVOKE ALL ON FUNCTION private.attendance_unprocessed_events(uuid) FROM PUBLIC,anon,authenticated,service_role;
 
 CREATE OR REPLACE FUNCTION private.refresh_attendance_notifications(p_employee_id uuid DEFAULT NULL) RETURNS void
 LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public,private,pg_temp AS $$
+DECLARE next_due timestamptz;
 BEGIN
  -- Serialize refreshes. Employee scope takes the same lock as scan/correction/retry.
  IF p_employee_id IS NULL THEN
-  -- Cron takes employee locks in a stable order and refreshes one employee scope at a time.
-  FOR p_employee_id IN SELECT DISTINCT id FROM public.employees ORDER BY id LOOP
+  -- Compatibility entry point: bounded work only. Cron uses the procedure below
+  -- to commit and release each employee lock before taking the next one.
+  FOR p_employee_id IN SELECT q.employee_id FROM private.attendance_notification_queue q
+   WHERE q.next_check_at<=now() ORDER BY q.next_check_at,q.employee_id LIMIT 25 LOOP
    PERFORM private.refresh_attendance_notifications(p_employee_id);
   END LOOP;
   RETURN;
  END IF;
- PERFORM pg_advisory_xact_lock(hashtextextended('attendance_punch:'||p_employee_id::text,0));
+ IF NOT pg_try_advisory_xact_lock(hashtextextended('attendance_punch:'||p_employee_id::text,0)) THEN RETURN; END IF;
  UPDATE public.notifications n SET resolved_at=clock_timestamp()
  WHERE n.attendance_employee_id=p_employee_id AND n.resolved_at IS NULL
   AND n.type IN ('attendance_missing_checkout','attendance_labor_failed')
@@ -56,8 +88,31 @@ BEGIN
  FROM private.attendance_unprocessed_events(p_employee_id) e JOIN public.employees person ON person.id=e.employee_id
  ON CONFLICT(store_id,dedupe_key) DO UPDATE SET resolved_at=NULL,attendance_work_date=excluded.attendance_work_date
  WHERE notifications.resolved_at IS NOT NULL;
+ -- A clock-in is checked once when it crosses 16h; writes re-evaluate immediately.
+ SELECT min(p.punched_at+interval '16 hours 1 microsecond') INTO next_due
+ FROM public.attendance_effective_punches p WHERE p.employee_id=p_employee_id
+  AND p.kind='clock_in' AND p.punched_at>=now()-interval '16 hours'
+  AND (public.attendance_shift_partner(p.id)).id IS NULL;
+ DELETE FROM private.attendance_notification_queue WHERE employee_id=p_employee_id;
+ IF next_due IS NOT NULL THEN
+  INSERT INTO private.attendance_notification_queue VALUES(p_employee_id,next_due);
+ END IF;
 END $$;
 REVOKE ALL ON FUNCTION private.refresh_attendance_notifications(uuid) FROM PUBLIC,anon,authenticated,service_role;
+
+-- Trusted scheduler only. Top-level CALL is required for per-employee COMMIT.
+-- No SECURITY DEFINER / SET clause: PostgreSQL disallows COMMIT with those.
+CREATE PROCEDURE private.process_attendance_notification_queue()
+LANGUAGE plpgsql AS $$
+DECLARE candidate record;
+BEGIN
+ FOR candidate IN SELECT q.employee_id FROM private.attendance_notification_queue q
+  WHERE q.next_check_at<=pg_catalog.now() ORDER BY q.next_check_at,q.employee_id LIMIT 25 LOOP
+  PERFORM private.refresh_attendance_notifications(candidate.employee_id);
+  COMMIT;
+ END LOOP;
+END $$;
+REVOKE ALL ON PROCEDURE private.process_attendance_notification_queue() FROM PUBLIC,anon,authenticated,service_role;
 
 CREATE OR REPLACE FUNCTION private.refresh_attendance_notifications_trigger() RETURNS trigger
 LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public,private,pg_temp AS $$
