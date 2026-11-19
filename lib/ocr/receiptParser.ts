@@ -72,45 +72,79 @@ function moneyValues(text: string, allowSmall: boolean): number[] {
 export function extractMoney(text: string): number[] { return moneyValues(text, false); }
 function scalar(line: RecognizedLine): boolean { return wholeMoney(line.text) !== null; }
 
-/** Work on clones: native coordinates remain available in the exported OCR. */
+const columnNames = ['품목명[규격]', '품목명', '상품명', '공급가액', '부가세', '품명', '규격', '입수', 'BOX', 'EA', '단가', '금액', '수량', '단위', '비고'];
+const joinableLabels = [...columnNames, '금일합계', '총결제금액', '결제금액', '청구금액', '총합계', '합계금액', '매출총계', '전일잔액', '미수잔액', '이월잔액', '총계', '합계'];
+const median = (values: number[]) => [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)];
+
+/** Normalize geometry/segmentation without altering OCR digits or original source boxes. */
 function prepare(lines: readonly RecognizedLine[]) {
   const rotated = lines.length > 0 && lines.filter(l => l.box.h > l.box.w * 1.2).length > lines.length * .55;
-  const sourceBoxes = new Map<RecognizedLine, TextBox>();
-  const transformed = lines.map(l => {
-    const cell = { ...l, box: rotated
-      ? { x: l.box.y, y: 1 - l.box.x - l.box.w, w: l.box.h, h: l.box.w }
-      : { ...l.box } };
-    sourceBoxes.set(cell, { ...l.box });
-    return cell;
-  });
-  const name = transformed.find(l => /^(상품명|품목명(?:\[규격\])?)$/.test(compact(l.text)));
-  const amount = name && transformed.filter(l => /^(금액|합계)$/.test(compact(l.text)) && cx(l) > cx(name) + .25 && Math.abs(cy(l) - cy(name)) < .04)
-    .sort((a, b) => Math.abs(cy(a) - cy(name)) - Math.abs(cy(b) - cy(name)))[0];
-  const slope = name && amount ? (cy(amount) - cy(name)) / (cx(amount) - cx(name)) : 0;
-  // Deskew is used for row association only. Preserve transformed boxes for provenance.
+  const sourceLines = new Map<RecognizedLine, RecognizedLine[]>();
+  const transformed: RecognizedLine[] = [];
+  for (const original of lines) {
+    const box = rotated ? { x: original.box.y, y: 1 - original.box.x - original.box.w, w: original.box.h, h: original.box.w } : { ...original.box };
+    const text = compact(original.text).replace(/[|]/g, '');
+    const tokens = text.match(/품목명\[규격\]|품목명|상품명|공급가액|부가세|품명|규격|입수|BOX|EA|단가|금액|수량|단위|비고/g) ?? [];
+    // ML Kit may put several table headers into one observation. Approximate column positions only;
+    // provenance always points to the complete original observation, never to an invented source box.
+    const parts = tokens.length > 1 && tokens.join('') === text ? tokens : [original.text];
+    let offset = 0;
+    for (const part of parts) {
+      const fraction = parts.length > 1 ? part.length / text.length : 1;
+      const line = { ...original, text: part, box: { ...box, x: box.x + box.w * offset, w: box.w * fraction } };
+      offset += fraction;
+      sourceLines.set(line, [original]); transformed.push(line);
+    }
+  }
+  const name = transformed.find(l => /^(상품명|품목명(?:\[규격\])?|품명)$/.test(compact(l.text)));
+  const headerSlopes = name ? transformed.filter(l => columnNames.includes(compact(l.text)) && cx(l) > cx(name) + .15 && Math.abs(cy(l) - cy(name)) < .04)
+    .map(l => (cy(l) - cy(name)) / (cx(l) - cx(name))).filter(value => Math.abs(value) < .15) : [];
+  const slope = headerSlopes.length ? median(headerSlopes) : 0;
   const rowY = (l: RecognizedLine) => cy(l) - slope * cx(l);
   const groups: { y: number; h: number; cells: RecognizedLine[] }[] = [];
   for (const line of [...transformed].sort((a, b) => rowY(a) - rowY(b))) {
-    let group = groups.find(g => Math.abs(g.y - rowY(line)) < Math.min(g.h, line.box.h) * .55 + .003);
+    let group = groups.filter(g => Math.abs(g.y - rowY(line)) < Math.min(g.h, line.box.h) * .55 + .003)
+      .sort((a, b) => Math.abs(a.y - rowY(line)) - Math.abs(b.y - rowY(line)))[0];
     if (!group) { group = { y: rowY(line), h: line.box.h, cells: [] }; groups.push(group); }
-    group.cells.push(line);
+    group.cells.push(line); group.y = median(group.cells.map(rowY));
   }
   const rows = groups.map(g => {
-    const cells = g.cells.sort((a, b) => a.box.x - b.box.x);
+    const ordered = g.cells.sort((a, b) => a.box.x - b.box.x);
+    const cells: RecognizedLine[] = [];
+    for (let i = 0; i < ordered.length; i++) {
+      let best = i, text = '';
+      for (let j = i; j < Math.min(i + 8, ordered.length); j++) {
+        if (j > i && ordered[j].box.x - (ordered[j - 1].box.x + ordered[j - 1].box.w) > .06) break;
+        text += compact(ordered[j].text);
+        if (!joinableLabels.some(label => label.startsWith(text))) break;
+        if (joinableLabels.includes(text)) best = j;
+      }
+      if (best === i) { cells.push(ordered[i]); continue; }
+      const sources = ordered.slice(i, best + 1);
+      const x = Math.min(...sources.map(l => l.box.x)), y = Math.min(...sources.map(l => l.box.y));
+      const confidences = sources.map(l => l.confidence).filter((n): n is number => n !== null);
+      const merged: RecognizedLine = { text: sources.map(l => compact(l.text)).join(''), confidence: confidences.length ? Math.min(...confidences) : null,
+        box: { x, y, w: Math.max(...sources.map(l => l.box.x + l.box.w)) - x, h: Math.max(...sources.map(l => l.box.y + l.box.h)) - y } };
+      sourceLines.set(merged, sources.flatMap(l => sourceLines.get(l) ?? [l])); cells.push(merged); i = best;
+    }
     return { text: cells.map(l => l.text).join(' '), cells };
   });
-  return { rotated, slope, rows, sourceBoxes };
+  return { rotated, slope, rows, sourceLines };
 }
 
 export function parseReceipt(lines: readonly RecognizedLine[], sourceImageId = 'image'): ParsedReceipt {
-  const { rows, rotated, slope, sourceBoxes } = prepare(lines);
+  const { rows, rotated, slope, sourceLines } = prepare(lines);
+  const spaceNormalized = new Set<RecognizedLine>();
   const field = <T,>(value: T, cells: RecognizedLine[], confidence = .7, source: 'observed' | 'derived' = 'observed'): ReceiptField<T> => {
-    const known = cells.map(l => l.confidence).filter((n): n is number => n !== null);
-    return { value, sourceImageId, sourceBoxes: cells.map(l => ({ ...(sourceBoxes.get(l) ?? l.box) })), rawText: cells.map(l => l.text).join(' '),
-      ocrConfidence: known.length ? Math.min(...known) : null, parserConfidence: confidence, source, warnings: [] };
+    const observations = [...new Set(cells.flatMap(l => sourceLines.get(l) ?? [l]))];
+    const known = observations.map(l => l.confidence).filter((n): n is number => n !== null);
+    return { value, sourceImageId, sourceBoxes: observations.map(l => ({ ...l.box })), rawText: observations.map(l => l.text).join(' '),
+      ocrConfidence: known.length ? Math.min(...known) : null, parserConfidence: cells.some(l => spaceNormalized.has(l)) ? Math.min(confidence, .5) : confidence,
+      source: cells.some(l => spaceNormalized.has(l)) ? 'derived' : source, warnings: cells.some(l => spaceNormalized.has(l)) ? ['금액 안의 공백을 천단위로 해석했어요. 원문을 확인해 주세요'] : [] };
   };
   const totalCandidates: TotalCandidate[] = [];
   const amounts: ParsedReceipt['amounts'] = { supply: null, vat: null, deposit: null, returns: null, goods: null, shipping: null, discount: null, balance: null };
+  const amountCells = new Map<keyof typeof amounts, RecognizedLine[]>();
   const amountStatus = Object.fromEntries(Object.keys(amounts).map(key => [key, 'absent'])) as Record<keyof typeof amounts, 'absent' | 'observed' | 'unreadable'>;
   const dates: ReceiptField<string>[] = [];
   const vendors: ReceiptField<string>[] = [];
@@ -119,33 +153,46 @@ export function parseReceipt(lines: readonly RecognizedLine[], sourceImageId = '
     ['balance', /전일잔액|미수잔액|이월|누적|잔액/], ['supply', /공급가(?:액)?/], ['vat', /부가세|세액|VAT/i],
     ['deposit', /보증금/], ['returns', /회수|공병반납|용기반납/], ['goods', /상품금액|상품액/], ['shipping', /배송비/], ['discount', /할인|쿠폰/],
   ];
+  const summaryValue = (text: string, label: RecognizedLine, singleObservation: boolean): number | null => {
+    const normalized = normalizeMoney(text).trim()
+      .replace(/^(?:총|[가-힣A-Za-z]+카드\s*\/\s*(?:일시불|일시물))\s*(?=[₩W(+\-\d])/, '')
+      .replace(/\s+인수(?:자)?\s*$/, '');
+    const observed = wholeMoney(normalized);
+    if (observed !== null) return observed;
+    if (singleObservation && /^(?:[+-]\s*)?[₩W]?\s*\d{1,3}(?:\s+\d{3})+(?:\s*원)?$/.test(normalized)) {
+      const value = wholeMoney(normalized.replace(/(\d)\s+(?=\d{3}(?:\D|$))/g, '$1,'));
+      if (value !== null) { spaceNormalized.add(label); return value; }
+    }
+    return null;
+  };
   // Only associate amounts inside the same row; crossing a balance row caused the Mac false total.
   const valueFor = (row: ReceiptRow, label: RecognizedLine): number | null => {
     const normalized = normalizeMoney(label.text);
     // Separate the label from its complete value; never pick one token from an ambiguous expression.
     if (/\d/.test(normalized)) {
       const start = normalized.search(/[₩W(+\-\d]/);
-      return start < 0 ? null : wholeMoney(normalized.slice(start));
+      return start < 0 ? null : summaryValue(normalized.slice(start), label, true);
     }
     const nextLabel = row.cells.find(l => cx(l) > cx(label) && /공급가|부가세|세액|VAT|보증금|회수|상품금액|배송비|할인|잔액|합계|총계|결제/.test(compact(l.text)));
     const right = row.cells.filter(l => l !== label && cx(l) > cx(label) && (!nextLabel || cx(l) < cx(nextLabel)));
     const signInLabel = normalized.match(/[+\-(]\s*$/)?.[0] ?? '';
-    return right.length ? wholeMoney(signInLabel + right.map(l => l.text).join(' ')) : null;
+    return right.length ? summaryValue(signInLabel + right.map(l => l.text).join(' '), label, right.length === 1) : null;
   };
   for (const row of rows) {
+    const isTableHeader = row.cells.filter(l => columnNames.includes(compact(l.text))).length >= 2 && !row.cells.some(l => wholeMoney(l.text) !== null);
     for (const cell of row.cells) {
       const text = compact(normalizeMoney(cell.text));
       for (const [key, pattern] of semanticLabels) {
-        if (pattern.test(text)) {
+        if (!isTableHeader && pattern.test(text)) {
           const value = valueFor(row, cell);
           if (value === null || (amounts[key] !== null && amounts[key]!.value !== value)) amountStatus[key] = 'unreadable';
           else {
             if (amountStatus[key] !== 'unreadable') amountStatus[key] = 'observed';
-            if (amounts[key] === null) amounts[key] = field(value, row.cells);
+            if (amounts[key] === null) { amounts[key] = field(value, row.cells); amountCells.set(key, row.cells); }
           }
         }
       }
-      if (!excluded.test(text)) {
+      if (!isTableHeader && !excluded.test(text)) {
         let score = /금일합계/.test(text) ? 120 : /총결제금액|결제금액|실결제|청구금액/.test(text) ? 110
           : /총합계|합계금액/.test(text) ? 100 : /매출총계|^총계(?:[₩W\d(+\-]|$)/.test(text) ? 90
           : /^합계(?:[₩W\d(+\-]|$)/.test(text) ? 65 : /주문금액/.test(text) ? 60 : 0;
@@ -190,7 +237,7 @@ export function parseReceipt(lines: readonly RecognizedLine[], sourceImageId = '
   const supplyPlusVat = amounts.supply && amounts.vat && amountStatus.supply === 'observed' && amountStatus.vat === 'observed'
     ? amounts.supply.value + amounts.vat.value : null;
   if (supplyPlusVat !== null) {
-    const cells = rows.filter(r => r.text === amounts.supply?.rawText || r.text === amounts.vat?.rawText).flatMap(r => r.cells);
+    const cells = [...(amountCells.get('supply') ?? []), ...(amountCells.get('vat') ?? [])];
     verifyDerived(supplyPlusVat, cells, '공급가 + 부가세 (합계 라벨 확인)', 105);
   }
   const grossRow = rows.find(r => /매출합계|매출총계/.test(compact(r.text)) && !excluded.test(compact(r.text)));
@@ -200,9 +247,11 @@ export function parseReceipt(lines: readonly RecognizedLine[], sourceImageId = '
     const net = gross === null ? null : gross - Math.abs(amounts.returns.value);
     if (net !== null) verifyDerived(net, grossRow.cells, '매출 − 회수 (결제 라벨 확인)', 115);
   }
-  if (totalConflict) selectedTotal = null;
+  const unresolvedReturns = amountStatus.returns !== 'absent' && (amountStatus.returns !== 'observed' || amounts.returns?.value !== 0)
+    && selectedTotal !== null && /매출총계|매출합계/.test(compact(selectedTotal.label));
+  if (totalConflict || unresolvedReturns) selectedTotal = null;
   const items: ReceiptItem[] = [];
-  const headerIndex = rows.findIndex(r => /품목명|상품명/.test(compact(r.text)));
+  const headerIndex = rows.findIndex(r => /품목명|상품명|품명/.test(compact(r.text)));
   const headers = headerIndex < 0 ? [] : rows[headerIndex].cells;
   const header = (pattern: RegExp) => headers.find(l => pattern.test(compact(l.text)));
   const quantityHeader = header(/^수량$|^중량$/), priceHeader = header(/^단가$/), amountHeader = header(/^금액$|^공급가액$|^합계$/);
@@ -215,6 +264,7 @@ export function parseReceipt(lines: readonly RecognizedLine[], sourceImageId = '
     return value === null ? null : field(value, [cell]);
   };
   for (const [index, row] of rows.entries()) {
+    if (headerIndex >= 0 && index > headerIndex && /공지사항|금일합계|총합계|송합계|손합계|매출총계|결제금액|전일잔액|미수잔액/.test(compact(row.text))) break;
     if (index <= headerIndex || excluded.test(compact(row.text)) || /합계|총계|공급가|부가세|보증금|회수|배송비|할인|결제|전화|주소|입금/.test(compact(row.text))) continue;
     const names = row.cells.filter(l => /[가-힣A-Za-z]/.test(l.text) && !/^[₩W\d.,\s]+원?$/.test(l.text) && l.box.x < .6);
     if (!names.length) continue;
@@ -234,6 +284,8 @@ export function parseReceipt(lines: readonly RecognizedLine[], sourceImageId = '
   const goodsAdjustments = amounts.goods && amountStatus.goods === 'observed' && amountStatus.shipping !== 'unreadable' && amountStatus.discount !== 'unreadable'
     ? amounts.goods.value + (amounts.shipping?.value ?? 0) - Math.abs(amounts.discount?.value ?? 0) : null;
   const warnings = ['인식 결과를 원본과 확인해 주세요'];
+  if (unresolvedReturns) warnings.push('회수액 또는 실결제액이 미확인이라 매출총계를 결제 합계로 선택하지 않았어요');
+  if (spaceNormalized.size) warnings.push('금액 안의 공백을 천단위로 해석했어요. 원문을 확인해 주세요');
   if (totalConflict) warnings.push('계산한 금액과 명시 결제·합계가 충돌해 합계를 확정하지 않았어요');
   const amountNames = { supply: '공급가', vat: '부가세', deposit: '보증금', returns: '회수액', goods: '상품금액', shipping: '배송비', discount: '할인', balance: '잔액' };
   for (const key of Object.keys(amountStatus) as (keyof typeof amounts)[]) {
