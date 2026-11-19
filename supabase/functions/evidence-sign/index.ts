@@ -1,4 +1,4 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.99.3';
 import { createEvidenceSignHandler } from './handler.ts';
 const url = Deno.env.get('SUPABASE_URL')!;
 const admin = createClient(url, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
@@ -11,7 +11,14 @@ Deno.serve(createEvidenceSignHandler({
     return data;
   },
   sign: async (path,ttl) => {
-    const { data,error } = await admin.storage.from('transaction-evidence').createSignedUrl(path,ttl);
+    const bucket = admin.storage.from('transaction-evidence');
+    const info = await bucket.info(path);
+    if (info.error) throw info.error;
+    // Accept only the canonical policy from a cacheControl: '0' upload.
+    if (info.data.cacheControl?.trim().toLowerCase() !== 'max-age=0') {
+      return null;
+    }
+    const { data,error } = await bucket.createSignedUrl(path,ttl);
     if (error) throw error;
     return data.signedUrl;
   },

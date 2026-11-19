@@ -1,4 +1,4 @@
--- Follow-up to the unapplied review_fixes migration. No scheduled cleanup.
+-- Requires the evidence review fixes, store soft deletion, Vault, pg_net, pg_cron and pgcrypto.
 BEGIN;
 ALTER TABLE public.transaction_evidence DROP CONSTRAINT transaction_evidence_status_check;
 ALTER TABLE public.transaction_evidence ADD CONSTRAINT transaction_evidence_status_check CHECK(status IN ('pending','ready','discarding','deleting'));
@@ -115,25 +115,70 @@ CREATE TRIGGER evidence_store_owned BEFORE INSERT OR UPDATE ON storage.objects
 UPDATE storage.objects SET owner=NULL,owner_id=NULL
  WHERE bucket_id='transaction-evidence' AND (owner IS NOT NULL OR owner_id IS NOT NULL);
 
--- Per-object retry lease: one permanently failing path cannot starve later paths.
-CREATE TABLE private.evidence_purge_attempts (
- path text PRIMARY KEY, attempted_at timestamptz NOT NULL
-);
-REVOKE ALL ON private.evidence_purge_attempts FROM PUBLIC,anon,authenticated;
-CREATE FUNCTION public.claim_expired_evidence_paths() RETURNS SETOF text
-LANGUAGE sql SECURITY DEFINER SET search_path=pg_catalog,public,pg_temp AS $$
- WITH batch AS (
-   SELECT o.name FROM storage.objects o JOIN public.stores s ON s.id::text=split_part(o.name,'/',1)
-   LEFT JOIN private.evidence_purge_attempts a ON a.path=o.name
-   WHERE o.bucket_id='transaction-evidence' AND s.deleted_at IS NOT NULL AND s.purge_after<=now()
-     AND (a.path IS NULL OR a.attempted_at < now()-interval '5 minutes')
-   ORDER BY a.attempted_at NULLS FIRST,s.purge_after,o.name LIMIT 100 FOR UPDATE OF o SKIP LOCKED
- )
- INSERT INTO private.evidence_purge_attempts SELECT name,now() FROM batch
- ON CONFLICT(path) DO UPDATE SET attempted_at=excluded.attempted_at RETURNING path;
+CREATE OR REPLACE FUNCTION public.restore_deleted_store(p_store_id uuid)
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
+DECLARE caller_id uuid := auth.uid(); target public.stores;
+BEGIN
+  IF caller_id IS NULL THEN RAISE EXCEPTION 'STORE_RESTORE_AUTH_REQUIRED'; END IF;
+  SELECT * INTO target FROM public.stores WHERE id = p_store_id AND owner_id = caller_id FOR UPDATE;
+  IF NOT FOUND OR target.deleted_at IS NULL THEN RAISE EXCEPTION 'STORE_RESTORE_NOT_FOUND'; END IF;
+  IF target.purge_after <= clock_timestamp() THEN RAISE EXCEPTION 'STORE_RESTORE_EXPIRED'; END IF;
+  UPDATE public.stores SET deleted_at = NULL, deleted_by = NULL, purge_after = NULL WHERE id = p_store_id;
+END;
 $$;
-REVOKE ALL ON FUNCTION public.claim_expired_evidence_paths() FROM PUBLIC,anon,authenticated;
-GRANT EXECUTE ON FUNCTION public.claim_expired_evidence_paths() TO service_role;
+REVOKE ALL ON FUNCTION public.restore_deleted_store(uuid) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.restore_deleted_store(uuid) TO authenticated;
+
+-- Keep path outcomes independent of storage.objects: Storage may commit its row
+-- deletion before a backend error. Only a positive per-path acknowledgement counts.
+CREATE TABLE private.evidence_purge_attempts (
+ path text PRIMARY KEY,
+ store_id uuid NOT NULL,
+ object_id uuid NOT NULL,
+ object_version text, -- retained for provider-side reconciliation if Storage loses its row
+ attempted_at timestamptz NOT NULL,
+ outcome text NOT NULL DEFAULT 'unknown' CHECK (outcome IN ('unknown','failed','confirmed'))
+);
+CREATE INDEX evidence_purge_unresolved ON private.evidence_purge_attempts(store_id,attempted_at)
+ WHERE outcome <> 'confirmed';
+REVOKE ALL ON private.evidence_purge_attempts FROM PUBLIC,anon,authenticated;
+
+CREATE FUNCTION public.claim_expired_evidence_paths() RETURNS SETOF text
+LANGUAGE sql SECURITY DEFINER SET search_path=pg_catalog,pg_temp AS $$
+ WITH locked AS MATERIALIZED (
+   SELECT s.id,s.purge_after FROM public.stores s
+   WHERE s.deleted_at IS NOT NULL AND s.purge_after <= clock_timestamp()
+   ORDER BY s.id FOR UPDATE SKIP LOCKED
+ ), due AS MATERIALIZED (
+   SELECT id FROM locked WHERE purge_after <= clock_timestamp()
+ ), candidates AS (
+   SELECT o.name AS path,d.id AS store_id,o.id AS object_id,o.version AS object_version,NULL::timestamptz AS attempted_at
+   FROM storage.objects o JOIN due d ON d.id::text=split_part(o.name,'/',1)
+   WHERE o.bucket_id='transaction-evidence'
+     AND NOT EXISTS (SELECT 1 FROM private.evidence_purge_attempts a WHERE a.path=o.name)
+   UNION ALL
+   SELECT a.path,a.store_id,a.object_id,a.object_version,a.attempted_at FROM private.evidence_purge_attempts a
+   JOIN due d ON d.id=a.store_id
+   WHERE a.outcome <> 'confirmed' AND a.attempted_at <= clock_timestamp()-interval '5 minutes'
+ ), batch AS (
+   SELECT path,store_id,object_id,object_version FROM candidates ORDER BY attempted_at NULLS FIRST,path LIMIT 100
+ )
+ INSERT INTO private.evidence_purge_attempts(path,store_id,object_id,object_version,attempted_at)
+ SELECT path,store_id,object_id,object_version,clock_timestamp() FROM batch
+ ON CONFLICT(path) DO UPDATE SET attempted_at=excluded.attempted_at
+ RETURNING path;
+$$;
+-- A delayed failed retry must never overwrite an acknowledged deletion.
+CREATE FUNCTION public.record_evidence_purge_result(p_path text,p_outcome text) RETURNS void
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,pg_temp AS $$
+BEGIN
+ UPDATE private.evidence_purge_attempts SET outcome=p_outcome
+ WHERE path=p_path AND outcome <> 'confirmed';
+END $$;
+REVOKE ALL ON FUNCTION public.claim_expired_evidence_paths(),public.record_evidence_purge_result(text,text)
+ FROM PUBLIC,anon,authenticated;
+GRANT EXECUTE ON FUNCTION public.claim_expired_evidence_paths(),public.record_evidence_purge_result(text,text)
+ TO service_role;
 
 CREATE OR REPLACE FUNCTION public.purge_expired_deleted_stores()
 RETURNS integer LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
@@ -141,14 +186,15 @@ DECLARE target uuid; purged integer := 0;
 BEGIN
   PERFORM set_config('rattle.store_purge', 'on', true);
   FOR target IN
-    SELECT id FROM public.stores WHERE deleted_at IS NOT NULL AND purge_after <= now()
-    ORDER BY purge_after FOR UPDATE SKIP LOCKED
+    SELECT id FROM public.stores WHERE deleted_at IS NOT NULL AND purge_after <= clock_timestamp()
+    ORDER BY id FOR UPDATE SKIP LOCKED
   LOOP
     BEGIN
       -- Wait for physical deletion through the Storage API, even after a failed batch.
       IF EXISTS (SELECT 1 FROM storage.objects WHERE bucket_id='transaction-evidence'
                  AND name LIKE target::text || '/%') THEN CONTINUE; END IF;
-      DELETE FROM private.evidence_purge_attempts WHERE path LIKE target::text || '/%';
+      IF EXISTS (SELECT 1 FROM private.evidence_purge_attempts
+                 WHERE store_id=target AND outcome <> 'confirmed') THEN CONTINUE; END IF;
       DELETE FROM public.transaction_evidence WHERE store_id=target;
       DELETE FROM public.recurring_fixed_expense_versions v
         USING public.recurring_fixed_expenses r WHERE v.rule_id = r.id AND r.store_id = target;
@@ -157,7 +203,7 @@ BEGIN
       DELETE FROM public.payroll_work_submissions WHERE store_id = target;
       DELETE FROM public.payroll_daily_work_history WHERE store_id = target;
       DELETE FROM public.payroll_daily_work WHERE store_id = target;
-      DELETE FROM public.stores WHERE id = target AND deleted_at IS NOT NULL AND purge_after <= now();
+      DELETE FROM public.stores WHERE id = target AND deleted_at IS NOT NULL AND purge_after <= clock_timestamp();
       purged := purged + 1;
     EXCEPTION WHEN OTHERS THEN
       -- 한 매장 실패가 다른 매장 파기를 막지 않게 하고, 다음 실행에서 다시 시도한다.
@@ -173,18 +219,70 @@ REVOKE ALL ON FUNCTION public.purge_expired_deleted_stores() FROM PUBLIC, anon, 
 GRANT EXECUTE ON FUNCTION public.purge_expired_deleted_stores() TO service_role;
 
 
--- Vault entries contain the project's HTTPS URL and a dedicated scheduler secret.
--- The Edge endpoint validates that secret and ignores caller-supplied paths.
+-- net._http_response is transient. Keep the outcome even when pg_net loses
+-- a request or expires its response before the next cron run.
+CREATE TABLE private.evidence_purge_requests (
+ request_id bigint PRIMARY KEY,
+ queued_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+ result text NOT NULL DEFAULT 'pending' CHECK (result IN ('pending','success','failed','timeout','missing')),
+ http_status integer
+);
+CREATE INDEX evidence_purge_requests_pending ON private.evidence_purge_requests(queued_at) WHERE result='pending';
+REVOKE ALL ON private.evidence_purge_requests FROM PUBLIC,anon,authenticated;
+
+CREATE FUNCTION private.check_evidence_purge_responses() RETURNS void
+LANGUAGE plpgsql SET search_path=pg_catalog,pg_temp AS $$
+BEGIN
+ UPDATE private.evidence_purge_requests q
+ SET result=CASE WHEN r.timed_out THEN 'timeout'
+                 WHEN r.error_msg IS NULL AND r.status_code=204 THEN 'success'
+                 ELSE 'failed' END,
+     http_status=r.status_code
+ FROM net._http_response r WHERE q.result IN ('pending','missing') AND r.id=q.request_id;
+
+ UPDATE private.evidence_purge_requests SET result='missing'
+ WHERE result='pending' AND queued_at < clock_timestamp()-interval '2 minutes';
+ DELETE FROM private.evidence_purge_requests
+ WHERE result='success' AND queued_at < clock_timestamp()-interval '30 days';
+END $$;
+
+CREATE FUNCTION private.evidence_purge_config(OUT project_url text, OUT signing_secret text)
+LANGUAGE plpgsql SET search_path=pg_catalog,pg_temp AS $$
+BEGIN
+ SELECT rtrim(decrypted_secret,'/') INTO project_url FROM vault.decrypted_secrets WHERE name='evidence_project_url';
+ SELECT decrypted_secret INTO signing_secret FROM vault.decrypted_secrets WHERE name='evidence_purge_token';
+ IF project_url IS NULL OR project_url !~ '^https://[a-zA-Z0-9.-]+(:[0-9]+)?$'
+    OR nullif(btrim(signing_secret),'') IS NULL THEN
+   RAISE EXCEPTION 'EVIDENCE_PURGE_VAULT_CONFIGURATION_REQUIRED';
+ END IF;
+END $$;
+
+CREATE FUNCTION private.dispatch_evidence_purge() RETURNS void
+LANGUAGE plpgsql SET search_path=pg_catalog,pg_temp AS $$
+DECLARE config record; issued text; signature text; request_id bigint;
+BEGIN
+ SELECT * INTO config FROM private.evidence_purge_config();
+ IF NOT EXISTS (SELECT 1 FROM public.stores WHERE deleted_at IS NOT NULL AND purge_after<=clock_timestamp()) THEN RETURN; END IF;
+ issued:=floor(extract(epoch from clock_timestamp()))::bigint::text;
+ signature:=encode(extensions.hmac('evidence-purge:'||issued,config.signing_secret,'sha256'),'hex');
+ SELECT net.http_post(url:=config.project_url||'/functions/v1/evidence-purge',
+   headers:=jsonb_build_object('x-evidence-purge-token',issued||'.'||signature),
+   body:='{}'::jsonb,timeout_milliseconds:=60000) INTO request_id;
+ INSERT INTO private.evidence_purge_requests(request_id) VALUES(request_id);
+END $$;
+REVOKE ALL ON FUNCTION private.evidence_purge_config(),private.dispatch_evidence_purge(),
+ private.check_evidence_purge_responses() FROM PUBLIC,anon,authenticated,service_role;
+
+-- Fail the entire migration if prerequisites or either schedule are unavailable.
 DO $schedule$
 BEGIN
- IF EXISTS (SELECT 1 FROM pg_extension WHERE extname='pg_cron') THEN
-   PERFORM cron.schedule('rattle-expired-evidence-storage','*/5 * * * *',$job$
-     SELECT net.http_post(url:=rtrim(u.decrypted_secret,'/')||'/functions/v1/evidence-purge',
-       headers:=jsonb_build_object('x-evidence-purge-token',t.decrypted_secret),body:='{}'::jsonb)
-     FROM vault.decrypted_secrets u,vault.decrypted_secrets t
-     WHERE u.name='evidence_project_url' AND t.name='evidence_purge_token'
-       AND EXISTS(SELECT 1 FROM public.stores WHERE deleted_at IS NOT NULL AND purge_after<=now())
-   $job$);
+ IF to_regprocedure('net.http_post(text,jsonb,jsonb,jsonb,integer)') IS NULL
+    OR to_regclass('net._http_response') IS NULL
+    OR to_regprocedure('extensions.hmac(text,text,text)') IS NULL THEN
+   RAISE EXCEPTION 'EVIDENCE_PURGE_PG_NET_AND_PGCRYPTO_REQUIRED';
  END IF;
+ PERFORM private.evidence_purge_config();
+ PERFORM cron.schedule('rattle-expired-evidence-storage','*/5 * * * *','SELECT private.dispatch_evidence_purge()');
+ PERFORM cron.schedule('rattle-evidence-storage-results','* * * * *','SELECT private.check_evidence_purge_responses()');
 END $schedule$;
 COMMIT;
