@@ -76,6 +76,7 @@ function OcrLabBody() {
         try { await cleanupPending(); if (current()) setCleanupNeeded(false); }
         catch { if (current()) setError('임시 파일을 지우지 못했어요. 다시 정리해 주세요'); return; }
       }
+      if (!current()) return;
       const photos = await pickLabImages(native);
       uris = photos.map(p => p.uri);
       if (!current() || !photos.length) return;

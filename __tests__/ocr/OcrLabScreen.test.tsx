@@ -107,3 +107,20 @@ it('OCR-R4: 공유 후 삭제 실패는 공유 자체 실패와 구분한다', a
   expect(screen.getByText('다시 정리')).toBeTruthy();
   alert.mockRestore();
 });
+it.each(['unmount', '권한 전환', '측정 중지'])('OCR-R8: 정리 대기 중 %s 뒤에는 사진 선택기를 열지 않는다', async action => {
+  let resolveCleanup!: () => void;
+  mockCleanup.mockRejectedValueOnce({ code: 'ERR_OCR_CLEANUP' }).mockImplementationOnce(() => new Promise<void>(resolve => { resolveCleanup = resolve; }));
+  const screen = render(<OcrLabScreen />);
+  await waitFor(() => expect(screen.getByText('이전 임시 파일을 지우지 못했어요. 다시 정리해 주세요')).toBeTruthy());
+  fireEvent.press(screen.getByText('사진 선택'));
+  await waitFor(() => expect(mockCleanup).toHaveBeenCalledTimes(2));
+  if (action === 'unmount') screen.unmount();
+  else if (action === '권한 전환') {
+    (useAuth as jest.Mock).mockReturnValue({ ...access, canManageStore: false });
+    screen.rerender(<OcrLabScreen />);
+  } else fireEvent.press(screen.getByText('측정 중지'));
+  await act(async () => { resolveCleanup(); });
+  await waitFor(() => expect(mockRelease).toHaveBeenCalled());
+  expect(mockPick).not.toHaveBeenCalled();
+  expect(recognizeText).not.toHaveBeenCalled();
+});
