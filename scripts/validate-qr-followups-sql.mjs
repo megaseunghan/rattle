@@ -67,12 +67,14 @@ export async function validateQrFollowups({ db, users, store, emp, as, migration
  const zeroRestored=await change(zeroChanged,'clock_in','2026-10-24T00:00:00Z');
  check('same-time kind reversal preserves original event ordering',await partner(zeroNext),zeroRestored);
  check('confirmed zero-minute pair is preserved',await day('2026-10-24'),{worked_minutes:0,gross:0,status:'approved'});
+ const unrelated=(await db.query("SELECT to_jsonb(s) s FROM private.attendance_work_sync s WHERE employee_id=$1 AND work_date='2026-10-26'",[eid])).rows[0].s;
  const movedIn=await manual('clock_in','2026-10-30T14:00:00Z');
  const movedOut=await manual('clock_out','2026-10-30T16:00:00Z');
  await change(movedOut,'clock_in','2026-10-30T16:00:00Z');
  const newOut=await manual('clock_out','2026-10-30T17:00:00Z');
  check('broken last old-day pair records SOURCE_REMOVED',(await db.query("SELECT error_code FROM private.attendance_work_sync WHERE employee_id=$1 AND work_date='2026-10-30'",[eid])).rows[0].error_code,'ATTENDANCE_WORK_SOURCE_REMOVED');
- check('new date uses reconstructed pair only',await day('2026-10-31'),{worked_minutes:60,gross:12000,status:'approved'});
+ check('unrelated failed date is not retried by a distant correction',(await db.query("SELECT to_jsonb(s) s FROM private.attendance_work_sync s WHERE employee_id=$1 AND work_date='2026-10-26'",[eid])).rows[0].s,unrelated);
+ check('new date uses reconstructed pair only' ,await day('2026-10-31'),{worked_minutes:60,gross:12000,status:'approved'});
  await as(users.owner,"INSERT INTO employees(id,store_id,user_id,name,is_active,employment_type,hourly_wage,joined_at) VALUES($1,$2,$3,'QA-owner',true,'part_time',12000,'2026-01-01')",[emp.owner,store,users.owner]);
  const ownerIn=(await as(users.owner,"SELECT record_manual_attendance($1,$2,'clock_in','2026-10-28T00:00:00Z','QA-owner') id",[store,emp.owner])).rows[0].id;
  const ownerRequest=await request(ownerIn,'clock_out','2026-10-28T00:00:00Z',users.owner,emp.owner);

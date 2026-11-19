@@ -179,7 +179,7 @@ BEGIN
  SELECT * INTO emp FROM public.employees WHERE id=p_employee_id;
  IF emp.id IS NULL OR emp.employment_type<>'part_time' THEN RETURN; END IF;
  UPDATE private.attendance_work_shifts SET active=false WHERE employee_id=emp.id AND work_date=ANY(p_work_dates) AND active;
- FOR o IN SELECT p.* FROM public.attendance_effective_punches p WHERE p.employee_id=emp.id AND p.kind='clock_out'
+ FOR o IN SELECT p.* FROM public.attendance_effective_punches p WHERE p.employee_id=emp.id AND p.work_date=ANY(p_work_dates) AND p.kind='clock_out'
  LOOP
   i:=public.attendance_shift_partner(o.id);
   IF i.id IS NULL OR i.kind<>'clock_in' OR o.punched_at<i.punched_at OR NOT (i.work_date=ANY(p_work_dates)) THEN CONTINUE; END IF;
@@ -273,8 +273,35 @@ BEGIN
   dates:=ARRAY[NEW.work_date];
  ELSE
   IF NEW.status<>'approved' OR OLD.status='approved' THEN RETURN NEW; END IF;
-  SELECT array_agg(DISTINCT p.work_date) INTO dates FROM public.attendance_punches p
-   WHERE p.employee_id=NEW.employee_id;
+  -- Only the old/new target, adjacent events and their prior/current pair dates can change.
+  -- Do not retry unrelated historical failures or reinterpret other months on a correction.
+  WITH anchors AS (
+   SELECT p.* FROM public.attendance_punches p
+    WHERE p.id IN (NEW.target_punch_id,NEW.applied_punch_id,NEW.paired_applied_punch_id)
+  ), affected AS (
+   SELECT a.id,a.work_date FROM anchors a
+   UNION
+   SELECT p.id,p.work_date FROM anchors a CROSS JOIN LATERAL (
+    SELECT p.* FROM public.attendance_effective_punches p
+     WHERE p.employee_id=NEW.employee_id AND p.punched_at>=a.punched_at-interval '16 hours'
+      AND (p.punched_at,private.attendance_root_order(p.id))
+      <(a.punched_at,private.attendance_root_order(a.id))
+     ORDER BY p.punched_at DESC,private.attendance_root_order(p.id) DESC LIMIT 1
+   ) p
+   UNION
+   SELECT p.id,p.work_date FROM anchors a CROSS JOIN LATERAL (
+    SELECT p.* FROM public.attendance_effective_punches p
+     WHERE p.employee_id=NEW.employee_id AND p.punched_at<=a.punched_at+interval '16 hours'
+      AND (p.punched_at,private.attendance_root_order(p.id))
+      >(a.punched_at,private.attendance_root_order(a.id))
+     ORDER BY p.punched_at,private.attendance_root_order(p.id) LIMIT 1
+   ) p
+  ), affected_dates AS (
+   SELECT a.work_date FROM affected a
+   UNION SELECT (public.attendance_shift_partner(a.id)).work_date FROM affected a
+   UNION SELECT sh.work_date FROM private.attendance_work_shifts sh WHERE sh.employee_id=NEW.employee_id
+    AND (sh.clock_in_id IN (SELECT id FROM affected) OR sh.clock_out_id IN (SELECT id FROM affected))
+  ) SELECT array_agg(DISTINCT work_date) FILTER(WHERE work_date IS NOT NULL) INTO dates FROM affected_dates;
  END IF;
  PERFORM private.refresh_attendance_daily_work(NEW.employee_id,dates);
  RETURN NEW;

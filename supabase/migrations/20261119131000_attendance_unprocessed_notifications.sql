@@ -34,7 +34,7 @@ LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public,private,pg_t
 BEGIN
  -- Serialize refreshes. Employee scope takes the same lock as scan/correction/retry.
  IF p_employee_id IS NULL THEN
-  -- Cron takes employee locks in a stable order and refreshes each independently.
+  -- Cron takes employee locks in a stable order and refreshes one employee scope at a time.
   FOR p_employee_id IN SELECT DISTINCT id FROM public.employees ORDER BY id LOOP
    PERFORM private.refresh_attendance_notifications(p_employee_id);
   END LOOP;
