@@ -5,10 +5,12 @@ import { queryClient } from '../../lib/query/client';
 const renderHook = (hook: () => ReturnType<typeof useIngredients>) => renderBaseHook(hook, { wrapper: ({ children }: { children: React.ReactNode }) => React.createElement(QueryClientProvider, { client: queryClient }, children) });
 import { useIngredients } from '../../lib/hooks/useIngredients';
 
+let mockPreviewMode = 'self';
+
 // AuthContext mock — store 객체를 factory 내부에서 고정해 참조 안정성 보장 (무한 루프 방지)
 jest.mock('../../lib/contexts/AuthContext', () => {
   const store = { id: 'store-123', name: '테스트 매장' };
-  return { useAuth: () => ({ store }) };
+  return { useAuth: () => ({ store, devPreviewMode: mockPreviewMode }) };
 });
 
 // 서비스 mock
@@ -40,6 +42,7 @@ const sampleIngredient = {
 afterEach(() => queryClient.clear());
 describe('useIngredients 훅', () => {
   beforeEach(() => {
+    mockPreviewMode = 'self';
     queryClient.clear();
     jest.clearAllMocks();
     mockGetIngredients.mockResolvedValue([sampleIngredient]);
@@ -98,4 +101,15 @@ describe('useIngredients 훅', () => {
     expect(result.current.error).toBe('처리하지 못했어요. 다시 시도해주세요.');
     expect(result.current.data).toEqual([]);
   });
+});
+
+it('역할 미리보기에서는 낙관적 삭제 전에 쓰기를 거절한다', async () => {
+  mockPreviewMode = 'regular';
+  jest.clearAllMocks(); mockGetIngredients.mockResolvedValue([sampleIngredient]);
+  const { result } = renderHook(() => useIngredients());
+  await waitFor(() => expect(result.current.data).toHaveLength(1));
+  await act(async () => { await expect(result.current.remove('ing-1')).rejects.toThrow(); });
+  expect(result.current.data).toHaveLength(1);
+  expect(mockDeleteIngredient).not.toHaveBeenCalled();
+  mockPreviewMode = 'self';
 });

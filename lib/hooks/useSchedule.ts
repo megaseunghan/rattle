@@ -1,3 +1,4 @@
+import { usePreviewWriteGuard } from './usePreviewWriteGuard';
 import { useCallback, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import {
@@ -6,6 +7,7 @@ import {
 import { EmployeeSchedule, ScheduleDayInput, ScheduleRequest } from '../../types';
 
 export function useSchedule(employeeId: string | undefined) {
+  const { assertCanWrite } = usePreviewWriteGuard();
   const { store } = useAuth();
   const [schedule, setSchedule] = useState<EmployeeSchedule[]>([]);
   const [pendingRequest, setPendingRequest] = useState<ScheduleRequest | null>(null);
@@ -28,6 +30,7 @@ export function useSchedule(employeeId: string | undefined) {
   }, [employeeId]);
 
   const submit = useCallback(async (days: ScheduleDayInput[]) => {
+    assertCanWrite();
     if (!store || !employeeId) return;
     setSubmitting(true);
     try {

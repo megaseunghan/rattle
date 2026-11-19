@@ -86,7 +86,7 @@ it('다른 매장·월에는 이전 초안이 섞이지 않는다', () => {
 it('월 이동을 취소하면 공제 초안을 유지하고 이동 확정 후에는 버린다', async () => {
  const { PayrollScreen } = require('../../app/(tabs)/payroll');
  const { Alert } = require('react-native');
- require('../../lib/contexts/AuthContext').useAuth.mockReturnValue({ store: { id: 's' }, currentRole: 'admin', user: { id: 'u' } });
+ require('../../lib/contexts/AuthContext').useAuth.mockReturnValue({ store: { id: 's' }, currentRole: 'admin', canManageStore: true, access: { is_owner: true }, user: { id: 'u' } });
  require('../../lib/hooks/useEmployees').useEmployees.mockReturnValue({ employees: [{ ...employee, store_id: 's', is_active: true, joined_at: '2026-01-01', created_at: '2026-01-01' }], loading: false, refetch: jest.fn() });
  const now = new Date(); const ym = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
  require('../../lib/hooks/usePayroll').usePayroll.mockReturnValue({ payrolls: [{ ...saved, year_month: ym }], loading: false, calculating: null, savingDeductions: null, refetch: jest.fn(), calculate: jest.fn(), saveDeductions: save });

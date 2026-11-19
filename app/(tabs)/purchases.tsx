@@ -75,7 +75,7 @@ function PurchasesView({ active }: { active: boolean }) {
   const [filterNotice, setFilterNotice] = useState(false);
 
   const category = usePurchaseCategories();
-  const { currentRole } = useAuth();
+  const { canManageStore } = useAuth();
   const [categoryModal, setCategoryModal] = useState(false);
   const [activeCategory, setActiveCategory] = useState('전체');
   const categoryOptions = ['전체', ...new Set(category.categories)];
@@ -152,7 +152,7 @@ function PurchasesView({ active }: { active: boolean }) {
       >
         {filterNotice && <Text style={styles.emptyHint}>선택한 달에 내역이 없는 거래처 필터를 해제했어요.</Text>}
         <LedgerHeader year={year} month={month + 1} onPrev={prevMonth} onNext={nextMonth} label={activeTab === '전체' && activeCategory === '전체' ? '이번 달 매입' : '선택한 조건의 매입'} amount={loading ? '불러오는 중' : error ? '조회 필요' : `${monthTotal.toLocaleString()}원`} />
-        <LedgerFilters label="매입 카테고리" options={availableCategories} selected={activeCategory} onSelect={setActiveCategory} onManage={currentRole === 'admin' ? () => setCategoryModal(true) : undefined} />
+        <LedgerFilters label="매입 카테고리" options={availableCategories} selected={activeCategory} onSelect={setActiveCategory} onManage={canManageStore ? () => setCategoryModal(true) : undefined} />
         {category.error && <Text style={styles.emptyHint}>{category.error}</Text>}
         {purchaseTabs.length > 1 && <LedgerFilters label="거래처" options={purchaseTabs} selected={activeTab} onSelect={setActiveTab} />}
 

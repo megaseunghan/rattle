@@ -139,32 +139,8 @@ const styles = StyleSheet.create({
 
 
 export default function WorkMinutesScreen() {
-  const { user, devPreviewEmployeeId, devPreviewMode, realRole } = useAuth();
-  const { employees, loading, error, refetch } = useEmployees();
-  useEffect(() => { void refetch(); }, [refetch]);
-  const employee = resolveSelfEmployee(employees, user?.id, devPreviewEmployeeId);
-  const today = new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 7);
-  const [month, setMonth] = useState(today);
-  const [legacy, setLegacy] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const preview = realRole === 'admin' && devPreviewMode !== 'self';
-  if (legacy) return <LegacyWorkMinutesScreen readOnly />;
-  function move(offset: number) {
-    const [year, value] = month.split('-').map(Number);
-    const date = new Date(Date.UTC(year, value - 1 + offset, 1));
-    // Confirm because switching month discards the current unsaved day draft.
-    Alert.alert('월을 변경할까요?', '저장하지 않은 일별 입력은 유지되지 않아요.', [{ text: '취소', style: 'cancel' }, { text: '변경', onPress: () => setMonth(date.toISOString().slice(0, 7)) }]);
-  }
   return <SafeAreaView style={styles.container}>
-    <AppBar title="일별 근무시간" onBack={() => router.back()} />
-    {loading ? <LoadingSpinner /> : error ? <ErrorMessage message={error} onRetry={refetch} /> : !employee || employee.employment_type !== 'part_time' ? <View style={styles.content}><Text style={styles.hint}>{'연결된 파트타이머 정보가 없어요.\n관리자에게 계정 연결을 요청해 주세요.'}</Text></View> : <>
-      <View style={[styles.monthRow, { paddingHorizontal: 16 }]}>
-        <Button label="이전 달" variant="text" onPress={() => move(-1)} disabled={busy} />
-        <Text style={styles.title}>{month}</Text>
-        <Button label="다음 달" variant="text" onPress={() => move(1)} disabled={busy || month >= today} />
-      </View>
-      <DailyWorkPanel key={`${employee.id}:${month}`} employee={employee} yearMonth={month} isAdmin={false} onBusyChange={setBusy} readOnly={preview || employee.user_id !== user?.id} />
-      <Button label="기존 월 합계 제출 이력" variant="text" disabled={busy} onPress={() => Alert.alert('이전 월 합계 기록을 열까요?', '저장하지 않은 일별 입력은 유지되지 않아요.', [{ text: '취소', style: 'cancel' }, { text: '열기', onPress: () => setLegacy(true) }])} />
-    </>}
+    <AppBar title="근무시간 안내" onBack={() => router.back()} />
+    <View style={styles.content}><Text style={styles.title}>퇴근하면 근무시간을 자동으로 기록해요</Text><Text style={styles.hint}>근무시간을 따로 제출하지 않아도 돼요. 출퇴근 기록이 다르면 정정을 요청해주세요.</Text><Button label="내 출퇴근 보기" onPress={() => router.replace('/attendance/my-qr')} /></View>
   </SafeAreaView>;
 }

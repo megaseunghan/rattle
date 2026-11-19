@@ -54,3 +54,12 @@ it('일별 자료 유무와 항목 전환에도 그래프와 범례 공간을 �
   expect(StyleSheet.flatten(screen.getByTestId('financial-chart-legend').props.style).height).toBe(18);
  }
 });
+it('실패 날짜의 null 인건비와 이후 누적은 0원으로 표시하지 않는다', () => {
+  const values = { revenue: 1000, purchase: 100, expense: 100, labor: null, profit: null };
+  const failed = { ...data, date: '2026-11-02', hasRecords: true, totals: { ...data.totals, labor: null },
+    current: [{ day: 1, hasRecords: true, values }, { day: 2, hasRecords: true, values }] };
+  render(<HomeFinancialCard {...props} data={failed} />);
+  fireEvent.press(screen.getByRole('button', { name: '인건비' }));
+  expect(screen.getByText('확인 필요')).toBeTruthy(); expect(screen.queryByLabelText('0원')).toBeNull();
+  expect(screen.getByText('일별 자료 확인 필요')).toBeTruthy();
+});

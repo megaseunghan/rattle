@@ -1,3 +1,4 @@
+import { useScopedWriteGuard } from '../../lib/hooks/useScopedWriteGuard';
 import { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, Alert,
@@ -13,6 +14,7 @@ import { getErrorMessage } from '../../lib/utils/error';
 
 export default function AccountScreen() {
   const { user } = useAuth();
+  const canWrite = useScopedWriteGuard([]);
   const meta = (user?.user_metadata ?? {}) as { full_name?: string; phone?: string };
   const [fullName, setFullName] = useState(meta.full_name ?? '');
   const [phone, setPhone] = useState(meta.phone ?? '');
@@ -31,6 +33,7 @@ export default function AccountScreen() {
     }
     setSaving(true);
     try {
+      if (!canWrite()) return;
       await updateUserProfile({ name: fullName.trim(), phone: phone.trim() || null });
       Alert.alert('성공', '내 정보가 저장되었습니다.');
     } catch (e: unknown) {
@@ -76,7 +79,7 @@ export default function AccountScreen() {
         <TouchableOpacity
           style={[styles.saveBtn, saving && styles.disabled]}
           onPress={handleSave}
-          disabled={saving}
+          disabled={saving || !canWrite()}
         >
           {saving
             ? <ActivityIndicator size="small" color={Colors.white} />

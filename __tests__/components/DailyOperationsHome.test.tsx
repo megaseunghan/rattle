@@ -61,8 +61,9 @@ it('금융 권한이 없는 역할은 모든 구간에서 재무 기능을 숨�
   expect(screen.queryByLabelText('비용 기록')).toBeNull();
   fireEvent.press(screen.getByLabelText('내 급여'));
   expect(router.push).toHaveBeenLastCalledWith('/mypage/payslip');
-  fireEvent.press(screen.getByLabelText('근무시간 제출'));
-  expect(router.push).toHaveBeenLastCalledWith('/mypage/work-minutes');
+  expect(screen.queryByLabelText('근무시간 제출')).toBeNull();
+  fireEvent.press(screen.getByLabelText('근태 확인'));
+  expect(router.push).toHaveBeenLastCalledWith('/attendance/my-qr');
 });
 it('체크 조회 오류를 0건으로 바꾸지 않으며 해당 구간에서만 재시도한다', () => {
   mockSummary = { data: undefined, isError: true, refetch: jest.fn() };
@@ -80,7 +81,7 @@ it('빈 구간도 선택할 수 있고 임의로 기본 항목을 채우지 않�
   fireEvent.press(screen.getByRole('tab', { name: '영업 중' }));
   expect(screen.getByText('이 구간에 표시할 기능이 없어요.')).toBeTruthy();
   expect(screen.queryByLabelText('매입 등록')).toBeNull();
-  expect(screen.getByLabelText('직원·급여')).toBeTruthy();
+  expect(screen.getByLabelText('직원 급여')).toBeTruthy();
   fireEvent.press(screen.getByText('구성 편집'));
   expect(screen.getByText('business 편집창')).toBeTruthy();
 });

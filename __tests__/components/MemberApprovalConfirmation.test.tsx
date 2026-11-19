@@ -1,0 +1,33 @@
+import { act, fireEvent, render } from '@testing-library/react-native';
+import { Alert } from 'react-native';
+import MembersScreen from '../../app/settings/members';
+import type { JoinOnboardingReview } from '../../types';
+const mockReload = jest.fn().mockResolvedValue(undefined), mockConfirm = jest.fn();
+const preserve = { preserve_existing_wage: true as const, wage_history_id: '11111111-1111-4111-8111-111111111111' };
+let mockReview: JoinOnboardingReview = preserve;
+jest.mock('expo-router', () => ({ router: { back: jest.fn(), push: jest.fn() }, useFocusEffect: (callback: () => void) => require('react').useEffect(callback, [callback]) }));
+jest.mock('../../lib/contexts/AuthContext', () => ({ useAuth: () => ({ user: { id: 'owner' }, store: { id: 'store', name: '가상 매장' }, access: { is_owner: true }, canManageStore: true, permissionRevision: '1', refreshStore: jest.fn() }) }));
+jest.mock('../../lib/hooks/useEmployees', () => ({ useEmployees: () => ({ employees: [], refetch: mockReload }) }));
+jest.mock('../../lib/hooks/useStoreMembers', () => ({ useStoreMembers: () => ({ members: [], loading: false, error: '', refetch: mockReload }) }));
+jest.mock('../../lib/hooks/useMemberApproval', () => ({ useMemberApproval: () => ({ selection: { member: { id: 'request' }, candidates: [{ id: 'employee' }], profile: null }, confirm: mockConfirm, dismiss: jest.fn() }) }));
+jest.mock('../../lib/components/MemberApprovalModal', () => ({ MemberApprovalModal: ({ onChoose }: { onChoose: Function }) => require('react').createElement(require('react-native').Pressable, { testID: 'choose', onPress: () => onChoose({ kind: 'rehire', employeeId: 'employee' }, mockReview) }) }));
+jest.mock('../../lib/services/storeMembers', () => ({}));
+jest.mock('../../lib/icons/AppIcon', () => ({ AppIcon: () => null }));
+jest.mock('react-native-safe-area-context', () => ({ SafeAreaView: require('react-native').View }));
+beforeEach(() => { mockReview = preserve; mockConfirm.mockReset().mockResolvedValue({ employee_name: '가상 직원' }); jest.spyOn(Alert, 'alert').mockImplementation(() => {}); });
+afterEach(() => jest.restoreAllMocks());
+it('보존 확인창과 성공 안내는 기존 정보 유지로 설명하고 정확한 보존 payload를 전달한다', async () => {
+  const view = render(<MembersScreen />); fireEvent.press(view.getByTestId('choose'));
+  const [, body, buttons] = (Alert.alert as jest.Mock).mock.calls[0];
+  expect(body).toContain('기존 직원 정보와 급여 조건을 유지하고 계정만 연결할까요?'); expect(body).not.toContain('확인한 근무 조건과 계좌로');
+  expect(buttons[0].text).toBe('닫기');
+  await act(async () => { buttons[1].onPress(); });
+  expect(mockConfirm).toHaveBeenCalledWith({ kind: 'rehire', employeeId: 'employee' }, preserve);
+  const success = (Alert.alert as jest.Mock).mock.calls.at(-1);
+  expect(success[1]).toContain('기존 직원 정보와 급여 조건은 그대로 유지했어요'); expect(success[1]).not.toContain('확정한 조건이 인건비에 반영');
+});
+it('새 급여 입력을 적용할 때는 기존 입력 조건 안내를 유지한다', () => {
+  mockReview = { employment_type: 'regular', base_salary: 3000000, hourly_wage: null, weekly_hours: null, non_taxable: 0, joined_at: '2026-11-18', bank_name: '가상 은행', account_number: '123456' };
+  const view = render(<MembersScreen />); fireEvent.press(view.getByTestId('choose'));
+  expect((Alert.alert as jest.Mock).mock.calls[0][1]).toContain('확인한 근무 조건과 계좌로 최종 합류 처리할까요?');
+});

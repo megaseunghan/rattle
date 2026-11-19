@@ -1,5 +1,7 @@
-import { act, render, screen, waitFor, fireEvent } from '@testing-library/react-native';
+import { act, render, screen, waitFor, fireEvent, renderHook } from '@testing-library/react-native';
+import { queryClient, queryKeys, useQueryScope } from '../../lib/query';
 import { PosScreen } from '../../app/pos';
+jest.mock('../../lib/supabase', () => ({ supabase: {} }));
 const mockFetch = jest.fn().mockResolvedValue(undefined);
 const mockToday = jest.fn().mockResolvedValue(undefined);
 const mockSync = jest.fn();
@@ -14,7 +16,7 @@ jest.mock('../../lib/hooks/usePosAnalytics', () => ({ usePosAnalytics: () => ({ 
 jest.mock('../../lib/hooks/useManualSales', () => ({ useManualSales: () => ({ sales: [], refetch: mockToday, total: 0 }) }));
 jest.mock('../../lib/services/stores', () => ({ getStoreDetails: jest.fn().mockResolvedValue({ toss_merchant_id: 'merchant', closing_time: '23:00' }) }));
 jest.mock('react-native-safe-area-context', () => ({ SafeAreaView: ({ children }: any) => children }));
-beforeEach(() => { jest.clearAllMocks(); mockLoading = true; mockRole = 'admin'; });
+beforeEach(() => { queryClient.clear(); jest.clearAllMocks(); mockLoading = true; mockRole = 'admin'; });
 it('POS 동기화가 끝나지 않아도 저장된 매출과 달력을 표시한다', async () => {
   let finish!: () => void;
   mockSync.mockImplementation(() => new Promise<void>(resolve => { finish = resolve; }));
@@ -37,4 +39,13 @@ it('직원은 POS 쓰기 동기화 없이 저장된 매출을 다시 조회할 �
   fireEvent.press(screen.getByText('조회'));
   await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(3));
   expect(mockSync).toHaveBeenCalledTimes(syncCalls);
+});
+
+it('같은 범위의 연결 캐시가 있으면 재마운트부터 저장 매출을 표시한다', async () => {
+ const scope = renderHook(useQueryScope);
+ queryClient.setQueryData(queryKeys.store(scope.result.current, 'store', 'pos', 'connection', '23:00:'), { toss_merchant_id: 'merchant', closing_time: '23:00' });
+ const view = render(<PosScreen />);
+ expect(view.queryByText('매출을 준비하고 있어요')).toBeNull();
+ expect(view.getByText('오늘 매출')).toBeTruthy();
+ await act(async () => {});
 });

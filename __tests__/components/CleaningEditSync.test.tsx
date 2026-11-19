@@ -3,11 +3,12 @@ import { notifyManager } from '@tanstack/react-query';
 import { clearQueryData } from '../../lib/query/client';
 import CleaningEditScreen from '../../app/cleaning/edit';
 const mockList = jest.fn(), mockAdd = jest.fn(), mockScroll = jest.fn(), mockOffset = jest.fn();
+let mockPreviewMode = 'self';
 let mockOnScrollFailed: (info: { index: number; averageItemLength: number }) => void;
 jest.mock('expo-router', () => ({ router: { back: jest.fn() }, useFocusEffect: (callback: () => void) => {
   const React = require('react'); React.useEffect(callback, [callback]);
 } }));
-jest.mock('../../lib/contexts/AuthContext', () => ({ useAuth: () => ({ store: { id: 's' }, user: { id: 'u' }, realRole: 'admin', currentRole: 'admin' }) }));
+jest.mock('../../lib/contexts/AuthContext', () => ({ useAuth: () => ({ store: { id: 's' }, user: { id: 'u' }, realRole: 'admin', currentRole: 'admin', devPreviewMode: mockPreviewMode }) }));
 jest.mock('../../lib/components/GlassBackdrop', () => ({ GlassBackdrop: () => null }));
 jest.mock('../../lib/icons/AppIcon', () => ({ AppIcon: () => null }));
 jest.mock('../../lib/components/ui', () => {
@@ -35,6 +36,7 @@ jest.mock('../../lib/services/cleaning', () => ({
 beforeAll(() => { notifyManager.setNotifyFunction(callback => { act(() => callback()); }); });
 afterAll(() => { notifyManager.setNotifyFunction(callback => callback()); });
 beforeEach(async () => {
+  mockPreviewMode = 'self';
   await act(async () => { await clearQueryData(); }); mockScroll.mockReset(); mockOffset.mockReset();
   mockList.mockReset().mockResolvedValue([]);
   mockAdd.mockReset().mockImplementation(async (_store, segment, title, sort_order, weekday) => ({ id: 'added', store_id: 's', segment, title, sort_order, weekday }));
@@ -81,4 +83,15 @@ it('재시도 대기 중 구분을 바꾸면 이전 목록의 index로 스크롤
   await act(async () => { await new Promise(resolve => setTimeout(resolve, 150)); });
   expect(screen.queryByText('QA-전환 전 항목')).toBeNull();
   expect(mockScroll).toHaveBeenCalledTimes(1);
+});
+
+it('역할 미리보기에서 항목을 추가해도 저장 서비스는 호출하지 않는다', async () => {
+  mockPreviewMode = 'regular';
+  render(<CleaningEditScreen />);
+  await waitFor(() => expect(mockList).toHaveBeenCalled());
+  fireEvent.press(screen.getByLabelText('항목 추가 열기'));
+  fireEvent.changeText(screen.getByLabelText('새 항목'), 'QA-차단 항목');
+  fireEvent.press(screen.getByLabelText('항목 추가'));
+  await waitFor(() => expect(screen.getByText('처리하지 못했어요. 다시 시도해주세요.')).toBeTruthy());
+  expect(mockAdd).not.toHaveBeenCalled();
 });

@@ -8,7 +8,7 @@ const read=service.getRecurringFixedExpenses as jest.Mock, save=service.saveRecu
 const empty={rules:[],occurrences:[],adoptedSourceIds:[]};
 const input:any={rule_id:'r',store_id:'s',effective_month:'2026-12',name:'비용',amount:10,payment_day:31,active:true,end_month:null,source_expense_id:null,expected_revision:null};
 function deferred<T>(){let resolve!:(value:T)=>void;const promise=new Promise<T>(r=>{resolve=r;});return {promise,resolve};}
-beforeEach(()=>{jest.clearAllMocks();mockAuth={user:{id:'u'},store:{id:'s'},currentRole:'admin',devPreviewMode:'self'};read.mockResolvedValue(empty);});
+beforeEach(()=>{jest.clearAllMocks();mockAuth={user:{id:'u'},store:{id:'s'},currentRole: 'admin', canManageStore: true,devPreviewMode:'self'};read.mockResolvedValue(empty);});
 test('scope switch hides old records and rejects old responses',async()=>{
  const old=deferred<any>();read.mockReturnValueOnce(old.promise);const {result,rerender}=renderHook(()=>useRecurringFixedExpenses('2026-11'));
  mockAuth={...mockAuth,user:{id:'other'}};rerender({});await waitFor(()=>expect(result.current.loading).toBe(false));
@@ -27,5 +27,11 @@ test('pending save rejects double submit and wrong store/admin',async()=>{
  const pending=deferred<string>();save.mockReturnValue(pending.promise);const {result,rerender}=renderHook(()=>useRecurringFixedExpenses('2026-11'));await waitFor(()=>expect(result.current.loading).toBe(false));
  let first!:Promise<string>;act(()=>{first=result.current.save(input);});await act(async()=>{await expect(result.current.save(input)).rejects.toThrow('저장 중');});expect(save).toHaveBeenCalledTimes(1);
  await act(async()=>{pending.resolve('r');await first;});
- mockAuth={...mockAuth,currentRole:'member'};rerender({});await act(async()=>{await expect(result.current.save(input)).rejects.toThrow('관리자');});
+ mockAuth={...mockAuth,currentRole: 'member', canManageStore: false};rerender({});await act(async()=>{await expect(result.current.save(input)).rejects.toThrow('관리자');});
+});
+
+test('본인 화면에서 받은 저장 콜백도 현재 미리보기에서는 쓰지 않는다',async()=>{
+ const {result,rerender}=renderHook(()=>useRecurringFixedExpenses('2026-11'));
+ const oldSave=result.current.save;mockAuth={...mockAuth,devPreviewMode:'regular'};rerender({});
+ await expect(oldSave(input)).rejects.toThrow();expect(save).not.toHaveBeenCalled();
 });

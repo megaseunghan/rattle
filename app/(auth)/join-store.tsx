@@ -1,3 +1,4 @@
+import { useScopedWriteGuard } from '../../lib/hooks/useScopedWriteGuard';
 import { useEffect, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, KeyboardAvoidingView, Platform,
@@ -73,6 +74,7 @@ export default function JoinStoreScreen() {
   const mounted = useRef(true);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const { user } = useAuth();
+  const canWrite = useScopedWriteGuard([]);
   const scope = useRef(user?.id);
   scope.current = user?.id;
   const steps = joinSteps(employment);
@@ -149,6 +151,7 @@ export default function JoinStoreScreen() {
       setLoading(true);
       setError(null);
       if (!inviteCode) throw new Error('참여코드를 확인해주세요.');
+      if (!canWrite()) return;
       const result = await submitJoinOnboarding(inviteCode, identity.name, identity.phone, profile);
       if (mounted.current && scope.current === userId) {
         Keyboard.dismiss();

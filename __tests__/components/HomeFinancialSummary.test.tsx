@@ -1,3 +1,4 @@
+jest.mock('../../lib/components/HomeAttendanceCard', () => ({ HomeAttendanceCard: () => null }));
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { RefreshControl, ScrollView } from 'react-native';
 import { router } from 'expo-router';
@@ -40,7 +41,7 @@ jest.mock('../../lib/components/GlassBackdrop', () => ({ GlassBackdrop: () => nu
 jest.mock('expo-router', () => ({ router: { push: jest.fn() } }));
 jest.mock('../../lib/contexts/AuthContext', () => {
   const store = { id: 'store', name: '소속 매장' }; const user = { id: 'employee' };
-  return { useAuth: () => ({ store, user, stores: [store], currentRole: mockRole, canReadFinancials: mockCanRead, realRole: mockRole, devPreviewMode: 'self', switchStore: mockSwitchStore }) };
+  return { useAuth: () => ({ store, user, stores: [store], currentRole: mockRole, canManageStore: mockRole === 'admin', storeRole: mockRole === 'admin' ? 'owner' : mockEmployment === 'part_time' ? 'part_timer' : 'employee', canReadFinancials: mockCanRead, realRole: mockRole, devPreviewMode: 'self', switchStore: mockSwitchStore }) };
 });
 jest.mock('../../lib/contexts/TabPagerContext', () => ({ useTabPager: () => {
   const React = require('react');

@@ -101,7 +101,7 @@ function ScheduleSummary({ employeeId }: { employeeId: string }) {
 }
 
 export default function MyPageScreen() {
-  const { user, store, currentRole, realRole, devPreviewMode, devPreviewEmployeeId, signOut } = useAuth();
+  const { user, store, currentRole, realRole, storeRole, canManageStore, devPreviewMode, devPreviewEmployeeId, signOut } = useAuth();
   const [signingOut, setSigningOut] = useState(false);
   function handleSignOut() {
     Alert.alert('로그아웃', '로그아웃할까요?', [
@@ -120,8 +120,7 @@ export default function MyPageScreen() {
   useEffect(() => { void refetchEmployees().catch(() => {}); }, [refetchEmployees]);
   const meta = (user?.user_metadata ?? {}) as { full_name?: string };
   const displayName = myEmployee?.name || meta.full_name || user?.email || '';
-  const roleLabel = !isPreviewing && currentRole === 'admin' ? '사장님'
-    : myEmployee?.employment_type === 'part_time' ? '파트타이머' : '직원';
+  const roleLabel = storeRole ? { owner: '사장', manager: '점장', employee: '직원', part_timer: '파트타이머' }[storeRole] : '역할을 확인하고 있어요';
   const scope = `${user?.id}:${store?.id}:${myEmployee?.id}:${devPreviewMode}:${devPreviewEmployeeId}`;
   return <SafeAreaView style={styles.container}><GlassBackdrop />
     <AppBar transparent title="마이페이지" onBack={() => router.back()} />
@@ -143,10 +142,10 @@ export default function MyPageScreen() {
       {myEmployee && <ScheduleSummary key={scope} employeeId={myEmployee.id} />}
       <View>
         <Text style={styles.sectionTitle}>내 메뉴</Text>
-        {myEmployee?.employment_type === 'part_time' && <MenuRow illustration="work-time" label="근무시간 제출" onPress={() => router.push('/mypage/work-minutes')} />}
+        {myEmployee && <MenuRow illustration="work-time" label="근태 확인" onPress={() => router.push('/attendance/my-qr')} />}
         {myEmployee && <MenuRow illustration="payroll" label="급여 명세서" withBorder={myEmployee.employment_type === 'part_time'} onPress={() => router.push('/mypage/payslip')} />}
         {!isPreviewing && <MenuRow illustration="staff" label="개인정보 수정" withBorder={!!myEmployee} onPress={() => router.push('/settings/account')} />}
-        {realRole === 'admin' && <MenuRow illustration="review-pending" label="요청함 (스케줄)" withBorder onPress={() => router.push('/mypage/requests')} />}
+        {canManageStore && <MenuRow illustration="review-pending" label="요청함 (스케줄)" withBorder onPress={() => router.push('/mypage/requests')} />}
       </View>
       <TouchableOpacity accessibilityRole="button" accessibilityLabel="로그아웃" accessibilityState={{ disabled: signingOut }} disabled={signingOut} onPress={handleSignOut} style={styles.logout}>
         <Text style={styles.note}>{signingOut ? '로그아웃 중...' : '로그아웃'}</Text>

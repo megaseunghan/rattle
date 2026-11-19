@@ -1,0 +1,23 @@
+import { act, renderHook } from '@testing-library/react-native';
+import { useHomeWorkflow } from '../../lib/hooks/useHomeWorkflow';
+import { queryClient, invalidateStoreData } from '../../lib/query/client';
+const mockGet = jest.fn().mockResolvedValue(null);
+jest.mock('../../lib/contexts/AuthContext', () => ({ useAuth: () => ({ store: { id: 'a' } }) }));
+jest.mock('../../lib/query', () => ({ ...jest.requireActual('../../lib/query/client'), useQueryScope: () => 'u' }));
+jest.mock('../../lib/services/homeWorkflow', () => ({ getHomeWorkflow: (...args: unknown[]) => mockGet(...args) }));
+jest.mock('expo-router', () => ({ useFocusEffect: (effect: () => void) => require('react').useEffect(effect, [effect]) }));
+beforeEach(() => { jest.useFakeTimers(); queryClient.clear(); mockGet.mockClear(); });
+afterEach(() => { queryClient.clear(); jest.useRealTimers(); });
+it('열어 둔 홈은 자동 폴링하지 않고 복귀와 저장 무효화 때 갱신한다', async () => {
+ const view = renderHook(({ active }: { active: boolean }) => useHomeWorkflow(active), { initialProps: { active: true } });
+ await act(async () => {});
+ const initial = mockGet.mock.calls.length;
+ await act(async () => { jest.advanceTimersByTime(120_000); });
+ expect(mockGet).toHaveBeenCalledTimes(initial);
+ view.rerender({ active: false }); view.rerender({ active: true });
+ await act(async () => {});
+ expect(mockGet.mock.calls.length).toBeGreaterThan(initial);
+ const returning = mockGet.mock.calls.length;
+ await act(async () => { await invalidateStoreData('a', ['home-workflow']); });
+ expect(mockGet.mock.calls.length).toBeGreaterThan(returning);
+});

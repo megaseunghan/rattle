@@ -8,7 +8,6 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors } from '../../constants/colors';
 import { useAuth } from '../../lib/contexts/AuthContext';
-import { useIngredients } from '../../lib/hooks/useIngredients';
 import { useEmployees } from '../../lib/hooks/useEmployees';
 import { DailyOperationsHome } from '../../lib/components/DailyOperationsHome';
 import { HomeAlertsPanel } from '../../lib/components/HomeAlertsPanel';
@@ -19,27 +18,27 @@ import { HomeFinancialCard } from '../../lib/components/HomeFinancialCard';
 import { useTabPager } from '../../lib/contexts/TabPagerContext';
 
 import { resolveSelfEmployee } from '../../lib/utils/resolveSelfEmployee';
+import { HomeAttendanceCard } from '../../lib/components/HomeAttendanceCard';
 
 
 export function HomeScreen({ active = true }: { active?: boolean }) {
-  const { store, user, currentRole, devPreviewEmployeeId, devPreviewMode, canReadFinancials } = useAuth();
+  const { store, user, storeRole, canManageStore, devPreviewEmployeeId, devPreviewMode, canReadFinancials } = useAuth();
   const { goToTab, innerGestureActive } = useTabPager();
   const { refetch: refetchNotifications } = useNotifications();
-  const { data: ingredients, refetch } = useIngredients();
   const { employees, refetch: refetchEmp } = useEmployees();
 
   const today = new Date();
   const realYear = today.getFullYear();
   const realMonth = today.getMonth() + 1;
 
-  const { todaySales, autoSyncOnForeground, loadTodaySales } = useTossSync();
+  const { todaySales, loadTodaySales, autoSyncOnForeground } = useTossSync();
   const financial = useHomeFinancialCard(active);
   const fetchTrend = financial.refetch;
   // 로그인 본인에 연결된 직원 → 파트타이머 여부 판별 (관리자 테스트 미리보기 시엔 선택된 직원)
   const myEmployee = resolveSelfEmployee(employees, user?.id, devPreviewEmployeeId);
   const effectiveRole: 'admin' | 'member' | 'part_time' =
-    currentRole === 'admin' ? 'admin'
-    : devPreviewMode === 'part_time' || myEmployee?.employment_type === 'part_time' ? 'part_time'
+    canManageStore ? 'admin'
+    : storeRole === 'part_timer' ? 'part_time'
     : 'member';
 
   const [refreshing, setRefreshing] = useState(false);
@@ -47,11 +46,10 @@ export function HomeScreen({ active = true }: { active?: boolean }) {
 
   async function loadAll(forceFinancial = false) {
     await Promise.all([
-      refetch(forceFinancial),
       refetchEmp(forceFinancial),
       ...(forceFinancial ? [refetchNotifications()] : []),
       ...(forceFinancial && canReadFinancials ? [fetchTrend()] : []),
-      ...(currentRole === 'admin' ? [loadTodaySales()] : []),
+      ...(canManageStore ? [loadTodaySales(forceFinancial)] : []),
     ]);
   }
 
@@ -64,11 +62,12 @@ export function HomeScreen({ active = true }: { active?: boolean }) {
   useEffect(() => {
     if (!active) return;
     return scheduleIdleTask(() => { void loadAll(); });
-  }, [active, refetch, refetchEmp, refetchNotifications, loadTodaySales, fetchTrend, currentRole]);
+  }, [active, refetchEmp, refetchNotifications, loadTodaySales, fetchTrend, canManageStore]);
 
+  // Returning from another tab is also a refresh opportunity while AppState stays
+  // active. The shared coordinator deduplicates this with root foreground sync.
   useEffect(() => {
-    if (!active) return;
-    autoSyncOnForeground();
+    if (active) void autoSyncOnForeground();
   }, [active, autoSyncOnForeground]);
 
   const monthLabel = `${realYear}년 ${realMonth}월`;
@@ -82,13 +81,14 @@ export function HomeScreen({ active = true }: { active?: boolean }) {
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />}
       >
-        <HomeAlertsPanel active={active} refreshKey={alertRefreshKey} todaySales={todaySales} financial={currentRole === 'admin'} />
+        <HomeAttendanceCard employee={myEmployee} active={active} refreshKey={alertRefreshKey} />
+        <HomeAlertsPanel active={active} refreshKey={alertRefreshKey} todaySales={todaySales} financial={canManageStore} />
         {canReadFinancials && <>
-        <HomeFinancialCard key={`${store?.id}-${user?.id}-${currentRole}`} data={financial.data} loading={financial.loading} refreshing={financial.refreshing} error={!!financial.error} onRetry={financial.refetch} />
-        {financial.data?.totals.labor === null && currentRole === 'admin' && <TouchableOpacity onPress={() => goToTab('payroll')} accessibilityRole="button" style={{ minHeight: 44, padding: 12 }}><Text style={{ color: Colors.action }}>확인할 직원 보기 →</Text></TouchableOpacity>}
+        <HomeFinancialCard key={`${store?.id}-${user?.id}-${canManageStore}`} data={financial.data} loading={financial.loading} refreshing={financial.refreshing} error={!!financial.error} onRetry={financial.refetch} />
+        {financial.data?.totals.labor === null && canManageStore && <TouchableOpacity onPress={() => goToTab('payroll')} accessibilityRole="button" style={{ minHeight: 44, padding: 12 }}><Text style={{ color: Colors.action }}>확인할 직원 보기 →</Text></TouchableOpacity>}
 
         </>}
-        <DailyOperationsHome active={active} refreshKey={alertRefreshKey} isAdmin={currentRole === 'admin'} isPartTime={effectiveRole === 'part_time'} canUseFinancialTabs={canReadFinancials && effectiveRole !== 'part_time'} />
+        <DailyOperationsHome active={active} refreshKey={alertRefreshKey} isAdmin={canManageStore} isPartTime={effectiveRole === 'part_time'} canUseFinancialTabs={canReadFinancials && effectiveRole !== 'part_time'} />
         <Text style={styles.footerCaption}>{store?.name ?? ''} · {monthLabel}</Text>
       </ScrollView>
 

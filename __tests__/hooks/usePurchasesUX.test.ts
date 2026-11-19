@@ -3,7 +3,7 @@ import { usePurchases } from '../../lib/hooks/usePurchases';
 const mockGet = jest.fn();
 const mockWrite = jest.fn();
 let mockStore: { id: string } | null = { id: 'a' };
-jest.mock('../../lib/contexts/AuthContext', () => ({ useAuth: () => ({ store: mockStore }) }));
+jest.mock('../../lib/contexts/AuthContext', () => ({ useAuth: () => ({ store: mockStore, devPreviewMode: 'self' }) }));
 jest.mock('../../lib/query', () => ({ useQueryScope: () => 'account-role' }));
 jest.mock('../../lib/services/purchases', () => ({ getPurchasesByMonth: (...args: unknown[]) => mockGet(...args), createPurchaseWithItems: (...args: unknown[]) => mockWrite(...args) }));
 beforeEach(() => { mockGet.mockReset(); mockWrite.mockReset(); mockStore = { id: 'a' }; });

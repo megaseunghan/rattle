@@ -2,11 +2,12 @@ import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { useNotificationSettings } from '../../lib/hooks/useNotificationSettings';
 const mockRead = jest.fn(), mockWrite = jest.fn();
 let mockStoreId = 's1';
+let mockPreviewMode = 'self';
 let mockUserId: string | null = 'u';
-jest.mock('../../lib/contexts/AuthContext', () => ({ useAuth: () => ({ store: { id: mockStoreId }, user: mockUserId ? { id: mockUserId } : null }) }));
+jest.mock('../../lib/contexts/AuthContext', () => ({ useAuth: () => ({ store: { id: mockStoreId }, devPreviewMode: mockPreviewMode, user: mockUserId ? { id: mockUserId } : null }) }));
 jest.mock('../../lib/services/notifications', () => ({ getNotificationSettings: (...args: unknown[]) => mockRead(...args), setNotificationSetting: (...args: unknown[]) => mockWrite(...args) }));
 function deferred<T>() { let resolve!: (v: T) => void; const promise = new Promise<T>(r => { resolve = r; }); return { resolve, promise }; }
-beforeEach(() => { jest.clearAllMocks(); mockStoreId = 's1'; mockUserId = 'u'; mockRead.mockReset().mockResolvedValue({ low: true }); mockWrite.mockReset().mockResolvedValue(undefined); });
+beforeEach(() => { jest.clearAllMocks(); mockStoreId = 's1'; mockPreviewMode = 'self'; mockUserId = 'u'; mockRead.mockReset().mockResolvedValue({ low: true }); mockWrite.mockReset().mockResolvedValue(undefined); });
 it('조회 실패를 기본 설정으로 표시하지 않고 재조회로 복구한다', async () => {
   mockRead.mockRejectedValueOnce(new Error('offline'));
   const { result } = renderHook(() => useNotificationSettings());
@@ -125,4 +126,11 @@ it('같은 매장에서 계정이 바뀌어도 이전 조회는 새 계정 설�
   await act(async () => { await result.current.refetch(); });
   await act(async () => { old.resolve({ low: true }); await pending; });
   expect(result.current).toMatchObject({ settings: { low: false }, ready: true });
+});
+
+it('미리보기에서 실제 매장 알림 설정을 저장하지 않는다', async () => {
+ mockPreviewMode='regular'; const {result}=renderHook(()=>useNotificationSettings());
+ await act(async()=>{await result.current.refetch();});
+ await act(async()=>{await result.current.toggle('low',false);});
+ expect(mockWrite).not.toHaveBeenCalled();
 });

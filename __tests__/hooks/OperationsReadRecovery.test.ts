@@ -5,7 +5,9 @@ import { useManualSales } from '../../lib/hooks/useManualSales';
 import { useRequestApprovals } from '../../lib/hooks/useRequestApprovals';
 const mockSales = jest.fn(), mockDelete = jest.fn(), mockRequests = jest.fn(), mockReview = jest.fn();
 let mockStore = 's';
-jest.mock('../../lib/contexts/AuthContext', () => ({ useAuth: () => ({ store: { id: mockStore }, user: { id: 'u' }, realRole: 'admin', currentRole: 'admin', devPreviewMode: 'self' }) }));
+let mockOwner = true;
+let mockManage = true;
+jest.mock('../../lib/contexts/AuthContext', () => ({ useAuth: () => ({ store: { id: mockStore }, user: { id: 'u' }, realRole: 'admin', currentRole: 'admin', canManageStore: mockManage, access: { is_owner: mockOwner, employee_id: 'self' }, devPreviewMode: 'self' }) }));
 jest.mock('../../lib/services/manualSales', () => ({ getManualSalesByMonth: (...a:unknown[]) => mockSales(...a), deleteManualSale: (...a:unknown[]) => mockDelete(...a) }));
 jest.mock('../../lib/services/schedule', () => ({ getPendingScheduleRequests: (...a:unknown[]) => mockRequests(...a), reviewScheduleRequest: (...a:unknown[]) => mockReview(...a) }));
 const sale = { id: 'sale', store_id: 's', date: '2026-10-01', cash_amount: 100, card_amount: 200 };
@@ -13,7 +15,7 @@ const request = { id: 'request', store_id: 's', employee_id: 'e', days: [] } as 
 function deferred() { let resolve!:(v:any)=>void; const promise = new Promise<any>(yes=>{resolve=yes;}); return {promise,resolve}; }
 beforeAll(() => notifyManager.setNotifyFunction(callback => { act(() => callback()); }));
 afterAll(() => notifyManager.setNotifyFunction(callback => callback()));
-beforeEach(async () => { await act(async () => { await clearQueryData(); }); mockStore = 's'; mockSales.mockReset().mockResolvedValue([sale]); mockRequests.mockReset().mockResolvedValue([request]); mockDelete.mockReset().mockResolvedValue(undefined); mockReview.mockReset().mockResolvedValue(undefined); });
+beforeEach(async () => { await act(async () => { await clearQueryData(); }); mockStore = 's'; mockOwner = true; mockManage = true; mockSales.mockReset().mockResolvedValue([sale]); mockRequests.mockReset().mockResolvedValue([request]); mockDelete.mockReset().mockResolvedValue(undefined); mockReview.mockReset().mockResolvedValue(undefined); });
 afterEach(async () => { await act(async () => { await clearQueryData(); }); });
 it('수기 매출 조회 실패는 합계 0원이나 빈 목록 성공과 구분하고 재시도로 복구한다', async () => {
  mockSales.mockRejectedValueOnce(new Error('offline')); const {result} = renderHook(()=>useManualSales('2026-10'));
@@ -57,4 +59,19 @@ it('승인 연타는 한 번만 쓰고 성공한 요청만 제거한다', async 
  await act(async()=>{await result.current.refetch();}); await waitFor(()=>expect(result.current.ready).toBe(true)); let saving!:Promise<void>;
  act(()=>{saving=result.current.reviewSchedule(request,true); void result.current.reviewSchedule(request,true);}); expect(mockReview).toHaveBeenCalledTimes(1);
  await act(async()=>{pending.resolve(undefined);await saving;}); await waitFor(()=>expect(result.current.scheduleRequests).toEqual([]));
+});
+
+it('점장은 본인 스케줄 요청을 승인하지 않는다', async () => {
+ mockOwner = false; mockRequests.mockResolvedValue([{ ...request, employee_id: 'self' }]);
+ const {result}=renderHook(()=>useRequestApprovals());
+ await act(async()=>{await result.current.refetch();});
+ await waitFor(()=>expect(result.current.ready).toBe(true));
+ await act(async()=>{await result.current.reviewSchedule({...request, employee_id:'self'},true);});
+ expect(mockReview).not.toHaveBeenCalled();
+});
+it('관리 capability가 없으면 직접 호출해도 요청함을 조회하지 않는다', async () => {
+ mockManage = false; const {result}=renderHook(()=>useRequestApprovals());
+ await act(async()=>{await result.current.refetch();});
+ expect(mockRequests).not.toHaveBeenCalled();
+ expect(result.current.scheduleRequests).toEqual([]);
 });

@@ -3,8 +3,9 @@ import { Alert } from 'react-native';
 import ManualSaleNewScreen from '../../app/pos/new';
 const mockRead=jest.fn(), mockSave=jest.fn(), mockBypass=jest.fn();
 let mockStore={id:'store'};
+let mockPreview='self';
 let mockDateChange: (_: unknown,date: Date) => void;
-jest.mock('../../lib/contexts/AuthContext',()=>({useAuth:()=>({store:mockStore})}));
+jest.mock('../../lib/contexts/AuthContext',()=>({useAuth:()=>({store:mockStore,devPreviewMode:mockPreview})}));
 jest.mock('../../lib/services/manualSales',()=>({getManualSaleByDate:(...args:unknown[])=>mockRead(...args),saveManualSale:(...args:unknown[])=>mockSave(...args)}));
 jest.mock('expo-router',()=>({router:{back:jest.fn()}}));
 jest.mock('../../lib/hooks/useConfirmLeave',()=>({useConfirmLeave:()=>mockBypass}));
@@ -23,7 +24,7 @@ function deferred<T>() {let resolve!:(value:T)=>void;const promise=new Promise<T
 const latestAlert=()=> (Alert.alert as jest.Mock).mock.calls.at(-1);
 async function loadExisting(){render(<ManualSaleNewScreen/>);await waitFor(()=>expect(screen.getByLabelText('현금 매출, 원').props.value).toBe('100'));}
 beforeEach(()=>{
- jest.clearAllMocks();mockStore={id:'store'};
+ jest.clearAllMocks();mockPreview='self';mockStore={id:'store'};
  mockRead.mockReset().mockResolvedValue(old);mockSave.mockReset().mockResolvedValue({...old,card_amount:250});
  jest.spyOn(Alert,'alert').mockImplementation(()=>{});
 });
@@ -76,4 +77,19 @@ it('같은 저장 확인 콜백이 중복 실행돼도 한 번만 쓴다',async(
  const save=latestAlert()[2].find((b:any)=>b.text==='저장').onPress;
  await act(async()=>{await Promise.all([save(),save()]);});
  expect(mockSave).toHaveBeenCalledTimes(1);
+});
+
+it('미리보기에서는 수기매출 저장 확인을 시작하지 않는다',async()=>{
+ mockPreview='regular';await loadExisting();
+ fireEvent.changeText(screen.getByLabelText('카드 매출, 원'),'250');
+ fireEvent.press(screen.getByText('변경 내용 확인'));
+ expect(mockSave).not.toHaveBeenCalled();expect(Alert.alert).not.toHaveBeenCalled();
+});
+it('저장 확인창을 연 뒤 미리보기로 바꾸면 이전 확인 버튼도 쓰지 않는다',async()=>{
+ const view=render(<ManualSaleNewScreen/>);
+ await waitFor(()=>expect(screen.getByLabelText('현금 매출, 원').props.value).toBe('100'));
+ fireEvent.changeText(screen.getByLabelText('카드 매출, 원'),'250');fireEvent.press(screen.getByText('변경 내용 확인'));
+ const buttons=latestAlert()[2];mockPreview='part_time';view.rerender(<ManualSaleNewScreen/>);
+ await act(async()=>{await buttons.find((b:any)=>b.text==='저장').onPress();});
+ expect(mockSave).not.toHaveBeenCalled();
 });

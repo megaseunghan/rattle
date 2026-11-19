@@ -1,3 +1,4 @@
+import { usePreviewWriteGuard } from '../../lib/hooks/usePreviewWriteGuard';
 import { useStorePermissions } from '../../lib/hooks/useStorePermissions';
 import { AppBar } from '../../lib/components/ui';
 import { ErrorMessage } from '../../lib/components/ErrorMessage';
@@ -83,6 +84,7 @@ function NewRecipeScreenForm() {
   const { data: recipes, create } = useRecipes();
   const { data: ingredients, create: createIngredient } = useIngredients();
   const { store } = useAuth();
+  const { canWrite } = usePreviewWriteGuard();
 
   const [name, setName] = useState('');
   const [category, setCategory] = useState('');
@@ -121,6 +123,7 @@ function NewRecipeScreenForm() {
     }
     setSavingVol(true);
     try {
+      if (!canWrite()) return;
       const updated = await updateIngredient(volumeTarget.id, { unit_volume: v, unit_volume_unit: volUnit });
       // 해당 재료의 ingredient를 갱신하고 입력 단위를 용량 단위로 전환
       setItems(prev =>
@@ -211,6 +214,7 @@ function NewRecipeScreenForm() {
     if (!store) return;
     setSavingNew(true);
     try {
+      if (!canWrite()) return;
       const created = await createIngredient({
         store_id: store.id,
         name: newName.trim(),
@@ -286,6 +290,7 @@ function NewRecipeScreenForm() {
       }));
 
       if (isEdit && id) {
+        if (!canWrite()) return;
         await updateRecipeFull(id, name.trim(), category.trim() || '기타', sp, ingredientData);
         Alert.alert('성공', '레시피가 수정되었습니다.');
       } else {

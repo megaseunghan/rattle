@@ -1,3 +1,4 @@
+import { usePreviewWriteGuard } from './usePreviewWriteGuard';
 import { useCallback, useState, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { isAccessDenied, queryClient, queryKeys, useQueryScope } from '../query';
@@ -18,6 +19,7 @@ function todayISO(): string {
 }
 
 export function useCleaningChecklist() {
+  const { assertCanWrite } = usePreviewWriteGuard();
   const { store } = useAuth();
   const scope = useQueryScope();
   const storeId = store?.id;
@@ -56,6 +58,7 @@ export function useCleaningChecklist() {
   }
 
   async function toggle(item: CleaningItem, checkedByName: string) {
+    assertCanWrite();
     if (!store || toggleLock.current || uncertainScope.current === actionScope) return;
     if (!itemQuery.isSuccess || !logQuery.isSuccess || itemQuery.isFetching || logQuery.isFetching) throw new UserFacingError('체크리스트를 다시 불러온 뒤 확인해주세요.');
     toggleLock.current = true;
@@ -81,6 +84,7 @@ export function useCleaningChecklist() {
   }
 
   async function addItem(segment: CleaningSegment, title: string, weekday: number | null = null) {
+    assertCanWrite();
     if (!store) throw new UserFacingError('매장을 선택해 주세요.');
     if (!itemQuery.isSuccess) throw new UserFacingError('체크리스트를 먼저 불러온 뒤 다시 추가해 주세요.');
     const sameSegment = items.filter(i => i.segment === segment);
@@ -91,16 +95,19 @@ export function useCleaningChecklist() {
   }
 
   async function editItem(id: string, title: string) {
+    assertCanWrite();
     await updateCleaningItem(id, title);
     await updateItems(prev => prev.map(i => (i.id === id ? { ...i, title } : i)));
   }
 
   async function removeItem(id: string) {
+    assertCanWrite();
     await removeCleaningItem(id);
     await updateItems(prev => prev.filter(i => i.id !== id));
   }
 
   async function reorder(segmentItems: CleaningItem[]) {
+    assertCanWrite();
     const updates = segmentItems.map((item, idx) => ({ id: item.id, sort_order: idx }));
     await reorderCleaningItems(updates);
     await updateItems(prev => prev.map(i => {

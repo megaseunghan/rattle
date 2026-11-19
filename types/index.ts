@@ -193,6 +193,13 @@ export interface StoreJoinResult {
   store_name: string;
 }
 
+export interface MemberApprovalExistingWage {
+  employment_type: 'regular' | 'part_time';
+  hourly_wage: number | null;
+  base_salary: number | null;
+  effective_date: string;
+}
+
 export interface MemberApprovalCandidate {
   id: string;
   name: string;
@@ -202,6 +209,14 @@ export interface MemberApprovalCandidate {
   created_at: string;
   has_other_account: boolean;
   is_applicant_account: boolean;
+  /** 관리자 후보 조회에서만 제공. 현재 유효 최신 조건이 없거나 잘못되었으면 null. */
+  existing_wage?: MemberApprovalExistingWage | null;
+  employment_type?: 'regular' | 'part_time' | null;
+  wage_condition_valid?: boolean;
+  wage_history_id?: string | null;
+  wage_effective_date?: string | null;
+  wage_hourly_wage?: number | null;
+  wage_base_salary?: number | null;
 }
 
 export type MemberApprovalChoice =
@@ -219,6 +234,13 @@ export interface JoinOnboardingInput {
   bank_name: string;
   account_number: string;
 }
+
+/** 재합류에서만 사용. 전체 조건 입력과 섞지 않고 조회한 이력 ID를 전달한다. */
+export interface PreserveJoinOnboardingWage {
+  preserve_existing_wage: true;
+  wage_history_id: string;
+}
+export type JoinOnboardingReview = JoinOnboardingInput | PreserveJoinOnboardingWage;
 
 export interface JoinOnboardingProfile extends JoinOnboardingInput {
   member_id: string;
@@ -570,3 +592,227 @@ export interface HomeFinancialSummary {
 export type HomePhase = 'open' | 'business' | 'close';
 export type HomeActionId = 'open_check' | 'close_check' | 'weekday_check' | 'stock' | 'stock_edit' | 'schedule' | 'purchase' | 'recipes' | 'sales' | 'expenses';
 export type HomeWorkflow = Record<HomePhase, HomeActionId[]>;
+
+// QR 출퇴근 1차 — 급여·일별 근무 자료와 분리된 서버 계약.
+export type AttendancePunchKind = 'clock_in' | 'clock_out';
+export type AttendancePunchSource = 'scan' | 'manual' | 'correction';
+export type AttendanceDeviceStatus = 'active' | 'pending' | 'revoked';
+export type AttendanceFlag = 'no_schedule' | 'early_clock_in' | 'late_clock_out' | 'previous_open_over_16h' | 'new_device';
+export type AttendanceCorrectionAction = 'add' | 'change' | 'void';
+export type AttendanceCorrectionStatus = 'pending' | 'approved' | 'rejected' | 'cancelled';
+export interface AttendanceEmployeeName { id: string; name: string }
+/** qr_nonce는 화면·캐시에 전달하지 않는다. 직원 조인은 이름·ID만 읽는다. */
+export interface AttendancePunch {
+  id: string;
+  /** 서버 동일 punched_at 순서. UUID로 대체 정렬하지 않는다. */
+  event_order: number;
+  store_id: string;
+  employee_id: string;
+  kind: AttendancePunchKind;
+  punched_at: string;
+  work_date: string;
+  source: AttendancePunchSource;
+  is_void: boolean;
+  supersedes_id: string | null;
+  scanner_id: string | null;
+  device_id: string | null;
+  flags: AttendanceFlag[];
+  note: string | null;
+  created_by: string | null;
+  created_at: string;
+}
+export interface AttendancePunchWithEmployee extends AttendancePunch {
+  employee: AttendanceEmployeeName | null;
+}
+export interface AttendancePairedSnapshot {
+  punch_id: string;
+  kind: AttendancePunchKind;
+  punched_at: string;
+  work_date: string;
+}
+export interface AttendanceOriginalSnapshot extends AttendancePairedSnapshot {
+  source: AttendancePunchSource;
+  paired_original?: AttendancePairedSnapshot | null;
+  paired_before_apply?: AttendancePairedSnapshot | null;
+}
+export interface AttendanceCorrectionRequest {
+  id: string;
+  store_id: string;
+  employee_id: string;
+  action: AttendanceCorrectionAction;
+  target_punch_id: string | null;
+  kind: AttendancePunchKind | null;
+  requested_time: string | null;
+  reason: string;
+  status: AttendanceCorrectionStatus;
+  original_snapshot: AttendanceOriginalSnapshot | null;
+  requested_by: string;
+  created_at: string;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  review_note: string | null;
+  applied_punch_id: string | null;
+  paired_applied_punch_id: string | null;
+}
+export interface AttendanceCorrectionWithHistory extends AttendanceCorrectionRequest {
+  employee: AttendanceEmployeeName | null;
+  /** 원본 attendance_punches와 연결하므로 후속 정정·무효 처리 뒤에도 조회된다. */
+  applied_punch: AttendancePunch | null;
+  paired_applied_punch: AttendancePunch | null;
+}
+export interface StoreAttendanceDevice {
+  device_id: string;
+  employee_id: string;
+  employee_name: string;
+  label: string;
+  status: AttendanceDeviceStatus;
+  requested_at: string;
+  activated_at: string | null;
+  first_punch_at: string | null;
+}
+export interface AttendanceScanner {
+  id: string;
+  store_id: string;
+  label: string;
+  created_by: string;
+  created_at: string;
+  last_seen_at: string | null;
+  revoked_at: string | null;
+  revoked_by: string | null;
+}
+export interface AttendanceScanReceipt {
+  punch_id: string;
+  kind: AttendancePunchKind;
+  punched_at: string;
+  flags: AttendanceFlag[];
+  duplicate: boolean;
+  employee_name: string;
+}
+/** RPC명·인자·반환을 한 곳에서 대조한다. void RPC의 JSON 응답은 null이다. */
+export interface AttendanceRpcContracts {
+  register_attendance_device: { args: { p_label: string }; result: { device_id: string; status: 'active' | 'pending'; secret: string } };
+  issue_attendance_qr: { args: { p_device_id: string }; result: { nonce: string; expires_at: string } };
+  approve_attendance_device: { args: { p_device_id: string }; result: null };
+  revoke_attendance_device: { args: { p_device_id: string; p_reason: string | null }; result: null };
+  list_store_attendance_devices: { args: { p_store_id: string }; result: StoreAttendanceDevice[] };
+  register_attendance_scanner: { args: { p_store_id: string; p_label: string }; result: { scanner_id: string; token: string } };
+  revoke_attendance_scanner: { args: { p_scanner_id: string }; result: null };
+  attendance_scanner_status: { args: { p_scanner_token: string }; result: { scanner_id: string; store_name: string; label: string } };
+  punch_attendance: { args: { p_scanner_token: string; p_qr: string }; result: AttendanceScanReceipt };
+  record_manual_attendance: { args: { p_store_id: string; p_employee_id: string; p_kind: AttendancePunchKind; p_at: string; p_reason: string }; result: string };
+  request_attendance_correction: { args: { p_store_id: string; p_employee_id: string; p_action: AttendanceCorrectionAction; p_target_punch_id: string | null; p_kind: AttendancePunchKind | null; p_time: string | null; p_reason: string }; result: string };
+  /** NULL은 반려/대상 변경 자동 반려도 포함한다. 승인으로 간주하지 말고 요청 상태를 재조회한다. */
+  review_attendance_correction: { args: { p_request_id: string; p_approve: boolean; p_note: string | null }; result: string | null };
+  cancel_attendance_correction: { args: { p_request_id: string }; result: null };
+}
+export type AttendanceRpcArgs<N extends keyof AttendanceRpcContracts> = AttendanceRpcContracts[N]['args'];
+export type AttendanceRpcResult<N extends keyof AttendanceRpcContracts> = AttendanceRpcContracts[N]['result'];
+export interface AttendancePage<T> { rows: T[]; nextOffset: number | null }
+export interface AttendancePeriodQuery {
+  storeId: string;
+  fromDate: string;
+  toDate: string;
+  employeeId?: string;
+  offset?: number;
+  pageSize?: number;
+  signal?: AbortSignal;
+}
+
+// 매장 역할·열람 계약: legacy StoreMember.role은 권한 근거가 아니다.
+export type StoreRole = 'owner' | 'manager' | 'employee' | 'part_timer';
+export interface StoreAccess {
+  store_id: string;
+  role: StoreRole | null;
+  employee_id: string | null;
+  is_owner: boolean;
+  is_manager: boolean;
+  can_manage_store: boolean;
+  can_manage_managers: boolean;
+  can_manage_visibility: boolean;
+  can_transfer_ownership: boolean;
+  can_delete_store: boolean;
+  can_view_owner_dashboard: boolean;
+  manager_member_id: string | null;
+  manager_employee_id: string | null;
+  /** bigint를 number로 변환하지 않는다. null은 조회 불가이며 CAS에 쓰지 않는다. */
+  manager_revision: string | null;
+}
+export interface StoreManagerState {
+  store_id: string;
+  member_id: string | null;
+  employee_id: string | null;
+  user_id: string | null;
+  assigned_at: string | null;
+  revision: string;
+}
+export interface StoreVisibilityScopes {
+  financial_share_scope: FinancialShareScope;
+  attendance_share_scope: FinancialShareScope;
+  payroll_share_scope: FinancialShareScope;
+}
+export interface StoreVisibility extends StoreVisibilityScopes {
+  store_id: string;
+  visibility_revision: string;
+  can_manage_visibility: boolean;
+  can_read_financials: boolean;
+  can_read_other_attendance: boolean;
+  can_read_other_payroll: boolean;
+}
+export interface SharedAttendance {
+  employee_id: string; employee_name: string; kind: string; punched_at: string;
+  work_date: string; flags: string[]; status: string;
+}
+export interface SharedAttendanceRequest {
+  employee_id: string; employee_name: string; kind: string; requested_time: string | null;
+  work_date: string | null; status: string;
+}
+export interface SharedPayroll {
+  employee_id: string; employee_name: string; year_month: string;
+  gross: number | null; applied_hourly_wage: number | null;
+}
+export interface SharedEmployeePay {
+  employee_id: string; employee_name: string; base_salary: number | null; hourly_wage: number | null;
+}
+export interface SharedFinancialSummary {
+  store_id: string; year_month: string; revenue: number | null; purchase_cost: number | null;
+  labor_cost: number | null; fixed_expense: number | null; variable_expense: number | null; operating_profit: number | null;
+}
+
+/** QR-A02/A04/A05: get/retry_attendance_work_record JSON (20261118120000). */
+export interface AttendanceWorkRecord {
+  punch_id: string;
+  effective_punch_id: string;
+  employee_id: string;
+  eligible: boolean;
+  state: 'pending' | 'completed' | 'failed' | 'not_applicable';
+  error_code: string | null;
+  clock_in_id: string | null;
+  clock_out_id: string | null;
+  work_date: string;
+  shift_minutes: number | null;
+  daily_work_id: string | null;
+  daily_minutes: number | null;
+  daily_revision: number | null;
+  daily_gross: number | null;
+  applied_hourly_wage: number | null;
+  review_status: 'pending' | 'approved' | 'rejected' | null;
+  updated_at: string | null;
+}
+export interface AttendanceAutoRecord {
+  punchId: string;
+  minutes: number | null;
+  status: 'pending' | 'saved' | 'unknown' | 'error';
+  /** 정정/재계산의 늦은 응답 검증용. */
+  effectivePunchId?: string;
+  dailyRevision?: number | null;
+}
+
+/** 관리자만 조회하는 QR 자동 인건비 반영 실패 목록. null 재시도 ID는 직접 원본 확인이 필요하다. */
+export interface AttendanceWorkFailure {
+  employee_id: string;
+  employee_name: string;
+  work_date: string;
+  error_code: string;
+  updated_at: string;
+  retry_punch_id: string | null;
+}

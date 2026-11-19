@@ -1,3 +1,6 @@
+let mockAuth = { user: {id:'owner'}, store: {id:'s'}, devPreviewMode:'self', permissionRevision:'1',canManageStore:true };
+jest.mock('../../lib/contexts/AuthContext',()=>({useAuth:()=>mockAuth}));
+import { Alert } from 'react-native';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { DailyWorkPanel } from '../../lib/components/DailyWorkPanel';
 import { Employee, DailyWorkRecord } from '../../types';
@@ -19,7 +22,8 @@ jest.mock('../../lib/services/dailyWork', () => ({
   dailyWorkTotals: (rows: DailyWorkRecord[]) => ({ minutes: rows.filter(r=>r.status==='approved').reduce((n,r)=>n+r.worked_minutes,0), gross: rows.filter(r=>r.status==='approved').reduce((n,r)=>n+r.gross,0), pending: rows.filter(r=>r.status!=='approved').length }),
 }));
 const row = { id: 'd', store_id: 's', employee_id: 'e', revision: 3, work_date: '2026-10-02', worked_minutes: 480, applied_hourly_wage: 12000, gross: 96000, note: '휴게 제외', status: 'approved', updated_at:'', submitted_by:'u',reviewed_by:null,review_note:null } as DailyWorkRecord;
-beforeEach(() => { jest.spyOn(Date, 'now').mockReturnValue(new Date('2026-10-26T12:00:00Z').getTime()); jest.clearAllMocks(); mockRows=[];mockLoading=false;mockError=null;mockRefetch.mockResolvedValue(true);mockSave.mockResolvedValue(row); });
+beforeEach(() => {
+  mockAuth={user:{id:'owner'},store:{id:'s'},devPreviewMode:'self',permissionRevision:'1',canManageStore:true}; jest.spyOn(Date, 'now').mockReturnValue(new Date('2026-10-26T12:00:00Z').getTime()); jest.clearAllMocks(); mockRows=[];mockLoading=false;mockError=null;mockRefetch.mockResolvedValue(true);mockSave.mockResolvedValue(row); });
 test('self form sends only date minutes note; no editable rate or approval control', async () => {
   render(<DailyWorkPanel employee={employee} yearMonth="2026-10" isAdmin={false} />);
   fireEvent.changeText(screen.getByLabelText('근무일'),'2026-10-02');
@@ -71,3 +75,21 @@ test('save success and reload failure stays saved, duplicate tap blocked while p
 });
 
 afterEach(() => jest.restoreAllMocks());
+
+it.each(['unmount','preview','user','store','employee','revision'])('월 급여 반영 확인창 뒤 %s 변경은 이전 콜백의 실제 쓰기를 막는다',async change=>{
+ mockRows=[row];jest.spyOn(Alert,'alert').mockImplementation(()=>{});
+ const view=render(<DailyWorkPanel employee={employee} yearMonth="2026-10" isAdmin/>);
+ await waitFor(()=>expect(screen.getByRole('button',{name:'확인된 일별 기록을 월 급여에 반영'})).not.toBeDisabled());
+ fireEvent.press(screen.getByText('확인된 일별 기록을 월 급여에 반영'));
+ const buttons=(Alert.alert as jest.Mock).mock.calls.at(-1)[2];
+ if(change==='unmount')view.unmount();
+ else {
+  if(change==='preview')mockAuth={...mockAuth,devPreviewMode:'regular'};
+  if(change==='user')mockAuth={...mockAuth,user:{id:'other'}};
+  if(change==='store')mockAuth={...mockAuth,store:{id:'other'}};
+  if(change==='revision')mockAuth={...mockAuth,permissionRevision:'2'};
+  view.rerender(<DailyWorkPanel employee={change==='employee'?{...employee,id:'other'}:employee} yearMonth="2026-10" isAdmin/>);
+ }
+ await act(async()=>{await buttons.find((b:any)=>b.style!=='cancel').onPress();});
+ expect(mockApply).not.toHaveBeenCalled();
+});

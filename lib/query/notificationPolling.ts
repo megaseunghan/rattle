@@ -18,7 +18,7 @@ export function subscribeNotificationPolling(key: string, poll: () => Promise<un
       const callback = subscribers.values().next().value;
       if (callback) void callback().catch(() => { /* Query observer owns the visible error. */ });
     };
-    entry = { subscribers, timer: setInterval(tick, 30_000), unsubscribe: lifecycle.subscribeActive(tick) };
+    entry = { subscribers, timer: setInterval(tick, 60_000), unsubscribe: lifecycle.subscribeActive(tick) };
     polling.set(key, entry);
     tick();
   } else entry.subscribers.add(poll);

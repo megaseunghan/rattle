@@ -3,13 +3,14 @@ import type { RegularWageSnapshot } from '../utils/regularWages';
 import { koreanDate, sortWages } from '../utils/regularWages';
 import { supabase } from '../supabase';
 
-export type LaborGap = 'legacy_monthly' | 'missing_wage' | 'employment_history' | 'missing_work' | 'invalid_snapshot';
+export type LaborGap = 'legacy_monthly' | 'missing_wage' | 'employment_history' | 'missing_work' | 'invalid_snapshot' | 'attendance_work_failed';
 export interface LaborSources {
   employees: Pick<Employee, 'id' | 'store_id' | 'joined_at' | 'is_active' | 'employment_type' | 'is_resigned_during_probation'>[];
-  payrolls: Payroll[];
-  dailyWork: Pick<DailyWorkRecord, 'id' | 'store_id' | 'employee_id' | 'work_date' | 'revision' | 'status'>[];
+  payrolls: (Payroll & { source_kind?: 'saved_payroll' | 'approved_daily_projection' })[];
+  dailyWork: (Pick<DailyWorkRecord, 'id' | 'store_id' | 'employee_id' | 'work_date' | 'revision' | 'status'> & Partial<Pick<DailyWorkRecord, 'gross' | 'worked_minutes' | 'applied_hourly_wage'>> & { record_source?: 'manual' | 'qr_auto'; auto_applied_at?: string | null })[];
   wages: WageHistory[];
   monthlyLaborCost?: number | null;
+  attendanceWorkFailures?: { store_id: string; employee_id: string; work_date: string; state: string; error_code: string | null; updated_at: string }[];
 }
 export interface DailyLaborDay {
   date: string;
@@ -39,9 +40,11 @@ function dates(month: string): string[] {
 export function buildDailyLaborSeries(storeId: string, month: string, through: number, sources: LaborSources, asOf = new Date()) {
   const calendar = dates(month);
   if (!Number.isInteger(through) || through < 1 || through > calendar.length || !Number.isFinite(asOf.getTime())) throw new Error('INVALID_LABOR_PERIOD');
-  const scopeRows = [...sources.employees, ...sources.payrolls, ...sources.dailyWork, ...sources.wages];
+  const failures = sources.attendanceWorkFailures === undefined ? [] : sources.attendanceWorkFailures;
+  if (!Array.isArray(failures)) throw new Error('INVALID_LABOR_SOURCE');
+  const scopeRows = [...sources.employees, ...sources.payrolls, ...sources.dailyWork, ...sources.wages, ...failures];
   if (scopeRows.some(row => row.store_id !== storeId) || sources.payrolls.some(p => p.year_month !== month)
-    || sources.dailyWork.some(d => !calendar.includes(d.work_date))) throw new Error('LABOR_SCOPE_MISMATCH');
+    || [...sources.dailyWork, ...failures].some(d => !calendar.includes(d.work_date))) throw new Error('LABOR_SCOPE_MISMATCH');
   const unique = (keys: string[]) => new Set(keys).size === keys.length;
   if (!unique(sources.payrolls.map(p => p.employee_id)) || !unique(sources.employees.map(e => e.id))
     || !unique(sources.dailyWork.map(d => `${d.employee_id}:${d.work_date}`))) throw new Error('DUPLICATE_LABOR_SOURCE');
@@ -49,6 +52,7 @@ export function buildDailyLaborSeries(storeId: string, month: string, through: n
   const gap = (indices: number[], reason: LaborGap) => indices.forEach(i => { days[i].amount = null; if (!days[i].gaps.includes(reason)) days[i].gaps.push(reason); });
   const add = (i: number, amount: number) => { if (days[i].amount !== null) days[i].amount! += amount; };
   const all = calendar.map((_, i) => i);
+  for (const failure of failures) gap([calendar.indexOf(failure.work_date)], 'attendance_work_failed');
   const ids = new Set([...sources.employees.map(e => e.id), ...sources.payrolls.map(p => p.employee_id), ...sources.dailyWork.map(d => d.employee_id)]);
   for (const id of ids) {
     const employee = sources.employees.find(e => e.id === id);
@@ -90,7 +94,11 @@ export function buildDailyLaborSeries(storeId: string, month: string, through: n
       if (payroll && rounded !== Number(payroll.gross)) gap(all, 'invalid_snapshot');
       continue;
     }
-    const snapshot = payroll?.daily_work_snapshot ?? [];
+    // 월 명세가 있으면 당시 snapshot을 유지한다. 없을 때만 승인 일별 원본을 쓴다.
+    const snapshot: DailyWorkSnapshot[] = payroll?.daily_work_snapshot ?? (!payroll ? rows.filter(row => row.status === 'approved').map(row => ({
+      id: row.id, revision: row.revision, work_date: row.work_date, status: row.status,
+      worked_minutes: row.worked_minutes!, applied_hourly_wage: row.applied_hourly_wage!, gross: row.gross!,
+    })) : []);
     if (!unique(snapshot.map(d => d.work_date)) || snapshot.some(d => !calendar.includes(d.work_date) || d.status !== 'approved' || d.worked_minutes == null || !Number.isInteger(Number(d.worked_minutes)) || Number(d.worked_minutes) < 0 || Number(d.worked_minutes) > 1440 || !validAmount(d.applied_hourly_wage) || Number(d.gross) !== Math.round(Number(d.worked_minutes) * Number(d.applied_hourly_wage) / 60))
       || (payroll && snapshot.reduce((sum, d) => sum + Number(d.gross), 0) !== Number(payroll.gross))) { gap(all, 'invalid_snapshot'); continue; }
     calendar.forEach((date, i) => {
@@ -117,7 +125,7 @@ export function buildDailyLaborSeries(storeId: string, month: string, through: n
       reasons: selected.some(d => d.amount === null) ? ['incomplete_daily_coverage'] : through < calendar.length ? ['daily_cutoff_vs_monthly_summary'] : ['monthly_summary_may_use_as_of_accrual_or_full_hourly_payroll'],
     },
     savedMonthlyGross: sources.payrolls.reduce((sum, p) => sum + Number(p.gross), 0),
-    basis: 'Korean calendar date; saved payroll snapshots; unposted work excluded; no legacy allocation' as const };
+    basis: 'Korean calendar date; saved payroll snapshots or approved daily sources; failures unknown; no legacy allocation' as const };
 }
 /** Stateless, one atomic server read. Caller owns scope-keyed cancellation/cache; errors never fall back. */
 export async function getDailyLaborSeries(storeId: string, month: string, through: number, asOf = new Date()) {

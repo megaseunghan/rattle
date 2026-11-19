@@ -1,3 +1,4 @@
+import { useScopedWriteGuard } from '../hooks/useScopedWriteGuard';
 import { DailyWorkPanel } from './DailyWorkPanel';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { getErrorMessage, UserFacingError } from '../utils/error';
@@ -17,6 +18,7 @@ export function LegacyWorkMinutesForm({ storeId, employee, payroll: initialPayro
   onSave: (input: WorkedMinutesInput, previous?: Payroll) => Promise<unknown>;
   submission?: PayrollWorkSubmission;
 }) {
+  const canWrite = useScopedWriteGuard([storeId, employee.id, yearMonth]);
   // 폼을 연 시점의 revision을 유지해 뒤에서 조회된 최신값으로 충돌 검사를 우회하지 않는다.
   const [payroll] = useState(initialPayroll);
   const isPart = employee.employment_type === 'part_time';
@@ -56,6 +58,7 @@ export function LegacyWorkMinutesForm({ storeId, employee, payroll: initialPayro
       if (isPart) calculateHourlyGross(Number(minutes), Number(rate));
     } catch (e) { setError(getErrorMessage(e)); return; }
     const performSave = async () => {
+      if (!canWrite()) return;
       setSaving(true);
       try {
         await onSave({ minutes, hourlyWage: isPart ? Number(rate) : null, note, ...(submission ? { submissionId: submission.id } : {}) }, payroll);

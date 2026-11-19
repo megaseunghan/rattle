@@ -8,12 +8,13 @@ import { clearQueryData } from '../../lib/query/client';
 
 let mockStores: Store[];
 const mockRoles = {};
+let mockOwnerAccess = true;
 const mockPnl = jest.fn();
 const mockTrend = jest.fn();
 const mockCleaning = jest.fn();
 const mockSchedule = jest.fn();
 jest.mock('../../lib/contexts/AuthContext', () => ({
-  useAuth: () => ({ user: { id: 'owner' }, stores: mockStores, memberRoles: mockRoles }),
+  useAuth: () => ({ user: { id: 'owner' }, stores: mockStores, memberRoles: mockRoles, canViewOwnerDashboard: mockOwnerAccess, devPreviewMode: 'self' }),
 }));
 jest.mock('../../lib/services/adminDashboard', () => ({
   getMultiStoreMonthlyPnl: (...args: unknown[]) => mockPnl(...args),
@@ -28,6 +29,7 @@ const store = (id: string, closingTime = '23:00') => ({ id, owner_id: 'owner', c
 
 beforeEach(async () => {
   await act(async () => { await clearQueryData(); });
+  mockOwnerAccess = true;
   mockStores = [store('a'), store('b')];
   mockPnl.mockReset().mockResolvedValue({ current: [], previous: [] });
   mockTrend.mockReset().mockResolvedValue([{ label: '10월', value: 0 }]);
@@ -149,4 +151,18 @@ it('전체 매장 범위에서는 청소와 스케줄을 조회하지 않는다'
   await waitFor(() => expect(result.current.pnl).not.toBeNull());
   expect(mockCleaning).not.toHaveBeenCalled();
   expect(mockSchedule).not.toHaveBeenCalled();
+});
+
+it('점장은 직접 호출해도 사장 대시보드 조회를 시작하지 않는다', async () => {
+  mockOwnerAccess = false;
+  const { result } = renderHook(() => useAdminDashboard());
+  await act(async () => { await result.current.refetch(); });
+  expect(result.current.ownedStores).toEqual([]);
+  expect(mockPnl).not.toHaveBeenCalled();
+  expect(mockTrend).not.toHaveBeenCalled();
+});
+it('사장 대시보드는 비소유 admin 참여 매장을 제외한다', async () => {
+  mockStores = [store('a'), { ...store('other'), owner_id: 'another-owner' }];
+  const { result } = renderHook(() => useAdminDashboard());
+  expect(result.current.ownedStores.map(s => s.id)).toEqual(['a']);
 });

@@ -12,8 +12,16 @@ export function isAccessDenied(error: unknown): boolean {
     || value?.status === 401 || value?.status === 403
     || /FORBIDDEN|FINANCE_ADMIN_REQUIRED|permission denied|JWT expired/i.test(value?.message ?? '');
 }
+const accessListeners = new Set<(storeId: string) => void>();
+export function subscribeAccessInvalidation(listener: (storeId: string) => void): () => void {
+  accessListeners.add(listener);
+  return () => { accessListeners.delete(listener); };
+}
 /** Cancel first: a response started before a mutation must never restore stale values. */
 export async function invalidateStoreData(storeId: string, domains?: string[], _months?: string[]): Promise<void> {
+  if (!domains?.length || domains.some(d => d === 'store-access' || d === 'store-visibility')) {
+    accessListeners.forEach(listener => listener(storeId));
+  }
   const filters = { predicate: (query: { queryKey: readonly unknown[]; meta?: Record<string, unknown> }) =>
     query.queryKey[0] === 'rattle'
       && (!domains?.length || domains.includes(String(query.queryKey[3])))

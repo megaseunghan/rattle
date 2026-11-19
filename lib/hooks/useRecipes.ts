@@ -1,3 +1,4 @@
+import { usePreviewWriteGuard } from './usePreviewWriteGuard';
 import { getErrorMessage } from '../utils/error';
 import { useState, useCallback, useRef, useMemo } from 'react';
 import { useInfiniteQuery, type InfiniteData } from '@tanstack/react-query';
@@ -34,6 +35,7 @@ interface UseRecipesResult {
 
 export function useRecipes(): UseRecipesResult {
   const { store } = useAuth();
+  const { assertCanWrite } = usePreviewWriteGuard();
   const scope = useQueryScope();
   const storeId = store?.id;
   const identity = `${scope}:${storeId ?? ''}`;
@@ -82,12 +84,14 @@ export function useRecipes(): UseRecipesResult {
     sellingPrice: number,
     ingredients: { ingredient_id: string; quantity: number; unit: string }[]
   ) {
+    assertCanWrite();
     if (!store) return;
     await createRecipeWithIngredients(store.id, name, category, sellingPrice, ingredients);
     if (active.current === identity) setMutationError(null);
   }
 
   const remove = useCallback(async (id: string) => {
+    assertCanWrite();
     const key = queryKeys.store(scope, storeId ?? '', 'recipes', 'pages', PAGE_SIZE);
     const cancelling = queryClient.cancelQueries({ queryKey: key });
     const previous = queryClient.getQueryData<InfiniteData<RecipeWithIngredients[], number>>(key);
@@ -95,6 +99,7 @@ export function useRecipes(): UseRecipesResult {
     const optimisticVersion = queryClient.setQueryData(key, optimistic);
     try {
       await cancelling;
+      assertCanWrite();
       await deleteRecipe(id);
       if (active.current === identity) setMutationError(null);
     } catch (e) {
@@ -105,6 +110,7 @@ export function useRecipes(): UseRecipesResult {
   }, [scope, storeId, identity]);
 
   async function bulkUpdateCategory(ids: string[], category: string) {
+    assertCanWrite();
     if (!storeId) return;
     await updateRecipeCategories(storeId, ids, category);
     if (active.current === identity) setMutationError(null);

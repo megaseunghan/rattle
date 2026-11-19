@@ -1,3 +1,4 @@
+import { usePreviewWriteGuard } from '../../lib/hooks/usePreviewWriteGuard';
 import { SheetModal } from '../../lib/components/ui/SheetModal';
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import {
@@ -19,6 +20,7 @@ import { animateListChange } from '../../lib/utils/layoutAnimation';
 export default function PurchaseDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { store, user } = useAuth();
+  const { canWrite } = usePreviewWriteGuard();
   const scope = useMemo(() => ({}), [id, store?.id, user?.id]);
   const active = useRef<object | null>(scope); active.current = scope;
   const request = useRef(0), saveLock = useRef(false);
@@ -79,6 +81,7 @@ export default function PurchaseDetailScreen() {
     saveLock.current = true;
     setSaving(true);
     try {
+      if (!canWrite()) return;
       await updatePurchaseItem(editTarget.id, qty, price);
       if (active.current !== scope) return;
       setSavedNeedsRefresh(true);

@@ -1,3 +1,4 @@
+import { usePreviewWriteGuard } from './usePreviewWriteGuard';
 import { getErrorMessage, UserFacingError } from '../utils/error';
 import { useState, useCallback, useRef } from 'react';
 import { useQueryScope } from '../query';
@@ -6,6 +7,7 @@ import { getPurchasesByMonth, createPurchase, deletePurchase, createPurchaseWith
 import { Purchase, PurchaseCategory, PurchaseType, PurchaseItemInput } from '../../types';
 
 export function usePurchases(yearMonth: string) {
+  const { assertCanWrite } = usePreviewWriteGuard();
   const { store } = useAuth();
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const scope = useQueryScope();
@@ -44,6 +46,7 @@ export function usePurchases(yearMonth: string) {
     type: PurchaseType;
     note?: string | null;
   }) => {
+    assertCanWrite();
     if (!store) throw new UserFacingError('매장 정보가 없습니다');
     const created = await createPurchase({ ...data, store_id: store.id });
     if (active.current === identity) { setPurchases(prev => [created, ...prev]); setLoadedIdentity(identity); }
@@ -56,6 +59,7 @@ export function usePurchases(yearMonth: string) {
     type: PurchaseType;
     items: PurchaseItemInput[];
   }) => {
+    assertCanWrite();
     if (!store) throw new UserFacingError('매장 정보가 없습니다');
     const result = await createPurchaseWithItems({ ...data, store_id: store.id });
     const refreshed = await refetch();
@@ -63,6 +67,7 @@ export function usePurchases(yearMonth: string) {
   }, [store, refetch]);
 
   const remove = useCallback(async (id: string) => {
+    assertCanWrite();
     await deletePurchase(id);
     setPurchases(prev => prev.filter(p => p.id !== id));
   }, []);

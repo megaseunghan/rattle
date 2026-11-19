@@ -42,7 +42,7 @@ function formatLabel(hour24: number): string {
 const HOURS_12 = Array.from({ length: 12 }, (_, i) => i + 1); // 1~12
 
 export default function SalesSettingsScreen() {
-  const { store, user, currentRole, refreshStore } = useAuth();
+  const { store, user, canManageStore, refreshStore } = useAuth();
   const initialHour = parseHour24(store?.closing_time as string | null | undefined);
 
   const [meridiem, setMeridiem] = useState<Meridiem>(to12h(initialHour).meridiem);
@@ -58,7 +58,7 @@ export default function SalesSettingsScreen() {
   const [savedNeedsRefresh, setSavedNeedsRefresh] = useState(false);
   const [periodMoving, setPeriodMoving] = useState(false);
   const [hourMoving, setHourMoving] = useState(false);
-  const isAdmin = currentRole === 'admin';
+  const isAdmin = canManageStore;
 
   useEffect(() => {
     const h = parseHour24(store?.closing_time as string | null | undefined);

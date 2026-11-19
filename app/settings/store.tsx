@@ -18,7 +18,7 @@ import { GlassBackdrop } from '../../lib/components/GlassBackdrop';
 import { AppBar, Button, Field } from '../../lib/components/ui';
 
 export default function StoreInfoScreen() {
-  const { store, user, currentRole, refreshStore } = useAuth();
+  const { store, user, access, canManageStore, refreshStore } = useAuth();
   const [name, setName] = useState(store?.name ?? '');
   const [address, setAddress] = useState(store?.address ?? '');
   const [saving, setSaving] = useState(false);
@@ -38,12 +38,12 @@ export default function StoreInfoScreen() {
   useFocusEffect(useCallback(() => { screenActive.current = true; return () => { screenActive.current = false; }; }, []));
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string; userId: string; scope: object } | null>(null);
   const [deletePhrase, setDeletePhrase] = useState('');
-  const isAdmin = currentRole === 'admin';
-  const isOwner = currentRole === 'admin' && store?.owner_id === user?.id;
+  const isAdmin = canManageStore;
+  const isOwner = access.can_delete_store && store?.owner_id === user?.id;
   const validDeleteTarget = !!deleteTarget && isOwner && deleteTarget.scope === scope
     && deleteTarget.id === store?.id && deleteTarget.name === store?.name;
   const expectedPhrase = deleteTarget ? `${deleteTarget.name} 삭제하기` : '';
-  useEffect(() => { setDeleteTarget(null); setDeletePhrase(''); }, [scope, store?.name, store?.owner_id, currentRole]);
+  useEffect(() => { setDeleteTarget(null); setDeletePhrase(''); }, [scope, store?.name, store?.owner_id, canManageStore]);
   function closeDelete() { if (!deletionLock.current) { setDeleteTarget(null); setDeletePhrase(''); } }
 
 
@@ -155,8 +155,8 @@ export default function StoreInfoScreen() {
           <Text style={styles.rowValue}>매일 {store?.closing_time?.slice(0, 5) ?? '23:00'}</Text>
           <AppIcon name="chevron-forward" size={16} color={Colors.gray400} />
         </TouchableOpacity>
-        {isOwner && <TouchableOpacity style={styles.settingRow} accessibilityRole="button" disabled={saving || deleting} onPress={() => router.push('/settings/financial-sharing')} activeOpacity={0.7}>
-          <Illustration name="profit-loss" size={28} /><Text style={styles.rowLabel}>손익 공유</Text><Text style={styles.rowValue}>공유 대상 설정</Text><AppIcon name="chevron-forward" size={16} color={Colors.gray400} />
+        {isOwner && <TouchableOpacity style={styles.settingRow} accessibilityRole="button" disabled={saving || deleting} onPress={() => router.push('/settings/store-visibility')} activeOpacity={0.7}>
+          <Illustration name="profit-loss" size={28} /><Text style={styles.rowLabel}>열람 설정</Text><Text style={styles.rowValue}>공유 대상 설정</Text><AppIcon name="chevron-forward" size={16} color={Colors.gray400} />
         </TouchableOpacity>}
         {isOwner && <TouchableOpacity style={styles.settingRow} accessibilityRole="button" accessibilityLabel="매장 삭제" disabled={saving || deleting || savedNeedsRefresh} accessibilityState={{ disabled: saving || deleting || savedNeedsRefresh }} onPress={handleDeleteStore} activeOpacity={0.7}>
           <Image source={require('../../assets/icons/runtime/business/store-delete.png')} style={styles.deleteIcon} resizeMode="contain" accessible={false} />

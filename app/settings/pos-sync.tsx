@@ -22,7 +22,7 @@ const POLL_INTERVAL_MS = 5000;
 type SyncStatus = 'connected' | 'waiting';
 
 export default function PosSyncScreen() {
-  const { store, currentRole } = useAuth();
+  const { store, canManageStore } = useAuth();
   const { setup } = useLocalSearchParams<{ setup?: string }>();
   const leave = () => setup === '1' ? router.replace('/(tabs)') : router.back();
 
@@ -37,7 +37,7 @@ export default function PosSyncScreen() {
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const load = useCallback(async () => {
-    if (!store || currentRole !== 'admin') return;
+    if (!store || !canManageStore) return;
     if (inFlightStore.current === store.id) return;
     inFlightStore.current = store.id;
     const request = ++loadRequest.current;
@@ -53,7 +53,7 @@ export default function PosSyncScreen() {
       setCheckedStoreId(id);
     } catch { if (request === loadRequest.current && id === currentStoreId.current) setLoadError(true); }
     finally { if (request === loadRequest.current) inFlightStore.current = null; }
-  }, [store, currentRole]);
+  }, [store, canManageStore]);
 
   useFocusEffect(useCallback(() => {
     void load();
@@ -75,7 +75,7 @@ export default function PosSyncScreen() {
     Alert.alert('복사됨', `서비스코드 ${SERVICE_CODE}를 복사했어요.`);
   }
 
-  if (currentRole !== 'admin') return <SafeAreaView><Text>관리자만 POS 연결을 설정할 수 있어요.</Text></SafeAreaView>;
+  if (!canManageStore) return <SafeAreaView><Text>관리자만 POS 연결을 설정할 수 있어요.</Text></SafeAreaView>;
   const checking = checkedStoreId !== store?.id;
 
   return (

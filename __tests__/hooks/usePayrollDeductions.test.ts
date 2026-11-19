@@ -2,14 +2,17 @@ import { act, renderHook } from '@testing-library/react-native';
 import { usePayroll } from '../../lib/hooks/usePayroll';
 import { Payroll } from '../../types';
 let mockStore = { id: 's' };
-const mockRead = jest.fn(), mockSave = jest.fn();
-jest.mock('../../lib/contexts/AuthContext', () => ({ useAuth: () => ({ store: mockStore }) }));
-jest.mock('../../lib/services/payroll', () => ({ getPayrollByMonth: (...args: unknown[]) => mockRead(...args), updatePayrollDeductions: (...args: unknown[]) => mockSave(...args) }));
+let mockRevision = '1';
+let mockManage = true;
+let mockAccess = { is_owner: true, employee_id: 'e' };
+const mockRead = jest.fn(), mockSave = jest.fn(), mockWork = jest.fn();
+jest.mock('../../lib/contexts/AuthContext', () => ({ useAuth: () => ({ store: mockStore, canManageStore: mockManage, permissionRevision: mockRevision, access: mockAccess, user: { id: 'u' } }) }));
+jest.mock('../../lib/services/payroll', () => ({ saveWorkedMinutes: (...args: unknown[]) => mockWork(...args), getPayrollByMonth: (...args: unknown[]) => mockRead(...args), updatePayrollDeductions: (...args: unknown[]) => mockSave(...args) }));
 jest.mock('../../lib/services/wageHistory', () => ({}));
 function deferred() { let resolve!: (value: any) => void; const promise = new Promise<any>(yes => { resolve = yes; }); return { promise, resolve }; }
 const row = { id: 'p', employee_id: 'e', store_id: 's', year_month: '2026-10', gross: 1000, net_pay: 900 } as Payroll;
 const values = { national_pension: 200, health_insurance: 0, long_term_care: 0, employment_insurance: 0, income_tax: 0, local_income_tax: 0, withholding_tax: 0 };
-beforeEach(() => { mockStore = { id: 's' }; mockRead.mockReset().mockResolvedValue([row]); mockSave.mockReset().mockResolvedValue({ ...row, net_pay: 800, is_settled: false }); });
+beforeEach(() => { mockRevision = '1'; mockManage = true; mockAccess = { is_owner: true, employee_id: 'e' }; mockWork.mockReset(); mockStore = { id: 's' }; mockRead.mockReset().mockResolvedValue([row]); mockSave.mockReset().mockResolvedValue({ ...row, net_pay: 800, is_settled: false }); });
 it('공제 저장 뒤 늦게 도착한 저장 전 조회는 새 금액을 덮지 않는다', async () => {
  const { result } = renderHook(() => usePayroll('2026-10')); await act(async () => { await result.current.refetch(); });
  const oldRead = deferred(); mockRead.mockReturnValueOnce(oldRead.promise); let pending!: Promise<void>;
@@ -67,4 +70,21 @@ it('저장 전에 시작한 월 재조회가 늦게 끝나도 다른 직원 명�
  expect(result.current.payrolls).toContainEqual(other);
  expect(result.current.totalNetPay).toBe(2600);
  expect(result.current.loading).toBe(false);
+});
+
+it('점장 본인의 근무시간은 서비스를 호출하기 전에 막는다', async () => {
+ mockAccess = { is_owner: false, employee_id: 'e' };
+ const {result}=renderHook(()=>usePayroll('2026-10'));
+ await expect(result.current.saveWork({id:'e', user_id:'u'} as any, {} as any)).rejects.toThrow('사장님');
+ expect(mockWork).not.toHaveBeenCalled();
+});
+it('권한 revision이 바뀌면 이전 급여와 합계를 즉시 숨기고 예전 저장 콜백을 막는다', async () => {
+ const {result,rerender}=renderHook(()=>usePayroll('2026-10'));
+ await act(async()=>{await result.current.refetch();});
+ const oldSave=result.current.saveDeductions;
+ mockRevision='2'; mockManage=false; rerender({});
+ expect(result.current.payrolls).toEqual([]);
+ expect(result.current.totalLaborCost).toBeNull();
+ await expect(oldSave(row,values)).rejects.toThrow('선택한 매장과 월');
+ expect(mockSave).not.toHaveBeenCalled();
 });

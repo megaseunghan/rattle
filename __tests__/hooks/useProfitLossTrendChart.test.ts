@@ -10,7 +10,7 @@ let mockRole = 'admin';
 let mockCanRead = true;
 let mockStore = { id: 'a', closing_time: '23:00' };
 const mockBatch = jest.fn();
-jest.mock('../../lib/contexts/AuthContext', () => ({ useAuth: () => ({ store: mockStore, user: mockUser, currentRole: mockRole, realRole: 'admin', canReadFinancials: mockCanRead, memberRoles: {}, devPreviewMode: 'self' }) }));
+jest.mock('../../lib/contexts/AuthContext', () => ({ useAuth: () => ({ store: mockStore, user: mockUser, currentRole: mockRole, canManageStore: mockRole === 'admin', realRole: 'admin', canReadFinancials: mockCanRead, memberRoles: {}, devPreviewMode: 'self' }) }));
 jest.mock('../../lib/services/homeFinancialSummary', () => ({ getFinancialSummaries: (...args: unknown[]) => mockBatch(...args) }));
 const rows = (ids: string[], months: string[], revenue = 100) => ids.flatMap(storeId => months.map(yearMonth => ({ storeId, yearMonth, revenue })));
 beforeEach(async () => {
@@ -45,7 +45,7 @@ it('다른 매장·계정·권한 응답을 표시하지 않는다', async () =>
   expect(result.current.bars.every(b => b.data === null)).toBe(true);
 });
 it('일부 월 실패는 0원과 구분하고 선택 월 숫자는 나머지 월 완료 전에 표시한다', async () => {
-  const scope = JSON.stringify(['admin', 'admin', 'admin', 'self', undefined, true, []]);
+  const scope = JSON.stringify(['admin', 'admin', 'admin', 'self', undefined, true, undefined, []]);
   queryClient.setQueryData(financialSummaryOptions(scope, 'a', '23:00', '2026-10', true).queryKey, { storeId: 'a', yearMonth: '2026-10', revenue: 0, purchaseCost: 0, laborCost: 0, fixedExpense: 0, variableExpense: 0, operatingProfit: 0 });
   mockBatch.mockRejectedValue(new Error('internal schema error'));
   const { result } = renderHook(() => useProfitLossTrendChart(2026, 10));

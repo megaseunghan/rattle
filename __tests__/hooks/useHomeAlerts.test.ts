@@ -4,10 +4,11 @@ let mockUser = { id: 'a' };
 const mockStore = { id: 'store' };
 const mockRead = jest.fn();
 const mockGetReads = jest.fn();
+const mockStock = jest.fn().mockResolvedValue([]);
 jest.mock('../../lib/contexts/AuthContext', () => ({ useAuth: () => ({ user: mockUser, store: mockStore }) }));
 jest.mock('../../lib/services/homeAlerts', () => ({
   buildHomeAlerts: () => [{ key: 'stock:one', kind: 'stock' }, { key: 'stock:two', kind: 'stock' }],
-  getHomeAlertStock: async () => [], hasMonthlyFixedExpense: async () => true,
+  getHomeAlertStock: (...args: unknown[]) => mockStock(...args), hasMonthlyFixedExpense: async () => true,
   getHomeAlertReads: (...args: unknown[]) => mockGetReads(...args),
   markHomeAlertRead: (...args: unknown[]) => mockRead(...args),
 }));
@@ -41,4 +42,12 @@ it('읽음 목록을 불러오지 못하면 확인 가능한 오류를 남긴다
   const { result } = renderHook(() => useHomeAlerts());
   await act(async () => { await result.current.refetch(); });
   expect(result.current.error).toContain('홈 알림');
+});
+
+it('오늘 매출만 바뀌면 원본 재조회 없이 경고를 다시 계산한다', async () => {
+  const { result, rerender } = renderHook(({ sales }: { sales: number }) => useHomeAlerts(sales), { initialProps: { sales: 0 } });
+  await act(async () => { await result.current.refetch(); });
+  const callback = result.current.refetch;
+  rerender({ sales: 100 });
+  expect(result.current.refetch).toBe(callback);
 });

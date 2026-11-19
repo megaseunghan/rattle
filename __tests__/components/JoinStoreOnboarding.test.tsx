@@ -1,12 +1,13 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import JoinStoreScreen from '../../app/(auth)/join-store';
 const mockSubmit = jest.fn();
+let mockMode='self';
 const mockGetInvite = jest.fn();
 jest.mock('expo-router', () => ({ router: { back: jest.fn() } }));
-jest.mock('../../lib/contexts/AuthContext', () => ({ useAuth: () => ({ user: { id: 'applicant' } }) }));
+jest.mock('../../lib/contexts/AuthContext', () => ({ useAuth: () => ({ user: { id: 'applicant' }, devPreviewMode:mockMode }) }));
 jest.mock('../../lib/hooks/useConfirmLeave', () => ({ useConfirmLeave: () => jest.fn() }));
 jest.mock('../../lib/services/storeMembers', () => ({ submitJoinOnboarding: (...args: unknown[]) => mockSubmit(...args), getStoreInviteCode: (...args: unknown[]) => mockGetInvite(...args) }));
-beforeEach(() => { mockSubmit.mockReset().mockResolvedValue({ store_name: '매장', store_id: 'store' }); mockGetInvite.mockReset().mockResolvedValue({ store_name: '매장', store_id: 'store' }); });
+beforeEach(() => { mockMode='self';mockSubmit.mockReset().mockResolvedValue({ store_name: '매장', store_id: 'store' }); mockGetInvite.mockReset().mockResolvedValue({ store_name: '매장', store_id: 'store' }); });
 async function renderJoin() { render(<JoinStoreScreen />); fireEvent.changeText(screen.getByLabelText('참여코드'), '1111-1111-1111-1111'); fireEvent.press(screen.getByText('매장 확인')); await waitFor(() => expect(screen.getByLabelText('이름')).toBeTruthy()); }
 
 it('취소되거나 만료된 초대는 온보딩을 열지 않는다', async () => {
@@ -165,4 +166,9 @@ it('추가 은행을 펼쳐 선택하고 제출할 수 있다', async () => {
   answer('급여 계좌번호', '001234567890');
   await act(async () => { fireEvent.press(screen.getByText('관리자에게 제출')); });
   expect(mockSubmit).toHaveBeenCalledWith('1111111111111111', '신입', '01012345678', expect.objectContaining({ bank_name: '케이뱅크', account_number: '001234567890' }));
+});
+
+it('미리보기에서 매장 참여 온보딩을 끝내도 실제 신청을 제출하지 않는다',async()=>{
+ mockMode='regular';await renderJoin();reviewRegular();
+ await act(async()=>{fireEvent.press(screen.getByText('관리자에게 제출'));});expect(mockSubmit).not.toHaveBeenCalled();
 });

@@ -1,6 +1,9 @@
+let mockAuth = { user: {id:'owner'}, store: {id:'s'}, devPreviewMode:'self', permissionRevision:'1' };
+jest.mock('../../lib/contexts/AuthContext',()=>({useAuth:()=>mockAuth}));
+import { Alert } from 'react-native';
 jest.mock('../../lib/components/DailyWorkPanel', () => ({ DailyWorkPanel: () => null }));
 import React from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { LegacyWorkMinutesForm as WorkMinutesForm } from '../../lib/components/WorkMinutesForm';
 import { getPayrollWorkHistory } from '../../lib/services/payroll';
 import { Employee } from '../../types';
@@ -9,6 +12,7 @@ jest.mock('../../lib/services/payroll', () => ({ getPayrollWorkHistory: jest.fn(
 const employee = { id: 'emp', store_id: 'store', name: '테스트 직원', employment_type: 'part_time', hourly_wage: 12000 } as Employee;
 
 beforeEach(() => {
+  mockAuth={user:{id:'owner'},store:{id:'s'},devPreviewMode:'self',permissionRevision:'1'};
   jest.clearAllMocks();
   (getPayrollWorkHistory as jest.Mock).mockResolvedValue([]);
 });
@@ -55,4 +59,13 @@ it('이력 조회 실패를 빈 이력으로 숨기지 않고 재시도한다', 
   expect(screen.queryByText('아직 작성 이력이 없어요.')).toBeNull();
   fireEvent.press(screen.getByText('다시 시도'));
   expect(await screen.findByText('아직 작성 이력이 없어요.')).toBeTruthy();
+});
+
+it('기존 월 합계 수정 확인창의 종료 후 저장 콜백을 막는다',async()=>{
+ const save=jest.fn();jest.spyOn(Alert,'alert').mockImplementation(()=>{});
+ const view=render(<WorkMinutesForm storeId="store" employee={employee} yearMonth="2026-10" payroll={{id:'p',gross:100,worked_minutes:10} as any} onSave={save} onClose={jest.fn()}/>);
+ await screen.findByText('아직 작성 이력이 없어요.');
+ fireEvent.changeText(screen.getByLabelText('총 근무시간 (분)'),'20');fireEvent.changeText(screen.getByLabelText('입력 근거 또는 수정 사유'),'가상 수정');fireEvent.press(screen.getByText('근무시간 저장'));
+ const buttons=(Alert.alert as jest.Mock).mock.calls.at(-1)[2];view.unmount();
+ await act(async()=>{await buttons.find((b:any)=>b.style!=='cancel').onPress();});expect(save).not.toHaveBeenCalled();jest.restoreAllMocks();
 });

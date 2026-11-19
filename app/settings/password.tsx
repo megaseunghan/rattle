@@ -1,3 +1,4 @@
+import { useScopedWriteGuard } from '../../lib/hooks/useScopedWriteGuard';
 import { useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, Alert,
@@ -15,6 +16,7 @@ const MIN_PASSWORD_LENGTH = 6;
 
 export default function PasswordScreen() {
   const { user } = useAuth();
+  const canWrite = useScopedWriteGuard([]);
   const provider = (user?.app_metadata?.provider as string | undefined) ?? 'email';
   const isEmailUser = provider === 'email';
 
@@ -33,6 +35,7 @@ export default function PasswordScreen() {
     }
     setSaving(true);
     try {
+      if (!canWrite()) return;
       await updateUserPassword(newPw);
       setNewPw('');
       setConfirmPw('');
@@ -81,7 +84,7 @@ export default function PasswordScreen() {
             <TouchableOpacity
               style={[styles.saveBtn, saving && styles.disabled]}
               onPress={handleChange}
-              disabled={saving}
+              disabled={saving || !canWrite()}
             >
               {saving
                 ? <ActivityIndicator size="small" color={Colors.white} />

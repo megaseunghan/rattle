@@ -1,3 +1,4 @@
+import { useScopedWriteGuard } from '../../lib/hooks/useScopedWriteGuard';
 import { useState, useCallback } from 'react';
 import {
   View,
@@ -31,6 +32,7 @@ export default function SelectStoreScreen() {
   const [restoringId, setRestoringId] = useState<string | null>(null);
   const { user, store, stores, storesLoaded, switchStore, refreshStore, signOut } = useAuth();
   const router = useRouter();
+  const canWrite = useScopedWriteGuard([]);
 
   function handleLogout() {
     Alert.alert('로그아웃', '로그아웃 하시겠습니까?', [
@@ -61,7 +63,7 @@ export default function SelectStoreScreen() {
   }
 
   function handleRestore(target: DeletedStore) {
-    if (restoringId) return;
+    if (!canWrite() || restoringId) return;
     Alert.alert('매장 복구', `‘${target.name}’ 매장을 복구할까요? 구성원들도 다시 매장을 볼 수 있게 돼요.`, [
       { text: '취소', style: 'cancel' },
       { text: '복구', onPress: () => { void restore(target); } },
@@ -71,6 +73,7 @@ export default function SelectStoreScreen() {
   async function restore(target: DeletedStore) {
     setRestoringId(target.id);
     try {
+      if (!canWrite()) return;
       await restoreDeletedStore(target.id);
       await reload();
       Alert.alert('복구 완료', `‘${target.name}’ 매장을 복구했어요.`);
@@ -83,7 +86,7 @@ export default function SelectStoreScreen() {
 
   const hasStores = stores.length > 0;
 
-  if (showForm && user) return <SafeAreaView style={[styles.container, { backgroundColor: Colors.homeCanvas }]}>
+  if (showForm && user && canWrite()) return <SafeAreaView style={[styles.container, { backgroundColor: Colors.homeCanvas }]}>
     <StoreSetupWizard knownRequestIds={stores.flatMap(s => s.setup_request_id ? [s.setup_request_id] : [])} userId={user.id} onCancel={() => setShowForm(false)} onCreated={async (id, choice) => {
       await refreshStore(id);
       router.replace(choice === 'now' ? '/settings/pos-sync?setup=1' : '/(tabs)');
@@ -136,7 +139,7 @@ export default function SelectStoreScreen() {
         {/* 신규 회원: stores 로드 완료 후 진짜 매장 없을 때만 표시 */}
         {storesLoaded && !hasStores && !showForm && (
           <View style={styles.optionGroup}>
-            <ListCard trailingIcon="chevron" onPress={() => setShowForm(true)} style={styles.optionCardPrimary}>
+            <ListCard trailingIcon="chevron" onPress={() => { if (canWrite()) setShowForm(true); }} style={styles.optionCardPrimary}>
               <View style={styles.optionRow}>
                 <View style={[styles.optionIcon, styles.optionIconPrimary]}>
                   <AppIcon name="storefront" size={22} color={Colors.primary} />
@@ -148,7 +151,7 @@ export default function SelectStoreScreen() {
               </View>
             </ListCard>
 
-            <ListCard trailingIcon="chevron" onPress={() => router.push('/(auth)/join-store')}>
+            <ListCard trailingIcon="chevron" onPress={() => { if (canWrite()) router.push('/(auth)/join-store'); }}>
               <View style={styles.optionRow}>
                 <View style={styles.optionIcon}>
                   <AppIcon name="people" size={22} color={Colors.gray600} />
@@ -165,7 +168,7 @@ export default function SelectStoreScreen() {
         {/* 기존 회원: 매장 있을 때 추가/참여 버튼 */}
         {hasStores && !showForm && (
           <View style={styles.optionGroup}>
-            <ListCard trailingIcon="chevron" onPress={() => setShowForm(true)}>
+            <ListCard trailingIcon="chevron" onPress={() => { if (canWrite()) setShowForm(true); }}>
               <View style={styles.optionRow}>
                 <View style={[styles.optionIcon, styles.optionIconPrimary]}>
                   <AppIcon name="add" size={22} color={Colors.primary} />
@@ -177,7 +180,7 @@ export default function SelectStoreScreen() {
               </View>
             </ListCard>
 
-            <ListCard trailingIcon="chevron" onPress={() => router.push('/(auth)/join-store')}>
+            <ListCard trailingIcon="chevron" onPress={() => { if (canWrite()) router.push('/(auth)/join-store'); }}>
               <View style={styles.optionRow}>
                 <View style={styles.optionIcon}>
                   <AppIcon name="people" size={22} color={Colors.gray600} />
@@ -203,7 +206,7 @@ export default function SelectStoreScreen() {
                     <Text style={styles.deletedHelp}>{formatRestoreDeadline(item.purgeAfter)}까지 복구할 수 있어요</Text>
                   </View>
                   <View style={styles.restoreAction}>
-                    <Button label="복구" variant="secondary" onPress={() => handleRestore(item)} loading={restoringId === item.id} disabled={!!restoringId} />
+                    <Button label="복구" variant="secondary" onPress={() => handleRestore(item)} loading={restoringId === item.id} disabled={!!restoringId || !canWrite()} />
                   </View>
                 </View>
               </ListCard>

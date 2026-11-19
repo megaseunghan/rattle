@@ -17,7 +17,7 @@ jest.mock('../../lib/services/homeFinancialSummary', () => ({ getFinancialSummar
 beforeEach(() => {
   jest.clearAllMocks();
   (useConfirmLeave as jest.Mock).mockReturnValue(jest.fn());
-  (useAuth as jest.Mock).mockReturnValue({ user: { id: 'user' }, store: { id: 'store', name: '검증 매장' }, currentRole: 'admin' });
+  (useAuth as jest.Mock).mockReturnValue({ user: { id: 'user' }, store: { id: 'store', name: '검증 매장' }, currentRole: 'admin', canManageStore: true });
   (getWageHistory as jest.Mock).mockResolvedValue([]);
   (addWageChange as jest.Mock).mockResolvedValue({ id: 'wage' });
   (getFinancialSummaries as jest.Mock).mockResolvedValue([{ laborCost: null }]);

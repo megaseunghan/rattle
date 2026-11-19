@@ -4,9 +4,9 @@ import { PayrollWorkSubmission } from '../../types';
 import { getPayrollSubmissions } from '../services/payrollSubmissions';
 
 export function usePayrollSubmissions(yearMonth: string, employeeId?: string) {
-  const { store, user } = useAuth();
+  const { store, user, permissionRevision } = useAuth();
   const storeId = store?.id;
-  const scope = `${user?.id}:${storeId}:${yearMonth}:${employeeId}`;
+  const scope = `${permissionRevision}:${user?.id}:${storeId}:${yearMonth}:${employeeId}`;
   const scopeRef = useRef(scope);
   scopeRef.current = scope;
   const request = useRef(0);

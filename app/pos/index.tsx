@@ -14,10 +14,12 @@ import { Fonts } from '../../constants/fonts';
 import { useTossSync } from '../../lib/hooks/useTossSync';
 import { usePosAnalytics } from '../../lib/hooks/usePosAnalytics';
 import { useAuth } from '../../lib/contexts/AuthContext';
+import { queryClient, queryKeys, useQueryScope, isAccessDenied } from '../../lib/query';
 import { LoadingSpinner } from '../../lib/components/LoadingSpinner';
 import { getStoreDetails } from '../../lib/services/stores';
 import { useManualSales } from '../../lib/hooks/useManualSales';
 import { DailySummary } from '../../types';
+import { getAutoSyncRange, getBusinessDayRange } from '../../lib/services/posAnalytics';
 import { ErrorMessage } from '../../lib/components/ErrorMessage';
 import { Badge, EmptyState } from '../../lib/components/ui';
 import { TabPagerContext } from '../../lib/contexts/TabPagerContext';
@@ -41,19 +43,39 @@ function toDateKey(year: number, month: number, day: number) {
 
 export function PosScreen({ active = true, reserveFab = false }: { active?: boolean; reserveFab?: boolean }) {
   const tabScope = useContext(TabPagerContext);
-  const { store, currentRole } = useAuth();
+  const { store, canManageStore } = useAuth();
   const {
     lastSyncAt, todaySales, todayOrderCount,
     loadTodaySales, syncByMonth, autoSyncing, autoSyncRecent, error: syncError,
   } = useTossSync();
-  const { summaries, loadingSummaries, fetchSummariesByRange, error: summariesError } = usePosAnalytics();
 
-  const [status, setStatus] = useState<SyncStatus>('unregistered');
-  const [loadingStatus, setLoadingStatus] = useState(true);
+  const accessScope = useQueryScope();
+  const connectionConfig = `${store?.closing_time ?? '23:00'}:${store?.toss_merchant_id ?? ''}`;
+  const connectionIdentity = `${accessScope}:${store?.id ?? ''}:${connectionConfig}`;
+  const connectionKey = queryKeys.store(accessScope, store?.id ?? '', 'pos', 'connection', connectionConfig);
+  const connectionDenied = isAccessDenied(queryClient.getQueryState(connectionKey)?.error);
+  const cachedConnection = connectionDenied ? undefined : queryClient.getQueryData<Awaited<ReturnType<typeof getStoreDetails>>>(connectionKey);
+  const [status, setStatus] = useState<SyncStatus>(() => cachedConnection?.toss_merchant_id ? 'connected' : 'unregistered');
+  const [loadingStatus, setLoadingStatus] = useState(!cachedConnection);
 
   const initialMonth = tabScope?.selectedMonth ?? `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
   const [queryYear, setQueryYear] = useState(Number(initialMonth.slice(0, 4)));
   const [queryMonth, setQueryMonth] = useState(Number(initialMonth.slice(5)));
+  const [syncing, setSyncing] = useState(false);
+  const [selectedDay, setSelectedDay] = useState<number | null>(null);
+
+  const statusStore = useRef<string | undefined>(cachedConnection ? connectionIdentity : undefined);
+  const statusRequest = useRef(0);
+  const currentStoreId = useRef(connectionIdentity);
+  currentStoreId.current = connectionIdentity;
+  const [statusError, setStatusError] = useState<string | null>(null);
+  useEffect(() => () => { statusRequest.current += 1; }, []);
+  const selectedYearRef = useRef(Number(initialMonth.slice(0, 4)));
+  const selectedMonthRef = useRef(Number(initialMonth.slice(5)));
+
+  const closingTime = (store?.closing_time as string | null | undefined)?.slice(0, 5) ?? '23:00';
+  const initialRange = getMonthRange(queryYear, queryMonth, closingTime);
+  const { summaries, loadingSummaries, fetchSummariesByRange, error: summariesError } = usePosAnalytics(initialRange.from, initialRange.to);
   const summaryByDay = useMemo(() => {
     const grouped = new Map<string, DailySummary>();
     summaries.forEach(summary => grouped.set(summary.date, summary));
@@ -61,19 +83,7 @@ export function PosScreen({ active = true, reserveFab = false }: { active?: bool
   }, [summaries]);
   const calendarDays = useMemo(() => getCalendarDays(queryYear, queryMonth), [queryYear, queryMonth]);
   const monthTotal = useMemo(() => summaries.reduce((sum, summary) => sum + summary.totalAmount, 0), [summaries]);
-  const [syncing, setSyncing] = useState(false);
-  const [selectedDay, setSelectedDay] = useState<number | null>(null);
 
-  const statusStore = useRef<string | undefined>(undefined);
-  const statusRequest = useRef(0);
-  const currentStoreId = useRef(store?.id);
-  currentStoreId.current = store?.id;
-  const [statusError, setStatusError] = useState<string | null>(null);
-  useEffect(() => () => { statusRequest.current += 1; }, []);
-  const selectedYearRef = useRef(Number(initialMonth.slice(0, 4)));
-  const selectedMonthRef = useRef(Number(initialMonth.slice(5)));
-
-  const closingTime = (store?.closing_time as string | null | undefined)?.slice(0, 5) ?? '23:00';
 
   const manualYearMonth = `${queryYear}-${String(queryMonth).padStart(2, '0')}`;
   useEffect(() => {
@@ -89,14 +99,14 @@ export function PosScreen({ active = true, reserveFab = false }: { active?: bool
   const { sales: manualSales, loading: loadingManualSales, total: manualTotal, ready: manualReady, refreshing: refreshingManualSales, error: manualError, actionError: manualActionError, removingId, refetch: refetchManualSales, remove: removeManualSale } = useManualSales(manualYearMonth);
 
   useEffect(() => {
-    if (!active || status !== 'unregistered') return;
+    if (!active || loadingStatus || currentStoreId.current !== statusStore.current || status !== 'unregistered') return;
     refetchManualSales();
-  }, [active, status, refetchManualSales]);
+  }, [active, status, loadingStatus, connectionIdentity, refetchManualSales]);
 
   // 매출 추가 화면(스택 push)에서 뒤로 돌아왔을 때도 목록 갱신
   useFocusEffect(useCallback(() => {
-    if (status === 'unregistered') refetchManualSales();
-  }, [status, refetchManualSales]));
+    if (active && !loadingStatus && currentStoreId.current === statusStore.current && status === 'unregistered') refetchManualSales();
+  }, [active, status, loadingStatus, connectionIdentity, refetchManualSales]));
 
   function prevQueryMonth() {
     const previous = new Date(queryYear, queryMonth - 2, 1);
@@ -137,56 +147,76 @@ export function PosScreen({ active = true, reserveFab = false }: { active?: bool
   }
 
   function getMonthRange(year: number, month: number, ct: string): { from: Date; to: Date } {
-    const [h, m] = ct.split(':').map(Number);
-    // 토스 기준: 영업일 D = [D 마감, D+1 마감) → 월 범위 = [M/1 마감, (M+1)/1 마감)
-    const from = new Date(year, month - 1, 1);
-    from.setHours(h, m, 0, 0);
-    const to = new Date(year, month, 1);
-    to.setHours(h, m, 0, 0);
-    if (to > new Date()) to.setTime(Date.now());
+    const monthKey = `${year}-${String(month).padStart(2, '0')}`;
+    const nextMonth = new Date(Date.UTC(year, month, 1)).toISOString().slice(0, 7);
+    const from = new Date(getBusinessDayRange(`${monthKey}-01`, ct).from);
+    const to = new Date(getBusinessDayRange(`${nextMonth}-01`, ct).from);
     return { from, to };
   }
 
   const loadStoreStatus = useCallback(async () => {
     if (!store) return;
     const request = ++statusRequest.current;
-    const valid = () => request === statusRequest.current && currentStoreId.current === store.id;
+    const valid = () => request === statusRequest.current && currentStoreId.current === connectionIdentity;
     setStatusError(null);
     // Re-entering the same store must not replace its content with a full-screen loader.
-    if (statusStore.current !== store.id) setLoadingStatus(true);
+    if (statusStore.current !== connectionIdentity) setLoadingStatus(true);
     try {
-      const data = await getStoreDetails(store.id);
+      const data = await queryClient.fetchQuery({
+        queryKey: queryKeys.store(accessScope, store.id, 'pos', 'connection', connectionConfig),
+        queryFn: () => getStoreDetails(store.id), staleTime: 0,
+      });
       if (!valid()) return;
       const newStatus: SyncStatus = data.toss_merchant_id ? 'connected' : 'unregistered';
       setStatus(newStatus);
-      statusStore.current = store.id;
+      statusStore.current = connectionIdentity;
       setLoadingStatus(false);
       if (newStatus === 'connected') {
-        const ct = data.closing_time?.slice(0, 5) ?? '23:00';
+        // Match the range and cache identity used by usePosAnalytics. Settings refresh
+        // the store context; connection data must not override that selected config.
+        const ct = closingTime;
         // Show saved sales immediately, independently of the slower POS import.
         const refreshSaved = () => {
           const { from, to } = getMonthRange(selectedYearRef.current, selectedMonthRef.current, ct);
           return Promise.all([loadTodaySales(), fetchSummariesByRange(from, to)]);
         };
         const saved = refreshSaved();
-        await autoSyncRecent(ct, 30);
+        // Recent changes stay fresh while the expensive history repair is throttled
+        // independently (30 minutes vs six hours across hook instances).
+        await autoSyncRecent(ct, 2);
+        if (valid()) await autoSyncRecent(ct, 30);
         await saved;
         if (valid()) await refreshSaved();
       }
     } catch {
       if (valid()) setStatusError('매출 정보를 확인하지 못했어요. 잠시 후 다시 시도해 주세요.');
     } finally { if (valid()) setLoadingStatus(false); }
-  }, [store, loadTodaySales, fetchSummariesByRange, autoSyncRecent]);
+  }, [store, accessScope, connectionConfig, connectionIdentity, closingTime, loadTodaySales, fetchSummariesByRange, autoSyncRecent]);
 
   useEffect(() => { if (active) void loadStoreStatus(); }, [active, loadStoreStatus]);
+  // Pager activation is handled above. A stack settings screen can blur/focus
+  // this mounted page without changing active; revalidate that return as well.
+  const connectionWasFocused = useRef(false);
+  useFocusEffect(useCallback(() => {
+    if (connectionWasFocused.current && active) void loadStoreStatus();
+    connectionWasFocused.current = true;
+  }, [active, loadStoreStatus]));
+  const businessDay = getAutoSyncRange(closingTime).from;
+  const shownBusinessDay = useRef(businessDay);
+  useEffect(() => {
+    if (!active || status !== 'connected' || shownBusinessDay.current === businessDay) return;
+    shownBusinessDay.current = businessDay;
+    const { from, to } = getMonthRange(queryYear, queryMonth, closingTime);
+    void fetchSummariesByRange(from, to);
+  }, [active, status, businessDay, queryYear, queryMonth, closingTime, fetchSummariesByRange]);
+
 
   async function handleManualSync() {
     setSyncing(true);
     try {
       const { from, to } = getMonthRange(queryYear, queryMonth, closingTime);
-      if (currentRole === 'admin') await syncByMonth(queryYear, queryMonth);
-      await loadTodaySales();
-      await fetchSummariesByRange(from, to);
+      if (canManageStore) await syncByMonth(queryYear, queryMonth);
+      await Promise.all([loadTodaySales(true), fetchSummariesByRange(from, to, true)]);
     } catch (e: any) {
       Alert.alert('동기화 실패', getErrorMessage(e));
     } finally {
@@ -220,7 +250,7 @@ export function PosScreen({ active = true, reserveFab = false }: { active?: bool
       </View>
 
       {statusError && <View style={styles.notice}><Text style={styles.noticeText}>{statusError}</Text><TouchableOpacity onPress={() => { void loadStoreStatus(); }} accessibilityRole="button" style={{ minHeight: 44, justifyContent: 'center' }}><Text style={{ color: Colors.action }}>다시 시도</Text></TouchableOpacity></View>}
-      {loadingStatus || currentStoreId.current !== statusStore.current
+      {connectionDenied || loadingStatus || currentStoreId.current !== statusStore.current
         ? <View style={styles.scroll}><View style={styles.todayCard}><Text style={styles.todayLabel}>매출을 준비하고 있어요</Text><LoadingSpinner fullScreen={false} /><Text style={styles.todayOrderCount}>저장된 매출을 먼저 불러오고 있어요.</Text></View></View>
         : status === 'connected'
           ? (() => {

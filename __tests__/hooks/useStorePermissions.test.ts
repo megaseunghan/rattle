@@ -9,7 +9,9 @@ let mockPreview: 'self' | 'regular' | 'part_time' = 'self';
 let mockHasStore = true;
 const mockRefetch = jest.fn();
 jest.mock('../../lib/contexts/AuthContext', () => ({ useAuth: () => ({
-  user: { id: 'u' }, store: mockHasStore ? { id: 's' } : null, currentRole: mockRole,
+  user: { id: 'u' }, store: mockHasStore ? { id: 's' } : null, currentRole: mockRole, canManageStore: mockRole === 'admin' && mockPreview === 'self',
+  storeRole: mockPreview === 'part_time' ? 'part_timer' : mockRole === 'admin' ? 'manager' : mockEmployment === 'regular' ? 'employee' : 'part_timer',
+  permissionsReady: mockRole === 'admin' || (!mockLoading && !mockError && !!mockEmployment),
   devPreviewMode: mockPreview, devPreviewEmployeeId: null, canReadFinancials: false,
 }) }));
 jest.mock('../../lib/hooks/useEmployees', () => ({ useEmployees: () => ({
