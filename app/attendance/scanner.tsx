@@ -1,5 +1,5 @@
-import { Component, ComponentType, ReactNode, memo, useCallback, useEffect, useRef, useState } from 'react';
-import { AccessibilityInfo, AppState, Platform, Linking, Modal, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Component, ComponentType, ReactNode, memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { AccessibilityInfo, Animated, AppState, Easing, Platform, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ScannerFrame } from '../../lib/components/ScannerFrame';
 import { useKeepAwake } from 'expo-keep-awake';
@@ -66,7 +66,30 @@ export const CameraSurface = memo(function CameraSurface({ onScan, onAvailabilit
   return <CameraBoundary fallback={unavailable}>{Camera && active && <Camera style={StyleSheet.absoluteFill} facing="back" barcodeScannerSettings={qrSettings} onBarcodeScanned={onBarcodeScanned} onMountError={() => setStatus('missing')} />}</CameraBoundary>;
 });
 function signalRecognition() {
+  if (Platform.OS === 'ios') AccessibilityInfo.announceForAccessibility('QR을 읽었어요');
   void Haptics.selectionAsync().catch(() => {});
+}
+
+function NoticeCard({ animate, color, children }: { animate: boolean; color: string; children: ReactNode }) {
+  const progress = useRef(new Animated.Value(animate ? 0 : 1)).current;
+  const entered = useRef(false);
+  useLayoutEffect(() => {
+    if (!animate || entered.current) {
+      progress.setValue(1);
+      entered.current = true;
+      return;
+    }
+    entered.current = true;
+    const animation = Animated.timing(progress, {
+      toValue: 1, duration: 240, easing: Easing.out(Easing.ease), useNativeDriver: true, isInteraction: false,
+    });
+    animation.start();
+    return () => animation.stop();
+  }, [animate, progress]);
+
+  return <Animated.View testID="scanner-notice-card" style={[s.notice, { borderTopColor: color,
+    opacity: progress, transform: [{ translateY: progress.interpolate({ inputRange: [0, 1], outputRange: [8, 0] }) }],
+  }]}>{children}</Animated.View>;
 }
 
 export default function AttendanceScannerScreen() {
@@ -116,32 +139,52 @@ export default function AttendanceScannerScreen() {
   }, [success, failed, repeat, scanner.notice]);
   const size = Math.min(width - 80, 280, height * 0.32), top = Math.max(insets.top + 86, height * 0.19);
   return <View style={s.root}>
-    <View style={[StyleSheet.absoluteFill, !cameraReady && showNotice && s.cameraAboveNotice]}>
+    <View style={[StyleSheet.absoluteFill, !cameraReady && (showNotice || !!unresolvedLabel) && s.cameraAboveNotice]}>
       <CameraSurface onAvailability={setCameraReady} onScan={scanner.scan} />
     </View>
     {cameraReady && <ScannerFrame size={size} top={top} left={(width - size) / 2} color={frameColor}
       phase={processing ? 'checking' : result || scanner.state === 'unknownSetup' ? 'result' : 'waiting'}
       symbol={success ? '✓' : failed ? '×' : repeat ? '!' : ''} staticFrame={staticFrame} />}
-    {cameraReady && <Text pointerEvents="none" style={[s.caption, { top: top + size + 20 }]}>{processing ? 'QR을 읽었어요' : result ? nextAction : scanner.ready ? '직원 QR을 스캔해주세요' : '사장님이나 점장님 앱의 등록 QR을 찍어주세요'}</Text>}
-    {showNotice && <View style={[s.noticeZone, { top: cameraReady ? top + size + 60 : height * 0.44, bottom: insets.bottom + (result && scanner.unresolvedCount ? 140 : 84) }]}><View style={s.notice}><View style={s.noticeText} accessible accessibilityLabel={noticeLabel} accessibilityLiveRegion="polite"><Text style={[s.whiteTitle, success && s.receipt]}>{scanner.title}</Text>{!!scanner.time && <Text style={s.time}>{scanner.time}</Text>}{!!scanner.body && <Text style={s.whiteBody}>{scanner.body}</Text>}</View>
-      {['error', 'unknownSetup'].includes(scanner.state) && <Pressable accessibilityRole="button" style={s.action} onPress={() => { void scanner.refresh(); }}><Text style={s.whiteBody}>다시 확인</Text></Pressable>}
-      {scanner.state === 'unknownSetup' && <Pressable accessibilityRole="button" style={s.action} onPress={() => setRecovery(true)}><Text style={s.whiteBody}>새 등록 준비하기</Text></Pressable>}
-    </View></View>}
-    {!!scanner.unresolvedCount && <View style={[s.unresolved, { bottom: insets.bottom + (result ? 76 : 12) }]} accessibilityLiveRegion="polite"><Text style={s.whiteBody}>{unresolvedLabel}</Text><Text style={s.whiteBody}>해당 직원 휴대폰에서 기록을 확인해주세요</Text></View>}
-    {result && <Pressable accessibilityRole="button" style={[s.confirm, { bottom: insets.bottom + 12 }]} onPress={scanner.clearNotice}>
-      <Text style={s.whiteTitle}>확인</Text>
-    </Pressable>}
+    {(cameraReady || showNotice || !!unresolvedLabel) && <ScrollView
+      key={scanner.state} testID="scanner-notice-scroll"
+      style={[s.noticeZone, { top: cameraReady ? top + size + 20 : height * 0.44, bottom: insets.bottom }]}
+      contentContainerStyle={s.noticeContent}>
+      {cameraReady && <Text style={s.caption}>{processing ? 'QR을 읽었어요' : result ? nextAction
+        : scanner.ready ? '직원 QR을 스캔해주세요' : '사장님이나 점장님 앱의 등록 QR을 찍어주세요'}</Text>}
+      {showNotice && <NoticeCard animate={result && !staticFrame} color={frameColor}>
+        <View style={s.noticeText} accessible accessibilityLabel={noticeLabel} accessibilityLiveRegion="polite">
+          <Text style={s.noticeTitle}>{scanner.title}</Text>
+          {!!scanner.time && <Text style={s.time}>{scanner.time}</Text>}
+          {!!scanner.body && <Text style={s.noticeBody}>{scanner.body}</Text>}
+        </View>
+        {recoveryNotice && <Pressable accessibilityRole="button" style={s.action} onPress={() => { void scanner.refresh(); }}>
+          <Text style={s.whiteBody}>다시 확인</Text>
+        </Pressable>}
+        {scanner.state === 'unknownSetup' && <Pressable accessibilityRole="button" style={s.action} onPress={() => setRecovery(true)}>
+          <Text style={s.whiteBody}>새 등록 준비하기</Text>
+        </Pressable>}
+        {result && <Pressable accessibilityRole="button" style={s.confirm} onPress={scanner.clearNotice}>
+          <Text style={s.whiteTitle}>확인</Text>
+        </Pressable>}
+      </NoticeCard>}
+      {!!unresolvedLabel && <View accessibilityLiveRegion="polite">
+        <Text style={s.whiteBody}>{unresolvedLabel}</Text>
+        <Text style={s.whiteBody}>해당 직원 휴대폰에서 기록을 확인해주세요</Text>
+      </View>}
+    </ScrollView>}
     <Modal visible={recovery} transparent animationType={staticFrame ? 'none' : 'fade'} onRequestClose={() => setRecovery(false)}><View style={s.shade}><View style={s.recoveryCard} accessibilityViewIsModal><Text style={s.recoveryTitle}>사장님이나 점장님 앱에서 확인했나요?</Text><Text style={s.recoveryBody}>등록돼 있다면 먼저 해제해주세요. 그다음 사장님이나 점장님 앱에서 새 등록 QR을 받아주세요.</Text><View style={s.actions}><Pressable accessibilityRole="button" style={s.action} onPress={() => setRecovery(false)}><Text style={s.recoveryAction}>닫기</Text></Pressable><Pressable accessibilityRole="button" style={s.action} onPress={() => { setRecovery(false); void scanner.confirmRegistrationRecovery(); }}><Text style={s.recoveryAction}>새 QR 찍기</Text></Pressable></View></View></View></Modal>
   </View>;
 }
 const s = StyleSheet.create({
-  noticeText: { gap: 8, alignItems: 'center' },
+  noticeText: { gap: 8 },
   cameraAboveNotice: { bottom: '56%' },
-  confirm: { position: 'absolute', left: Spacing.screenX, right: Spacing.screenX, minHeight: 52, borderRadius: Radius.lg, backgroundColor: Colors.action, alignItems: 'center', justifyContent: 'center' },
-  receipt: { fontSize: 24, lineHeight: 32 },
-  unresolved: { position: 'absolute', left: 20, right: 20, alignItems: 'center' },
+  confirm: { marginTop: 8, minHeight: 52, borderRadius: Radius.lg, backgroundColor: Colors.action, alignItems: 'center', justifyContent: 'center' },
+  noticeTitle: { fontFamily: Fonts.wantedSemiBold, fontSize: 22, lineHeight: 30, color: Colors.white },
+  noticeBody: { fontFamily: Fonts.wantedRegular, fontSize: 15, lineHeight: 23, color: Colors.gray300 },
   shade: { flex: 1, justifyContent: 'center', padding: Spacing.screenX, backgroundColor: Colors.overlayDetail }, recoveryCard: { padding: Spacing.screenX, gap: 16, borderRadius: Radius.xl, backgroundColor: Colors.white }, recoveryTitle: { fontFamily: Fonts.wantedSemiBold, fontSize: Type.lg, color: Colors.black }, recoveryBody: { fontFamily: Fonts.wantedRegular, fontSize: Type.base, lineHeight: 22, color: Colors.gray600 }, recoveryAction: { color: Colors.action, fontFamily: Fonts.wantedMedium, fontSize: Type.base }, actions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 12 },
   root: { flex: 1, backgroundColor: Colors.black },
-  caption: { position: 'absolute', left: 20, right: 20, textAlign: 'center', fontFamily: Fonts.wantedMedium, fontSize: Type.lg, color: Colors.white }, noticeZone: { position: 'absolute', left: 20, right: 20, justifyContent: 'center' }, notice: { backgroundColor: Colors.gray900, borderRadius: Radius.xl, padding: Spacing.screenX, gap: 8, alignItems: 'center' },
-  whiteTitle: { fontFamily: Fonts.wantedSemiBold, fontSize: Type.lg, lineHeight: 26, textAlign: 'center', color: Colors.white }, whiteBody: { fontFamily: Fonts.wantedRegular, fontSize: Type.base, lineHeight: 22, textAlign: 'center', color: Colors.white }, time: { fontFamily: Fonts.geistMedium, fontSize: 24, color: Colors.white }, action: { minHeight: 44, paddingHorizontal: 16, alignItems: 'center', justifyContent: 'center' },
+  caption: { textAlign: 'center', fontFamily: Fonts.wantedMedium, fontSize: Type.lg, color: Colors.white }, noticeZone: { position: 'absolute', left: 20, right: 20 },
+  noticeContent: { flexGrow: 1, gap: 16, paddingBottom: 24 },
+  notice: { backgroundColor: Colors.gray900, borderRadius: Radius.xl, padding: Spacing.screenX, gap: 12, borderTopWidth: 4, marginTop: 'auto', flexShrink: 0 },
+  whiteTitle: { fontFamily: Fonts.wantedSemiBold, fontSize: Type.lg, lineHeight: 26, textAlign: 'center', color: Colors.white }, whiteBody: { fontFamily: Fonts.wantedRegular, fontSize: Type.base, lineHeight: 22, textAlign: 'center', color: Colors.white }, time: { fontFamily: Fonts.geistMedium, fontSize: 32, color: Colors.white }, action: { minHeight: 44, paddingHorizontal: 16, alignItems: 'center', justifyContent: 'center' },
   cameraFallback: { ...StyleSheet.absoluteFillObject, justifyContent: 'center', padding: 32, gap: 12 } });

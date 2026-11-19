@@ -1,5 +1,5 @@
-import { act, fireEvent, render } from '@testing-library/react-native';
-import { AccessibilityInfo, ActivityIndicator, Animated, AppState, type AppStateStatus } from 'react-native';
+import { act, fireEvent, render, within } from '@testing-library/react-native';
+import { AccessibilityInfo, ActivityIndicator, Animated, AppState, Dimensions, ScrollView, StyleSheet, type AppStateStatus } from 'react-native';
 import AttendanceScannerScreen from '../../app/attendance/scanner';
 import { Camera, CameraView } from 'expo-camera';
 import * as Haptics from 'expo-haptics';
@@ -243,12 +243,13 @@ it('권한을 회수하고 복귀해도 결과를 읽고 확인할 수 있고 iO
   const label = '가상 직원님, 출근했어요. 09:00. 다음 QR을 찍으려면 확인을 눌러주세요';
   expect(view.getByLabelText(label)).toBeTruthy();
   expect(announce).toHaveBeenCalledWith(label);
+  await detect(view, 'employee-A');
   await act(async () => { listeners.forEach(listener => listener('background')); });
   (Camera.getCameraPermissionsAsync as jest.Mock).mockResolvedValueOnce({ granted: false });
   await refreshStatus();
   expect(view.getByText('카메라를 허용해주세요')).toBeTruthy();
   expect(view.getByLabelText(label)).toBeTruthy();
-  expect(announce).toHaveBeenCalledTimes(1);
+  expect(announce.mock.calls).toEqual([['QR을 읽었어요'], [label]]);
   confirm(view);
   expect(view.queryByLabelText(label)).toBeNull();
 });
@@ -274,4 +275,44 @@ it('미등록 매장폰에서 거절된 등록 QR을 다시 비추면 재교환 
   expect(Enrollment.exchangeAndStoreAttendanceScannerPairingQr).toHaveBeenCalledTimes(1);
   await detect(view, 'rattle-scanner:v1.fresh');
   expect(view.getByText('매장폰을 등록했어요')).toBeTruthy();
+});
+
+it('320×568·글꼴 2배에서 결과불명 안내와 확인이 같은 스크롤 영역에 있고 확인 후 재시도한다', async () => {
+  jest.spyOn(Dimensions, 'get').mockReturnValue({ width: 320, height: 568, scale: 2, fontScale: 2 });
+  (Enrollment.scan as jest.Mock).mockResolvedValueOnce({ status: 'unknown', error: { code: 'ATTENDANCE_TIMEOUT' } });
+  const view = render(<AttendanceScannerScreen />);
+  await act(async () => {});
+  await detect(view, employeeQr);
+  const scroll = view.UNSAFE_getByType(ScrollView);
+  expect(scroll.props.scrollEnabled).not.toBe(false);
+  const viewport = StyleSheet.flatten(scroll.props.style);
+  expect(568 - viewport.top - viewport.bottom).toBeGreaterThan(240);
+  const card = within(scroll).getByTestId('scanner-notice-card');
+  const instructions = within(card).getByText(/확인을 누른 뒤 같은 QR로 다시 확인해주세요/);
+  expect(instructions.props.numberOfLines).toBeUndefined();
+  expect(instructions.props.allowFontScaling).not.toBe(false);
+  expect(within(scroll).getByText('확인할 기록 1건이 있어요')).toBeTruthy();
+  const confirmButton = within(card).getByRole('button', { name: '확인' });
+  expect(StyleSheet.flatten(confirmButton.props.style)?.position).not.toBe('absolute');
+  fireEvent.press(confirmButton);
+  expect(view.queryByTestId('scanner-notice-card')).toBeNull();
+  await detect(view, employeeQr);
+  expect(Enrollment.scan).toHaveBeenLastCalledWith(employeeQr, 'unknown');
+});
+
+it.each([false, true])('결과 카드 진입은 동작 줄이기 %s 설정을 따른다', async reduced => {
+  jest.spyOn(AccessibilityInfo, 'isReduceMotionEnabled').mockResolvedValue(reduced);
+  const timing = jest.spyOn(Animated, 'timing').mockImplementation(() => ({
+    start: jest.fn(), stop: jest.fn(), reset: jest.fn(),
+  }));
+  const view = await successfulPunch();
+  const card = view.getByTestId('scanner-notice-card');
+  expect(card).toHaveStyle({
+    opacity: reduced ? 1 : 0,
+    transform: [{ translateY: reduced ? 0 : 8 }],
+  });
+  if (reduced) expect(timing).not.toHaveBeenCalled();
+  else expect(timing).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+    toValue: 1, duration: 240, useNativeDriver: true, isInteraction: false,
+  }));
 });
