@@ -1,8 +1,10 @@
 // QA-EVIDENCE-20261114: reduced local schema only; no network or real data.
 import assert from 'node:assert/strict';
+import { createHmac } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { PGlite } from '@electric-sql/pglite';
-const db = new PGlite();
+import { pgcrypto } from '@electric-sql/pglite/contrib/pgcrypto';
+const db = new PGlite({ extensions: { pgcrypto } });
 const id = n => `00000000-0000-0000-0000-${String(n).padStart(12,'0')}`;
 const [admin, member, part, outsider, store, otherStore, purchase, expense, rule] = Array.from({length:9},(_,i)=>id(i+1));
 let checks=0;
@@ -17,7 +19,7 @@ async function rejected(fn) { let failed=false; try { await fn(); } catch { fail
 try {
  await db.exec(`CREATE ROLE service_role; CREATE ROLE anon; CREATE ROLE authenticated; ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon,authenticated; CREATE SCHEMA private; CREATE SCHEMA auth; CREATE SCHEMA storage;
  CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$ SELECT nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;
- CREATE TABLE stores(id uuid PRIMARY KEY, deleted_at timestamptz,purge_after timestamptz,financial_share_scope text DEFAULT 'all_staff',attendance_share_scope text,payroll_share_scope text); CREATE TABLE purchases(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),store_id uuid,date date,supplier text,amount numeric,category text,type text,note text);
+ CREATE TABLE stores(id uuid PRIMARY KEY, owner_id uuid, deleted_by uuid, deleted_at timestamptz,purge_after timestamptz,financial_share_scope text DEFAULT 'all_staff',attendance_share_scope text,payroll_share_scope text); CREATE TABLE purchases(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),store_id uuid,date date,supplier text,amount numeric,category text,type text,note text);
  CREATE TABLE ingredients(id uuid PRIMARY KEY,store_id uuid,current_stock numeric,last_price numeric,updated_at timestamptz);
  CREATE TABLE purchase_items(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),purchase_id uuid REFERENCES purchases(id),store_id uuid,ingredient_id uuid,name text,quantity numeric,unit text,unit_price numeric,subtotal numeric,category text);
  CREATE FUNCTION is_store_member(s uuid) RETURNS boolean LANGUAGE sql STABLE AS $$ SELECT s='${store}' AND auth.uid() IN ('${admin}','${member}','${part}') $$;
@@ -34,7 +36,7 @@ try {
  CREATE TABLE store_purge_failures(store_id uuid,sqlstate text,message text);
  CREATE TABLE payroll(store_id uuid); CREATE TABLE payroll_work_submissions(store_id uuid);
  CREATE TABLE payroll_daily_work_history(store_id uuid); CREATE TABLE payroll_daily_work(store_id uuid);
- CREATE TABLE storage.objects(owner uuid REFERENCES auth.users,owner_id text,id uuid PRIMARY KEY DEFAULT gen_random_uuid(),bucket_id text,name text, UNIQUE(bucket_id,name));
+ CREATE TABLE storage.objects(version text,owner uuid REFERENCES auth.users,owner_id text,id uuid PRIMARY KEY DEFAULT gen_random_uuid(),bucket_id text,name text, UNIQUE(bucket_id,name));
  ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;
  CREATE POLICY qa_broad_storage ON storage.objects FOR ALL TO PUBLIC USING(true) WITH CHECK(true);
  CREATE FUNCTION is_store_admin(s uuid) RETURNS boolean LANGUAGE sql STABLE AS $$ SELECT s='${store}' AND auth.uid() IN ('${admin}','${id(610)}') AND EXISTS(SELECT 1 FROM stores WHERE id=s AND deleted_at IS NULL) $$;
@@ -67,7 +69,36 @@ try {
  await db.exec(await readFile(new URL('../supabase/migrations/20261119140000_evidence_review_fixes.sql',import.meta.url),'utf8'));
  await db.query('INSERT INTO auth.users VALUES($1),($2)',[id(981),id(982)]);
  await db.query("INSERT INTO storage.objects(bucket_id,name,owner,owner_id) VALUES('transaction-evidence','legacy-proof',$1,$1::uuid::text),('other','keep',$2,$2::uuid::text)",[id(981),id(982)]);
- await db.exec(await readFile(new URL('../supabase/migrations/20261119141000_evidence_cleanup_purchase_rpc.sql',import.meta.url),'utf8'));
+ // Test doubles never enqueue network traffic. Missing dependencies must roll back installation.
+ const reviewMigration = await readFile(new URL('../supabase/migrations/20261119141000_evidence_cleanup_purchase_rpc.sql',import.meta.url),'utf8');
+ async function installationFails(pattern) {
+   await assert.rejects(db.exec(reviewMigration), pattern);
+   await db.exec('ROLLBACK');
+   ok((await db.query("SELECT to_regclass('private.evidence_purge_requests') IS NULL AS absent")).rows[0].absent);
+ }
+ await installationFails(/EVIDENCE_PURGE_PG_NET_AND_PGCRYPTO_REQUIRED/);
+ await db.exec(`
+   CREATE SCHEMA extensions;
+   CREATE EXTENSION pgcrypto WITH SCHEMA extensions;
+   CREATE SCHEMA net;
+   CREATE TABLE net._http_response(id bigint,status_code int,timed_out boolean,error_msg text);
+   CREATE TABLE net.test_queue(id bigint GENERATED ALWAYS AS IDENTITY,url text,headers jsonb);
+   CREATE FUNCTION net.http_post(url text,body jsonb,params jsonb DEFAULT '{}',headers jsonb DEFAULT '{}',timeout_milliseconds int DEFAULT 1000)
+   RETURNS bigint LANGUAGE sql AS $$ INSERT INTO net.test_queue(url,headers) VALUES($1,$4) RETURNING id $$;
+   CREATE SCHEMA vault;
+   CREATE TABLE vault.decrypted_secrets(name text PRIMARY KEY,decrypted_secret text);
+ `);
+ await installationFails(/EVIDENCE_PURGE_VAULT_CONFIGURATION_REQUIRED/);
+ await db.exec(`INSERT INTO vault.decrypted_secrets VALUES('evidence_project_url','https://qa.invalid'),('evidence_purge_token','qa-secret')`);
+ await installationFails(/schema "cron" does not exist/);
+ await db.exec(`
+   CREATE SCHEMA cron;
+   CREATE TABLE cron.test_jobs(name text PRIMARY KEY,schedule text,command text);
+   CREATE FUNCTION cron.schedule(text,text,text) RETURNS bigint LANGUAGE sql AS $$
+     INSERT INTO cron.test_jobs VALUES($1,$2,$3) RETURNING 1::bigint $$;
+ `);
+ await db.exec(reviewMigration);
+ ok((await db.query('SELECT * FROM cron.test_jobs')).rows.length===2);
  await db.query('DELETE FROM auth.users WHERE id=$1',[id(981)]);
  ok((await db.query("SELECT id FROM storage.objects WHERE name='legacy-proof' AND owner IS NULL AND owner_id IS NULL")).rows.length===1);
  await rejected(()=>db.query('DELETE FROM auth.users WHERE id=$1',[id(982)]));
@@ -250,9 +281,41 @@ try {
  ok((await db.query('SELECT * FROM claim_expired_evidence_paths()')).rows.length===1);
  ok((await db.query('SELECT * FROM claim_expired_evidence_paths()')).rows.length===0);
  ok((await db.query('SELECT purge_expired_deleted_stores() AS n')).rows[0].n===0);
- await db.query("DELETE FROM storage.objects WHERE name=$1",[id(990)+'/proof/image.jpg']);
+ const expiredPath=id(990)+'/proof/image.jpg';
+ await db.query("DELETE FROM storage.objects WHERE name=$1",[expiredPath]);
+ const record=outcome => db.query('SELECT record_evidence_purge_result($1,$2)',[expiredPath,outcome]);
+ for (const outcome of ['failed','unknown']) {
+   await record(outcome);
+   ok((await db.query('SELECT purge_expired_deleted_stores() AS n')).rows[0].n===0);
+   ok((await db.query('SELECT id FROM transaction_evidence WHERE id=$1',[id(992)])).rows.length===1);
+   await db.exec("UPDATE private.evidence_purge_attempts SET attempted_at=now()-interval '6 minutes'");
+   ok((await db.query('SELECT claim_expired_evidence_paths() AS path')).rows[0].path===expiredPath);
+ }
+
+ // Capture per-request outcomes including a lost pg_net response.
+ for (let i=0;i<4;++i) await db.query('SELECT private.dispatch_evidence_purge()');
+ const header=(await db.query("SELECT headers->>'x-evidence-purge-token' AS token FROM net.test_queue ORDER BY id LIMIT 1")).rows[0].token;
+ const [issued,signature]=header.split('.');
+ ok(signature===createHmac('sha256','qa-secret').update('evidence-purge:'+issued).digest('hex'));
+ await db.exec(`INSERT INTO net._http_response VALUES(1,204,false,NULL),(2,503,false,NULL),(3,NULL,true,NULL);
+   UPDATE private.evidence_purge_requests SET queued_at=now()-interval '3 minutes' WHERE request_id=4;
+   SELECT private.check_evidence_purge_responses();`);
+ assert.deepEqual((await db.query('SELECT result FROM private.evidence_purge_requests ORDER BY request_id')).rows.map(r=>r.result),
+   ['success','failed','timeout','missing']);
+ await record('confirmed');
+ await record('failed'); // A stale result cannot downgrade an acknowledgement.
  ok((await db.query('SELECT purge_expired_deleted_stores() AS n')).rows[0].n===1);
+ ok((await db.query('SELECT outcome FROM private.evidence_purge_attempts WHERE path=$1',[expiredPath])).rows[0].outcome==='confirmed');
  ok((await db.query('SELECT id FROM stores WHERE id=$1',[id(990)])).rows.length===0);
  ok((await db.query('SELECT id FROM transaction_evidence WHERE id=$1',[id(992)])).rows.length===0);
+ // PGlite runs one session. Model an old transaction crossing the restore deadline.
+ await db.query("INSERT INTO stores(id,owner_id,deleted_by,deleted_at,purge_after) VALUES($1,$2,$2,now()-interval '7 days',now()+interval '1 day')",[id(995),admin]);
+ await as(admin);
+ await db.query('SELECT restore_deleted_store($1)',[id(995)]);
+ await db.exec('RESET ROLE; BEGIN');
+ await db.query("UPDATE stores SET deleted_at=now()-interval '7 days',purge_after=now()+interval '1 millisecond' WHERE id=$1",[id(995)]);
+ await db.exec("SELECT pg_sleep(0.015); SET LOCAL ROLE authenticated");
+ await assert.rejects(db.query('SELECT restore_deleted_store($1)',[id(995)]), /STORE_RESTORE_EXPIRED/);
+ await db.exec('ROLLBACK');
  console.log(`Evidence SQL: ${checks} assertions passed (PGlite reduced schema; remote JWT/Storage not tested).`);
 } finally { await db.close(); }

@@ -1,7 +1,7 @@
 type Proof = { id: string; store_id: string; mime_type: string };
 interface Dependencies {
   readyProof(authorization: string, id: string): Promise<Proof | null>;
-  sign(path: string, ttl: number): Promise<string>;
+  sign(path: string, ttl: number): Promise<string | null>;
 }
 
 const headers = {
@@ -25,6 +25,9 @@ export function createEvidenceSignHandler(deps: Dependencies) {
       if (!file || (input.thumbnail && file.mime_type !== 'image/jpeg')) return new Response(null, { status: 403, headers });
       const filename = input.thumbnail ? 'thumb.jpg' : file.mime_type === 'image/jpeg' ? 'image.jpg' : 'document.pdf';
       const signedUrl = await deps.sign([file.store_id, file.id, filename].join('/'), 300);
+      if (signedUrl === null) {
+        return Response.json({ code: 'EVIDENCE_CACHE_POLICY_REQUIRES_REUPLOAD' }, { status: 409, headers });
+      }
       return new Response(JSON.stringify({ signedUrl }), { headers: { ...headers, 'Content-Type': 'application/json' } });
     } catch { return new Response(null, { status: 503, headers }); }
   };
