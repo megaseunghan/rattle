@@ -12,7 +12,7 @@ describe('OCR 엔진 분할 차이 · 합성 원문만 사용', () => {
     const parsed = parseReceipt(input);
     expect(parsed.totalCandidates[0].value).toBe(31450);
     expect(parsed.selectedTotal).toBeNull();
-    expect(parsed.suggestedTotal).toBeNull();
+    expect(parsed.suggestedTotal?.value).toBe(31450);
   });
   it('띄어진 합·계·금·액 라벨을 합치되 출처 상자는 원본 그대로 보관한다', () => {
     const input = [cell('합', .1, .2, .02), cell('계', .14, .2, .02), cell('금', .18, .2, .02), cell('액', .22, .2, .02), cell('48,620', .7, .2)];
