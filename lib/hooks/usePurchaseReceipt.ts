@@ -45,7 +45,7 @@ export function usePurchaseReceipt(selections: EvidenceSelection[]) {
       ? Object.fromEntries(Object.entries(previous).filter(([id]) => ids.has(id))) : previous);
     setManual(previous => previous && !ids.has(previous.source) ? null : previous);
   }, [files]);
-  const readings = files.map(file => ({ file, result: results[file.id] }));
+  const readings = useMemo(() => files.map(file => ({ file, result: results[file.id] })), [files, results]);
   const single = readings.length === 1 ? readings[0].result : null;
   const selected = single && 'receipt' in single && !single.receipt.guidanceCodes.includes('WHOLE_ORDER_TOTAL')
     ? single.receipt.selectedTotal : null;

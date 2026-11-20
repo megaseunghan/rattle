@@ -1,3 +1,4 @@
+import { PurchaseReceiptRows, ReceiptDraftRow } from '../../lib/components/PurchaseReceiptRows';
 import { usePurchaseReceipt } from '../../lib/hooks/usePurchaseReceipt';
 import { PurchaseReceiptReview } from '../../lib/components/PurchaseReceiptReview';
 import { useStorePermissions } from '../../lib/hooks/useStorePermissions';
@@ -164,7 +165,36 @@ function NewPurchaseContent() {
   }, [purchaseTypes.loading, purchaseTypes.error, purchaseTypes.types, purchaseType]);
 
   // 매입 품목
-  const [items, setItems] = useState<PurchaseItemForm[]>([]);
+  const [manualItems, setItems] = useState<PurchaseItemForm[]>([]);
+  const [rowEdits, setRowEdits] = useState<Record<string, Partial<ReceiptDraftRow>>>({});
+  const [linkRow, setLinkRow] = useState<string | null>(null);
+  function changeRow(id: string, patch: Partial<ReceiptDraftRow>) {
+    setRowEdits(previous => ({ ...previous, [id]: { ...previous[id], ...patch } }));
+  }
+  const receiptRows = useMemo<ReceiptDraftRow[]>(() => receipt.readings.flatMap(({ file, result }) =>
+    result && 'receipt' in result ? result.receipt.items.map((row, index) => {
+      const id = file.id + ':' + index;
+      const matches = ingredients.filter(ingredient => ingredient.name === row.name.value);
+      return { id, name: row.name.value, amount: String(row.amount?.value ?? ''),
+        quantity: String(row.quantity?.value ?? ''), unit_price: String(row.unitPrice?.value ?? ''),
+        ingredient: matches.length === 1 ? matches[0] : undefined, ...rowEdits[id] };
+    }).filter(row => !row.removed) : []), [receipt.readings, rowEdits, ingredients]);
+  const items = useMemo(() => [...manualItems, ...receiptRows.flatMap(row => row.ingredient ? [{
+    ingredient: row.ingredient, unit: row.ingredient.unit, quantity: row.quantity, unit_price: row.unit_price,
+  }] : [])], [manualItems, receiptRows]);
+  const arrived = useRef(new Set<string>());
+  useEffect(() => {
+    if (receipt.busy || pickingEvidence) return;
+    const completed = receipt.readings.filter(({ result }) => !!result).map(({ file }) => file.id);
+    const added = completed.some(id => !arrived.current.has(id));
+    arrived.current = new Set(completed);
+    if (added) {
+      Keyboard.dismiss();
+      setStep(1);
+      setEditingReview(false);
+      scrollRef.current?.scrollTo({ y: 0, animated: false });
+    }
+  }, [receipt.busy, receipt.readings, pickingEvidence]);
   const [showPicker, setShowPicker] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState('전체');
@@ -188,6 +218,7 @@ function NewPurchaseContent() {
   const existingSuppliers = useMemo(() => [...new Set(purchases.map(p => p.supplier).filter(Boolean))], [purchases]);
 
   function closePicker() {
+    setLinkRow(null);
     setShowPicker(false);
     setShowQuickAdd(false);
     setSelectedIngredients(new Set());
@@ -210,13 +241,18 @@ function NewPurchaseContent() {
   }
 
   const toggleIngredient = useCallback((ingredient: Ingredient) => {
+    if (linkRow) {
+      changeRow(linkRow, { ingredient });
+      closePicker();
+      return;
+    }
     if (items.some(i => i.ingredient.id === ingredient.id)) return;
     setSelectedIngredients(prev => {
       const next = new Set(prev);
       next.has(ingredient.id) ? next.delete(ingredient.id) : next.add(ingredient.id);
       return next;
     });
-  }, [items]);
+  }, [items, linkRow]);
 
   function handleBulkAdd() {
     ingredients
@@ -255,7 +291,8 @@ function NewPurchaseContent() {
         min_stock: 0,
         last_price: 0,
       });
-      addIngredient(created);
+      if (linkRow) changeRow(linkRow, { ingredient: created });
+      else addIngredient(created);
       setQuickName('');
       setQuickCategory('식자재');
       setQuickUnit('g');
@@ -277,6 +314,12 @@ function NewPurchaseContent() {
       if (purchaseTypes.loading || purchaseTypes.error || !purchaseTypes.types.includes(purchaseType)) next.type = '매입 유형을 불러온 뒤 선택해주세요.';
     } else {
       if (!items.length) next.items = '매입 품목을 1개 이상 추가해주세요.';
+      for (const row of receiptRows) {
+        if (!row.ingredient) next.items = row.name + '에 연결할 재고 품목을 선택해 주세요.';
+        else if (!row.quantity.trim() || !row.unit_price.trim() || Number(row.quantity) <= 0 || Number(row.unit_price) < 0 ||
+          !Number.isFinite(Number(row.quantity) * Number(row.unit_price))) next.items = row.name + '의 수량과 단가를 확인해 주세요.';
+        else if (row.amount && (!/^\d+$/.test(row.amount) || Math.abs(Number(row.amount) - Number(row.quantity) * Number(row.unit_price)) > 0.000001)) next.items = row.name + '의 금액과 수량 × 단가가 달라요.';
+      }
       for (const item of items) {
         const quantity = Number(item.quantity), price = Number(item.unit_price);
         if (!item.quantity.trim() || !Number.isFinite(quantity) || quantity <= 0) next[`${item.ingredient.id}:quantity`] = '0보다 큰 수량을 입력해주세요.';
@@ -299,6 +342,7 @@ function NewPurchaseContent() {
   function advance() {
     if (submitting || pickingEvidence || writeState === 'unknown') return;
     if (!validate(step)) return;
+    if (step === 1 && !validate(0)) { setStep(0); setEditingReview(true); return; }
     Keyboard.dismiss();
     setStep(value => editingReview ? 2 : value + 1);
     setEditingReview(false);
@@ -370,18 +414,26 @@ function NewPurchaseContent() {
   const pickerExtraData = useMemo(() => ({ items, selectedIngredients }), [items, selectedIngredients]);
   const addedIngredientIds = useMemo(() => new Set(items.map(row => row.ingredient.id)), [items]);
   const renderPickerItem = useCallback(({ item }: { item: Ingredient }) => (
-    <IngredientPickerRow item={item} already={addedIngredientIds.has(item.id)} checked={selectedIngredients.has(item.id)} onSelect={toggleIngredient} />
-  ), [addedIngredientIds, selectedIngredients, toggleIngredient]);
+    <IngredientPickerRow item={item} already={!linkRow && addedIngredientIds.has(item.id)} checked={selectedIngredients.has(item.id)} onSelect={toggleIngredient} />
+  ), [addedIngredientIds, selectedIngredients, toggleIngredient, linkRow]);
 
   const totalAmount = items.reduce((sum, item) => sum + (Number(item.quantity) || 0) * (Number(item.unit_price) || 0), 0);
+  const amountsComplete = manualItems.every(row => row.quantity.trim() && row.unit_price.trim()) &&
+    receiptRows.every(row => row.amount.trim() || (row.quantity.trim() && row.unit_price.trim()));
+  const printedSum = receiptRows.reduce((sum, row) => sum + (row.amount ? Number(row.amount) : Number(row.quantity) * Number(row.unit_price)), 0);
+  const tableTotal = manualItems.reduce((sum, item) => sum + Number(item.quantity) * Number(item.unit_price), printedSum);
   const saved = writeState === 'saved' || writeState === 'saved-refresh';
 
   const hasReceipt = receipt.readings.some(({ result }) => result && 'receipt' in result);
   const needsComparison = hasReceipt || receipt.total.length > 0;
   const comparisonMatches = /^\d+$/.test(receipt.total) && Math.abs(Number(receipt.total) - totalAmount) < 0.000001;
-  const reviewKey = JSON.stringify([stagedEvidence.map(file => file.id), receipt.total, items, supplier, formatDate(date), purchaseType]);
+  const reviewKey = JSON.stringify([stagedEvidence.map(file => file.id), receipt.total, receiptRows, items, supplier, formatDate(date), purchaseType]);
   const receiptBlocked = receipt.busy || (needsComparison && (!comparisonMatches || confirmedReview !== reviewKey));
 
+  const evidencePicker = canAttach && !saved && (step !== 1 || stagedEvidence.length > 0) && (
+    <EvidenceStagingPanel files={stagedEvidence} onChange={updateStagedEvidence}
+      disabled={submitting || writeState === 'unknown'} onPickingChange={setPickingEvidence} />
+  );
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
@@ -396,20 +448,7 @@ function NewPurchaseContent() {
       <View style={styles.progressTrack}><View style={[styles.progressFill, { width: `${(step + 1) / 3 * 100}%` }]} /></View>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <ScrollView ref={scrollRef} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
-          {canAttach && !saved && (step !== 1 || stagedEvidence.length > 0) && <>
-            <EvidenceStagingPanel files={stagedEvidence} onChange={updateStagedEvidence} disabled={submitting || writeState === 'unknown'} onPickingChange={setPickingEvidence} />
-            <PurchaseReceiptReview draft={receipt} disabled={submitting || writeState === 'unknown'} application={row => {
-              const matches = ingredients.filter(ingredient => ingredient.name === row.name.value);
-              if (matches.length !== 1 || items.some(item => item.ingredient.id === matches[0].id)) return;
-              const ingredient = matches[0];
-              return { label: ingredient.name + ' 품목으로 추가 (' + ingredient.unit + ')', apply: () => {
-                setItems(previous => previous.some(item => item.ingredient.id === ingredient.id) ? previous : [...previous, {
-                  ingredient, unit: ingredient.unit, quantity: row.quantity ? String(row.quantity.value) : '',
-                  unit_price: row.unitPrice ? String(row.unitPrice.value) : '',
-                }]);
-              } };
-            }} />
-          </>}
+          {step !== 1 && evidencePicker}
           {step === 0 && !saved && <>
           <Text style={styles.modeHint}>품목·수량·단가를 입력하면 매입 금액과 재고에 함께 반영돼요.</Text>
 
@@ -481,13 +520,16 @@ function NewPurchaseContent() {
             </TouchableOpacity>
           </View>
 
+          {receipt.readings.length > 0 && !receipt.busy && <PurchaseReceiptRows rows={receiptRows} change={changeRow} select={row => {
+            setLinkRow(row.id); setSearchQuery(''); setQuickName(row.name); setShowPicker(true);
+          }} />}
           {errors.items && <Text style={styles.fieldError}>{errors.items}</Text>}
-          {items.length === 0 ? (
+          {manualItems.length === 0 ? (receipt.readings.length && !receipt.busy ? null :
             <View style={styles.emptyItems}>
               <Text style={styles.emptyItemsText}>품목을 추가해주세요</Text>
             </View>
           ) : (
-            items.map(item => (
+            manualItems.map(item => (
               <View key={item.ingredient.id} style={styles.itemCard} onLayout={event => { fieldY.current[`${item.ingredient.id}:quantity`] = event.nativeEvent.layout.y; fieldY.current[`${item.ingredient.id}:unit_price`] = event.nativeEvent.layout.y; }}>
                 <View style={styles.itemCardTop}>
                   <View style={{ flex: 1 }}>
@@ -552,12 +594,14 @@ function NewPurchaseContent() {
             ))
           )}
           </>}
+          {!saved && <PurchaseReceiptReview draft={receipt} disabled={submitting || writeState === 'unknown'} itemTotal={amountsComplete && Number.isFinite(tableTotal) ? tableTotal : undefined} />}
+          {step === 1 && evidencePicker}
           {step === 2 && !saved && <View style={styles.itemCard}>
             <Text style={styles.itemName}>등록할 내용을 확인해주세요</Text>
             <Text style={styles.reviewText}>{store?.name} · {formatDate(date)}</Text>
             <Text style={styles.reviewText}>{supplier} · {purchaseType}</Text>
             <TouchableOpacity style={styles.actionButton} disabled={submitting || writeState === 'unknown'} onPress={() => editReview(0)}><Text style={styles.modalClose}>기본 정보 수정</Text></TouchableOpacity>
-            {items.map(item => <Text key={item.ingredient.id} style={styles.reviewText}>{item.ingredient.name} · {item.quantity}{item.unit} × {Number(item.unit_price).toLocaleString()}원 = {(Number(item.quantity) * Number(item.unit_price)).toLocaleString('ko-KR', { maximumFractionDigits: 6 })}원</Text>)}
+            {items.map((item, index) => <Text key={item.ingredient.id + index} style={styles.reviewText}>{item.ingredient.name} · {item.quantity}{item.unit} × {Number(item.unit_price).toLocaleString()}원 = {(Number(item.quantity) * Number(item.unit_price)).toLocaleString('ko-KR', { maximumFractionDigits: 6 })}원</Text>)}
             <TouchableOpacity style={styles.actionButton} disabled={submitting || writeState === 'unknown'} onPress={() => editReview(1)}><Text style={styles.modalClose}>품목 수정</Text></TouchableOpacity>
           </View>}
 
@@ -565,9 +609,6 @@ function NewPurchaseContent() {
             <EvidenceStagingPanel files={stagedEvidence} onChange={updateStagedEvidence} disabled />}
           {saved && savedPurchaseId && store && <EvidencePanel target={{ kind: 'purchase', id: savedPurchaseId, storeId: store.id }} initiallyExpanded initialSelections={stagedEvidence} onPendingChange={setPendingEvidence} />}
           {step === 2 && !saved && needsComparison && <View>
-            {!comparisonMatches && <Text accessibilityRole="alert" style={styles.fieldError}>{receipt.total && /^\d+$/.test(receipt.total)
-              ? `영수증과 품목 합계가 ${Math.abs(Number(receipt.total) - totalAmount).toLocaleString()}원 달라요. 품목과 별도 금액을 확인해주세요.`
-              : '영수증에서 합계를 확인해 대조할 금액을 입력해주세요.'}</Text>}
             <TouchableOpacity accessibilityRole="checkbox" accessibilityState={{ checked: confirmedReview === reviewKey }}
               style={styles.actionButton} disabled={!comparisonMatches || receipt.busy || submitting || writeState === 'unknown'}
               onPress={() => setConfirmedReview(confirmedReview === reviewKey ? '' : reviewKey)}>

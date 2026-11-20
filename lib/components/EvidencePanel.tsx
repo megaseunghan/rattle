@@ -1,3 +1,4 @@
+import { EvidencePhoto } from './EvidencePhoto';
 import { memo, useEffect, useRef, useState } from 'react';
 import { Alert, FlatList, Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Image } from 'expo-image';
@@ -285,9 +286,9 @@ function EvidencePanelContent({ target, disabled = false, initiallyExpanded = fa
       {canWrite && <EvidenceSourceButtons disabled={busy || disabled || !loaded || !!error} onPick={pick} />}
     </>}
     <Modal visible={!!viewer} animationType="fade" onRequestClose={() => setViewer(null)}>
-      <SafeAreaView style={styles.viewer}>
+      <SafeAreaView style={styles.viewer} onAccessibilityEscape={() => setViewer(null)}>
         <TouchableOpacity accessibilityRole="button" style={styles.button} onPress={() => setViewer(null)}><Text style={styles.link}>닫기</Text></TouchableOpacity>
-        {viewer && <Image style={styles.original} source={{ uri: viewer.url, cacheKey: `${account}:${viewer.file.id}:full` }} placeholder={viewer.thumb ? { uri: viewer.thumb, cacheKey: `${account}:${viewer.file.id}:thumb` } : undefined} cachePolicy="memory" contentFit="contain" placeholderContentFit="contain" transition={150} onError={() => { setViewer(null); setError('이미지를 불러오지 못했어요. 다시 열어주세요.'); }} />}
+        {viewer && <EvidencePhoto key={viewer.file.id} onClose={() => setViewer(null)} style={styles.original} source={{ uri: viewer.url, cacheKey: `${account}:${viewer.file.id}:full` }} placeholder={viewer.thumb ? { uri: viewer.thumb, cacheKey: `${account}:${viewer.file.id}:thumb` } : undefined} cachePolicy="memory" contentFit="contain" placeholderContentFit="contain" transition={150} onError={() => { setViewer(null); setError('이미지를 불러오지 못했어요. 다시 열어주세요.'); }} />}
       </SafeAreaView>
     </Modal>
   </View>;
