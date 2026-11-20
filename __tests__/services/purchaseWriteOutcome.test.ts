@@ -1,4 +1,4 @@
-import { createPurchaseWithItems, PurchaseWriteError } from '../../lib/services/purchases';
+import { createPurchaseWithItems, updatePurchaseAmounts, PurchaseWriteError } from '../../lib/services/purchases';
 import { invalidateCachedStore } from '../../lib/services/cacheInvalidation';
 const mockRpc = jest.fn();
 jest.mock('../../lib/supabase', () => ({ supabase: { rpc: (...args: unknown[]) => mockRpc(...args) } }));
@@ -46,4 +46,16 @@ it('금액별 매입을 단일 RPC로 저장하고 증빙을 연결할 번호를
     p_store_id: 'store', p_date: input.date, p_supplier: input.supplier, p_type: '수기', p_mode: 'amounts', p_rows: rows,
   });
   expect(mockRpc).toHaveBeenCalledTimes(1);
+});
+
+it('금액별 수정은 원래 매입 ID로 요청하며 ID가 없으면 등록으로 전환하지 않는다', async () => {
+  const rows = [{ category: '소모품', amount: 299 }];
+  mockRpc.mockResolvedValue({ data: 'purchase-id', error: null });
+  await expect(updatePurchaseAmounts({ ...input, id: '' }, rows)).rejects.toThrow('수정할 매입');
+  expect(mockRpc).not.toHaveBeenCalled();
+  await expect(updatePurchaseAmounts({ ...input, id: 'purchase-id' }, rows)).resolves.toEqual({ purchaseId: 'purchase-id', refreshFailed: false });
+  expect(mockRpc).toHaveBeenCalledWith('create_purchase_entry', {
+    p_store_id: input.store_id, p_date: input.date, p_supplier: input.supplier, p_type: input.type,
+    p_mode: 'amounts', p_rows: rows, p_purchase_id: 'purchase-id',
+  });
 });

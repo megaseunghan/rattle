@@ -22,7 +22,7 @@ try {
  CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$ SELECT nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;
  CREATE TABLE stores(id uuid PRIMARY KEY, owner_id uuid, deleted_by uuid, deleted_at timestamptz,purge_after timestamptz,financial_share_scope text DEFAULT 'all_staff',attendance_share_scope text,payroll_share_scope text); CREATE TABLE purchases(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),store_id uuid,date date,supplier text,amount numeric,category text,type text,note text);
  CREATE TABLE ingredients(id uuid PRIMARY KEY,store_id uuid,current_stock numeric,last_price numeric,updated_at timestamptz);
- CREATE TABLE purchase_items(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),purchase_id uuid REFERENCES purchases(id),store_id uuid,ingredient_id uuid,name text,quantity numeric,unit text,unit_price numeric,subtotal numeric,category text);
+ CREATE TABLE purchase_items(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),purchase_id uuid REFERENCES purchases(id) ON DELETE CASCADE,store_id uuid,ingredient_id uuid,name text,quantity numeric,unit text,unit_price numeric,subtotal numeric,category text);
  CREATE FUNCTION is_store_member(s uuid) RETURNS boolean LANGUAGE sql STABLE AS $$ SELECT s='${store}' AND auth.uid() IN ('${admin}','${member}','${part}') $$;
  CREATE FUNCTION map_purchase_category(category text) RETURNS text LANGUAGE sql IMMUTABLE AS $$ SELECT category $$; CREATE TABLE expenses(id uuid PRIMARY KEY,store_id uuid);
  CREATE TABLE recurring_fixed_expenses(id uuid PRIMARY KEY,store_id uuid,source_expense_id uuid);
