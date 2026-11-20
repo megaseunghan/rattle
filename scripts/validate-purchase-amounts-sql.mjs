@@ -137,8 +137,9 @@ export async function validatePurchaseAmounts({ db, as, reserve, id, admin, memb
   }
   assert.deepEqual(await balances(),afterItems);
   assert.equal((await db.query("SELECT count(*)::int n FROM purchases WHERE supplier='QA-분류'")).rows[0].n,2);
-  const edit = (pid,rows) => db.query("SELECT create_purchase_entry($1,'2026-11-21','QA-분류','수기','amounts',$2,$3) AS id",
-    [store,JSON.stringify(rows),pid]);
+  const version = pid => db.query('SELECT edit_version FROM purchases WHERE id=$1',[pid]).then(r=>r.rows[0]?.edit_version);
+  const edit = async (pid,rows,expected) => db.query("SELECT create_purchase_entry($1,'2026-11-21','QA-분류','수기','amounts',$2,$3,$4) AS id",
+    [store,JSON.stringify(rows),pid,expected === undefined ? await version(pid) : expected]);
   await assert.rejects(edit(itemId,splitAmounts),/PURCHASE_AMOUNT_ENTRY_NOT_FOUND/);
   await assert.rejects(edit(amountId,[{category:'미등록',amount:1}]),/PURCHASE_INVALID_CATEGORY/);
   assert.deepEqual(await breakdown(amountId),{amount:'20499',cats:{'주류':20200,'소모품':299}});
@@ -161,23 +162,50 @@ export async function validatePurchaseAmounts({ db, as, reserve, id, admin, memb
   await change(null,'기타','add');
   const renamed = (await entry('amounts',[{category:'주류',amount:40},{category:'기타',amount:60},{category:'별도',amount:90}])).rows[0].id;
   assert.equal(await headerCategory(renamed),'별도');
+  const beforeRename = await version(renamed);
   await change('주류','음료','rename');
+  assert.notEqual(await version(renamed),beforeRename);
   assert.deepEqual((await breakdown(renamed)).cats,{'음료':40,'기타':60,'별도':90});
   await change('음료',null,'remove');
   await change(null,'음료','add');
   assert.deepEqual((await breakdown(renamed)).cats,{'기타':100,'별도':90});
   assert.equal(await headerCategory(renamed),'기타');
   const itemKey = (await db.query('SELECT id FROM purchase_items WHERE purchase_id=$1 AND ingredient_id=$2',[itemId,id(910)])).rows[0].id;
-  const editItem = (key,qty,amount) => db.query('SELECT update_purchase_item_amount($1,$2,$3)',[key,qty,amount]);
+  const editItem = async (key,qty,amount,expected) => {
+    const token = expected === undefined ? (await db.query('SELECT p.edit_version FROM purchases p JOIN purchase_items i ON i.purchase_id=p.id WHERE i.id=$1',[key])).rows[0]?.edit_version : expected;
+    return db.query('SELECT update_purchase_item_amount($1,$2,$3,$4)',[key,qty,amount,token]);
+  };
   const remove = pid => db.query('SELECT delete_purchase_entry($1) AS removed',[pid]).then(r=>r.rows[0].removed);
   const currentItem = () => db.query('SELECT quantity,unit_price,subtotal FROM purchase_items WHERE id=$1',[itemKey]).then(r=>r.rows[0]);
 
-  // 10,000원/3개 → 2개: 구앱의 JS 숫자로 돌아온 단가도 수량 수정으로 인식한다.
-  await db.query('SELECT update_purchase_item($1,2,$2)',[itemKey,10000/3]);
+  // PGlite 한 연결에서 독립적인 편집 세션 A/B의 조회→조회→저장→저장을 교차한다.
+  const split = (first,second) => [{category:'별도',amount:first},{category:'소모품',amount:second}];
+  const concurrent = (await entry('amounts',split(100,200))).rows[0].id;
+  await db.exec('RESET ROLE');
+  await db.query("UPDATE stores SET financial_share_scope='all_staff' WHERE id=$1",[store]);
+  await db.query('UPDATE employees SET is_active=true WHERE store_id=$1 AND user_id=$2',[store,member]);
+  await as(admin);
+  const a = await version(concurrent);
+  await as(member);
+  const b = await version(concurrent);
+  await as(admin);
+  await edit(concurrent,split(150,200),a);
+  await as(member);
+  await assert.rejects(edit(concurrent,split(100,220),b),/PURCHASE_CHANGED/);
+  await assert.rejects(edit(concurrent,split(100,220),null),/PURCHASE_CHANGED/);
+  assert.deepEqual(await breakdown(concurrent),{amount:'350',cats:{'별도':150,'소모품':200}});
+  await edit(concurrent,split(150,220),await version(concurrent));
+  assert.equal((await breakdown(concurrent)).amount,'370');
+  await as(admin);
+  const staleItemVersion = await version(itemId);
+  await assert.rejects(db.query('SELECT update_purchase_item($1,2,$2)',[itemKey,10000/3]),/PURCHASE_CHANGED/);
+  await editItem(itemKey,2,null,staleItemVersion);
+  await as(member);
+  await assert.rejects(editItem(itemKey,3,500,staleItemVersion),/PURCHASE_CHANGED/);
+  await as(admin);
   assert.deepEqual(await breakdown(itemId),{amount:'10728',cats:{'별도':10027,'소모품':701}});
   assert.equal(Number((await currentItem()).unit_price),5000);
   assert.equal((await balances()).current_stock,'19');
-  await assert.rejects(db.query('SELECT update_purchase_item($1,2,4999)',[itemKey]),/PURCHASE_EDIT_AMOUNT_REQUIRED/);
   await editItem(itemKey,2,null);
   assert.equal((await currentItem()).subtotal,'10000');
   assert.equal((await balances()).current_stock,'19');
@@ -199,6 +227,22 @@ export async function validatePurchaseAmounts({ db, as, reserve, id, admin, memb
   assert.equal(await remove(itemId),false);
   assert.equal((await balances()).current_stock,'17');
 
+  await db.exec('RESET ROLE');
+  await db.query("INSERT INTO ingredients(id,store_id,current_stock,last_price,unit) VALUES($1,$2,7,1200,'개')",[id(1032),store]);
+  await as(admin);
+  const onlyEntry = (await entry('items',[{name:'최초 입고',category:'소모품',amount:8000,ingredient_id:id(1032)}])).rows[0].id;
+  await remove(onlyEntry);
+  assert.deepEqual((await db.query('SELECT current_stock,last_price FROM ingredients WHERE id=$1',[id(1032)])).rows[0],{current_stock:'7',last_price:'1200'});
+  const earlier = (await entry('items',[{...splitItems[0],amount:3500,quantity:1}])).rows[0].id;
+  const later = (await entry('items',[{...splitItems[0],amount:8000,quantity:1}])).rows[0].id;
+  assert.equal(Number((await balances()).last_price),8000);
+  const earlierLine = (await db.query('SELECT id FROM purchase_items WHERE purchase_id=$1',[earlier])).rows[0].id;
+  await editItem(earlierLine,1,3700);
+  assert.equal(Number((await balances()).last_price),8000);
+  await remove(later);
+  assert.equal(Number((await balances()).last_price),3700);
+  await remove(earlier);
+  assert.equal(Number((await balances()).last_price),10000/3);
   const rawDeleteId = (await entry('items',[{...splitItems[0],quantity:1},{...splitItems[0],quantity:2}])).rows[0].id;
   assert.equal((await balances()).current_stock,'20');
   await db.query('DELETE FROM purchases WHERE id=$1',[rawDeleteId]);
@@ -212,7 +256,7 @@ export async function validatePurchaseAmounts({ db, as, reserve, id, admin, memb
   const fractionalLine = (await db.query("SELECT id FROM purchase_items WHERE purchase_id=$1 AND name='A'",[fractional])).rows[0].id;
   await editItem(fractionalLine,2,null);
   assert.deepEqual(await breakdown(fractional),{amount:'1',cats:{'소모품':1}});
-  assert.equal((await db.query('SELECT bool_and(subtotal=round(subtotal)) AS exact FROM purchase_items WHERE purchase_id=$1',[fractional])).rows[0].exact,true);
+  assert.equal((await db.query('SELECT bool_and(subtotal=round(subtotal) AND unit_price=subtotal/quantity) AS exact FROM purchase_items WHERE purchase_id=$1',[fractional])).rows[0].exact,true);
   await as(outsider);
   await assert.rejects(entry('items',splitItems),/FINANCIAL_SHARING_DENIED/);
   assert.equal((await db.query('SELECT * FROM purchase_amount_lines WHERE purchase_id=$1',[amountId])).rows.length,0);

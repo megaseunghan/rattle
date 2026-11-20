@@ -22,7 +22,7 @@ jest.mock('expo-router', () => ({ router: { back: () => mockBack() }, useLocalSe
 jest.mock('../../lib/contexts/AuthContext', () => ({ useAuth: () => ({ user: { id: 'user' }, store: { id: 'store' },
   permissionsReady: true, storeRole: 'owner', canManageStore: true, canReadFinancials: true, devPreviewMode: 'self' }) }));
 jest.mock('../../lib/services/purchases', () => ({
-  getPurchaseById: async () => ({ id: 'purchase', store_id: 'store', amount: 4000 }),
+  getPurchaseById: async () => ({ id: 'purchase', store_id: 'store', edit_version: 1, amount: 4000 }),
   getPurchaseItems: async () => [{ id: 'row', name: '가상 사과', quantity: 1, unit: '망', unit_price: 4000, subtotal: 4000 }],
   updatePurchaseItem: (...args: unknown[]) => mockSave(...args),
 }));
@@ -54,7 +54,7 @@ test('editing applies only a chosen item, uploads after save and keeps manual co
   fireEvent.changeText(view.getByLabelText('매입 품목 수량'), '3');
   expect(mockUpload).not.toHaveBeenCalled();
   fireEvent.press(view.getByLabelText('품목 수정 저장'));
-  await waitFor(() => expect(mockSave).toHaveBeenCalledWith('row', 3, 6000));
+  await waitFor(() => expect(mockSave).toHaveBeenCalledWith('row', 3, 6000, 1));
   await waitFor(() => expect(mockUpload).toHaveBeenCalledTimes(1));
 });
 

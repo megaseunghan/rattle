@@ -72,6 +72,8 @@ function PurchaseDetailContent({ id }: { id: string }) {
 
   const [amountRows, setAmountRows] = useState<{ category: string; value: string; initial: string }[] | null>(null);
   const [editTarget, setEditTarget] = useState<PurchaseItem | null>(null);
+  const [editVersion, setEditVersion] = useState<number | null>(null);
+  const [draftConflict, setDraftConflict] = useState(false);
   const [editQuantity, setEditQuantity] = useState('');
   const [editAmount, setEditAmount] = useState('');
   const quantity = Number(editQuantity.replace(/,/g, ''));
@@ -123,12 +125,14 @@ function PurchaseDetailContent({ id }: { id: string }) {
     }
     setFetching(true);
     try {
-      const [p, its] = await Promise.all([getPurchaseById(id), getPurchaseItems(id)]);
+      // 헤더 버전을 먼저 읽는다. 사이에 변경된 품목은 저장 시 그 버전으로 거절된다.
+      const p = await getPurchaseById(id);
+      const its = await getPurchaseItems(id);
       if (!current()) return false;
       if (p.store_id !== store.id) throw new Error('PURCHASE_STORE_MISMATCH');
       setResult({ scope, purchase: p, items: its, error: null });
       setSavedNeedsRefresh(false);
-      return true;
+      return { purchase: p, items: its };
     } catch (e) {
       if (current()) setResult(previous => ({ scope, purchase: previous?.scope === scope ? previous.purchase : null, items: previous?.scope === scope ? previous.items : [], error: getErrorMessage(e) }));
       return false;
@@ -141,7 +145,9 @@ function PurchaseDetailContent({ id }: { id: string }) {
   }, [load, scope]);
 
   function openEdit(item: PurchaseItem) {
-    if (savedNeedsRefresh || saving || error) return;
+    if (!purchase || savedNeedsRefresh || saving || error) return;
+    setEditVersion(purchase.edit_version);
+    setDraftConflict(false);
     setEditTarget(item);
     setEditQuantity(String(item.quantity));
     setEditAmount(String(Math.round(item.subtotal)));
@@ -154,6 +160,8 @@ function PurchaseDetailContent({ id }: { id: string }) {
     try {
       const categories = await purchaseCategoryTaxonomy.getCategories(purchase.store_id);
       if (active.current !== scope) return;
+      setEditVersion(purchase.edit_version);
+      setDraftConflict(false);
       const amounts = purchase.category_amounts ?? {};
       setAmountRows([...new Set([...Object.keys(amounts), ...categories])].map(category => {
         const initial = Object.prototype.hasOwnProperty.call(amounts, category) ? String(amounts[category]) : '';
@@ -167,15 +175,44 @@ function PurchaseDetailContent({ id }: { id: string }) {
     }
   }
 
+  async function refreshDraft() {
+    setDraftConflict(true);
+    setEditVersion(null);
+    const fresh = await load();
+    if (!fresh || active.current !== scope) return;
+    if (amountRows && fresh.purchase.hasAmountLines) {
+      const amounts = fresh.purchase.category_amounts ?? {};
+      const updated = amountRows.map(row => {
+        const initial = String(amounts[row.category] ?? '');
+        return { ...row, initial, value: row.value === row.initial ? initial : row.value };
+      });
+      for (const [category, value] of Object.entries(amounts)) {
+        if (!updated.some(row => row.category === category)) updated.push({ category, initial: String(value), value: String(value) });
+      }
+      setAmountRows(updated);
+    } else if (editTarget) {
+      const latest = fresh.items.find(row => row.id === editTarget.id);
+      if (!latest) return;
+      if (editQuantity === String(editTarget.quantity)) setEditQuantity(String(latest.quantity));
+      if (editAmount === String(Math.round(editTarget.subtotal))) setEditAmount(String(Math.round(latest.subtotal)));
+      setEditTarget(latest);
+    } else return;
+    setEditVersion(fresh.purchase.edit_version);
+  }
+
   async function handleSaveEdit() {
     if (picking || receipt.busy || (!editTarget && !amountRows) || saveLock.current || savedNeedsRefresh) return;
-    if (editTarget && !validQuantity) { Alert.alert('입력 오류', '수량을 올바르게 입력해주세요.'); return; }
-    if (editTarget && !validAmount) { Alert.alert('입력 오류', '금액을 0원 이상의 정수로 입력해주세요.'); return; }
+    if (editVersion != null && editTarget && !validQuantity) { Alert.alert('입력 오류', '수량을 올바르게 입력해주세요.'); return; }
+    if (editVersion != null && editTarget && !validAmount) { Alert.alert('입력 오류', '금액을 0원 이상의 정수로 입력해주세요.'); return; }
 
     saveLock.current = true;
     setSaving(true);
     try {
       if (!canWrite()) return;
+      if (editVersion == null) {
+        await refreshDraft();
+        return;
+      }
       if (amountRows && purchase) {
         const rows = amountRows.map(({ category, value }) => ({ category, amount: Number(value) }));
         if (amountRows.some(row => !/^\d*$/.test(row.value)) || !rows.some(row => row.amount > 0)
@@ -183,9 +220,9 @@ function PurchaseDetailContent({ id }: { id: string }) {
           Alert.alert('금액 확인', '적어도 한 분류에 원 단위 금액을 입력해주세요.');
           return;
         }
-        await updatePurchaseAmounts(purchase, rows);
+        await updatePurchaseAmounts({ ...purchase, edit_version: editVersion }, rows);
       } else if (editTarget) {
-        await updatePurchaseItem(editTarget.id, quantity, amount === Math.round(editTarget.subtotal) ? null : amount);
+        await updatePurchaseItem(editTarget.id, quantity, amount === Math.round(editTarget.subtotal) ? null : amount, editVersion);
       } else return;
       if (active.current !== scope) return;
       if (photos.length) {
@@ -203,7 +240,10 @@ function PurchaseDetailContent({ id }: { id: string }) {
       if (!refreshed && active.current === scope) Alert.alert('저장 완료 · 새로고침 필요', editLabel + '은 저장됐어요. 다시 불러오기로 현재 내역을 확인해주세요.');
     } catch (e: unknown) {
       if (active.current !== scope) return;
-      if (amountRows && (e as {outcome?: string} | null)?.outcome === 'unknown') {
+      if (e instanceof Error && e.message === 'PURCHASE_CHANGED') {
+        Alert.alert('다른 곳에서 먼저 수정됐어요. 최신 내용을 불러올게요');
+        await refreshDraft();
+      } else if (amountRows && (e as {outcome?: string} | null)?.outcome === 'unknown') {
         setAmountRows(null);
         Alert.alert('저장 결과 확인', '현재 매입을 다시 불러와 금액을 확인해주세요.');
         await load();
@@ -300,13 +340,17 @@ function PurchaseDetailContent({ id }: { id: string }) {
               <TouchableOpacity onPress={handleSaveEdit} disabled={saving || picking || receipt.busy} style={styles.headerAction} accessibilityRole="button" accessibilityLabel={amountRows ? '금액 수정 저장' : '품목 수정 저장'} accessibilityState={{ disabled: saving, busy: saving }}>
                 {saving
                   ? <ActivityIndicator size="small" color={Colors.primary} />
-                  : <Text style={styles.sheetSaveText}>저장</Text>}
+                  : <Text style={styles.sheetSaveText}>{draftConflict && editVersion == null ? '다시 불러오기' : '저장'}</Text>}
               </TouchableOpacity>
             </View>
 
             <ScrollView ref={editScroll} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
-            {amountRows ? amountRows.map(({category, value}) => <View key={category}>
-              <Text style={styles.fieldLabel}>{category} (원)</Text>
+            {draftConflict && <Text accessibilityRole="alert" style={styles.errorText}>{editVersion == null
+              ? '최신 내용을 확인해야 저장할 수 있어요. 다시 불러와 주세요.'
+              : '입력을 유지했어요. 최신 값과 비교한 뒤 저장해주세요.'}</Text>}
+            {draftConflict && editTarget && <Text>현재 저장값 · 수량 {editTarget.quantity} · 금액 {Math.round(editTarget.subtotal).toLocaleString()}원</Text>}
+            {amountRows ? amountRows.map(({category, value, initial}) => <View key={category}>
+              <Text style={styles.fieldLabel}>{category} (원){draftConflict && value !== initial ? ` · 현재 ${Number(initial).toLocaleString()}원` : ''}</Text>
               <TextInput style={styles.input} accessibilityLabel={category + ' 금액'} keyboardType="number-pad"
                 value={value} placeholder="0" editable={!saving} onChangeText={text => setAmountRows(previous =>
                   previous?.map(row => row.category === category ? {...row, value: text.replace(/,/g, '').trim()} : row) ?? null)} />

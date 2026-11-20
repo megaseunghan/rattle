@@ -13,7 +13,7 @@ jest.mock('../../lib/components/ui/SheetModal',()=>({SheetModal:({visible,childr
 jest.mock('../../lib/services/purchaseCategories',()=>({purchaseCategoryTaxonomy:{getCategories:async()=>['식자재','소모품']}}));
 jest.mock('../../lib/icons/AppIcon',()=>({AppIcon:()=>null}));
 jest.mock('../../lib/utils/layoutAnimation',()=>({animateListChange:jest.fn()}));
-const purchase={id:'p',store_id:'s',supplier:'QA 거래처',category:'식자재',type:'수기',date:'2026-11-01',amount:100};
+const purchase={id:'p',store_id:'s',edit_version:1,supplier:'QA 거래처',category:'식자재',type:'수기',date:'2026-11-01',amount:100};
 const item={id:'i',purchase_id:'p',name:'우유',quantity:1,unit:'개',unit_price:100,subtotal:100};
 beforeEach(()=>{jest.clearAllMocks();mockId='p';mockMode='self';mockHeader.mockReset().mockResolvedValue(purchase);mockItems.mockReset().mockResolvedValue([item]);mockSave.mockReset().mockResolvedValue({refreshFailed:false});jest.spyOn(Alert,'alert').mockImplementation(()=>{});});
 afterEach(()=>jest.restoreAllMocks());
@@ -57,7 +57,7 @@ it('수량만 수정하면 10,000원은 유지하고 예상 단가를 5,000원�
  expect(screen.getByLabelText('매입 품목 금액').props.value).toBe('10000');
  expect(screen.getByText('단가 5,000원')).toBeTruthy();
  fireEvent.press(screen.getByLabelText('품목 수정 저장'));
- await waitFor(()=>expect(mockSave).toHaveBeenCalledWith('i',2,null));
+ await waitFor(()=>expect(mockSave).toHaveBeenCalledWith('i',2,null,1));
 });
 
 it('금액별 상세에서 새 분류에 금액을 옮겨 같은 영수증에 저장한다', async () => {
@@ -76,4 +76,35 @@ it('기존 단일금액 기록에는 금액별 수정 버튼을 표시하지 않
  render(<PurchaseDetail/>);
  await screen.findByText('금액만 입력된 매입이에요');
  expect(screen.queryByRole('button',{name:'금액 수정'})).toBeNull();
+});
+
+it('다른 편집자가 바꾼 분류는 최신값으로 가져오고 직접 입력한 분류는 다음 저장까지 유지한다', async () => {
+ const first={...purchase,hasAmountLines:true,category_amounts:{'식자재':100,'소모품':200}};
+ const latest={...first,edit_version:2,category_amounts:{'식자재':150,'소모품':200}};
+ mockHeader.mockResolvedValueOnce(first).mockResolvedValue(latest);
+ mockItems.mockResolvedValue([]);
+ mockAmounts.mockRejectedValueOnce(new Error('PURCHASE_CHANGED'));
+ render(<PurchaseDetail/>);
+ fireEvent.press(await screen.findByRole('button',{name:'금액 수정'}));
+ fireEvent.changeText(await screen.findByLabelText('소모품 금액'),'220');
+ fireEvent.press(screen.getByLabelText('금액 수정 저장'));
+ await waitFor(()=>expect(screen.getByLabelText('식자재 금액').props.value).toBe('150'));
+ expect(screen.getByLabelText('소모품 금액').props.value).toBe('220');
+ expect(mockAmounts).toHaveBeenCalledTimes(1);
+ fireEvent.press(screen.getByLabelText('금액 수정 저장'));
+ await waitFor(()=>expect(mockAmounts).toHaveBeenLastCalledWith(latest,[{category:'식자재',amount:150},{category:'소모품',amount:220}]));
+});
+it('품목 충돌 후 변경한 수량은 유지하고 다른 편집자가 저장한 금액과 버전을 반영한다', async () => {
+ mockHeader.mockResolvedValueOnce(purchase).mockResolvedValue({...purchase,edit_version:2});
+ mockItems.mockResolvedValueOnce([item]).mockResolvedValue([{...item,subtotal:120}]);
+ mockSave.mockRejectedValueOnce(new Error('PURCHASE_CHANGED'));
+ render(<PurchaseDetail/>);
+ fireEvent.press(await screen.findByRole('button',{name:/우유.*수정/}));
+ fireEvent.changeText(screen.getByLabelText('매입 품목 수량'),'2');
+ fireEvent.press(screen.getByLabelText('품목 수정 저장'));
+ await waitFor(()=>expect(screen.getByLabelText('매입 품목 금액').props.value).toBe('120'));
+ expect(screen.getByLabelText('매입 품목 수량').props.value).toBe('2');
+ expect(mockSave).toHaveBeenCalledTimes(1);
+ fireEvent.press(screen.getByLabelText('품목 수정 저장'));
+ await waitFor(()=>expect(mockSave).toHaveBeenLastCalledWith('i',2,null,2));
 });

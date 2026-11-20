@@ -51,11 +51,19 @@ it('금액별 매입을 단일 RPC로 저장하고 증빙을 연결할 번호를
 it('금액별 수정은 원래 매입 ID로 요청하며 ID가 없으면 등록으로 전환하지 않는다', async () => {
   const rows = [{ category: '소모품', amount: 299 }];
   mockRpc.mockResolvedValue({ data: 'purchase-id', error: null });
-  await expect(updatePurchaseAmounts({ ...input, id: '' }, rows)).rejects.toThrow('수정할 매입');
+  await expect(updatePurchaseAmounts({ ...input, edit_version: 1, id: '' }, rows)).rejects.toThrow('수정할 매입');
   expect(mockRpc).not.toHaveBeenCalled();
-  await expect(updatePurchaseAmounts({ ...input, id: 'purchase-id' }, rows)).resolves.toEqual({ purchaseId: 'purchase-id', refreshFailed: false });
+  await expect(updatePurchaseAmounts({ ...input, edit_version: 1, id: 'purchase-id' }, rows)).resolves.toEqual({ purchaseId: 'purchase-id', refreshFailed: false });
   expect(mockRpc).toHaveBeenCalledWith('create_purchase_entry', {
     p_store_id: input.store_id, p_date: input.date, p_supplier: input.supplier, p_type: input.type,
-    p_mode: 'amounts', p_rows: rows, p_purchase_id: 'purchase-id',
+    p_mode: 'amounts', p_rows: rows, p_purchase_id: 'purchase-id', p_expected_version: 1,
   });
+});
+
+it('금액별 충돌은 화면에서 재조회할 수 있게 구분하고 재시도하지 않는다', async () => {
+  mockRpc.mockResolvedValue({ error: { code: 'P0001', message: 'PURCHASE_CHANGED' } });
+  await expect(updatePurchaseAmounts({ ...input, id: 'p', edit_version: 4 }, [{category: '비품', amount: 100}]))
+    .rejects.toThrow('PURCHASE_CHANGED');
+  expect(mockRpc).toHaveBeenCalledTimes(1);
+  expect(invalidateCachedStore).not.toHaveBeenCalled();
 });
