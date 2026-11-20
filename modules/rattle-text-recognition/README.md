@@ -281,3 +281,48 @@ Mac 비교 스크립트는 저장소 밖 `/private/tmp/rattle-ocr-bench/compare-
 구현자 자체 검토이며, 이후 검토에서도 안전한 누락을 완료 차단으로 취급하지 않는다. 화면·제안값 입력 연결·실기기 수집·빌드·설치·EAS·원격 변경은 이번 범위에서 실행하지 않았다.
 
 최종 검증(2026-11-19, macOS 로컬, 기준 f1272f7 위 이 과제의 미커밋 코드·합성 회귀): `npm run typecheck` **통과**(`/tmp/rattle-ocr-r12-typecheck.log`), 전체 `npx jest --runInBand --no-coverage --testPathIgnorePatterns='/node_modules/' '/__tests__/setup\.ts' '<rootDir>/supabase/functions/' '<rootDir>/dev/'` **198 suites/1728 tests 통과**, 기본 timeout, 45.990초, 종료 0(`/tmp/rattle-ocr-r12-full-jest.log`). 실행 전후 파서·회귀 소스 SHA가 같음을 `/tmp/rattle-ocr-r12-final-source.sha256`으로 확인했고 외부 비교의 파서 SHA도 최종 코드와 일치했다. `git diff --check`와 외부 비교 스크립트 `node --check` 통과.
+
+## iPhone 신규 10장 후속 · 2026-11-20
+
+작업 `task_db93d61f7d57`, 기준 `feature/evidence-attachments@ae73f68`. 사용자가 처음 제시한 iPhone 실기기 OCR 10장의 정답·범위를 확인한 뒤, 일반화 가능한 문서 구조만 보완했다. 원본은 `/private/tmp/rattle-ocr-bench/iphone/iphone-new-20261120.json`에 유지하고 저장소에는 가상 금액·문구·좌표의 합성 fixture만 추가했다. 이 10장은 이제 규칙 작성에 사용한 개발 표본이며 독립 holdout으로 재사용하지 않는다.
+
+### 판정 보완
+
+- **세금과 매출합계:** 독립된 공급가+VAT가 명시 매출합계와 맞으면, 빈 보증금·회수 부가란과 여러 금액 열을 가진 일반 합계 행 때문에 판매액 검산을 차단하지 않는다. 표 머리글은 미확인 금액란과 구분한다. 확인된 비영(非零) 회수액, 다른 명시 결제의 불일치·읽기 실패, 공급가/VAT의 토큰 공유·불완전 값은 계속 차단한다. 이 판정은 명시 판매액이며 보증금·회수의 회계 반영 기준은 별도 경고로 남긴다.
+- **금일합계와 누적:** 전일잔액+금일합계가 일반 합계와 일치하고 세 숫자가 독립된 토큰이면 일반 합계는 누적 범위로 분류해 경쟁에서 제외한다. 모든 후보는 보존한다. 품목 합이 맞으면 selected, 전체 품목 검산이 완성되지 않았으면 단일 명시 금일합계를 낮은 신뢰도의 suggested로 제공한다. 확인된 계산 불일치는 제안으로 우회하지 않는다. 이 금일합계 제안 규칙이 이전의 ‘검산 재료가 전혀 없을 때만 제안’보다 최신이다.
+- **분리된 결제 셀:** 같은 행의 결제 라벨과 다른 x 위치의 금액을 연결하고, 사이의 고정 결제수단 문구 `쿠페이 머니`를 분리한다. 배송 묶음 신호 `배송 N건 중`이 있으면 `주문 전체 결제금액이에요`를 필드·전체 경고에 남긴다.
+- **비정상 천단위:** 잘못된 쉼표 그룹은 숫자 순서를 보존한 낮은 신뢰도 후보(`source=derived`, `parserConfidence≤0.2`)로만 남긴다. 독립 계산값과 우연히 같아도 selected/suggested로 승격하지 않는다. 숫자 순서 오독을 자동 교정하지 않으며 상품가·수량을 합계로 사용하지 않는다.
+
+기존 R1~R12 오확정 차단은 유지했다. 기존 엔진 분할 테스트 2개는 검산 없는 단일 금일합계의 새 제안 규칙에 맞춰 selected=null·suggested=인쇄 금액으로 정렬했다. 새 `deviceReceiptPatterns.test.ts`의 **13개 합성 회귀**는 머리글·다중 금액 합계 행·빈 부가란·독립 세금 검산·회수 비영값·읽기 실패한 다른 결제·금일/누적·불완전 품목·결제수단 셀·주문 범위·비정상 그룹·상품가 오연결 차단을 검사한다. 최초 10개 실행에서 6개 실패로 기존 동작을 재현했다(`/tmp/rattle-ocr-device-red.log`).
+
+### 안내 코드 계약
+
+`ParsedReceipt.guidanceCodes`를 추가했으며 사람이 읽을 메시지는 기존 `warnings`에도 함께 반환한다. 화면 코드는 수정하지 않았고 새 코드의 네이티브 표시 검증은 하지 않았다.
+
+| 코드 | 반환 조건·메시지 |
+| --- | --- |
+| `PAYMENT_SCREEN_REQUIRED` | 비어 있지 않은 원문에서 명시 합계 라벨이 없음: `결제 화면을 함께 올려주세요` |
+| `WHOLE_ORDER_TOTAL` | 배송 묶음 신호가 있는 화면에서 결제액을 제안/확정: `주문 전체 결제금액이에요` |
+| `INVALID_THOUSANDS_GROUPING` | 잘못된 천단위 그룹: `금액의 천단위 구분이 이상해요. 원문을 확인해 주세요`, 낮은 신뢰도 후보만 보존 |
+
+### 원문 재평가
+
+사용자가 제공한 새 iPhone raw는 기존 `run-current.mjs`로 변경 전후 재파싱했고, 외부 평가기 `iphone/compare-device20261120.mjs`에서 사용자 정답과 selected/suggested/null·안내 코드를 대조했다. 결과 `/private/tmp/rattle-ocr-bench/iphone/device20261120-comparison.json`, 로그 `/tmp/rattle-ocr-device-new-evaluation.log`. 사용자 정답은 평가기에만 들어가며 파서에는 전달하지 않는다. 파서·입력 SHA-256과 원문 불변성을 기록했다.
+
+| 표본 / 장수 | ae73f68 selected/suggested/null | 수정본 selected/suggested/null | 잘못된 금액 승격 |
+| --- | --- | --- | --- |
+| 새 iPhone 10장 | 0 / 0 / 10 | **1 / 2 / 7** | **0 → 0** |
+| 기존 Android 10장 | 3 / 0 / 7 | **3 / 0 / 7** | **0 → 0** |
+| 기존 Mac 10장 | 4 / 0 / 6 | **4 / 0 / 6** | **0 → 0** |
+
+새 표본에서 독립 세금 검산이 되는 판매액 1장은 확정했고, 금일액과 주문 전체 결제액 2장은 미확인 제안으로 복구했다. 잘못 읽힌 쉼표 그룹 1장과 합계 라벨 없는 주문 목록 6장은 두 값 모두 null을 유지했다. 6장 모두 `PAYMENT_SCREEN_REQUIRED`, 정상 주문 결제 화면은 `WHOLE_ORDER_TOTAL`, 잘못된 그룹 화면은 `INVALID_THOUSANDS_GROUPING`을 반환했다. 이는 사용자 확인 정답에 대한 같은 개발 표본의 재평가이며 운영 정확도나 새로운 holdout 성능이 아니다.
+
+기존 10쌍 평가기는 저장소 밖 `android/compare-device20261120.mjs`, 결과 `android/parser-device20261120-comparison.json`, 로그 `/tmp/rattle-ocr-device-old-pairs.log`다. 원문·이미지·상품별 거래내역·사업자정보는 저장소에 넣지 않았다.
+
+### 검증 범위
+
+OCR 대상 **8 suites/167 tests 통과**, 기본 timeout, 2.507초(`/tmp/rattle-ocr-device-target.log`). 기존 154개와 새 13개를 포함한다. 수정본에서 새 OCR·기기 조작·네이티브 빌드·설치·EAS·DB/원격 변경은 하지 않았다. 기존 실제 기기의 raw를 현재 TS 파서에 재실행한 결과와 수정본 앱의 새 기기 실행을 구분한다.
+
+구현자 자체 검토이며 같은 검토자의 후속 검토는 PL이 이어서 배정한다. 차단 대상은 selected/suggested의 잘못된 금액 승격 경로이며, 이번 범위 밖의 안전한 미확정은 기존 backlog에 유지한다.
+
+최종 검증(2026-11-20, macOS 로컬, 기준 ae73f68 위 이 과제의 미커밋 코드·합성 fixture): `npm run typecheck` **통과**(`/tmp/rattle-ocr-device-typecheck-final.log`), 전체 `npx jest --runInBand --no-coverage --testPathIgnorePatterns='/node_modules/' '/__tests__/setup\.ts' '<rootDir>/supabase/functions/' '<rootDir>/dev/'` **199 suites/1741 tests 통과**, 기본 timeout, 50.675초, 종료 0(`/tmp/rattle-ocr-device-full-jest.log`). 실행 전후 소스 SHA는 `/tmp/rattle-ocr-device-final-source.sha256`과 대조해 일치했다. 새 iPhone 평가·기존 10쌍 평가의 파서 SHA도 최종 소스와 일치했고 `git diff --check`·두 외부 평가기 `node --check` 통과.
