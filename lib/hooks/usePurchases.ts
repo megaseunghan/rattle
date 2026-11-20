@@ -1,10 +1,11 @@
+import type { PurchaseFormInput } from '../services/purchases';
 import { usePreviewWriteGuard } from './usePreviewWriteGuard';
 import { getErrorMessage, UserFacingError } from '../utils/error';
 import { useState, useCallback, useRef } from 'react';
 import { useQueryScope } from '../query';
 import { useAuth } from '../contexts/AuthContext';
 import { getPurchasesWithItemCountsByMonth, createPurchase, deletePurchase, createPurchaseWithItems } from '../services/purchases';
-import { Purchase, PurchaseCategory, PurchaseType, PurchaseItemInput } from '../../types';
+import { Purchase, PurchaseCategory, PurchaseType } from '../../types';
 
 export function usePurchases(yearMonth: string) {
   const { assertCanWrite } = usePreviewWriteGuard();
@@ -53,13 +54,7 @@ export function usePurchases(yearMonth: string) {
     return created;
   }, [store, identity]);
 
-  const addWithItems = useCallback(async (data: {
-    date: string;
-    supplier: string;
-    type: PurchaseType;
-    items: PurchaseItemInput[];
-    returnId?: boolean;
-  }) => {
+  const addWithItems = useCallback(async (data: PurchaseFormInput) => {
     assertCanWrite();
     if (!store) throw new UserFacingError('매장 정보가 없습니다');
     const result = await createPurchaseWithItems({ ...data, store_id: store.id });
