@@ -30,12 +30,15 @@ export async function uploadEvidence(selection: EvidenceSelection, row: Evidence
     let image: Awaited<ReturnType<ReturnType<typeof ImageManipulator.manipulate>['renderAsync']>> | undefined;
     const files: string[] = [];
     try {
-      source = await Image.loadAsync(selection.uri, { maxWidth: 2400, maxHeight: 2400 });
+      source = await Image.loadAsync(selection.uri, { maxWidth: 2000, maxHeight: 2000 });
       check();
       context = ImageManipulator.manipulate(source);
+      if (Math.max(source.width, source.height) > 2000) {
+        context.resize(source.width >= source.height ? { width: 2000 } : { height: 2000 });
+      }
       image = await context.renderAsync();
       check();
-      const full = await image.saveAsync({ format: SaveFormat.JPEG, compress: 0.85 });
+      const full = await image.saveAsync({ format: SaveFormat.JPEG, compress: 0.75 });
       files.push(full.uri); check();
       const bytes = await readBounded(full.uri); check();
       await uploadEvidenceBytes(row, bytes); check();

@@ -15,8 +15,13 @@ import { getTextRecognitionModule, recognizeText, type RecognitionResult } from 
 interface LabResult { id: string; fileName: string; benchmarkKey: string; ocr: RecognitionResult | null; parsed: ParsedReceipt | null; error: string | null }
 const amount = (n: number | null | undefined) => n == null ? '미확인' : `${n.toLocaleString('ko-KR')}원`;
 
-/** This route is present in release builds; actual management access is required. */
+
 export default function OcrLabScreen() {
+  if (!__DEV__) return <ErrorMessage message="사용할 수 없는 화면이에요" />;
+  return <AuthorizedOcrLab />;
+}
+
+function AuthorizedOcrLab() {
   const { user, store, canManageStore, permissionsReady, devPreviewMode, permissionRevision } = useAuth();
   if (!permissionsReady) return <LoadingSpinner />;
   if (!user || !store || !canManageStore || devPreviewMode !== 'self') {

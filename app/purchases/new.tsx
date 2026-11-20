@@ -1,3 +1,5 @@
+import { usePurchaseReceipt } from '../../lib/hooks/usePurchaseReceipt';
+import { PurchaseReceiptReview } from '../../lib/components/PurchaseReceiptReview';
 import { useStorePermissions } from '../../lib/hooks/useStorePermissions';
 import { usePreviewWriteGuard } from '../../lib/hooks/usePreviewWriteGuard';
 import { EvidenceStagingPanel } from '../../lib/components/EvidenceStagingPanel';
@@ -92,8 +94,8 @@ const IngredientPickerRow = memo(function IngredientPickerRow({ item, already, c
 });
 
 export default function NewPurchaseScreen() {
-  const { user, store, storeRole, canReadFinancials, devPreviewMode } = useAuth();
-  return <NewPurchaseContent key={`${user?.id}:${store?.id}:${storeRole}:${canReadFinancials}:${devPreviewMode}`} />;
+  const { user, store, storeRole, canReadFinancials, devPreviewMode, permissionRevision, permissionsReady } = useAuth();
+  return <NewPurchaseContent key={`${user?.id}:${store?.id}:${storeRole}:${canReadFinancials}:${devPreviewMode}:${permissionRevision}:${permissionsReady}`} />;
 }
 
 function NewPurchaseContent() {
@@ -142,6 +144,8 @@ function NewPurchaseContent() {
   const [submitting, setSubmitting] = useState(false);
   const [savedPurchaseId, setSavedPurchaseId] = useState<string>();
   const [stagedEvidence, setStagedEvidence] = useState<EvidenceSelection[]>([]);
+  const receipt = usePurchaseReceipt(stagedEvidence);
+  const [confirmedReview, setConfirmedReview] = useState('');
   const [pickingEvidence, setPickingEvidence] = useState(false);
   const [pendingEvidence, setPendingEvidence] = useState(0);
   const ownedEvidence = useRef(new Set<string>());
@@ -302,7 +306,7 @@ function NewPurchaseContent() {
   }
 
   async function handleSubmit() {
-    if (!canWrite() || writeLock.current || submitting || pickingEvidence || writeState === 'unknown' || writeState.startsWith('saved')) return;
+    if (receiptBlocked || !canWrite() || writeLock.current || submitting || pickingEvidence || writeState === 'unknown' || writeState.startsWith('saved')) return;
     if (!store) return;
     if (!validate(0)) { setStep(0); return; }
     if (!validate(1)) { setStep(1); return; }
@@ -372,6 +376,12 @@ function NewPurchaseContent() {
   const totalAmount = items.reduce((sum, item) => sum + (Number(item.quantity) || 0) * (Number(item.unit_price) || 0), 0);
   const saved = writeState === 'saved' || writeState === 'saved-refresh';
 
+  const hasReceipt = receipt.readings.some(({ result }) => result && 'receipt' in result);
+  const needsComparison = hasReceipt || receipt.total.length > 0;
+  const comparisonMatches = /^\d+$/.test(receipt.total) && Math.abs(Number(receipt.total) - totalAmount) < 0.000001;
+  const reviewKey = JSON.stringify([stagedEvidence.map(file => file.id), receipt.total, items, supplier, formatDate(date), purchaseType]);
+  const receiptBlocked = receipt.busy || (needsComparison && (!comparisonMatches || confirmedReview !== reviewKey));
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
@@ -386,6 +396,20 @@ function NewPurchaseContent() {
       <View style={styles.progressTrack}><View style={[styles.progressFill, { width: `${(step + 1) / 3 * 100}%` }]} /></View>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <ScrollView ref={scrollRef} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
+          {canAttach && !saved && (step !== 1 || stagedEvidence.length > 0) && <>
+            <EvidenceStagingPanel files={stagedEvidence} onChange={updateStagedEvidence} disabled={submitting || writeState === 'unknown'} onPickingChange={setPickingEvidence} />
+            <PurchaseReceiptReview draft={receipt} disabled={submitting || writeState === 'unknown'} application={row => {
+              const matches = ingredients.filter(ingredient => ingredient.name === row.name.value);
+              if (matches.length !== 1 || items.some(item => item.ingredient.id === matches[0].id)) return;
+              const ingredient = matches[0];
+              return { label: ingredient.name + ' 품목으로 추가 (' + ingredient.unit + ')', apply: () => {
+                setItems(previous => previous.some(item => item.ingredient.id === ingredient.id) ? previous : [...previous, {
+                  ingredient, unit: ingredient.unit, quantity: row.quantity ? String(row.quantity.value) : '',
+                  unit_price: row.unitPrice ? String(row.unitPrice.value) : '',
+                }]);
+              } };
+            }} />
+          </>}
           {step === 0 && !saved && <>
           <Text style={styles.modeHint}>품목·수량·단가를 입력하면 매입 금액과 재고에 함께 반영돼요.</Text>
 
@@ -536,8 +560,20 @@ function NewPurchaseContent() {
             {items.map(item => <Text key={item.ingredient.id} style={styles.reviewText}>{item.ingredient.name} · {item.quantity}{item.unit} × {Number(item.unit_price).toLocaleString()}원 = {(Number(item.quantity) * Number(item.unit_price)).toLocaleString('ko-KR', { maximumFractionDigits: 6 })}원</Text>)}
             <TouchableOpacity style={styles.actionButton} disabled={submitting || writeState === 'unknown'} onPress={() => editReview(1)}><Text style={styles.modalClose}>품목 수정</Text></TouchableOpacity>
           </View>}
-          {step === 2 && canAttach && (!saved || !savedPurchaseId) && <EvidenceStagingPanel files={stagedEvidence} onChange={updateStagedEvidence} disabled={saved || submitting || writeState === 'unknown'} onPickingChange={setPickingEvidence} />}
+
+          {saved && !savedPurchaseId && canAttach && stagedEvidence.length > 0 &&
+            <EvidenceStagingPanel files={stagedEvidence} onChange={updateStagedEvidence} disabled />}
           {saved && savedPurchaseId && store && <EvidencePanel target={{ kind: 'purchase', id: savedPurchaseId, storeId: store.id }} initiallyExpanded initialSelections={stagedEvidence} onPendingChange={setPendingEvidence} />}
+          {step === 2 && !saved && needsComparison && <View>
+            {!comparisonMatches && <Text accessibilityRole="alert" style={styles.fieldError}>{receipt.total && /^\d+$/.test(receipt.total)
+              ? `영수증과 품목 합계가 ${Math.abs(Number(receipt.total) - totalAmount).toLocaleString()}원 달라요. 품목과 별도 금액을 확인해주세요.`
+              : '영수증에서 합계를 확인해 대조할 금액을 입력해주세요.'}</Text>}
+            <TouchableOpacity accessibilityRole="checkbox" accessibilityState={{ checked: confirmedReview === reviewKey }}
+              style={styles.actionButton} disabled={!comparisonMatches || receipt.busy || submitting || writeState === 'unknown'}
+              onPress={() => setConfirmedReview(confirmedReview === reviewKey ? '' : reviewKey)}>
+              <Text style={styles.modalClose}>{confirmedReview === reviewKey ? '✓ ' : ''}영수증과 입력 내용을 확인했어요</Text>
+            </TouchableOpacity>
+          </View>}
           {writeState === 'rejected' && <Text style={styles.fieldError}>등록되지 않았어요. 입력 내용을 확인한 뒤 다시 등록해주세요.</Text>}
           {writeState === 'unknown' && <View style={styles.itemCard}><Text style={styles.itemName}>등록 결과를 확인해주세요</Text><Text style={styles.reviewText}>응답을 받지 못해 등록 여부가 확실하지 않아요. 중복 등록을 막기 위해 매입 내역을 먼저 확인해주세요. 입력과 선택한 증빙은 이 화면에 유지돼요. 등록 여부를 확인하기 전에는 증빙을 업로드하지 않아요.</Text><TouchableOpacity style={styles.actionButton} onPress={() => router.push({ pathname: '/(tabs)', params: { targetTab: 'purchases', month: formatDate(date).slice(0, 7), homeScope: 'store' } })}><Text style={styles.modalClose}>등록 내역 확인</Text></TouchableOpacity></View>}
           {saved && !savedPurchaseId && stagedEvidence.length > 0 && <Text style={styles.fieldError}>매입은 저장됐지만 거래 번호를 확인하지 못해 증빙을 업로드하지 않았어요. 선택한 파일은 이 화면에 유지돼요.</Text>}
@@ -555,7 +591,7 @@ function NewPurchaseContent() {
           accessibilityRole="button"
           accessibilityLabel={saved ? '매입 내역으로' : step < 2 ? '다음 단계' : '매입 최종 등록'}
           onPress={saved ? leaveSaved : step < 2 ? advance : handleSubmit}
-          disabled={submitting || pickingEvidence || writeState === 'unknown'}
+          disabled={submitting || pickingEvidence || (!saved && step === 2 && receiptBlocked) || writeState === 'unknown'}
         >
           <Text style={styles.bottomSubmitText}>
             {submitting ? '등록 중...' : saved ? '매입 내역으로' : editingReview ? '검토로 돌아가기' : step === 0 ? '품목 입력으로' : step === 1 ? '입력 내용 검토' : writeState === 'rejected' ? '다시 등록' : '매입 등록'}

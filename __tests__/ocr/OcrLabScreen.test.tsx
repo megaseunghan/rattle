@@ -127,3 +127,14 @@ it.each(['unmount', '권한 전환', '측정 중지'])('OCR-R8: 정리 대기 �
   expect(mockPick).not.toHaveBeenCalled();
   expect(recognizeText).not.toHaveBeenCalled();
 });
+
+test('release builds block the lab even for a manager', () => {
+  const runtime = globalThis as typeof globalThis & { __DEV__: boolean };
+  const previous = runtime.__DEV__;
+  try {
+    runtime.__DEV__ = false;
+    expect(render(<OcrLabScreen />).getByText('사용할 수 없는 화면이에요')).toBeTruthy();
+  } finally {
+    runtime.__DEV__ = previous;
+  }
+});

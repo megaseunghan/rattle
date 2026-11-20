@@ -7,7 +7,7 @@ const mockRelease = jest.fn();
 const mockResize = jest.fn();
 const mockRender = jest.fn().mockResolvedValue({ width: 1800, height: 2400, saveAsync: mockSave, release: mockRelease });
 jest.mock('../../lib/services/evidence', () => ({ uploadEvidenceBytes: (...args: unknown[]) => mockUpload(...args), finishEvidence: (...args: unknown[]) => mockFinish(...args) }));
-const mockSource = { release: jest.fn() };
+const mockSource = { width: 3000, height: 4000, release: jest.fn() };
 const mockLoad = jest.fn().mockResolvedValue(mockSource);
 const mockManipulate = jest.fn((..._args: unknown[]) => ({ renderAsync: mockRender, resize: mockResize, release: mockRelease }));
 const mockSizes: Record<string, number> = {};
@@ -21,9 +21,12 @@ const selection = { id: 'file', uri: 'file:///picked.jpg', name: 'receipt.jpg', 
 beforeEach(() => { jest.clearAllMocks(); Object.keys(mockSizes).forEach(key => delete mockSizes[key]); mockUpload.mockResolvedValue(undefined); });
 test('native transforms send an optimized image then thumbnail before finalizing', async () => {
  await uploadEvidence(selection, file, () => true);
- expect(mockLoad).toHaveBeenCalledWith(selection.uri, { maxWidth: 2400, maxHeight: 2400 });
+ expect(mockLoad).toHaveBeenCalledWith(selection.uri, { maxWidth: 2000, maxHeight: 2000 });
  expect(mockManipulate).toHaveBeenCalledWith(mockSource);
  expect(mockResize).toHaveBeenCalledWith({ width: 288, height: 384 });
+ expect(mockResize).toHaveBeenNthCalledWith(1, { height: 2000 });
+ expect(mockSave).toHaveBeenNthCalledWith(1, { format: 'jpeg', compress: 0.75 });
+ expect(mockSave).toHaveBeenNthCalledWith(2, { format: 'jpeg', compress: 0.65 });
  expect(mockSource.release).toHaveBeenCalled();
  expect(mockUpload).toHaveBeenNthCalledWith(1, file, expect.any(ArrayBuffer));
  expect(mockUpload).toHaveBeenNthCalledWith(2, file, expect.any(ArrayBuffer), true);

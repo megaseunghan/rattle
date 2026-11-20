@@ -1,3 +1,9 @@
+import { EvidenceStagingPanel } from '../../lib/components/EvidenceStagingPanel';
+import { PurchaseReceiptReview } from '../../lib/components/PurchaseReceiptReview';
+import { usePurchaseReceipt } from '../../lib/hooks/usePurchaseReceipt';
+import { useStorePermissions } from '../../lib/hooks/useStorePermissions';
+import { disposeEvidenceCache } from '../../lib/media/evidencePicker';
+import type { EvidenceSelection } from '../../lib/types/evidence';
 import { usePreviewWriteGuard } from '../../lib/hooks/usePreviewWriteGuard';
 import { EvidencePanel } from '../../lib/components/EvidencePanel';
 import { SheetModal } from '../../lib/components/ui/SheetModal';
@@ -20,7 +26,40 @@ import { animateListChange } from '../../lib/utils/layoutAnimation';
 
 export default function PurchaseDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { store, user, storeRole, permissionRevision, canReadFinancials, devPreviewMode } = useAuth();
+  return <PurchaseDetailContent key={[id, store?.id, user?.id, storeRole, permissionRevision, canReadFinancials, devPreviewMode].join(':')} id={id} />;
+}
+
+function PurchaseDetailContent({ id }: { id: string }) {
   const { store, user } = useAuth();
+  const { canManageStock, canReadFinancials } = useStorePermissions();
+  const [photos, setPhotos] = useState<EvidenceSelection[]>([]);
+  const [uploadBatch, setUploadBatch] = useState<EvidenceSelection[]>([]);
+  const [panelKey, setPanelKey] = useState('existing');
+  const [pending, setPending] = useState(0);
+  const onPending = useCallback((count: number) => {
+    setPending(count);
+    if (!count) setUploadBatch(previous => previous.length ? [] : previous);
+  }, []);
+  const [picking, setPicking] = useState(false);
+  const cache = useRef(new Set<string>());
+  const receipt = usePurchaseReceipt(photos);
+  useEffect(() => () => cache.current.forEach(disposeEvidenceCache), []);
+  function changePhotos(next: EvidenceSelection[]) {
+    for (const photo of photos) {
+      if (!next.some(file => file.id === photo.id)) {
+        disposeEvidenceCache(photo.uri);
+        cache.current.delete(photo.uri);
+      }
+    }
+    next.forEach(file => cache.current.add(file.uri));
+    setPhotos(next);
+  }
+  function cancelEdit() {
+    if (saving || picking) return;
+    changePhotos([]);
+    setEditTarget(null);
+  }
   const { canWrite } = usePreviewWriteGuard();
   const scope = useMemo(() => ({}), [id, store?.id, user?.id]);
   const active = useRef<object | null>(scope); active.current = scope;
@@ -73,7 +112,7 @@ export default function PurchaseDetailScreen() {
   }
 
   async function handleSaveEdit() {
-    if (!editTarget || saveLock.current || savedNeedsRefresh) return;
+    if (picking || receipt.busy || !editTarget || saveLock.current || savedNeedsRefresh) return;
     const qty = Number(editQuantity.replace(/,/g, ''));
     const price = Number(editUnitPrice.replace(/,/g, ''));
     if (!Number.isFinite(qty) || qty <= 0) { Alert.alert('입력 오류', '수량을 올바르게 입력해주세요.'); return; }
@@ -85,6 +124,12 @@ export default function PurchaseDetailScreen() {
       if (!canWrite()) return;
       await updatePurchaseItem(editTarget.id, qty, price);
       if (active.current !== scope) return;
+      if (photos.length) {
+        setPending(photos.length);
+        setPanelKey(photos[0].id);
+        setUploadBatch(photos);
+        setPhotos([]);
+      }
       setSavedNeedsRefresh(true);
       animateListChange();
       setEditTarget(null);
@@ -110,7 +155,7 @@ export default function PurchaseDetailScreen() {
       </View>
 
       {savedNeedsRefresh && result?.scope === scope && <Text accessibilityRole="alert" style={styles.errorText}>품목 수정은 저장됐어요. 현재 내역을 다시 불러와 확인해주세요.</Text>}
-      {loading ? (
+      {loading && !purchase ? (
         <View style={styles.center}>
           <ActivityIndicator size="large" color={Colors.primary} />
         </View>
@@ -130,7 +175,7 @@ export default function PurchaseDetailScreen() {
             <Text style={styles.amount} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{purchase.amount.toLocaleString()}원</Text>
           </View>
 
-          {store && <EvidencePanel target={{ kind: 'purchase', id: purchase.id, storeId: store.id }} disabled={saving} />}
+          {store && <EvidencePanel key={panelKey} initialSelections={uploadBatch} initiallyExpanded={uploadBatch.length > 0} onPendingChange={onPending} target={{ kind: 'purchase', id: purchase.id, storeId: store.id }} disabled={saving} />}
           <Text style={styles.sectionLabel}>품목</Text>
           {items.length === 0 ? (
             <View style={styles.emptyCard}>
@@ -142,6 +187,7 @@ export default function PurchaseDetailScreen() {
                 <TouchableOpacity
                   key={it.id}
                   style={[styles.itemRow, i < items.length - 1 && styles.rowBorder]}
+                  disabled={saving || !!error || savedNeedsRefresh}
                   onPress={() => openEdit(it)}
                   activeOpacity={0.7}
                   accessibilityRole="button"
@@ -163,22 +209,34 @@ export default function PurchaseDetailScreen() {
         </ScrollView>
       ) : null}
 
-      <SheetModal visible={editTarget != null} onRequestClose={() => { if (!saving) setEditTarget(null); }}>
+      <SheetModal visible={editTarget != null} onRequestClose={cancelEdit}>
         <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <View style={styles.modalSheet}>
             <View style={styles.modalHandle} />
             <View style={styles.sheetHeader}>
-              <TouchableOpacity disabled={saving} onPress={() => setEditTarget(null)} style={styles.headerAction} accessibilityRole="button">
+              <TouchableOpacity disabled={saving} onPress={cancelEdit} style={styles.headerAction} accessibilityRole="button">
                 <Text style={styles.sheetCancelText}>취소</Text>
               </TouchableOpacity>
               <Text style={styles.sheetHeaderTitle}>{editTarget?.name}</Text>
-              <TouchableOpacity onPress={handleSaveEdit} disabled={saving} style={styles.headerAction} accessibilityRole="button" accessibilityLabel="품목 수정 저장" accessibilityState={{ disabled: saving, busy: saving }}>
+              <TouchableOpacity onPress={handleSaveEdit} disabled={saving || picking || receipt.busy} style={styles.headerAction} accessibilityRole="button" accessibilityLabel="품목 수정 저장" accessibilityState={{ disabled: saving, busy: saving }}>
                 {saving
                   ? <ActivityIndicator size="small" color={Colors.primary} />
                   : <Text style={styles.sheetSaveText}>저장</Text>}
               </TouchableOpacity>
             </View>
 
+            <ScrollView keyboardShouldPersistTaps="handled">
+            {pending > 0 && <Text>진행 중인 증빙을 올리거나 취소한 뒤 사진을 추가할 수 있어요.</Text>}
+            {editTarget && canManageStock && canReadFinancials && !pending && <>
+              <EvidenceStagingPanel files={photos} onChange={changePhotos} disabled={saving} onPickingChange={setPicking} edit />
+              <PurchaseReceiptReview draft={receipt} editing disabled={saving} application={row => {
+                if (row.name.value !== editTarget.name || (!row.quantity && !row.unitPrice)) return;
+                return { label: editTarget.name + '에 적용 (' + editTarget.unit + ')', apply: () => {
+                  if (row.quantity) setEditQuantity(String(row.quantity.value));
+                  if (row.unitPrice) setEditUnitPrice(String(row.unitPrice.value));
+                } };
+              }} />
+            </>}
             <Text style={styles.fieldLabel}>수량 ({editTarget?.unit})</Text>
             <TextInput
               style={styles.input}
@@ -206,6 +264,7 @@ export default function PurchaseDetailScreen() {
             <Text style={styles.editSubtotal}>
               합계 {((Number(editQuantity.replace(/,/g, '')) || 0) * (Number(editUnitPrice.replace(/,/g, '')) || 0)).toLocaleString()}원
             </Text>
+            </ScrollView>
           </View>
         </KeyboardAvoidingView>
       </SheetModal>
@@ -260,7 +319,7 @@ const styles = StyleSheet.create({
   itemSubtotal: { flexShrink: 1, fontFamily: Fonts.geistSemiBold, fontVariant: ['tabular-nums'], fontSize: 14, fontWeight: '600', color: Colors.black },
 
   modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: Colors.overlay },
-  modalSheet: { backgroundColor: Colors.homeCanvas, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20},
+  modalSheet: { maxHeight: '90%', backgroundColor: Colors.homeCanvas, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20},
   modalHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: Colors.gray200, alignSelf: 'center', marginBottom: 20 },
   sheetHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 16, paddingBottom: 12, borderBottomWidth: 0.5, borderBottomColor: Colors.gray100 },
   sheetHeaderTitle: { fontSize: 16, fontWeight: '700', color: Colors.black, flex: 1, textAlign: 'center' },
