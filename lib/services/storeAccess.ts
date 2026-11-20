@@ -19,11 +19,18 @@ export function closedStoreAccess(storeId: string): StoreAccess {
 export const invalidStoreRequest = (): StoreRequestResult<never> => ({ status: 'preflight_failed', error: { code: 'STORE_REQUEST_INVALID', category: 'input' } });
 /** 공통 시간 초과·중단 처리를 재사용하고 권한 오류를 별도 분류한다. 자동 재시도하지 않는다. */
 export async function storeRpc<T>(name: string, args: Record<string, unknown>, validate: (data: unknown) => boolean, options?: AttendanceCallOptions): Promise<StoreRequestResult<T>> {
+  let receivedResponse = false;
   let serverError: StoreAccessError | undefined;
   const result = await executeAttendance<T>(() => {
     const builder = supabase.rpc(name, args);
     const capture = (pending: PromiseLike<{ data: unknown; error: unknown }>) => Promise.resolve(pending).then(response => {
-      if (response.error) serverError = classifyStoreAccessError(response.error);
+      receivedResponse = true;
+      if (response.error) {
+        serverError = classifyStoreAccessError(response.error);
+        if (serverError.category === 'unknown' && /failed to fetch|network request failed|fetch failed/i.test(String((response.error as { message?: string }).message))) {
+          serverError.transient = true;
+        }
+      }
       return response;
     });
     // executeAttendance가 시작 신호를 연결한 뒤에만 thenable을 실행한다.
@@ -34,6 +41,9 @@ export async function storeRpc<T>(name: string, args: Record<string, unknown>, v
   if (serverError) {
     if (serverError.category === 'conflict') return { status: 'conflict', error: serverError, refreshRequired: true };
     return { status: serverError.category === 'permission' ? 'denied' : serverError.category === 'unknown' ? 'unknown' : 'error', error: serverError };
+  }
+  if (result.status === 'unknown' && (!receivedResponse || result.error.category === 'transport')) {
+    return { status: 'unknown', error: { code: 'STORE_REQUEST_UNKNOWN', category: 'unknown', transient: true } };
   }
   return { status: result.status === 'preflight_failed' ? 'preflight_failed' : 'unknown', error: { code: 'STORE_REQUEST_UNKNOWN', category: 'unknown' } };
 }

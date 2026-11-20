@@ -3,6 +3,7 @@ import { clearAttendanceDeviceCredentials } from '../../lib/services/attendanceC
 import { useQuery } from '@tanstack/react-query';
 import { queryClient } from '../../lib/query/client';
 import { ReactNode } from 'react';
+import { AppState } from 'react-native';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AuthProvider, useAuth } from '../../lib/contexts/AuthContext';
@@ -276,11 +277,13 @@ it('권한 회수 무효화 직후 캐시를 폐기하고 늦은 이전 권한�
   (getMyStoreAccess as jest.Mock).mockImplementation(id => id === 'a' ? new Promise(resolve => { release = resolve; }) : Promise.resolve({ status: 'success', data: ownerAccess(id) }));
   let pending!: Promise<void>;
   act(() => { pending = result.current.refreshStore(); });
-  await waitFor(() => expect(result.current.canManageStore).toBe(false));
-  expect(queryClient.getQueryData(['rattle', 'old', 'a', 'shared-payroll'])).toBeUndefined();
+  await waitFor(() => expect(release).toBeDefined());
+  expect(result.current).toMatchObject({ canManageStore: true, canReadFinancials: true });
+  expect(queryClient.getQueryData(['rattle', 'old', 'a', 'shared-payroll'])).toEqual([{ gross: 100 }]);
   (getMyStoreAccess as jest.Mock).mockImplementation(async id => ({ status: 'success', data: { ...closedStoreAccess(id), role: 'employee', manager_revision: '2' } }));
   await act(async () => { await invalidateStoreData('a'); });
   await waitFor(() => expect(result.current.storeRole).toBe('employee'));
+  expect(queryClient.getQueryData(['rattle', 'old', 'a', 'shared-payroll'])).toBeUndefined();
   await act(async () => { release({ status: 'success', data: ownerAccess('a') }); await pending; });
   expect(result.current.canManageStore).toBe(false);
 });
@@ -314,4 +317,55 @@ it('계정 교체와 SIGNED_OUT은 이전 사용자만 정리하고 토큰 갱�
   expect(clearAttendanceDeviceCredentials).toHaveBeenCalledWith('user');
   act(() => notify('SIGNED_OUT', null));
   expect(clearAttendanceDeviceCredentials).toHaveBeenCalledWith('next-user');
+});
+
+it('매장 전환은 새 매장의 이전 권한을 사용하지 않고 확정 응답을 기다린다', async () => {
+  const { result } = await login();
+  let finish!: (value: unknown) => void;
+  queries(new Promise(resolve => { finish = resolve; }));
+  let switching!: Promise<void>;
+  act(() => { switching = result.current.switchStore('b'); });
+  await waitFor(() => expect(result.current.store?.id).toBe('b'));
+  expect(result.current).toMatchObject({ permissionsReady: false, permissionsPending: true, canReadFinancials: false });
+  await act(async () => { finish({ data: stores, error: null }); await switching; });
+  expect(result.current.canReadFinancials).toBe(true);
+});
+
+it('일시적 연결 실패는 같은 범위에서만 직전 결과를 사용하고 서버 거절은 차단한다', async () => {
+  (supabase.rpc as jest.Mock).mockResolvedValue({ data: [
+    { store: stores[0], member_role: null, financial_access: true },
+  ], error: null });
+  const { result } = await login();
+  (getMyStoreVisibility as jest.Mock).mockResolvedValue({ status: 'unknown', error: { transient: true } });
+  await act(async () => { await result.current.refreshStore(); });
+  expect(result.current.canReadFinancials).toBe(true);
+  (getMyStoreVisibility as jest.Mock).mockResolvedValue({ status: 'denied', error: { category: 'permission' } });
+  await act(async () => { await result.current.refreshStore(); });
+  expect(result.current.canReadFinancials).toBe(false);
+});
+
+it('5분 타이머는 응답 대기와 동일 권한 응답 후에도 금전 경로와 캐시를 유지한다', async () => {
+  const timer = jest.spyOn(globalThis, 'setInterval');
+  const originalState = AppState.currentState;
+  AppState.currentState = 'active';
+  try {
+    const { result } = await login();
+    const tick = timer.mock.calls.find(([, delay]) => delay === 300_000)?.[0];
+    expect(typeof tick).toBe('function');
+    const key = ['rattle', 'user', 'a', 'financials'];
+    queryClient.setQueryData(key, 1200);
+    let finish!: (value: unknown) => void;
+    (getMyStoreAccess as jest.Mock).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    await act(async () => { (tick as () => void)(); });
+    expect(finish).toBeDefined();
+    const granted = { storeRole: 'owner', canReadFinancials: true, permissionsReady: true, permissionsPending: false };
+    expect(result.current).toMatchObject(granted);
+    expect(queryClient.getQueryData(key)).toBe(1200);
+    await act(async () => { finish({ status: 'success', data: ownerAccess('a') }); });
+    expect(result.current).toMatchObject(granted);
+    expect(queryClient.getQueryData(key)).toBe(1200);
+  } finally {
+    AppState.currentState = originalState;
+    timer.mockRestore();
+  }
 });

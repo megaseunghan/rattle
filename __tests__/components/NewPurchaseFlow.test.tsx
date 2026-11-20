@@ -14,6 +14,7 @@ const mockQuickCreate = jest.fn();
 const mockRecognize = jest.fn();
 jest.mock('../../modules/rattle-text-recognition', () => ({ recognizeText: (...args: unknown[]) => mockRecognize(...args) }));
 let mockMode='self';
+let mockRevision = '1';
 const mockWrite = jest.fn(), mockPick = jest.fn(), mockReserveEvidence = jest.fn(), mockUploadEvidence = jest.fn(), mockCacheDelete = jest.fn();
 let mockStoreId = 'store';
 jest.mock('expo-image-picker', () => ({
@@ -33,7 +34,7 @@ const mockIngredient = { id: 'rice', name: '쌀', category: '식자재', unit: '
 const mockIngredients = [mockIngredient];
 jest.mock('expo-router', () => ({ router: { back: jest.fn(), push: jest.fn(), replace: jest.fn(), canGoBack: jest.fn(() => true) }, useLocalSearchParams: () => ({ date: '2026-10-01' }) }));
 jest.mock('@react-native-community/datetimepicker', () => 'DateTimePicker');
-jest.mock('../../lib/contexts/AuthContext', () => ({ useAuth: () => ({ user: { id: 'user' }, store: { id: mockStoreId, name: '검증 매장' }, currentRole: 'admin', canReadFinancials: true, canManageStore: true, storeRole: 'owner', devPreviewMode: mockMode }) }));
+jest.mock('../../lib/contexts/AuthContext', () => ({ useAuth: () => ({ user: { id: 'user' }, store: { id: mockStoreId, name: '검증 매장' }, currentRole: 'admin', canReadFinancials: true, canManageStore: true, storeRole: 'owner', permissionRevision: mockRevision, devPreviewMode: mockMode }) }));
 jest.mock('../../lib/hooks/usePurchases', () => ({ usePurchases: () => ({ purchases: [], addWithItems: mockWrite, refetch: jest.fn() }) }));
 jest.mock('../../lib/hooks/useIngredients', () => ({ useIngredients: () => ({ data: mockIngredients, create: jest.fn(), refetch: jest.fn(), loading: false }) }));
 jest.mock('../../lib/hooks/usePurchaseCategories', () => ({ usePurchaseCategories: () => ({ categories: ['식자재','비품','소모품'], loading: false }) }));
@@ -396,4 +397,15 @@ it('여러 개 주문한 상품의 표시 가격은 보여주고 품목 금액�
   expect(view.getByLabelText('가상 접시 금액').props.value).toBe('8240');
 });
 
+});
+
+it('같은 매장의 권한 버전 갱신은 매입 초안을 보존하고 매장 전환은 비운다', async () => {
+  const view = await filledPurchase();
+  mockRevision = '2';
+  view.rerender(<NewPurchaseScreen />);
+  expect(view.getByLabelText('거래처명').props.value).toBe('가상 거래처');
+  expect(view.getByText('20,000원')).toBeTruthy();
+  mockStoreId = 'other';
+  view.rerender(<NewPurchaseScreen />);
+  expect(view.getByLabelText('거래처명').props.value).toBe('');
 });
