@@ -483,3 +483,38 @@ OCR 대상 **10 suites/511 tests 통과**, 기본 timeout, 2.675초(`/tmp/rattle
 규칙 개발에 이미 사용한 표본의 재평가이며 독립 holdout 정확도가 아니다. 새 기기 OCR·화면·빌드·설치·EAS·원격 변경은 실행하지 않았다.
 
 최종 검증(2026-11-20, macOS 로컬, 기준 43b6e93 위 이 과제의 미커밋 파서·합성 회귀): 전체 `npx jest --runInBand --no-coverage --testPathIgnorePatterns='/node_modules/' '/__tests__/setup\.ts' '<rootDir>/supabase/functions/' '<rootDir>/dev/'` **201 suites/2085 tests 통과**, 기본 timeout, 48.708초, 종료 0(`/tmp/rattle-ocr-r14-full-jest.log`). 실행 전후 파서·회귀 소스 SHA는 `/tmp/rattle-ocr-r14-final-source.sha256`과 일치했고, 두 raw 평가기와 합성 기본표 평가기의 파서 SHA도 최종 코드와 일치했다. `git diff --check`와 외부 평가기 `node --check` 통과.
+
+## 독립 검토 12회차 반영 · 병렬 빈 잔액 칸의 범위 (2026-11-20)
+
+작업 `task_741f6be8094b`, 기준 `feature/evidence-attachments@5028c29`. 같은 행의 어느 곳에든 빈 잔액 라벨이 있으면 독립 최종 합계까지 과거 범위로 제외하던 조건을 제거했다. 잔액 범위는 해당 원본 관측의 접두·빈 잔액/합계 별칭 구간에만 적용한다. 별칭 라벨에 연결된 다른 값 셀은 기존 값 구간 해석기로 읽는다. 옆의 빈 잔액 칸, 좌우 위치, 셀 간격은 독립 최종 합계를 제거할 근거가 아니다.
+
+따라서 현재 최종 합계의 정상 금액 후보는 보존해 검산 충돌로 차단하고, 오독 값은 R14 공통 미해석 게이트로 차단한다. 숫자가 있는 별도 잔액의 일반 누적 합계는 기존 금일액+잔액의 세 독립 토큰 검증을 그대로 거친다. 명시 과거 라벨과 독립 현재 합계가 다른 관측이면 가까이 붙어 있어도 같은 범위로 합치지 않는다. 별도 관측의 불명확한 별칭 연결은 안전한 null backlog 대상으로 유지한다.
+
+### 직접 실행한 합성 변형표
+
+새 `balanceScope.test.ts`의 공통 값은 가상 공급가 21,818 + VAT 2,182 = 매출합계 24,000이다. 최종 라벨 13종은 앞선 R14 정의와 동일하다. 각 값 조건마다 인라인/별도 셀 × 빈 잔액 좌/우 × 가까운/먼 간격의 8가지 배치를 전부 실행했다. 후보 보존·최종 합계 경고·원본 입력 불변성도 확인했다.
+
+| 변형 | 건수 | 수정 전 → 수정 후 |
+| --- | --- | --- |
+| 독립 현재 최종 합계 21,000, 병렬 잔액 빈칸 | 104 | 후보가 사라져 24,000 승격 → 후보 21,000 보존·selected/suggested null |
+| 독립 현재 최종 합계 `21,OOO`, 병렬 잔액 빈칸 | 104 | 미해석 관측이 사라져 24,000 승격 → 관측 유지·두 값 null·최종 합계 경고 |
+| 독립 현재 최종 합계 24,000 일치, 같은 병렬 빈칸 배치 | 104 | selected 24,000·suggested null 유지 |
+| 전일 접두·전일 별칭·누적 접두·별칭 라벨+별도 값·잔액 라벨+별도 값·미수 접두, 정상/오독 과거 값 | 12 | 과거 범위를 현재 경쟁 합계로 만들지 않음·selected 24,000 유지 |
+
+수정 전 **324건 중 208건 실패**로 빈 잔액 칸에 의한 두 종류 승격을 재현했다(`/tmp/rattle-ocr-r14-scope-red.log`·동명 JSON). 수정 후 **324/324 통과: 차단 208건·정상 대조 116건**이다. 기존 `finalTotalEvidence.test.ts`의 검증된 누적 대조 8건과 미해석 누적 차단 8건도 그대로 통과했다. R1~R14의 기존 기대값은 변경하지 않았다.
+
+OCR 대상 **11 suites/835 tests 통과**, 기본 timeout, 3.173초(`/tmp/rattle-ocr-r14-scope-target.log`), 실제 변형 assertion 결과는 `/tmp/rattle-ocr-r14-scope-target.json`에 남겼다. `npm run typecheck` 통과(`/tmp/rattle-ocr-r14-scope-typecheck.log`). 구현자 자체 검토로 범위 함수가 같은 행의 다른 칸을 조회하지 않는 것과 접두·별칭·연결 값 경계, 기존 누적 검증을 대조했다. 같은 검토자의 재검토는 PL 후속이다.
+
+### 원문 재평가
+
+외부 `iphone/compare-r14-scope.mjs`, `android/compare-r14-scope.mjs`로 5028c29와 최종 파서를 재실행했다. 결과는 `/private/tmp/rattle-ocr-bench/iphone/r14-scope-comparison.json`, `/private/tmp/rattle-ocr-bench/android/parser-r14-scope-comparison.json`이다. 입력 불변성과 최종 파서 SHA-256 일치를 확인했다.
+
+| 개발 표본 / 장수 | 5028c29 selected/suggested/null | 수정본 selected/suggested/null | 잘못된 selected/suggested |
+| --- | --- | --- | --- |
+| iPhone 신규 표본 10장 | 1 / 2 / 7 | **1 / 2 / 7** | **0 / 0** |
+| 기존 Android 10장 | 3 / 0 / 7 | **3 / 0 / 7** | **0 / 0** |
+| 기존 Mac 10장 | 4 / 0 / 6 | **4 / 0 / 6** | **0 / 0** |
+
+같은 개발 표본의 재평가이며 독립 holdout 정확도가 아니다. 실제 영수증·파싱 출력·원문 로그는 외부 벤치에만 유지하고 저장소에는 합성 회귀와 집계만 추가했다. 안전한 null은 기존 backlog에 남긴다. 새 기기 OCR·화면·빌드·설치·EAS·원격 변경은 실행하지 않았다.
+
+최종 검증(2026-11-20, macOS 로컬, 기준 5028c29 위 이 과제의 미커밋 파서·합성 회귀): 전체 `npx jest --runInBand --no-coverage --testPathIgnorePatterns='/node_modules/' '/__tests__/setup\.ts' '<rootDir>/supabase/functions/' '<rootDir>/dev/'` **202 suites/2409 tests 통과**, 기본 timeout, 47.832초, 종료 0(`/tmp/rattle-ocr-r14-scope-full-jest.log`). 실행 전후 파서·회귀 소스 SHA는 `/tmp/rattle-ocr-r14-scope-final-source.sha256`과 일치했고 두 외부 평가 결과의 파서 SHA도 최종 코드와 일치했다. `git diff --check`와 두 외부 평가기 `node --check` 통과.
