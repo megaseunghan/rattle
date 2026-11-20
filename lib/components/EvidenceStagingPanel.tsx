@@ -8,8 +8,8 @@ import { getErrorMessage } from '../utils/error';
 import { EvidenceLocalPreview } from './EvidenceLocalPreview';
 
 /** Local-only controlled draft. Its parent owns cache lifetime across review steps/save. */
-export function EvidenceStagingPanel({ files, onChange, disabled = false, onPickingChange }: {
-  files: EvidenceSelection[]; onChange: (files: EvidenceSelection[]) => void; disabled?: boolean; onPickingChange?: (picking: boolean) => void;
+export function EvidenceStagingPanel({ files, onChange, disabled = false, onPickingChange, edit = false }: {
+  files: EvidenceSelection[]; onChange: (files: EvidenceSelection[]) => void; disabled?: boolean; edit?: boolean; onPickingChange?: (picking: boolean) => void;
 }) {
   const [picking, setPicking] = useState(false), [error, setError] = useState('');
   const alive = useRef(true), lock = useRef(false);
@@ -20,12 +20,15 @@ export function EvidenceStagingPanel({ files, onChange, disabled = false, onPick
     try {
       const selected = await pickEvidenceSelections(files.length, () => alive.current, true);
       if (alive.current && selected.length) onChange([...files, ...selected]);
-    } catch (error) { if (alive.current) setError(getErrorMessage(error)); }
+    } catch (error) { if (alive.current) {
+      const code = error && typeof error === 'object' && 'code' in error ? String(error.code) : '';
+      setError(/PERMISSION|DENIED/i.test(code) ? '사진 접근을 허용하거나 다른 파일을 선택해주세요.' : getErrorMessage(error));
+    } }
     finally { lock.current = false; if (alive.current) { setPicking(false); onPickingChange?.(false); } }
   }
   return <View style={styles.container}>
     <Text style={styles.title}>증빙 자료</Text>
-    <Text style={styles.help}>등록 전에는 기기에만 보관해요. 매입 등록 후 자동으로 업로드해요.</Text>
+    <Text style={styles.help}>{edit ? '품목 수정 저장 후 사진을 증빙으로 올려요.' : '등록 전에는 기기에만 보관해요. 매입 등록 후 자동으로 업로드해요.'}</Text>
     <Text style={styles.help}>최대 10개 · 이미지 원본 25MiB · 사진·이미지만 선택</Text>
     {!!error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
     <FlatList horizontal data={files} keyExtractor={file => file.id} initialNumToRender={3} maxToRenderPerBatch={3} windowSize={3} renderItem={({ item }) => <View style={styles.file}>

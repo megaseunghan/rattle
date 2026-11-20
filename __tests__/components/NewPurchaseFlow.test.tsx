@@ -3,6 +3,8 @@ import { act, fireEvent, render, waitFor, within } from '@testing-library/react-
 import NewPurchaseScreen from '../../app/purchases/new';
 import { PurchaseWriteError } from '../../lib/services/purchases';
 const mockQuickCreate = jest.fn();
+const mockRecognize = jest.fn();
+jest.mock('../../modules/rattle-text-recognition', () => ({ recognizeText: (...args: unknown[]) => mockRecognize(...args) }));
 let mockMode='self';
 const mockWrite = jest.fn(), mockPick = jest.fn(), mockReserveEvidence = jest.fn(), mockUploadEvidence = jest.fn(), mockCacheDelete = jest.fn();
 let mockStoreId = 'store';
@@ -30,6 +32,7 @@ jest.mock('../../lib/services/purchases', () => ({ PurchaseWriteError: class ext
   constructor(outcome: 'rejected' | 'unknown', original: unknown) { super(String(original)); this.outcome = outcome; }
 } }));
 beforeEach(() => {
+ mockRecognize.mockReset().mockRejectedValue({ code: 'ERR_OCR_UNAVAILABLE' });
  jest.clearAllMocks(); mockMode='self'; mockQuickCreate.mockReset(); mockStoreId = 'store'; mockWrite.mockReset();
  mockPick.mockResolvedValue({ canceled: false, assets: [{uri:'file:///cache/picked.jpg',name:'영수증.jpg',mimeType:'image/jpeg',size:100}] });
  mockReserveEvidence.mockResolvedValue({id:'draft-id',status:'pending',mime_type:'image/jpeg'});
@@ -182,4 +185,55 @@ it('leaving removes owned cached drafts and individual removal removes preview',
  fireEvent.press(screen.getByLabelText('영수증.jpg 선택 삭제'));
  expect(screen.queryByLabelText('영수증.jpg 미리보기')).toBeNull();expect(mockCacheDelete).toHaveBeenCalledTimes(1);
  await stageReceipt(screen);screen.unmount();expect(mockCacheDelete).toHaveBeenCalledTimes(2);
+});
+
+it('keeps a suggested total empty until chosen and gates saving on reconciliation and review', async () => {
+  mockRecognize.mockResolvedValue({ lines: [{ text: '금일합계 19,000', confidence: 1, box: { x: .1, y: .2, w: .5, h: .02 } }] });
+  const view = await reviewFilledPurchase();
+  await stageReceipt(view);
+  expect(mockRecognize).toHaveBeenCalledWith('file:///cache/picked.jpg');
+  const input = view.getByLabelText('대조할 영수증 합계');
+  expect(input.props.value).toBe('');
+  fireEvent.press(view.getByText('이 합계 적용'));
+  expect(input.props.value).toBe('19000');
+  fireEvent.press(view.getByLabelText('매입 최종 등록'));
+  expect(mockWrite).not.toHaveBeenCalled();
+  fireEvent.changeText(input, '20000');
+  fireEvent.press(view.getByLabelText('매입 최종 등록'));
+  expect(mockWrite).not.toHaveBeenCalled();
+  fireEvent.press(view.getByText('영수증과 입력 내용을 확인했어요'));
+  mockWrite.mockResolvedValue({ refreshFailed: false });
+  fireEvent.press(view.getByLabelText('매입 최종 등록'));
+  await waitFor(() => expect(mockWrite).toHaveBeenCalledTimes(1));
+});
+
+it('preserves an edited total when recognition finishes later', async () => {
+  let finish!: (result: unknown) => void;
+  mockRecognize.mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+  const view = render(<NewPurchaseScreen />);
+  await stageReceipt(view);
+  const input = view.getByLabelText('대조할 영수증 합계');
+  fireEvent.changeText(input, '123');
+  await act(async () => finish({ lines: ['공급가액 20,000', '부가세 2,000', '총합계 22,000'].map((text, i) =>
+    ({ text, confidence: 1, box: { x: .1, y: .2 + i * .1, w: .5, h: .02 } })) }));
+  expect(view.getByText('영수증 합계 22,000원')).toBeTruthy();
+  expect(input.props.value).toBe('123');
+});
+
+it('prefills an independently checked total and clears it when its photo is removed', async () => {
+  mockRecognize.mockResolvedValue({ lines: ['공급가액 20,000', '부가세 2,000', '총합계 22,000'].map((text, i) =>
+    ({ text, confidence: 1, box: { x: .1, y: .2 + i * .1, w: .5, h: .02 } })) });
+  const view = render(<NewPurchaseScreen />);
+  await stageReceipt(view);
+  expect(view.getByLabelText('대조할 영수증 합계').props.value).toBe('22000');
+  fireEvent.press(view.getByLabelText('영수증.jpg 선택 삭제'));
+  expect(view.queryByLabelText('대조할 영수증 합계')).toBeNull();
+});
+
+it('requests the payment screen for a photo with no payment total', async () => {
+  mockRecognize.mockResolvedValue({ lines: [{ text: '가상 주문 내역', confidence: 1, box: { x: .1, y: .2, w: .5, h: .02 } }] });
+  const view = render(<NewPurchaseScreen />);
+  await stageReceipt(view);
+  expect(view.getByText('결제 화면을 함께 올려주세요.')).toBeTruthy();
+  expect(view.getByLabelText('대조할 영수증 합계').props.value).toBe('');
 });
