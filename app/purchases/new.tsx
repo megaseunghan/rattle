@@ -10,7 +10,7 @@ import { EvidencePanel } from '../../lib/components/EvidencePanel';
 import { SheetModal } from '../../lib/components/ui/SheetModal';
 /* Hallmark · genre: modern-minimal · macrostructure: Workbench · design-system: DESIGN.md · designed-as-app */
 import { getErrorMessage } from '../../lib/utils/error';
-import { useEffect, useState, useRef, useMemo } from 'react';
+import { useCallback, useEffect, useState, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -240,11 +240,20 @@ function NewPurchaseContent() {
       Alert.alert('증빙 업로드가 남아 있어요', '매입은 저장됐어요. 지금 나가면 미완료 파일을 다시 선택해야 해요.', [{ text: '계속 업로드', style: 'cancel' }, { text: '나가기', style: 'destructive', onPress: navigateSaved }]);
     } else navigateSaved();
   }
-  function navigateSaved() {
+  const returning = useRef(false);
+  const navigateSaved = useCallback(() => {
+    if (!alive.current || returning.current) return;
+    returning.current = true;
     bypassLeaveGuard();
     if (router.canGoBack()) router.back();
     else router.replace({ pathname: '/(tabs)', params: { targetTab: 'purchases', month: formatDate(date).slice(0, 7), homeScope: 'store' } });
-  }
+  }, [bypassLeaveGuard, date]);
+
+  useEffect(() => {
+    if (writeState === 'saved' && pendingEvidence === 0 && (!stagedEvidence.length || savedPurchaseId)) {
+      navigateSaved();
+    }
+  }, [writeState, pendingEvidence, stagedEvidence.length, savedPurchaseId, navigateSaved]);
 
 
   return <SafeAreaView style={styles.container}>
@@ -318,7 +327,7 @@ function NewPurchaseContent() {
         </View>}
           {saved && !savedPurchaseId && canAttach && stagedEvidence.length > 0 &&
             <EvidenceStagingPanel files={stagedEvidence} onChange={updateStagedEvidence} disabled />}
-          {saved && savedPurchaseId && store && <EvidencePanel target={{ kind: 'purchase', id: savedPurchaseId, storeId: store.id }} initiallyExpanded initialSelections={stagedEvidence} onPendingChange={setPendingEvidence} />}
+          {saved && savedPurchaseId && stagedEvidence.length > 0 && store && <EvidencePanel target={{ kind: 'purchase', id: savedPurchaseId, storeId: store.id }} initiallyExpanded initialSelections={stagedEvidence} onPendingChange={setPendingEvidence} />}
           {writeState === 'rejected' && <Text style={styles.fieldError}>등록되지 않았어요. 입력 내용을 확인한 뒤 다시 등록해주세요.</Text>}
           {writeState === 'unknown' && <View style={styles.itemCard}><Text style={styles.itemName}>등록 결과를 확인해주세요</Text><Text style={styles.reviewText}>응답을 받지 못해 등록 여부가 확실하지 않아요. 중복 등록을 막기 위해 매입 내역을 먼저 확인해주세요. 입력과 선택한 증빙은 이 화면에 유지돼요. 등록 여부를 확인하기 전에는 증빙을 업로드하지 않아요.</Text><TouchableOpacity style={styles.actionButton} onPress={() => router.push({ pathname: '/(tabs)', params: { targetTab: 'purchases', month: formatDate(date).slice(0, 7), homeScope: 'store' } })}><Text style={styles.modalClose}>등록 내역 확인</Text></TouchableOpacity></View>}
           {saved && !savedPurchaseId && stagedEvidence.length > 0 && <Text style={styles.fieldError}>매입은 저장됐지만 거래 번호를 확인하지 못해 증빙을 업로드하지 않았어요. 선택한 파일은 이 화면에 유지돼요.</Text>}
@@ -328,9 +337,9 @@ function NewPurchaseContent() {
       {!!error && <Text accessibilityRole="alert" style={styles.fieldError}>{error}</Text>}
       <View style={styles.bottomBar}>
         <View><Text style={styles.bottomTotalLabel}>합계</Text><Text style={styles.bottomTotalValue}>{total.toLocaleString()}원</Text></View>
-        <TouchableOpacity accessibilityRole="button" accessibilityLabel={saved ? '매입 내역으로' : '매입 저장'} disabled={locked || pickingEvidence || receipt.busy}
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel={saved ? '돌아가기' : '매입 저장'} disabled={locked || pickingEvidence || receipt.busy}
           style={styles.bottomSubmit} onPress={saved ? leaveSaved : handleSubmit}>
-          <Text style={styles.bottomSubmitText}>{saved ? '매입 내역으로' : submitting ? '저장 중…' : writeState === 'rejected' ? '다시 등록' : '매입 저장'}</Text></TouchableOpacity>
+          <Text style={styles.bottomSubmitText}>{saved ? '돌아가기' : submitting ? '저장 중…' : writeState === 'rejected' ? '다시 등록' : '매입 저장'}</Text></TouchableOpacity>
       </View>
     </KeyboardAvoidingView>
     <SheetModal visible={!!linkRow} onRequestClose={() => { if (!quickAdding) setLinkRow(null); }}>

@@ -62,7 +62,9 @@ async function writePurchase(input: PurchaseFormInput & { store_id: string }, ed
     throw new PurchaseWriteError(rejected ? 'rejected' : 'unknown', result.error);
   }
   try {
-    await invalidateCachedStore(input.store_id);
+    const affectsInventory = 'mode' in input ? input.mode === 'items' && input.rows.some(row => row.ingredient_id)
+      : input.items.some(row => row.ingredient_id);
+    await invalidateCachedStore(input.store_id, affectsInventory ? ['financial', 'ingredients', 'recipes'] : ['financial']);
     return { refreshFailed: false, ...(input.returnId ? { purchaseId: result.data as string } : {}) };
   } catch {
     // The RPC already acknowledged success. Never turn refresh failure into a
@@ -166,7 +168,7 @@ export async function createPurchase(data: {
     .single();
 
   if (error) throw new Error(error.message);
-  await invalidateCachedStore(data.store_id);
+  await invalidateCachedStore(data.store_id, ['financial']);
   return row as Purchase;
 }
 

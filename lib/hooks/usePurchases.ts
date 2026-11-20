@@ -57,10 +57,9 @@ export function usePurchases(yearMonth: string) {
   const addWithItems = useCallback(async (data: PurchaseFormInput) => {
     assertCanWrite();
     if (!store) throw new UserFacingError('매장 정보가 없습니다');
-    const result = await createPurchaseWithItems({ ...data, store_id: store.id });
-    const refreshed = await refetch();
-    return { ...result, refreshFailed: result.refreshFailed || !refreshed };
-  }, [store, refetch]);
+    // The ledger owns its month and refreshes on focus when registration returns.
+    return createPurchaseWithItems({ ...data, store_id: store.id });
+  }, [store, assertCanWrite]);
 
   const remove = useCallback(async (id: string) => {
     assertCanWrite();
