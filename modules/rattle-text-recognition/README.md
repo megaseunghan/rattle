@@ -518,3 +518,13 @@ OCR 대상 **11 suites/835 tests 통과**, 기본 timeout, 3.173초(`/tmp/rattle
 같은 개발 표본의 재평가이며 독립 holdout 정확도가 아니다. 실제 영수증·파싱 출력·원문 로그는 외부 벤치에만 유지하고 저장소에는 합성 회귀와 집계만 추가했다. 안전한 null은 기존 backlog에 남긴다. 새 기기 OCR·화면·빌드·설치·EAS·원격 변경은 실행하지 않았다.
 
 최종 검증(2026-11-20, macOS 로컬, 기준 5028c29 위 이 과제의 미커밋 파서·합성 회귀): 전체 `npx jest --runInBand --no-coverage --testPathIgnorePatterns='/node_modules/' '/__tests__/setup\.ts' '<rootDir>/supabase/functions/' '<rootDir>/dev/'` **202 suites/2409 tests 통과**, 기본 timeout, 47.832초, 종료 0(`/tmp/rattle-ocr-r14-scope-full-jest.log`). 실행 전후 파서·회귀 소스 SHA는 `/tmp/rattle-ocr-r14-scope-final-source.sha256`과 일치했고 두 외부 평가 결과의 파서 SHA도 최종 코드와 일치했다. `git diff --check`와 두 외부 평가기 `node --check` 통과.
+
+### 매입 품목 표 재평가 (2026-11-20)
+
+쿠팡 주문 화면에서 상품명·옵션·카드 가격·주문 수량을 같은 상품에 연결한다. 인쇄 가격이 단가인지 행 금액인지 불분명하면 품목명과 관측 가격(`printedPrice`)을 보존하고 금액은 비워 둔다. 주류 명세서는 품명과 인쇄 금액 열을 연결하고, BOX와 EA가 혼용되면 단일 수량으로 환산하지 않는다. 추가 추출 행의 `needsReview`는 항상 참이다. 이 행들은 R1~R14의 합계 확정이나 제안 근거로 쓰지 않는다.
+
+실패 사진 5장에서 보이는 구매 품목은 16개였다. 기준 파서와 비교해 이름·금액이 함께 일치한 품목은 0개에서 14개로 늘었다. iPhone 저장 관측과 동일 설정의 macOS Vision 재실행에서 각각 재현율·정밀도 14/16(87.5%)였다. 나머지 두 행은 이름을 추출했고, 복수 수량 가격의 의미와 수량 OCR 오독 때문에 행 금액은 미확인이다. 결제·리뷰 화면에서 추가한 품목은 0개였다. 이름은 옵션을 포함해 공백·대소문자를 정규화했고 금액은 인쇄 원 단위로 대조했다. 구현자가 원본을 확인한 개발 표본이며 사용자 정산 확인 및 독립 표본 검증은 후속이다.
+
+기존 엔진별 10장 재생에서 확정/제안/미확인은 iPhone 1/2/7, Android 3/0/7, Mac 4/0/6으로 유지됐다. 기존 합계 정답 기준 오확정·오제안은 각각 0건이었다. 사진별 판정·시간·실패 분류는 로컬 벤치의 `item-layout-report.md`에 있다. 5장 Mac Vision은 장당 396~1,158ms였다.
+
+macOS 로컬 typecheck 통과. OCR Jest 12 suites/845 tests, 전체 Jest 206 suites/2,445 tests 통과. 사진·OCR 원문·PDF와 개별 결과는 외부 벤치에만 보관한다. 합성 회귀는 `__tests__/ocr/purchaseItemLayouts.test.ts`에 있다.

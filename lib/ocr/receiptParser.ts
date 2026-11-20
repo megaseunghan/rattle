@@ -26,6 +26,9 @@ export interface ReceiptItem {
   unitPrice: ReceiptField<number> | null;
   amount: ReceiptField<number> | null;
   arithmeticMatches: boolean | null;
+  needsReview?: boolean;
+  /** Printed order-card price when the unit/extended-price scope needs review. */
+  printedPrice?: ReceiptField<number>;
 }
 export type ReceiptGuidanceCode = 'PAYMENT_SCREEN_REQUIRED' | 'WHOLE_ORDER_TOTAL' | 'INVALID_THOUSANDS_GROUPING';
 export interface ParsedReceipt {
@@ -182,6 +185,138 @@ function prepare(lines: readonly RecognizedLine[]) {
     return { text: cells.map(l => l.text).join(' '), cells };
   });
   return { rotated, slope, rows, sourceLines };
+}
+
+type ItemField = <T>(value: T, cells: RecognizedLine[], confidence?: number, source?: 'observed' | 'derived', tokens?: MoneyToken[]) => ReceiptField<T>;
+
+// These editable observations are built after the independent total-evidence decision.
+function orderCardItems(rows: ReceiptRow[], field: ItemField): ReceiptItem[] | null {
+  if (!rows.some(row => /쿠팡|로켓|쿠페이/.test(row.text))
+      || !rows.some(row => /주문완료|배송\d+건중|수량[:：]/.test(compact(row.text)))) return null;
+  const result: ReceiptItem[] = [];
+  const boundary = /배송\s*\d+건|판매자\s*[:;：]|도착\s*예정|도착\s*\(|주문\s*완료|수량\s*[:：]|배송시간|변경\s*안내/;
+  const pricePattern = /^[•·]?\s*(\d[\d,]*\s*원)(?=$|\s|:)/;
+  for (const [index, row] of rows.entries()) {
+    if (/받는\s*사람|총\s*결제|배송지|구매\s*경험|리뷰|혜택받기/.test(row.text)) break;
+    const labelledQuantityFollows = /^수량[:：]\d+개$/.test(compact(rows[index + 1]?.text ?? ''));
+    const prices = row.cells.filter(c => pricePattern.test(c.text.trim())
+      || (labelledQuantityFollows && /^\d{1,3}(?:,\d{3})+\s+[A-Za-z]$/.test(c.text.trim())));
+    if (prices.length !== 1 || (row.text.match(/\d\s*원/g) ?? []).length > 1) continue;
+    const price = prices[0];
+    const printed = price.text.trim().match(pricePattern);
+    const value = printed ? wholeMoney(printed[1]) : null;
+    const aligned = (c: RecognizedLine) => Math.abs(c.box.x - price.box.x) <= .055;
+    const names: RecognizedLine[] = [];
+    let next = price;
+    for (let i = index - 1; i >= Math.max(0, index - 4); i--) {
+      const prior = rows[i];
+      if (boundary.test(prior.text) || /\d\s*원|결제|우편번호/.test(prior.text)) break;
+      const matches = prior.cells.filter(c => aligned(c) && /[가-힣a-z\d]/i.test(c.text));
+      if (!matches.length && i === index - 1) continue; // thumbnail lettering
+      const ordered = matches.sort((a, b) => a.box.y - b.box.y);
+      const last = ordered[ordered.length - 1];
+      if (!last || next.box.y - (last.box.y + last.box.h) > 2 * price.box.h) break;
+      if (ordered.some((cell, j) => j > 0 && cy(cell) - cy(ordered[j - 1]) < .6 * cell.box.h)) break;
+      names.unshift(...ordered);
+      next = ordered[0];
+    }
+    if (!names.length || !/[가-힣a-z]{2}/i.test(names.map(c => c.text).join(' '))) continue;
+    let quantity: ReceiptField<number> | null = null;
+    for (const following of rows.slice(index + 1, index + 3)) {
+      const q = following.cells.find(c => aligned(c) && /^수량\s*[:：]\s*\d+\s*개$/.test(c.text.trim()));
+      if (q && q.box.y - price.box.y < 4 * price.box.h) {
+        const count = Number(q.text.match(/\d+/)![0]);
+        if (Number.isSafeInteger(count) && count > 0) quantity = field(count, [q]);
+        break;
+      }
+      if (following.cells.some(aligned) || boundary.test(following.text)) break;
+    }
+    const name = field(names.map(c => c.text.trim()).join(' '), names);
+    // A card price alone doesn't identify unit vs extended price for multiple units.
+    const printedPrice = value === null ? undefined : field(value, [price]);
+    const amount = quantity?.value === 1 ? printedPrice ?? null : null;
+    result.push({ name, quantity, amount, printedPrice, unitPrice: amount, arithmeticMatches: null, needsReview: true });
+  }
+  return result;
+}
+
+// Some wholesale slips print spaced column titles and separate box/each counts.
+function boxStatementItems(rows: ReceiptRow[], field: ItemField): ReceiptItem[] | null {
+  const cells = rows.flatMap(row => row.cells);
+  const box = cells.find(c => compact(c.text) === 'BOX');
+  if (!box) return null;
+  const nearHeader = cells.filter(c => Math.abs(cy(c) - cy(box)) < box.box.h * 2);
+  const header = (text: string) => nearHeader.find(c => compact(c.text).replace(/[|]/g, '') === text);
+  const each = header('EA'), serial = header('순번'), end = header('비고');
+  if (!each || !serial || !end || !(cx(serial) < cx(box) && cx(box) < cx(each) && cx(each) < cx(end))) return null;
+  const slope = (cy(end) - cy(serial)) / (cx(end) - cx(serial));
+  const level = (c: RecognizedLine) => cy(c) - slope * cx(c);
+  const spec = header('규격') ?? header('규');
+  if (!spec) return null;
+  const start = level(serial);
+  const firstFooter = cells.filter(c => level(c) > start && /합계|소계|총계|잔액|미수/.test(compact(c.text)));
+  const cutoff = Math.min(...firstFooter.map(level));
+  const data = cells.filter(c => level(c) > start + box.box.h && level(c) < cutoff);
+  const serialPattern = /^\s*\|?\s*\d{3,8}(?:\s*\||$)/;
+  const anchors = data.filter(c => Math.abs(c.box.x - serial.box.x) < .045 && serialPattern.test(c.text));
+  const rightHeader = header('금액') ?? (header('금') && header('액'));
+  const priceHeader = header('단가') ?? (header('단') && header('가'));
+  const result: ReceiptItem[] = [];
+  for (const anchor of anchors) {
+    const sameRow = data.filter(c => Math.abs(level(c) - level(anchor)) < anchor.box.h * .85);
+    const names = sameRow.filter(c => /[가-힣]/.test(c.text) && c.box.x < spec.box.x && c.box.x >= anchor.box.x);
+    const name = names.map(c => c.text.replace(serialPattern, '').trim()).join(' ');
+    if (!name) continue;
+    const numeric = (column: RecognizedLine | undefined) => {
+      if (!column) return null;
+      const aligned = sameRow.filter(c => Math.abs(cx(c) - cx(column)) < .04 && scalar(c));
+      return aligned.length === 1 ? field(wholeMoney(aligned[0].text)!, aligned) : null;
+    };
+    // BOX and EA may be mixed. A single scalar quantity would lose the unit.
+    result.push({ name: field(name, names), quantity: null, unitPrice: numeric(priceHeader),
+      amount: numeric(rightHeader), arithmeticMatches: null, needsReview: true });
+  }
+  return result.length ? result : null;
+}
+
+function statementItems(rows: ReceiptRow[], field: ItemField): ReceiptItem[] | null {
+  const matches = (cell: RecognizedLine, re: RegExp) => re.test(compact(cell.text));
+  const nameHeader = /^(?:매출상품|품명|품목명|상품명)$/;
+  const index = rows.findIndex(row => row.cells.some(c => matches(c, nameHeader))
+    && (row.cells.some(c => matches(c, /^매출합계$/))
+      || (row.cells.some(c => matches(c, /^공급가액?$/)) && row.cells.some(c => matches(c, /^(세액|부가세)$/))))
+    && row.cells.some(c => matches(c, /^수량$/)));
+  if (index < 0) return null;
+  const columns = rows[index].cells;
+  const result: ReceiptItem[] = [];
+  for (const row of rows.slice(index + 1)) {
+    if (/합계|소계|총계|잔액|서명|공지|회수|총액/.test(compact(row.text))) break;
+    const under = (pattern: RegExp) => {
+      const column = columns.find(c => matches(c, pattern));
+      if (!column) return [];
+      return row.cells.filter(c => columns.every(other => other === column || Math.abs(cx(c) - cx(column)) < Math.abs(cx(c) - cx(other))));
+    };
+    const names = under(nameHeader).filter(c => /[가-힣a-z]/i.test(c.text));
+    if (!names.length || !row.cells.some(scalar)) continue;
+    const numeric = (pattern: RegExp) => {
+      const cells = under(pattern);
+      const value = cells.length === 1 ? wholeMoney(cells[0].text) : null;
+      return value === null ? null : field(value, cells);
+    };
+    const quantity = numeric(/^수량$/), unitPrice = numeric(/^단가$/);
+    const gross = numeric(/^(매출합계|금액)$/);
+    const supply = numeric(/^공급가액?$/), vat = numeric(/^(세액|부가세)$/);
+    const depositHeader = columns.some(c => matches(c, /보증금/));
+    const deposit = numeric(/보증금/);
+    let amount = gross;
+    if (!gross && !columns.some(c => matches(c, /^(매출합계|금액)$/)) && supply && vat && (!depositHeader || deposit)) {
+      const value = supply.value + vat.value + (deposit?.value ?? 0);
+      if (Number.isSafeInteger(value)) amount = field(value, [...under(/^공급가액?$/), ...under(/^(세액|부가세)$/), ...under(/보증금/)], .6, 'derived');
+    }
+    result.push({ name: field(names.map(c => c.text).join(' '), names), quantity, unitPrice, amount,
+      arithmeticMatches: null, needsReview: true });
+  }
+  return result;
 }
 
 export function parseReceipt(lines: readonly RecognizedLine[], sourceImageId = 'image'): ParsedReceipt {
@@ -605,7 +740,10 @@ export function parseReceipt(lines: readonly RecognizedLine[], sourceImageId = '
   if (lines.length > 0 && totalLabelCount === 0) guidanceCodes.push('PAYMENT_SCREEN_REQUIRED');
   totalCandidates.sort((a, b) => b.score - a.score);
   const unresolvedReturns = amountStatus.returns !== 'absent' && selectedTotal === null;
-  const itemsMatchTotal = itemSum !== null && selectedTotal !== null ? itemSum === selectedTotal.value : null;
+  const displayItems = statementItems(rows, field) ?? boxStatementItems(rows, field) ?? orderCardItems(rows, field) ?? items;
+  const displaySum = displayItems.length && displayItems.every(item => item.amount !== null)
+    ? displayItems.reduce((sum, item) => sum + item.amount!.value, 0) : null;
+  const itemsMatchTotal = displaySum !== null && selectedTotal !== null ? displaySum === selectedTotal.value : null;
   const warnings = ['인식 결과를 원본과 확인해 주세요'];
   if (supplyScopeUnknown) warnings.push('공급가·부가세의 배송·할인 포함 여부를 확인해 주세요');
   if (spaceNormalized.size) warnings.push('공백 숫자의 독립 검산 근거를 확인해 주세요');
@@ -624,12 +762,12 @@ export function parseReceipt(lines: readonly RecognizedLine[], sourceImageId = '
     if (amountStatus[key] === 'unreadable') warnings.push(`${amountNames[key]} 라벨은 있지만 금액을 읽지 못했거나 서로 달라요`);
   }
   if (!selectedTotal) warnings.push('합계를 확인하지 못했어요');
-  if (!items.length) warnings.push('품목 영역이 없거나 품목을 구분하지 못했어요');
+  if (!displayItems.length) warnings.push('품목 영역이 없거나 품목을 구분하지 못했어요');
   if (itemsMatchTotal === false) warnings.push('품목 합계와 선택 합계가 달라요 (세액·배송·할인·잘림 확인)');
   if (items.some(i => i.arithmeticMatches === false)) warnings.push('수량 × 단가와 인쇄 금액이 다른 품목이 있어요');
   if (multipleTotals) warnings.push('같은 우선순위 또는 명시 결제의 합계가 여러 개예요');
   if (amounts.deposit || amounts.returns) warnings.push('보증금·회수액의 매입 반영 기준은 별도 확인이 필요해요');
   return { version: 1, sourceImageId, rotated, slope, rows, totalCandidates, selectedTotal, suggestedTotal, dateCandidates: dates, vendorCandidates: vendors,
-    amounts, amountStatus, items, checks: { itemSum, itemsMatchTotal, supplyPlusVat, supplyVatMatchesTotal: supplyPayable !== null && selectedTotal && supplyPayable === supplyPlusVat ? supplyPlusVat === selectedTotal.value : null,
+    amounts, amountStatus, items: displayItems.map(item => ({ ...item, needsReview: item.needsReview ?? (item.arithmeticMatches !== true || itemsMatchTotal !== true) })), checks: { itemSum: displaySum, itemsMatchTotal, supplyPlusVat, supplyVatMatchesTotal: supplyPayable !== null && selectedTotal && supplyPayable === supplyPlusVat ? supplyPlusVat === selectedTotal.value : null,
       goodsAdjustments, goodsAdjustmentsMatchTotal: goodsAdjustments !== null && selectedTotal ? goodsAdjustments === selectedTotal.value : null }, guidanceCodes, warnings };
 }
