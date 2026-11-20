@@ -9,7 +9,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../supabase';
 import { Store, StoreAccess, StoreVisibility, StoreRole } from '../../types';
 import { UserFacingError } from '../utils/error';
-import { subscribeAccessInvalidation, clearQueryData } from '../query/client';
+import { subscribeAccessInvalidation, clearQueryData, isAccessDenied } from '../query/client';
 import { clearPosSyncCoordinator } from '../services/posSyncCoordinator';
 import { clearLegacyPosCache } from '../query/legacyPosCache';
 import { setExpenseCategorySession } from '../utils/expenseCategorySession';
@@ -37,6 +37,7 @@ interface AuthContextValue {
   visibility: StoreVisibility | null;
   storeRole: StoreRole | null;
   permissionsReady: boolean;
+  permissionsPending: boolean;
   permissionRevision: string;
   canManageStore: boolean;
   canViewOwnerDashboard: boolean;
@@ -62,7 +63,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [memberRoles, setMemberRoles] = useState<Record<string, 'admin' | 'member'>>({});
   const [accessByStore, setAccessByStore] = useState<Record<string, StoreAccess>>({});
   const [visibilityByStore, setVisibilityByStore] = useState<Record<string, StoreVisibility>>({});
+  const lastPermissions = useRef<{ userId: string; access: Record<string, StoreAccess>; visibility: Record<string, StoreVisibility>; stores: Store[]; roles: typeof memberRoles } | null>(null);
   const accessController = useRef<AbortController | null>(null);
+  const [checkingPermissions, setCheckingPermissions] = useState(false);
   const [loading, setLoading] = useState(true);
   const [devPreviewMode, setDevPreviewMode] = useState<DevPreviewMode>('self');
   const [devPreviewEmployeeId, setDevPreviewEmployeeId] = useState<string | null>(null);
@@ -92,26 +95,49 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [devPreviewMode, devPreviewEmployeeId, store?.id, user?.id, accessByStore]);
 
   async function loadStores(userId: string, preferredStoreId?: string) {
+    if (authenticatedUserId.current !== userId) return;
     const requestId = ++storeRequestId.current;
     accessController.current?.abort();
     const controller = new AbortController();
     accessController.current = controller;
-    setAccessByStore({});
-    setVisibilityByStore({});
-    void clearQueryData();
+    setCheckingPermissions(true);
+    try {
+      await readStorePermissions(userId, requestId, controller, preferredStoreId);
+    } finally {
+      if (storeRequestId.current === requestId) setCheckingPermissions(false);
+    }
+  }
+
+  async function readStorePermissions(userId: string, requestId: number, controller: AbortController, preferredStoreId?: string) {
+    const previous = lastPermissions.current?.userId === userId ? lastPermissions.current : null;
     const isCurrent = () => {
       if (requestId === storeRequestId.current) return true;
       if (preferredStoreId) throw new UserFacingError('매장 목록이 갱신됐어요. 같은 설정으로 다시 시도해주세요.');
       return false;
     };
-    const { stores: storeList, roles } = await loadMyStores(userId);
+    const { stores: storeList, roles, access: financialAccess } = await loadMyStores(userId).catch(error => {
+      if (isCurrent() && isAccessDenied(error)) {
+        lastPermissions.current = null;
+        setAccessByStore({});
+        setVisibilityByStore({});
+        resetQueryIdentity('access-denied');
+      }
+      throw error;
+    });
     if (!isCurrent()) return;
     const entries = await Promise.all(storeList.map(async s => {
       const [access, visibility] = await Promise.all([
         getMyStoreAccess(s.id, { signal: controller.signal }),
         getMyStoreVisibility(s.id, { signal: controller.signal }),
       ]);
-      return { id: s.id, access: access.data, visibility: visibility.status === 'success' ? visibility.data : null };
+      const sameOwner = previous?.stores.some(old => old.id === s.id && old.owner_id === s.owner_id) && previous.roles[s.id] === roles[s.id];
+      const priorAccess = sameOwner ? previous?.access[s.id] : undefined;
+      const confirmedAccess = access.status === 'unavailable' && access.error?.transient && priorAccess
+        ? priorAccess : access.data;
+      const priorVisibility = priorAccess && JSON.stringify(priorAccess) === JSON.stringify(confirmedAccess) && financialAccess[s.id] === true
+        ? previous?.visibility[s.id] : null;
+      return { id: s.id, access: confirmedAccess, visibility: visibility.status === 'success' ? visibility.data
+        : visibility.status === 'unknown' && visibility.error.transient ? priorVisibility : null };
     }));
     const access = Object.fromEntries(entries.map(e => [e.id, e.access]));
     const visibility = Object.fromEntries(entries.flatMap(e => e.visibility ? [[e.id, e.visibility]] : []));
@@ -123,6 +149,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       storeList.map(s => [s.id, s.owner_id, access[s.id], visibility[s.id]]).sort()]));
     if (preferredStoreId && storeList.some(s => s.id === preferredStoreId)) await AsyncStorage.setItem(LAST_STORE_ID_KEY, preferredStoreId);
     if (!isCurrent()) return;
+    lastPermissions.current = { userId, stores: storeList, roles, access, visibility };
     setAccessByStore(access);
     setVisibilityByStore(visibility);
     setMemberRoles(roles);
@@ -138,6 +165,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const requestId = ++storeRequestId.current;
     await AsyncStorage.setItem(LAST_STORE_ID_KEY, storeId);
     if (requestId !== storeRequestId.current) throw new UserFacingError('매장 목록이 변경됐어요. 다시 선택해주세요.');
+    lastPermissions.current = null;
+    setAccessByStore({});
+    setVisibilityByStore({});
+    void clearQueryData();
+    clearPosSyncCoordinator();
     setStore(selectedStore);
     setDevPreview('self', null);
     await loadStores(user.id, storeId);
@@ -151,7 +183,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // refresh avoids repeatedly loading every store and member while the app stays open.
   useEffect(() => {
     if (!user) return;
-    const refresh = () => { if (AppState.currentState === 'active') void loadStores(user.id).catch(() => { /* 요청 시작 때 이미 닫았으며 이전 요청 실패는 새 권한을 덮지 않는다. */ }); };
+    const refresh = () => { if (AppState.currentState === 'active') void loadStores(user.id).catch(() => { /* 다음 활성화 또는 주기에 다시 조회한다. */ }); };
     const subscription = AppState.addEventListener('change', state => { if (state === 'active') refresh(); });
     const timer = setInterval(refresh, STORE_ACCESS_REFRESH_MS);
     return () => { subscription.remove(); clearInterval(timer); };
@@ -164,6 +196,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     authRequestId.current += 1;
     if (previousUserId) await clearAttendanceDeviceCredentials(previousUserId);
     authenticatedUserId.current = null;
+    lastPermissions.current = null;
     await clearQueryData();
     clearPosSyncCoordinator();
     await clearLegacyPosCache().catch(() => {});
@@ -188,6 +221,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const visibility = store && user ? visibilityByStore[store.id] ?? null : null;
   const storeRole = previewing ? (devPreviewMode === 'part_time' ? 'part_timer' : 'employee') : access.role;
   const permissionsReady = !!actualAccess?.role;
+  const permissionsPending = checkingPermissions && !actualAccess;
   const canManageStore = access.can_manage_store;
   const canViewOwnerDashboard = access.can_view_owner_dashboard && store?.owner_id === user?.id;
   const permissionRevision = JSON.stringify([store?.id, actualAccess, visibility]);
@@ -196,7 +230,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     : visibility.can_read_financials);
 
   useEffect(() => subscribeAccessInvalidation(storeId => {
-    if (user && stores.some(s => s.id === storeId)) void loadStores(user.id).catch(() => { /* 현재 요청은 닫힌 상태를 유지한다. */ });
+    if (user && stores.some(s => s.id === storeId)) void loadStores(user.id).catch(() => { /* 다음 재조회에서 다시 확인한다. */ });
   }), [user?.id, stores]);
 
   useEffect(() => {
@@ -212,9 +246,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const eventRequestId = ++authRequestId.current;
         storeRequestId.current += 1;
         accessController.current?.abort();
-        setAccessByStore({}); setVisibilityByStore({});
-        void clearQueryData();
-        setLoading(true);
+        if (!session?.user || authenticatedUserId.current !== session.user.id) {
+          lastPermissions.current = null;
+          setAccessByStore({}); setVisibilityByStore({});
+          void clearQueryData();
+          setLoading(true);
+        }
 
         const previousUserId = authenticatedUserId.current;
         if (previousUserId && previousUserId !== session?.user?.id) {
@@ -271,7 +308,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider value={{
-      user, session, store, stores, storesLoaded, memberRoles, currentRole, realRole, access, visibility, storeRole, permissionsReady, permissionRevision, canManageStore, canViewOwnerDashboard, canReadFinancials, loading, signOut, refreshStore, switchStore,
+      user, session, store, stores, storesLoaded, memberRoles, currentRole, realRole, access, visibility, storeRole, permissionsReady, permissionsPending, permissionRevision, canManageStore, canViewOwnerDashboard, canReadFinancials, loading, signOut, refreshStore, switchStore,
       devPreviewMode, devPreviewEmployeeId, setDevPreview,
     }}>
       {children}

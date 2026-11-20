@@ -58,8 +58,8 @@ function parseInitialDate(value?: string): Date {
 }
 
 export default function NewPurchaseScreen() {
-  const { user, store, storeRole, canReadFinancials, devPreviewMode, permissionRevision, permissionsReady } = useAuth();
-  return <NewPurchaseContent key={`${user?.id}:${store?.id}:${storeRole}:${canReadFinancials}:${devPreviewMode}:${permissionRevision}:${permissionsReady}`} />;
+  const { user, store, storeRole, canReadFinancials, devPreviewMode } = useAuth();
+  return <NewPurchaseContent key={`${user?.id}:${store?.id}:${storeRole}:${canReadFinancials}:${devPreviewMode}`} />;
 }
 
 function NewPurchaseContent() {

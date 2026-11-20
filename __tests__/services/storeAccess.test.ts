@@ -71,3 +71,18 @@ it('역할과 capability가 충돌하면 닫는다', async () => {
 it.each(['-1','1.2','01','9223372036854775808',''])('잘못된 revision %s는 전송하지 않는다', async revision => {
   expect(await setStoreManager('s', null, revision)).toMatchObject({ status: 'preflight_failed' }); expect(rpc).not.toHaveBeenCalled();
 });
+
+it('전송 실패만 임시 오류로 구분하고 손상된 권한 응답과 접근 거부는 닫는다', async () => {
+  rpc.mockResolvedValueOnce({ data: null, error: { code: '', message: 'Network request failed' } });
+  expect(await getMyStoreAccess('s')).toMatchObject({ status: 'unavailable', error: { transient: true } });
+  for (const response of [
+    { data: {}, error: null },
+    { data: { ...ownerAccess, role: 'employee' }, error: null },
+    { data: null, error: { code: '42501' } },
+  ]) {
+    rpc.mockResolvedValueOnce(response);
+    const result = await getMyStoreAccess('s');
+    expect(result.status).toBe('unavailable');
+    if (result.status === 'unavailable') expect(result.error.transient).toBeFalsy();
+  }
+});

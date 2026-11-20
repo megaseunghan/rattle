@@ -28,8 +28,8 @@ import { animateListChange } from '../../lib/utils/layoutAnimation';
 
 export default function PurchaseDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { store, user, storeRole, permissionRevision, canReadFinancials, devPreviewMode } = useAuth();
-  return <PurchaseDetailContent key={[id, store?.id, user?.id, storeRole, permissionRevision, canReadFinancials, devPreviewMode].join(':')} id={id} />;
+  const { store, user, storeRole, canReadFinancials, devPreviewMode } = useAuth();
+  return <PurchaseDetailContent key={[id, store?.id, user?.id, storeRole, canReadFinancials, devPreviewMode].join(':')} id={id} />;
 }
 
 function PurchaseDetailContent({ id }: { id: string }) {
