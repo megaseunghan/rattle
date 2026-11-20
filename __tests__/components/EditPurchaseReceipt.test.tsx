@@ -58,7 +58,8 @@ test('editing applies only a chosen item, uploads after save and keeps manual co
   await waitFor(() => expect(mockUpload).toHaveBeenCalledTimes(1));
 });
 
-test('keeps the draft on modal dismissal and guards navigation until save and upload finish', async () => {
+test('OCR off: 증빙 사진을 인식 없이 보관하고 저장·업로드가 끝날 때까지 입력을 지킨다', async () => {
+  mockRecognize.mockClear();
   const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
   let finishSave!: () => void, finishUpload!: () => void;
   mockSave.mockImplementationOnce(() => new Promise<void>(resolve => { finishSave = resolve; }));
@@ -67,7 +68,10 @@ test('keeps the draft on modal dismissal and guards navigation until save and up
   const view = render(<PurchaseDetailScreen />);
   fireEvent.press(await view.findByLabelText(/가상 사과.*수정/));
   await act(async () => fireEvent.press(view.getByText('파일 선택')));
-  expect(view.getByText('사진으로 자동 입력은 준비 중이에요')).toBeTruthy();
+  expect(view.queryByText(/준비 중|OCR|자동 입력|인식|휴대폰에서 읽고|다시 읽기|합계 후보/)).toBeNull();
+  expect(view.queryByLabelText(/준비 중|OCR|자동 입력|인식/)).toBeNull();
+  expect(view.getByLabelText('매입 품목 금액').props.value).toBe('4000');
+  expect(mockRecognize).not.toHaveBeenCalled();
   fireEvent.press(view.getByText('취소'));
   expect(alert).toHaveBeenLastCalledWith('이대로 나갈까요?', expect.stringContaining('선택한 사진'), expect.any(Array));
   expect(view.getByLabelText('receipt.jpg 미리보기')).toBeTruthy();

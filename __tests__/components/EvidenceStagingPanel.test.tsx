@@ -12,6 +12,15 @@ jest.mock('expo-file-system', () => ({ Paths: { cache: { uri:'file:///cache' } }
 const asset = {uri:'file:///cache/receipt.jpg',name:'receipt.jpg',mimeType:'image/jpeg',size:100};
 function Harness({initial=[]}:{initial?:EvidenceSelection[]}) { const [files,setFiles]=useState(initial);return <><Text>{`선택 ${files.length}개`}</Text><EvidenceStagingPanel files={files} onChange={setFiles} /></>; }
 beforeEach(()=>{jest.clearAllMocks();mockId=0;mockPick.mockResolvedValue({canceled:false,assets:[asset]});});
+test('OCR off: 빈 패널과 사진 선택 후에도 증빙 첨부만 안내한다', async () => {
+ render(<Harness />);
+ expect(screen.queryByText(/준비 중|OCR|자동 입력|인식/)).toBeNull();
+ expect(screen.getByText('증빙 자료 (선택)')).toBeTruthy();
+ await act(async () => { fireEvent.press(screen.getByText('파일 선택')); });
+ expect(screen.getByText('선택 1개')).toBeTruthy();
+ expect(screen.queryByText(/준비 중|OCR|자동 입력|인식/)).toBeNull();
+ expect(screen.queryByLabelText(/준비 중|OCR|자동 입력|인식/)).toBeNull();
+});
 test('local staging add, image modal and accessible removal',async()=>{
  render(<Harness />);await act(async()=>{fireEvent.press(screen.getByText('파일 선택'));});
  fireEvent.press(screen.getByLabelText('receipt.jpg 미리보기'));
