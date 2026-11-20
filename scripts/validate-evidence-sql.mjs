@@ -1,5 +1,6 @@
 // QA-EVIDENCE-20261114: reduced local schema only; no network or real data.
 import assert from 'node:assert/strict';
+import { validatePurchaseAmounts } from './validate-purchase-amounts-sql.mjs';
 import { createHmac } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { PGlite } from '@electric-sql/pglite';
@@ -378,5 +379,6 @@ try {
  await db.exec("SELECT pg_sleep(0.015); SET LOCAL ROLE authenticated");
  await assert.rejects(db.query('SELECT restore_deleted_store($1)',[id(995)]), /STORE_RESTORE_EXPIRED/);
  await db.exec('ROLLBACK');
+ await validatePurchaseAmounts({db,as,reserve,id,admin,member,outsider,store,otherStore});
  console.log(`Evidence SQL: ${checks} assertions passed (PGlite reduced schema; remote JWT/Storage not tested).`);
 } finally { await db.close(); }
