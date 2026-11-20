@@ -57,3 +57,22 @@ it('가격의 원 단위가 깨져도 주문 수량 앞의 품목명을 보존�
   const p = parseReceipt(lines.map((v,i) => cell(v,.35,.04*i)));
   expect(p.items[0]).toMatchObject({ name: { value: '가상 접시' }, quantity: { value: 1 }, amount: null, needsReview: true });
 });
+
+it.each([
+  ['시험용 잔, 0.25 L, 8 개', '시험용 잔', '0.25L', 8],
+  ['시험용 티백,250g,9개', '시험용 티백', '250g', 9],
+  ['시험용 티백, 0,25kg, 9개', undefined, undefined, undefined],
+  ['시험용 티백, 9개', '시험용 티백', undefined, 9],
+  ['시험용 잔, 1,000개', undefined, undefined, undefined],
+  ['시험용 티백, 3팩, 9개', undefined, undefined, undefined],
+  ['시험용 잔, 6개, 빨강', undefined, undefined, undefined],
+] as const)('카드 옵션 %s와 주문 수량을 독립적으로 유지한다', (title, product, spec, pack) => {
+  const lines = ['쿠팡 주문 완료', title, '4,210원', '수량: 2개'];
+  const item = parseReceipt(lines.map((v, i) => cell(v, .35, .04 * i))).items[0];
+  expect(item.name.value).toBe(title);
+  expect(item.productName?.value).toBe(product);
+  expect(item.specification?.value).toBe(spec);
+  expect(item.packQuantity?.value).toBe(pack);
+  expect(item.quantity?.value).toBe(2);
+  expect(item.amount).toBeNull();
+});
