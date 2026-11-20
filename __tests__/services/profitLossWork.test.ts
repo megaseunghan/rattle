@@ -159,3 +159,11 @@ it('거래처명이 객체 예약어여도 누락하거나 금액을 문자열�
   expect(result.purchaseBySupplier?.constructor).toBe(35);
   expect(Object.values(result.purchaseBySupplier!).reduce((sum, amount) => sum + amount, 0)).toBe(result.purchaseCost);
 });
+
+it('한 매입의 카테고리별 금액을 나누고 손익 합계에는 한 번만 포함한다', async () => {
+  setup([]);
+  mockPurchases.mockResolvedValue([{ category: '식자재', amount: 3500, category_amounts: { 식자재: 2000, 비품: 1500 } }]);
+  await expect(getProfitLossByMonth('store', '2026-09', '23:00')).resolves.toMatchObject({
+    purchaseCost: 3500, purchaseByCategory: { 식자재: 2000, 비품: 1500 },
+  });
+});

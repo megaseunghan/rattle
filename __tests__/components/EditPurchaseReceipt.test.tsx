@@ -1,3 +1,5 @@
+import * as purchaseFlag from '../../lib/ocr/purchaseOcrFlag';
+afterEach(() => jest.restoreAllMocks());
 import { Alert } from 'react-native';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import PurchaseDetailScreen from '../../app/purchases/[id]';
@@ -35,6 +37,7 @@ jest.mock('../../lib/services/evidence', () => ({ listEvidence: async () => [], 
 jest.mock('../../lib/media/evidenceUpload', () => ({ uploadEvidence: (...args: unknown[]) => mockUpload(...args) }));
 
 test('editing applies only a chosen item, uploads after save and keeps manual corrections', async () => {
+  jest.replaceProperty(purchaseFlag, 'PURCHASE_OCR_ENABLED', true as false);
   const row = (cells: string[], y: number) => cells.map((text, index) => ({
     text, confidence: .9, box: { x: [.1, .5, .65, .8][index], y, w: [.2, .06, .08, .1][index], h: .02 },
   }));
@@ -64,6 +67,7 @@ test('keeps the draft on modal dismissal and guards navigation until save and up
   const view = render(<PurchaseDetailScreen />);
   fireEvent.press(await view.findByLabelText(/가상 사과.*수정/));
   await act(async () => fireEvent.press(view.getByText('파일 선택')));
+  expect(view.getByText('사진으로 자동 입력은 준비 중이에요')).toBeTruthy();
   fireEvent.press(view.getByText('취소'));
   expect(alert).toHaveBeenLastCalledWith('이대로 나갈까요?', expect.stringContaining('선택한 사진'), expect.any(Array));
   expect(view.getByLabelText('receipt.jpg 미리보기')).toBeTruthy();

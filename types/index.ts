@@ -387,6 +387,7 @@ export type PurchaseCategory = string;
 export type PurchaseType = string;
 
 export interface Purchase {
+  category_amounts?: Record<string, number>;
   id: string;
   store_id: string;
   category_id?: string | null;

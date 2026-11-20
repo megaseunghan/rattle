@@ -13,7 +13,10 @@ export class PurchaseWriteError extends Error {
 }
 
 type BasePurchaseInput = { date: string; supplier: string; type: PurchaseType };
+type ClassifiedItem = { ingredient_id: string | null; name: string; quantity: number; unit: string; amount: number; category: string };
 export type PurchaseFormInput = BasePurchaseInput & (
+  { mode: 'items'; returnId: true; rows: ClassifiedItem[] } |
+  { mode: 'amounts'; returnId: true; rows: { category: string; amount: number }[] } |
   { category: string; returnId: true; items: { ingredient_id: string | null; name: string; quantity: number; unit: string; amount: number }[] } |
   { category?: undefined; returnId?: boolean; items: PurchaseItemInput[] }
 );
@@ -27,16 +30,14 @@ export async function getPurchaseSuppliers(storeId: string, signal: AbortSignal)
 export async function createPurchaseWithItems(input: PurchaseFormInput & { store_id: string }): Promise<{ refreshFailed: boolean; purchaseId?: string }> {
   let result;
   try {
-    const rpc = input.category !== undefined ? 'create_purchase_with_amounts'
-      : input.returnId ? 'create_purchase_with_evidence' : 'create_purchase_with_items';
-    result = await supabase.rpc(rpc, {
-      ...(input.category !== undefined && { p_category: input.category }),
-      p_store_id: input.store_id,
-      p_date: input.date,
-      p_supplier: input.supplier,
-      p_type: input.type,
-      p_items: input.items,
-    });
+    const common = { p_store_id: input.store_id, p_date: input.date, p_supplier: input.supplier, p_type: input.type };
+    if ('mode' in input) {
+      result = await supabase.rpc('create_purchase_entry', { ...common, p_mode: input.mode, p_rows: input.rows });
+    } else {
+      const rpc = input.category !== undefined ? 'create_purchase_with_amounts'
+        : input.returnId ? 'create_purchase_with_evidence' : 'create_purchase_with_items';
+      result = await supabase.rpc(rpc, { ...common, p_items: input.items, ...(input.category !== undefined && { p_category: input.category }) });
+    }
   } catch (error) {
     throw new PurchaseWriteError('unknown', error);
   }
@@ -60,7 +61,7 @@ export async function createPurchaseWithItems(input: PurchaseFormInput & { store
 export async function getPurchaseById(id: string): Promise<Purchase> {
   const { data, error } = await supabase
     .from('purchases')
-    .select('*')
+    .select('*,category_amounts')
     .eq('id', id)
     .single();
   if (error) throw new Error(error.message);
@@ -124,13 +125,13 @@ export async function getPurchasesByMonth(
   storeId: string,
   yearMonth: string, // 'YYYY-MM'
 ): Promise<Purchase[]> {
-  return readMonthPurchases<Purchase>(storeId, yearMonth, '*');
+  return readMonthPurchases<Purchase>(storeId, yearMonth, '*,category_amounts');
 }
 
 /** 매입 탭 목록용: 품목 수를 같은 조회에서 받아 별도 개수 조회를 하지 않는다. */
 export async function getPurchasesWithItemCountsByMonth(storeId: string, yearMonth: string): Promise<Purchase[]> {
   type Row = Purchase & { purchase_items?: { count: number }[] | null };
-  const rows = await readMonthPurchases<Row>(storeId, yearMonth, '*, purchase_items(count)');
+  const rows = await readMonthPurchases<Row>(storeId, yearMonth, '*,category_amounts,purchase_items(count)');
   return rows.map(({ purchase_items, ...purchase }) => ({ ...purchase, item_count: Number(purchase_items?.[0]?.count ?? 0) }));
 }
 

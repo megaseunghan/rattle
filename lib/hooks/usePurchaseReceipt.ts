@@ -1,3 +1,4 @@
+import { PURCHASE_OCR_ENABLED } from '../ocr/purchaseOcrFlag';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { recognizeText } from '../../modules/rattle-text-recognition';
 import { parseReceipt, type ParsedReceipt } from '../ocr/receiptParser';
@@ -16,7 +17,7 @@ function readFailure(error: unknown) {
 }
 
 export function usePurchaseReceipt(selections: EvidenceSelection[]) {
-  const files = useMemo(() => selections.filter(file => file.mimeType !== 'application/pdf'), [selections]);
+  const files = useMemo(() => PURCHASE_OCR_ENABLED ? selections.filter(file => file.mimeType !== 'application/pdf') : [], [selections]);
   const [results, setResults] = useState<Record<string, Reading>>({});
   const [manual, setManual] = useState<{ source: string; value: string } | null>(null);
   const queue = useRef<Promise<void>>(Promise.resolve());

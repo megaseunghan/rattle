@@ -54,3 +54,14 @@ it('이전 관리자 역할이 있어도 현재 권한이 없으면 카테고리
   await waitFor(() => expect(mockRefetch).toHaveBeenCalled());
   expect(screen.queryByLabelText('매입 카테고리 관리')).toBeNull();
 });
+
+it('복수 분류 매입은 목록 한 건으로 표시하고 선택한 분류의 금액만 합산한다', async () => {
+  mockPurchases = [{ id: 'mixed', supplier: '가상 상점', type: '수기', category: '식자재', date: '2026-10-01',
+    amount: 3500, category_amounts: { 식자재: 2000, 비품: 1500 }, item_count: 0 }];
+  render(<PurchasesScreen />);
+  await waitFor(() => expect(mockRefetch).toHaveBeenCalled());
+  expect(screen.getByText('식자재 · 비품')).toBeTruthy();
+  fireEvent.press(screen.getByLabelText('매입 카테고리 비품'));
+  expect(screen.getAllByText('1,500원').length).toBeGreaterThan(0);
+  expect(screen.queryByText('3,500원')).toBeNull();
+});

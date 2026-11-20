@@ -16,7 +16,7 @@ it('매입 목록과 품목 수를 한 번의 조회로 받고 중첩 응답은 
     { id: 'c', amount: 200, purchase_items: [] },
   ]);
   const rows = await getPurchasesWithItemCountsByMonth('store', '2026-11');
-  expect(mockSelect).toHaveBeenCalledWith('*, purchase_items(count)');
+  expect(mockSelect).toHaveBeenCalledWith('*,category_amounts,purchase_items(count)');
   expect(rows).toEqual([
     { id: 'a', amount: 1000, item_count: 3 },
     { id: 'b', amount: 500, item_count: 0 },
