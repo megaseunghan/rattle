@@ -37,3 +37,13 @@ it('건 카테고리와 정수 원 금액을 새 RPC에 보내고 매입 UUID를
   });
   expect(result).toEqual({ purchaseId: 'purchase-id', refreshFailed: false });
 });
+
+it('금액별 매입을 단일 RPC로 저장하고 증빙을 연결할 번호를 받는다', async () => {
+  const rows = [{ category: '비품', amount: 2300 }, { category: '식자재', amount: 1100 }];
+  mockRpc.mockResolvedValue({ data: 'purchase-id', error: null });
+  await expect(createPurchaseWithItems({ ...input, mode: 'amounts', rows, returnId: true })).resolves.toMatchObject({ purchaseId: 'purchase-id' });
+  expect(mockRpc).toHaveBeenCalledWith('create_purchase_entry', {
+    p_store_id: 'store', p_date: input.date, p_supplier: input.supplier, p_type: '수기', p_mode: 'amounts', p_rows: rows,
+  });
+  expect(mockRpc).toHaveBeenCalledTimes(1);
+});

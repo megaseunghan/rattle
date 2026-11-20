@@ -200,7 +200,7 @@ function PurchaseDetailContent({ id }: { id: string }) {
           <View style={styles.summaryCard}>
             <Text style={styles.supplier}>{purchase.supplier || '거래처 미입력'}</Text>
             <View style={styles.pillRow}>
-              <View style={styles.pill}><Text style={styles.pillText}>{purchase.category}</Text></View>
+              <View style={styles.pill}><Text style={styles.pillText}>{Object.keys(purchase.category_amounts ?? { [purchase.category]: purchase.amount }).join(' · ')}</Text></View>
               <View style={styles.pill}><Text style={styles.pillText}>{purchase.type}</Text></View>
             </View>
             <Text style={styles.date}>{purchase.date}</Text>
@@ -212,6 +212,8 @@ function PurchaseDetailContent({ id }: { id: string }) {
           {items.length === 0 ? (
             <View style={styles.emptyCard}>
               <Text style={styles.emptyText}>금액만 입력된 매입이에요</Text>
+              {Object.entries(purchase.category_amounts ?? {}).map(([category, amount]) =>
+                <Text key={category} style={styles.emptyText}>{category} · {amount.toLocaleString()}원</Text>)}
             </View>
           ) : (
             <View style={styles.listCard}>

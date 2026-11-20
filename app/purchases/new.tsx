@@ -5,7 +5,7 @@ import { useStorePermissions } from '../../lib/hooks/useStorePermissions';
 import { usePreviewWriteGuard } from '../../lib/hooks/usePreviewWriteGuard';
 import { EvidenceStagingPanel } from '../../lib/components/EvidenceStagingPanel';
 import { EvidenceSelection } from '../../lib/types/evidence';
-import { disposeEvidenceCache, pickEvidenceSelections } from '../../lib/media/evidencePicker';
+import { disposeEvidenceCache } from '../../lib/media/evidencePicker';
 import { EvidencePanel } from '../../lib/components/EvidencePanel';
 import { SheetModal } from '../../lib/components/ui/SheetModal';
 /* Hallmark · genre: modern-minimal · macrostructure: Workbench · design-system: DESIGN.md · designed-as-app */
@@ -36,6 +36,7 @@ import { usePurchaseCategories } from '../../lib/hooks/usePurchaseCategories';
 import { usePurchaseTypes } from '../../lib/hooks/usePurchaseTypes';
 import { useCategories } from '../../lib/hooks/useCategories';
 import { PurchaseWriteError, getPurchaseSuppliers } from '../../lib/services/purchases';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useConfirmLeave } from '../../lib/hooks/useConfirmLeave';
 
 const COMMON_UNITS = ['g', 'kg', 'ml', 'L', '개', '병', '봉', '박스'];
@@ -62,7 +63,7 @@ export default function NewPurchaseScreen() {
 }
 
 function NewPurchaseContent() {
-  const { store, canReadFinancials, devPreviewMode } = useAuth();
+  const { user, store, canReadFinancials, devPreviewMode } = useAuth();
   const { canManageStock } = useStorePermissions();
   const canAttach = canManageStock && canReadFinancials && devPreviewMode === 'self';
   const { canWrite } = usePreviewWriteGuard();
@@ -72,9 +73,18 @@ function NewPurchaseContent() {
   const { addWithItems } = usePurchases(formatDate(parseInitialDate(params.date)).slice(0, 7));
   const inventory = useIngredients();
   const ingredientCategories = useCategories();
-  const [started, setStarted] = useState(false);
-  const [categoryChoice, setCategoryChoice] = useState('');
-  const category = categoryChoice || (purchaseCategories.categories.includes('식자재') ? '식자재' : purchaseCategories.categories[0]);
+  const preferenceKey = 'purchase-entry-mode:' + user?.id;
+  const [mode, setMode] = useState<'items' | 'amounts'>('items');
+  const interacted = useRef(false);
+  useEffect(() => {
+    let active = true;
+    void AsyncStorage.getItem(preferenceKey).then(value => {
+      if (active && !interacted.current && value === 'amounts') setMode(value);
+    }).catch(() => {});
+    return () => { active = false; };
+  }, [preferenceKey]);
+  const [amounts, setAmounts] = useState<Record<string, string>>({});
+  const category = purchaseCategories.categories.includes('식자재') ? '식자재' : purchaseCategories.categories[0];
   const [chosenType, setChosenType] = useState('');
   const type = purchaseTypes.types.includes('수기') ? '수기'
     : purchaseTypes.types.includes(chosenType) ? chosenType : purchaseTypes.types.length === 1 ? purchaseTypes.types[0] : '';
@@ -117,7 +127,7 @@ function NewPurchaseContent() {
     return () => controller.abort();
   }, [store?.id, showSupplierPicker, supplierAttempt]);
 
-  const [manual, setManual] = useState<ReceiptDraftRow[]>([]);
+  const [manual, setManual] = useState<ReceiptDraftRow[]>([{ id: 'initial', name: '', amount: '', quantity: '' }]);
   const counter = useRef(0);
   function appendItem() {
     const row = { id: 'manual-' + ++counter.current, name: '', quantity: '', amount: '' };
@@ -139,23 +149,17 @@ function NewPurchaseContent() {
     const manualRows = scanned.length && manual.length === 1 && manual[0].id === 'initial' && !edits.initial ? [] : manual;
     return [...scanned, ...manualRows].map(row => ({ ...row, ...edits[row.id] })).filter(row => !row.removed);
   }, [receipt.readings, manual, edits]);
-  const total = rows.reduce((sum, row) => sum + (/^\d+$/.test(row.amount) ? Number(row.amount) : 0), 0);
+  const amountRows = purchaseCategories.categories.map(category => ({ category, value: amounts[category] ?? '' }));
+  const total = mode === 'amounts' ? amountRows.reduce((sum, row) => sum + (/^\d+$/.test(row.value) ? Number(row.value) : 0), 0) : rows.reduce((sum, row) => sum + (/^\d+$/.test(row.amount) ? Number(row.amount) : 0), 0);
   const saved = writeState.startsWith('saved');
   const locked = submitting || writeState === 'unknown';
-  const bypassLeaveGuard = useConfirmLeave((started && !saved) || pickingEvidence || pendingEvidence > 0, {
+  const hasDraft = !!supplier || stagedEvidence.length > 0 || Object.keys(edits).length > 0 ||
+    manual.length > 1 || Object.values(amounts).some(Boolean) || !!chosenType ||
+    formatDate(date) !== formatDate(parseInitialDate(params.date));
+  const bypassLeaveGuard = useConfirmLeave((hasDraft && !saved) || pickingEvidence || pendingEvidence > 0, {
     blockLeave: submitting || pickingEvidence,
     message: pendingEvidence ? '매입은 저장됐어요. 지금 나가면 남은 증빙을 다시 선택해야 해요.' : '지금 나가면 입력한 매입 내용과 선택한 증빙이 사라져요.',
   });
-  const pickLock = useRef(false);
-  async function startPhoto(source: 'camera' | 'library') {
-    if (pickLock.current || !canAttach) return;
-    pickLock.current = true; setPickingEvidence(true); setError('');
-    try {
-      const files = await pickEvidenceSelections(0, () => alive.current, source);
-      if (alive.current && files.length) { updateStagedEvidence(files); setStarted(true); }
-    } catch (e) { if (alive.current) setError(getErrorMessage(e)); }
-    finally { pickLock.current = false; if (alive.current) setPickingEvidence(false); }
-  }
   const [linkRow, setLinkRow] = useState<string | null>(null);
   const [quickName, setQuickName] = useState('');
   const [quickCategory, setQuickCategory] = useState('식자재');
@@ -199,22 +203,28 @@ function NewPurchaseContent() {
     if (!supplier.trim()) return setError('거래처를 선택하거나 이름을 입력해 주세요.');
     if (purchaseCategories.loading || purchaseTypes.loading || !category || !purchaseCategories.categories.includes(category) || purchaseTypes.error || purchaseCategories.error)
       return setError('매입 카테고리와 유형을 다시 불러와 주세요.');
-    if (rows.length > 300) return setError('품목은 한 번에 300개까지 저장할 수 있어요.');
+    if (mode === 'items' && rows.length > 300) return setError('품목은 한 번에 300개까지 저장할 수 있어요.');
     if (total >= 1e12) return setError('매입 합계를 확인해 주세요.');
     if (!type) return setError('매입 유형을 선택해 주세요.');
-    if (!rows.length) return setError('품목을 한 개 이상 추가해 주세요.');
-    if (rows.some(row => row.needsReview)) return setError('확인이 필요한 품목의 금액을 확인해 주세요.');
-    const items = rows.map(row => ({
+    if (mode === 'items' && !rows.length) return setError('품목을 한 개 이상 추가해 주세요.');
+    if (mode === 'items' && rows.some(row => row.needsReview)) return setError('확인이 필요한 품목의 금액을 확인해 주세요.');
+    const items = (mode === 'items' ? rows : []).map(row => ({
       ingredient_id: row.ingredient?.id ?? null, name: (row.ingredient?.name ?? row.inputName ?? row.name).trim(),
-      quantity: Number(row.quantity.trim() || 1), unit: row.ingredient?.unit ?? '개', amount: Number(row.amount),
+      quantity: Number(row.quantity.trim() || 1), category: row.category ?? category, unit: row.ingredient?.unit ?? row.unit?.trim() ?? '', amount: Number(row.amount),
     }));
-    if (items.some((item, index) => !item.name || item.name.length > 200 || !/^\d+$/.test(rows[index].amount) ||
+    if (items.some((item, index) => !purchaseCategories.categories.includes(item.category) || !item.name || item.name.length > 200 || !/^\d+$/.test(rows[index].amount) ||
       !Number.isSafeInteger(item.amount) || !Number.isFinite(item.quantity) || item.quantity <= 0 || item.quantity >= 1e9 || item.amount / item.quantity >= 1e9))
       return setError('품목명과 원 단위 금액을 입력하고 수량을 확인해 주세요.');
+    const categoryAmounts = amountRows.filter(row => Number(row.value) > 0).map(row => ({ category: row.category, amount: Number(row.value) }));
+    if (categoryAmounts.length > 300 && mode === 'amounts') return setError('카테고리는 한 번에 300개까지 저장할 수 있어요.');
+    if (mode === 'amounts' && (!categoryAmounts.length || amountRows.some(row => row.value && !/^\d+$/.test(row.value))))
+      return setError('카테고리에 원 단위 금액을 입력해 주세요.');
+    Keyboard.dismiss();
     writeLock.current = true; setSubmitting(true); setError('');
     try {
-      const result = await addWithItems({ date: formatDate(date), supplier: supplier.trim(), category, type, items, returnId: true });
+      const result = await addWithItems({ date: formatDate(date), supplier: supplier.trim(), type, ...(mode === 'items' ? { mode, rows: items } : { mode, rows: categoryAmounts }), returnId: true });
       if (!alive.current) return;
+      void AsyncStorage.setItem(preferenceKey, mode).catch(() => {});
       setSavedPurchaseId(result.purchaseId);
       setPendingEvidence(result.purchaseId ? stagedEvidence.length : 0);
       setWriteState(result.refreshFailed ? 'saved-refresh' : 'saved');
@@ -245,29 +255,12 @@ function NewPurchaseContent() {
     </View>
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
       <ScrollView ref={scrollRef} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
-        {!started && <View style={styles.itemCard}>
-          <Text style={styles.itemName}>어떻게 등록할까요?</Text>
-          {canAttach && (['library', 'camera'] as const).map(source => <TouchableOpacity accessibilityRole="button" style={styles.actionButton}
-            key={source} disabled={pickingEvidence} onPress={() => startPhoto(source)}><Text style={styles.modalClose}>{source === 'library' ? '앨범' : '사진 촬영'}</Text></TouchableOpacity>)}
-          <TouchableOpacity accessibilityRole="button" style={styles.actionButton} disabled={pickingEvidence}
-            onPress={() => { setError(''); setManual([{ id: 'initial', name: '', quantity: '', amount: '' }]); setStarted(true); }}><Text style={styles.modalClose}>수기 입력</Text></TouchableOpacity>
-        </View>}
-        {started && !saved && <View pointerEvents={locked ? 'none' : 'auto'}>
-          <Text style={styles.label}>거래처</Text>
-          <View style={styles.supplierRow}>
-            <TextInput ref={supplierRef} style={[styles.input, { flex: 1 }]} accessibilityLabel="거래처명" placeholder="거래처 이름 입력" value={supplier}
-              onChangeText={setSupplier} editable={!locked} />
-            <TouchableOpacity style={styles.supplierPickerBtn} accessibilityRole="button" accessibilityState={{ expanded: showSupplierPicker }}
-              onPress={() => setShowSupplierPicker(!showSupplierPicker)}><Text style={styles.modalClose}>거래처 목록</Text></TouchableOpacity>
-          </View>
-          {showSupplierPicker && <View>
-            {supplierLoading && <Text>거래처를 불러오고 있어요…</Text>}
-            {!supplierLoading && !supplierError && !knownSuppliers.length && <Text>등록된 거래처가 없어요.</Text>}
-            {supplierError && <TouchableOpacity onPress={() => setSupplierAttempt(n => n + 1)}><Text>목록 다시 불러오기</Text></TouchableOpacity>}
-            {knownSuppliers.filter(name => name.includes(supplier.trim())).map(name => <TouchableOpacity key={name} style={styles.actionButton}
-              onPress={() => { setSupplier(name); setShowSupplierPicker(false); }}><Text>{name}</Text></TouchableOpacity>)}
-            <TouchableOpacity style={styles.actionButton} onPress={() => { setSupplier(''); setShowSupplierPicker(false); supplierRef.current?.focus(); }}><Text style={styles.modalClose}>새 거래처 입력</Text></TouchableOpacity>
-          </View>}
+        {!saved && <View pointerEvents={locked ? 'none' : 'auto'} onTouchStart={() => { interacted.current = true; }}>
+          <View style={styles.chipRow}>{(['items', 'amounts'] as const).map(value =>
+            <TouchableOpacity key={value} accessibilityRole="radio" accessibilityState={{ checked: mode === value }}
+              style={[styles.chip, mode === value && styles.chipActive]} onPress={() => { interacted.current = true; setMode(value); setError(''); }}>
+              <Text style={[styles.chipText, mode === value && styles.chipTextActive]}>{value === 'items' ? '품목별' : '금액별'}</Text>
+            </TouchableOpacity>)}</View>
           <Text style={styles.label}>매입일</Text>
           <TouchableOpacity style={styles.dateInput} onPress={() => setShowDatePicker(p => !p)} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel={`매입일 ${formatDate(date)}, 변경`} accessibilityState={{ expanded: showDatePicker }}>
             <Text style={styles.dateText}>{formatDate(date)}</Text>
@@ -285,27 +278,43 @@ function NewPurchaseContent() {
               }}
             />
           )}
-
-
+          <Text style={styles.label}>거래처</Text>
+          <View style={styles.supplierRow}>
+            <TextInput ref={supplierRef} style={[styles.input, { flex: 1 }]} accessibilityLabel="거래처명" placeholder="거래처 이름 입력" value={supplier}
+              onChangeText={setSupplier} editable={!locked} />
+            <TouchableOpacity style={styles.supplierPickerBtn} accessibilityRole="button" accessibilityState={{ expanded: showSupplierPicker }}
+              onPress={() => setShowSupplierPicker(!showSupplierPicker)}><Text style={styles.modalClose}>거래처 목록</Text></TouchableOpacity>
+          </View>
+          {showSupplierPicker && <View>
+            {supplierLoading && <Text>거래처를 불러오고 있어요…</Text>}
+            {!supplierLoading && !supplierError && !knownSuppliers.length && <Text>등록된 거래처가 없어요.</Text>}
+            {supplierError && <TouchableOpacity onPress={() => setSupplierAttempt(n => n + 1)}><Text>목록 다시 불러오기</Text></TouchableOpacity>}
+            {knownSuppliers.filter(name => name.includes(supplier.trim())).map(name => <TouchableOpacity key={name} style={styles.actionButton}
+              onPress={() => { setSupplier(name); setShowSupplierPicker(false); }}><Text>{name}</Text></TouchableOpacity>)}
+            <TouchableOpacity style={styles.actionButton} onPress={() => { setSupplier(''); setShowSupplierPicker(false); supplierRef.current?.focus(); }}><Text style={styles.modalClose}>새 거래처 입력</Text></TouchableOpacity>
+          </View>}
           {!purchaseTypes.types.includes('수기') && purchaseTypes.types.length > 1 && <>
             <Text style={styles.label}>매입 유형</Text>
             <View style={styles.chipRow}>{purchaseTypes.types.map(name => <TouchableOpacity key={name} accessibilityRole="radio"
               accessibilityState={{ checked: name === type }} onPress={() => setChosenType(name)} style={[styles.chip, type === name && styles.chipActive]}>
               <Text style={[styles.chipText, type === name && styles.chipTextActive]}>{name}</Text></TouchableOpacity>)}</View>
           </>}
-          <Text style={styles.label}>카테고리</Text>
-          <View style={styles.chipRow}>{purchaseCategories.categories.map(name => <TouchableOpacity key={name} accessibilityRole="radio"
-            accessibilityState={{ checked: category === name }} onPress={() => setCategoryChoice(name)} style={[styles.chip, category === name && styles.chipActive]}>
-            <Text style={[styles.chipText, category === name && styles.chipTextActive]}>{name}</Text></TouchableOpacity>)}</View>
+          {canAttach && <EvidenceStagingPanel files={stagedEvidence} onChange={updateStagedEvidence} disabled={locked} onPickingChange={setPickingEvidence} />}
           {(purchaseCategories.error || purchaseTypes.error) && <TouchableOpacity onPress={() => { void purchaseCategories.refetch(); void purchaseTypes.refetch(); }}><Text>분류 다시 불러오기</Text></TouchableOpacity>}
+          {mode === 'amounts' ? <View>
+            <Text style={styles.label}>카테고리별 금액</Text>
+            {amountRows.map(row => <View key={row.category}><Text style={styles.label}>{row.category}</Text>
+              <TextInput style={styles.input} accessibilityLabel={row.category + ' 금액'} placeholder="0원" keyboardType="number-pad"
+                value={row.value} onChangeText={value => { setError(''); setAmounts(previous => ({ ...previous, [row.category]: value })); }} /></View>)}
+          </View> : <>
           <View style={styles.itemsHeader}><Text style={styles.label}>매입 품목</Text>
             <TouchableOpacity style={styles.actionButton} onPress={appendItem}><Text style={styles.modalClose}>품목 추가</Text></TouchableOpacity></View>
-          <PurchaseReceiptRows rows={rows} change={changeRow} inventory={inventory.data} complete={!inventory.loading && !inventory.hasMore && !inventory.error}
+          <PurchaseReceiptRows categories={purchaseCategories.categories} defaultCategory={category} rows={rows} change={changeRow} inventory={inventory.data} complete={!inventory.loading && !inventory.hasMore && !inventory.error}
             storeId={store?.id ?? ''} used={(id, rowId) => rows.some(row => row.id !== rowId && row.ingredient?.id === id)}
             focus={target => scrollRef.current?.getScrollResponder()?.scrollResponderScrollNativeHandleToKeyboard(target, 156, true)}
             create={(row, name) => { setLinkRow(row.id); setQuickName(name); }} />
           <PurchaseReceiptReview draft={receipt} disabled={locked} itemTotal={total} />
-          {canAttach && <EvidenceStagingPanel files={stagedEvidence} onChange={updateStagedEvidence} disabled={locked} onPickingChange={setPickingEvidence} />}
+          </>}
         </View>}
           {saved && !savedPurchaseId && canAttach && stagedEvidence.length > 0 &&
             <EvidenceStagingPanel files={stagedEvidence} onChange={updateStagedEvidence} disabled />}
@@ -317,12 +326,12 @@ function NewPurchaseContent() {
 
       </ScrollView>
       {!!error && <Text accessibilityRole="alert" style={styles.fieldError}>{error}</Text>}
-      {started && <View style={styles.bottomBar}>
+      <View style={styles.bottomBar}>
         <View><Text style={styles.bottomTotalLabel}>합계</Text><Text style={styles.bottomTotalValue}>{total.toLocaleString()}원</Text></View>
         <TouchableOpacity accessibilityRole="button" accessibilityLabel={saved ? '매입 내역으로' : '매입 저장'} disabled={locked || pickingEvidence || receipt.busy}
           style={styles.bottomSubmit} onPress={saved ? leaveSaved : handleSubmit}>
           <Text style={styles.bottomSubmitText}>{saved ? '매입 내역으로' : submitting ? '저장 중…' : writeState === 'rejected' ? '다시 등록' : '매입 저장'}</Text></TouchableOpacity>
-      </View>}
+      </View>
     </KeyboardAvoidingView>
     <SheetModal visible={!!linkRow} onRequestClose={() => { if (!quickAdding) setLinkRow(null); }}>
       <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>

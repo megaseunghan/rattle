@@ -1,7 +1,7 @@
 import { readAllRows } from './readAllRows';
 import { supabase } from '../supabase';
-import { ProfitLoss, PurchaseCategory, PurchaseItem, Employee, Payroll } from '../../types';
-import { getPurchasesByMonth, getPurchaseItemsForPurchases } from './purchases';
+import { ProfitLoss, PurchaseCategory, Employee, Payroll } from '../../types';
+import { getPurchasesByMonth } from './purchases';
 import { getExpensesByMonth, getEffectiveFixedExpenses } from './expenses';
 import { getStoreWageHistory } from './wageHistory';
 import { probationFactor } from './payroll';
@@ -101,25 +101,11 @@ export async function getProfitLossByMonth(
     return s + (card + cash > 0 ? card + cash : Number(r.total_amount ?? 0));
   }, 0) + manualSalesTotals.total;
 
-  // 2. 매입 (카테고리별) — 품목 있는 매입은 품목별 category로, 금액만 매입은 purchases.category로 집계
-  const purchaseItems = await getPurchaseItemsForPurchases(purchases.map(p => p.id));
-  const itemsByPurchase = new Map<string, PurchaseItem[]>();
-  for (const it of purchaseItems) {
-    const list = itemsByPurchase.get(it.purchase_id) ?? [];
-    list.push(it);
-    itemsByPurchase.set(it.purchase_id, list);
-  }
-
   const purchaseByCategory: Partial<Record<PurchaseCategory, number>> = {};
-  for (const p of purchases) {
-    const items = itemsByPurchase.get(p.id) ?? [];
-    if (items.length > 0) {
-      for (const it of items) {
-        const cat = it.category ?? '기타';
-        purchaseByCategory[cat] = (purchaseByCategory[cat] ?? 0) + it.subtotal;
-      }
-    } else {
-      purchaseByCategory[p.category] = (purchaseByCategory[p.category] ?? 0) + p.amount;
+  for (const purchase of purchases) {
+    const amounts = purchase.category_amounts ?? { [purchase.category]: purchase.amount };
+    for (const [category, amount] of Object.entries(amounts)) {
+      purchaseByCategory[category] = (purchaseByCategory[category] ?? 0) + amount;
     }
   }
   const purchaseCost = purchases.reduce((s, p) => s + p.amount, 0);
