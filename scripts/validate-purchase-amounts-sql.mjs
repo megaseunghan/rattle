@@ -14,6 +14,7 @@ export async function validatePurchaseAmounts({ db, as, reserve, id, admin, memb
     CREATE TABLE toss_orders(store_id uuid,status text,order_at timestamptz,card_amount numeric,cash_amount numeric,total_amount numeric);
     CREATE TABLE manual_sales(store_id uuid,date date,card_amount numeric,cash_amount numeric);
     ALTER TABLE purchases ENABLE ROW LEVEL SECURITY;
+    CREATE POLICY qa_purchase_delete ON purchases FOR DELETE USING (is_store_member(store_id) AND can_read_store_financials(store_id));
     CREATE POLICY qa_purchase_scope ON purchases FOR SELECT USING (is_store_member(store_id) AND supplier IS DISTINCT FROM 'QA-RLS-hidden');`);
   await db.exec(await migration('20261118141000_home_daily_sources.sql'));
   const mapping = await migration('20260914_unify_bipum_category.sql');
@@ -23,6 +24,9 @@ export async function validatePurchaseAmounts({ db, as, reserve, id, admin, memb
     visibility.indexOf('CREATE OR REPLACE FUNCTION public.can_read_other_attendance')));
   const taxonomy = await migration('20261023120000_read_models_and_integrity.sql');
   await db.exec(taxonomy.slice(0, taxonomy.indexOf('CREATE OR REPLACE FUNCTION public.change_purchase_type')) + 'COMMIT;');
+  const integrity = await migration('20261020_01_access_and_purchase_integrity.sql');
+  await db.exec(integrity.slice(integrity.indexOf('CREATE OR REPLACE FUNCTION public.validate_purchase_item_store'),
+    integrity.indexOf('CREATE OR REPLACE FUNCTION public.create_purchase_with_items')));
   const type = await migration('20261019_purchase_types.sql');
   await db.exec(type.slice(type.indexOf('CREATE FUNCTION public.validate_purchase_type()'), type.lastIndexOf('COMMIT;')));
   await db.query("UPDATE stores SET purchase_categories=ARRAY['다른매장전용','소모품'] WHERE id=$1", [otherStore]);
@@ -109,7 +113,7 @@ export async function validatePurchaseAmounts({ db, as, reserve, id, admin, memb
   const balances = () => db.query('SELECT current_stock,last_price FROM ingredients WHERE id=$1',[id(910)]).then(r=>r.rows[0]);
   const afterItems = await balances();
   assert.equal(afterItems.current_stock,'20');
-  const amountId = (await entry('amounts',splitAmounts)).rows[0].id;
+  const amountId = (await entry('amounts',[...splitAmounts].reverse())).rows[0].id;
   const breakdown = pid => db.query('SELECT amount,category_amounts(p) AS cats FROM purchases p WHERE id=$1',[pid]).then(r=>r.rows[0]);
   assert.deepEqual(await breakdown(itemId), {amount:'10728',cats:{'별도':10027,'소모품':701}});
   assert.deepEqual(await breakdown(amountId), {amount:'20499',cats:{'주류':20200,'소모품':299}});
@@ -117,6 +121,8 @@ export async function validatePurchaseAmounts({ db, as, reserve, id, admin, memb
   assert.equal((await db.query("SELECT unit FROM purchase_items WHERE purchase_id=$1 AND ingredient_id IS NOT NULL",[itemId])).rows[0].unit,'kg');
   assert.deepEqual(await balances(),afterItems);
   assert.equal((await reserve(id(1021),{p_purchase_id:amountId})).purchase_id,amountId);
+  const headerCategory = pid => db.query('SELECT category FROM purchases WHERE id=$1',[pid]).then(r=>r.rows[0].category);
+  assert.equal(await headerCategory(amountId),'주류');
   const filtered = await db.query(`SELECT sum((category_amounts(p)->>'소모품')::numeric) AS cost,sum(p.amount) AS total
     FROM purchases p WHERE p.store_id=$1 AND p.supplier='QA-분류' AND p.date BETWEEN '2026-11-01' AND '2026-11-30'`,[store]);
   assert.deepEqual(filtered.rows[0],{cost:'1000',total:'31227'});
@@ -153,12 +159,60 @@ export async function validatePurchaseAmounts({ db, as, reserve, id, admin, memb
   await as(admin);
   const change = (oldName,newName,action) => db.query("SELECT change_store_taxonomy($1,'purchase',$2,$3,$4)",[store,oldName,newName,action]);
   await change(null,'기타','add');
-  const renamed = (await entry('amounts',[{category:'주류',amount:40},{category:'기타',amount:60}])).rows[0].id;
+  const renamed = (await entry('amounts',[{category:'주류',amount:40},{category:'기타',amount:60},{category:'별도',amount:90}])).rows[0].id;
+  assert.equal(await headerCategory(renamed),'별도');
   await change('주류','음료','rename');
-  assert.deepEqual((await breakdown(renamed)).cats,{'음료':40,'기타':60});
+  assert.deepEqual((await breakdown(renamed)).cats,{'음료':40,'기타':60,'별도':90});
   await change('음료',null,'remove');
   await change(null,'음료','add');
-  assert.deepEqual((await breakdown(renamed)).cats,{'기타':100});
+  assert.deepEqual((await breakdown(renamed)).cats,{'기타':100,'별도':90});
+  assert.equal(await headerCategory(renamed),'기타');
+  const itemKey = (await db.query('SELECT id FROM purchase_items WHERE purchase_id=$1 AND ingredient_id=$2',[itemId,id(910)])).rows[0].id;
+  const editItem = (key,qty,amount) => db.query('SELECT update_purchase_item_amount($1,$2,$3)',[key,qty,amount]);
+  const remove = pid => db.query('SELECT delete_purchase_entry($1) AS removed',[pid]).then(r=>r.rows[0].removed);
+  const currentItem = () => db.query('SELECT quantity,unit_price,subtotal FROM purchase_items WHERE id=$1',[itemKey]).then(r=>r.rows[0]);
+
+  // 10,000원/3개 → 2개: 구앱의 JS 숫자로 돌아온 단가도 수량 수정으로 인식한다.
+  await db.query('SELECT update_purchase_item($1,2,$2)',[itemKey,10000/3]);
+  assert.deepEqual(await breakdown(itemId),{amount:'10728',cats:{'별도':10027,'소모품':701}});
+  assert.equal(Number((await currentItem()).unit_price),5000);
+  assert.equal((await balances()).current_stock,'19');
+  await assert.rejects(db.query('SELECT update_purchase_item($1,2,4999)',[itemKey]),/PURCHASE_EDIT_AMOUNT_REQUIRED/);
+  await editItem(itemKey,2,null);
+  assert.equal((await currentItem()).subtotal,'10000');
+  assert.equal((await balances()).current_stock,'19');
+  await assert.rejects(editItem(itemKey,2,10.5),/PURCHASE_INVALID_AMOUNT/);
+  await editItem(itemKey,2,1);
+  assert.deepEqual(await breakdown(itemId),{amount:'729',cats:{'별도':28,'소모품':701}});
+  assert.equal(await headerCategory(itemId),'소모품');
+  assert.equal(Number((await currentItem()).unit_price),0.5);
+  assert.equal((await balances()).current_stock,'19');
+
+  // 증빙이 남으면 부모와 입고량이 모두 유지된다.
+  await assert.rejects(remove(purchaseId),/foreign key constraint/);
+  assert.equal((await balances()).current_stock,'19');
+  await as(outsider);
+  await assert.rejects(editItem(itemKey,3,4),/FINANCIAL_SHARING_DENIED/);
+  assert.equal(await remove(itemId),false);
+  await as(admin);
+  assert.equal(await remove(itemId),true);
+  assert.equal(await remove(itemId),false);
+  assert.equal((await balances()).current_stock,'17');
+
+  const rawDeleteId = (await entry('items',[{...splitItems[0],quantity:1},{...splitItems[0],quantity:2}])).rows[0].id;
+  assert.equal((await balances()).current_stock,'20');
+  await db.query('DELETE FROM purchases WHERE id=$1',[rawDeleteId]);
+  assert.equal((await balances()).current_stock,'17');
+  const oldKey = (await db.query('SELECT id FROM purchase_items WHERE purchase_id=$1',[legacy.rows[0].id])).rows[0].id;
+  await editItem(oldKey,4,null);
+  assert.deepEqual(await breakdown(legacy.rows[0].id),{amount:'6',cats:{'소모품':6}});
+  // 과거 0.49원 두 줄(헤더 1원)은 수량을 수정해도 합계가 0원으로 줄지 않는다.
+  const fractional = (await db.query("SELECT create_purchase_with_evidence($1,current_date,'QA-legacy','수기',$2) AS id",
+    [store,JSON.stringify(['A','B'].map(name=>({name,quantity:1,unit_price:0.49,category:'소모품'})))])).rows[0].id;
+  const fractionalLine = (await db.query("SELECT id FROM purchase_items WHERE purchase_id=$1 AND name='A'",[fractional])).rows[0].id;
+  await editItem(fractionalLine,2,null);
+  assert.deepEqual(await breakdown(fractional),{amount:'1',cats:{'소모품':1}});
+  assert.equal((await db.query('SELECT bool_and(subtotal=round(subtotal)) AS exact FROM purchase_items WHERE purchase_id=$1',[fractional])).rows[0].exact,true);
   await as(outsider);
   await assert.rejects(entry('items',splitItems),/FINANCIAL_SHARING_DENIED/);
   assert.equal((await db.query('SELECT * FROM purchase_amount_lines WHERE purchase_id=$1',[amountId])).rows.length,0);

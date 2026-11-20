@@ -27,12 +27,24 @@ export async function getPurchaseSuppliers(storeId: string, signal: AbortSignal)
   return rows.map(row => row.supplier);
 }
 
-export async function createPurchaseWithItems(input: PurchaseFormInput & { store_id: string }): Promise<{ refreshFailed: boolean; purchaseId?: string }> {
+export function createPurchaseWithItems(input: PurchaseFormInput & { store_id: string }) {
+  return writePurchase(input);
+}
+
+export async function updatePurchaseAmounts(
+  purchase: Pick<Purchase, 'id' | 'store_id' | 'date' | 'supplier' | 'type'>,
+  rows: { category: string; amount: number }[],
+) {
+  if (!purchase.id?.trim()) throw new UserFacingError('수정할 매입을 다시 선택해주세요.');
+  return writePurchase({ ...purchase, mode: 'amounts', rows, returnId: true }, purchase.id);
+}
+
+async function writePurchase(input: PurchaseFormInput & { store_id: string }, purchaseId?: string): Promise<{ refreshFailed: boolean; purchaseId?: string }> {
   let result;
   try {
     const common = { p_store_id: input.store_id, p_date: input.date, p_supplier: input.supplier, p_type: input.type };
     if ('mode' in input) {
-      result = await supabase.rpc('create_purchase_entry', { ...common, p_mode: input.mode, p_rows: input.rows });
+      result = await supabase.rpc('create_purchase_entry', { ...common, p_mode: input.mode, p_rows: input.rows, ...(purchaseId && { p_purchase_id: purchaseId }) });
     } else {
       const rpc = input.category !== undefined ? 'create_purchase_with_amounts'
         : input.returnId ? 'create_purchase_with_evidence' : 'create_purchase_with_items';
@@ -58,14 +70,15 @@ export async function createPurchaseWithItems(input: PurchaseFormInput & { store
   }
 }
 
-export async function getPurchaseById(id: string): Promise<Purchase> {
+export async function getPurchaseById(id: string): Promise<Purchase & { hasAmountLines: boolean }> {
   const { data, error } = await supabase
     .from('purchases')
-    .select('*,category_amounts')
+    .select('*,category_amounts,purchase_amount_lines(count)')
     .eq('id', id)
     .single();
   if (error) throw new Error(error.message);
-  return data as Purchase;
+  const { purchase_amount_lines, ...purchase } = data;
+  return { ...purchase, hasAmountLines: Number(purchase_amount_lines?.[0]?.count) > 0 } as Purchase & { hasAmountLines: boolean };
 }
 
 export async function getPurchaseItems(purchaseId: string): Promise<PurchaseItem[]> {
@@ -88,17 +101,16 @@ export async function getPurchaseItemsForPurchases(purchaseIds: string[]): Promi
   return rows;
 }
 
-/** 매입 건별 품목 수 (목록에서 "N개 품목" 표시용) */
-/** 매입 품목 수량/단가 수정 — 재고 델타 반영 + last_price 갱신 + 매입 합계 재계산 (원자적, RPC) */
+/** 금액을 그대로 둔 수량 수정은 서버가 잠근 품목의 현재 소계를 사용한다. */
 export async function updatePurchaseItem(
   itemId: string,
   quantity: number,
-  unitPrice: number,
+  amount: number | null,
 ): Promise<{ refreshFailed: boolean }> {
-  const { error } = await supabase.rpc('update_purchase_item', {
+  const { error } = await supabase.rpc('update_purchase_item_amount', {
     p_item_id: itemId,
     p_quantity: quantity,
-    p_unit_price: unitPrice,
+    p_amount: amount,
   });
   if (error) throw new Error(error.message);
   try { await invalidateCachedStore(); return { refreshFailed: false }; }
@@ -157,9 +169,9 @@ export async function createPurchase(data: {
 
 export async function deletePurchase(id: string): Promise<void> {
   await discardParentEvidence('purchase', id);
-  const { count, error } = await supabase.from('purchases').delete({ count: 'exact' }).eq('id', id);
+  const { data, error } = await supabase.rpc('delete_purchase_entry', { p_purchase_id: id });
   if (error) throw new Error(error.message);
-  if (count !== 1) throw new UserFacingError('삭제를 확인하지 못했어요. 목록을 새로고침해주세요.');
+  if (data !== true) throw new UserFacingError('삭제를 확인하지 못했어요. 목록을 새로고침해주세요.');
   await invalidateCachedStore();
 }
 

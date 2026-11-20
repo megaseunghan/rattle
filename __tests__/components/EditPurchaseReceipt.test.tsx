@@ -48,13 +48,13 @@ test('editing applies only a chosen item, uploads after save and keeps manual co
   const view = render(<PurchaseDetailScreen />);
   fireEvent.press(await view.findByLabelText(/가상 사과.*수정/));
   await act(async () => fireEvent.press(view.getByText('파일 선택')));
-  expect(view.getByLabelText('매입 품목 단가').props.value).toBe('4000');
+  expect(view.getByLabelText('매입 품목 금액').props.value).toBe('4000');
   fireEvent.press(view.getByText('가상 사과에 적용 (망)'));
-  expect(view.getByLabelText('매입 품목 단가').props.value).toBe('3000');
+  expect(view.getByLabelText('매입 품목 금액').props.value).toBe('6000');
   fireEvent.changeText(view.getByLabelText('매입 품목 수량'), '3');
   expect(mockUpload).not.toHaveBeenCalled();
   fireEvent.press(view.getByLabelText('품목 수정 저장'));
-  await waitFor(() => expect(mockSave).toHaveBeenCalledWith('row', 3, 3000));
+  await waitFor(() => expect(mockSave).toHaveBeenCalledWith('row', 3, 6000));
   await waitFor(() => expect(mockUpload).toHaveBeenCalledTimes(1));
 });
 
