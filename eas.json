@@ -32,6 +32,11 @@
       "environment": "production",
       "env": {
         "EXPO_PUBLIC_QA_LOGIN": "0"
+      },
+      "android": {
+        "buildType": "app-bundle",
+        "autoIncrement": "versionCode",
+        "credentialsSource": "local"
       }
     }
   },
@@ -44,6 +49,10 @@
     "production": {
       "ios": {
         "ascAppId": "6825832614"
+      },
+      "android": {
+        "track": "internal",
+        "serviceAccountKeyPath": "./.local-signing/google-play-service-account.json"
       }
     }
   }
