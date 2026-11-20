@@ -27,3 +27,13 @@ it('네트워크 예외는 자동 재시도하지 않고 결과 미확인으로 
   await expect(createPurchaseWithItems(input)).rejects.toBeInstanceOf(PurchaseWriteError);
   expect(mockRpc).toHaveBeenCalledTimes(1);
 });
+
+it('건 카테고리와 정수 원 금액을 새 RPC에 보내고 매입 UUID를 반환한다', async () => {
+  mockRpc.mockResolvedValue({ data: 'purchase-id', error: null });
+  const items = [{ ingredient_id: null, name: '가상 장갑', quantity: 3, unit: '개', amount: 1000 }];
+  const result = await createPurchaseWithItems({ ...input, items, category: '소모품', returnId: true });
+  expect(mockRpc).toHaveBeenCalledWith('create_purchase_with_amounts', {
+    p_store_id: 'store', p_supplier: '거래처', p_date: input.date, p_type: '수기', p_category: '소모품', p_items: items,
+  });
+  expect(result).toEqual({ purchaseId: 'purchase-id', refreshFailed: false });
+});

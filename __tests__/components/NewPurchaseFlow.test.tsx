@@ -1,6 +1,5 @@
 import type { ReactNode } from 'react';
-import { FlatList } from 'react-native';
-import { act, fireEvent, render, waitFor, within } from '@testing-library/react-native';
+import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import NewPurchaseScreen from '../../app/purchases/new';
 import { PurchaseWriteError } from '../../lib/services/purchases';
 const mockQuickCreate = jest.fn();
@@ -10,6 +9,8 @@ let mockMode='self';
 const mockWrite = jest.fn(), mockPick = jest.fn(), mockReserveEvidence = jest.fn(), mockUploadEvidence = jest.fn(), mockCacheDelete = jest.fn();
 let mockStoreId = 'store';
 jest.mock('expo-image-picker', () => ({
+  requestCameraPermissionsAsync: async () => ({ granted: true }),
+  launchCameraAsync: async () => ({ canceled: true, assets: [] }),
   UIImagePickerPreferredAssetRepresentationMode: { Current: 'current' },
   launchImageLibraryAsync: async () => ({ canceled: false, assets: [{ uri:'file:///cache/original.heic', fileName:null, fileSize:100, mimeType:'image/heic' }] }),
 }));
@@ -27,6 +28,7 @@ jest.mock('@react-native-community/datetimepicker', () => 'DateTimePicker');
 jest.mock('../../lib/contexts/AuthContext', () => ({ useAuth: () => ({ user: { id: 'user' }, store: { id: mockStoreId, name: '검증 매장' }, currentRole: 'admin', canReadFinancials: true, canManageStore: true, storeRole: 'owner', devPreviewMode: mockMode }) }));
 jest.mock('../../lib/hooks/usePurchases', () => ({ usePurchases: () => ({ purchases: [], addWithItems: mockWrite, refetch: jest.fn() }) }));
 jest.mock('../../lib/hooks/useIngredients', () => ({ useIngredients: () => ({ data: mockIngredients, create: jest.fn(), refetch: jest.fn(), loading: false }) }));
+jest.mock('../../lib/hooks/usePurchaseCategories', () => ({ usePurchaseCategories: () => ({ categories: ['식자재','비품','소모품'], loading: false }) }));
 jest.mock('../../lib/hooks/usePurchaseTypes', () => ({ usePurchaseTypes: () => ({ types: ['수기'], loading: false }) }));
 jest.mock('../../lib/hooks/useCategories', () => ({ useCategories: () => ({ categories: ['식자재'] }) }));
 jest.mock('../../lib/services/ingredients',()=>({createIngredient:(...a:unknown[])=>mockQuickCreate(...a)}));
@@ -37,7 +39,7 @@ jest.mock('../../lib/components/ui/SheetModal', () => ({
 }));
 jest.mock('../../lib/icons/AppIcon', () => ({ AppIcon: () => null }));
 jest.mock('../../lib/components/CategoryManageModal', () => ({ CategoryManageModal: () => null }));
-jest.mock('../../lib/services/purchases', () => ({ PurchaseWriteError: class extends Error {
+jest.mock('../../lib/services/purchases', () => ({ getPurchaseSuppliers: jest.fn().mockResolvedValue(['지난달 거래처']), PurchaseWriteError: class extends Error {
   outcome: 'rejected' | 'unknown';
   constructor(outcome: 'rejected' | 'unknown', original: unknown) { super(String(original)); this.outcome = outcome; }
 } }));
@@ -48,129 +50,99 @@ beforeEach(() => {
  mockReserveEvidence.mockResolvedValue({id:'draft-id',status:'pending',mime_type:'image/jpeg'});
  mockUploadEvidence.mockResolvedValue(undefined);
 });
-it('기본정보·품목·검토를 나누고 단계 뒤로가도 값을 보존하며 최종 확인에서만 저장한다', async () => {
-  mockWrite.mockResolvedValue({ refreshFailed: false });
-  const screen = render(<NewPurchaseScreen />);
-  fireEvent.press(screen.getByText('품목 입력으로'));
-  expect(screen.getByText('거래처명을 입력해주세요.')).toBeTruthy();
-  fireEvent.changeText(screen.getByLabelText('거래처명'), '검증 거래처');
-  fireEvent.press(screen.getByText('품목 입력으로'));
-  fireEvent.press(screen.getByText('+ 추가'));
-  fireEvent.press(screen.getByText('쌀'));
-  fireEvent.press(screen.getByText('1개 추가'));
-  fireEvent.changeText(screen.getByLabelText('쌀 수량'), '2');
-  fireEvent.press(screen.getByText('입력 내용 검토'));
-  expect(screen.getByText('단가를 입력해주세요. 무상이면 0원을 입력해주세요.')).toBeTruthy();
-  fireEvent.changeText(screen.getByLabelText('쌀 단가'), '10000');
-  fireEvent.press(screen.getByText('입력 내용 검토'));
+function manualForm() {
+  const view = render(<NewPurchaseScreen />);
+  fireEvent.press(view.getByText('수기 입력'));
+  return view;
+}
+async function filledPurchase() {
+  const view = manualForm();
+  fireEvent.changeText(view.getByLabelText('거래처명'), '가상 거래처');
+  fireEvent.changeText(view.getByLabelText('1번째 항목명'), '쌀');
+  fireEvent.press(await view.findByText('쌀 · kg'));
+  fireEvent.changeText(view.getByLabelText('1번째 수량'), '2');
+  fireEvent.changeText(view.getByLabelText('1번째 금액'), '20000');
+  return view;
+}
+it('시작 방법을 고르고 한 화면에서 거래처·분류·품목을 저장한다', async () => {
+  const view = render(<NewPurchaseScreen />);
+  expect(view.getByText('앨범')).toBeTruthy();
+  expect(view.getByText('사진 촬영')).toBeTruthy();
+  fireEvent.press(view.getByText('수기 입력'));
+  fireEvent.press(view.getByText('거래처 목록'));
+  fireEvent.press(await view.findByText('지난달 거래처'));
+  fireEvent.press(view.getByText('소모품'));
+  fireEvent.changeText(view.getByLabelText('1번째 금액'), '1000');
+  fireEvent.press(view.getByText('매입 저장'));
   expect(mockWrite).not.toHaveBeenCalled();
-  fireEvent.press(screen.getByText('기본 정보 수정'));
-  expect(screen.getByLabelText('거래처명').props.value).toBe('검증 거래처');
-  fireEvent.press(screen.getByText('검토로 돌아가기'));
-  expect(screen.getByText('등록할 내용을 확인해주세요')).toBeTruthy();
-  fireEvent.press(screen.getByText('품목 수정'));
-  expect(screen.getByLabelText('쌀 수량').props.value).toBe('2');
-  fireEvent.press(screen.getByText('검토로 돌아가기'));
-  await act(async () => { fireEvent.press(screen.getByLabelText('매입 최종 등록')); });
-  expect(screen.getByText('매입이 등록됐어요')).toBeTruthy();
-  expect(mockWrite).toHaveBeenCalledTimes(1);
-  expect(mockWrite).toHaveBeenCalledWith(expect.objectContaining({ supplier: '검증 거래처', items: [expect.objectContaining({ quantity: 2, unit_price: 10000 })] }));
+  fireEvent.changeText(view.getByLabelText('1번째 항목명'), '가상 장갑');
+  fireEvent.changeText(view.getByLabelText('1번째 수량'), '3');
+  expect(view.getByText('단가 333원')).toBeTruthy();
+  fireEvent.press(view.getByText('품목 추가'));
+  fireEvent.changeText(view.getByLabelText('2번째 항목명'), '가상 봉투');
+  fireEvent.changeText(view.getByLabelText('2번째 금액'), '250');
+  expect(view.getByText('1,250원')).toBeTruthy();
+  mockWrite.mockResolvedValue({ purchaseId: 'saved' });
+  await act(async () => fireEvent.press(view.getByText('매입 저장')));
+  expect(mockWrite).toHaveBeenCalledWith(expect.objectContaining({ supplier: '지난달 거래처', category: '소모품', items: [
+    expect.objectContaining({ quantity: 3, amount: 1000 }), expect.objectContaining({ quantity: 1, amount: 250 })] }));
 });
 
-async function reviewFilledPurchase() {
-  const screen = render(<NewPurchaseScreen />);
-  fireEvent.changeText(screen.getByLabelText('거래처명'), '검증 거래처');
-  fireEvent.press(screen.getByText('품목 입력으로'));
-  fireEvent.press(screen.getByText('+ 추가'));
-  fireEvent.press(screen.getByText('쌀'));
-  fireEvent.press(screen.getByText('1개 추가'));
-  fireEvent.changeText(screen.getByLabelText('쌀 수량'), '2');
-  fireEvent.changeText(screen.getByLabelText('쌀 단가'), '10000');
-  fireEvent.press(screen.getByText('입력 내용 검토'));
-  return screen;
-}
-
-it('등록 거절 후 입력을 보존하고 최종 검토에서 다시 등록한다', async () => {
+it('등록 거절 후 같은 폼에서 입력을 보존하고 다시 저장한다', async () => {
   mockWrite.mockRejectedValueOnce(new PurchaseWriteError('rejected', 'validation')).mockResolvedValueOnce({ refreshFailed: false });
-  const screen = await reviewFilledPurchase();
-  fireEvent.press(screen.getByLabelText('매입 최종 등록'));
+  const screen = await filledPurchase();
+  fireEvent.press(screen.getByLabelText('매입 저장'));
   await waitFor(() => expect(screen.getByText('다시 등록')).toBeTruthy());
-  expect(screen.getByText('쌀 · 2kg × 10,000원 = 20,000원')).toBeTruthy();
-  fireEvent.press(screen.getByLabelText('매입 최종 등록'));
+  expect(screen.getByLabelText('1번째 금액').props.value).toBe('20000');
+  fireEvent.press(screen.getByLabelText('매입 저장'));
   await waitFor(() => expect(screen.getByText('매입이 등록됐어요')).toBeTruthy());
   expect(mockWrite).toHaveBeenCalledTimes(2);
 });
 
 it('응답 유실 뒤에는 재등록을 차단하고 등록 내역 확인으로 안내한다', async () => {
   mockWrite.mockRejectedValueOnce(new PurchaseWriteError('unknown', 'response lost'));
-  const screen = await reviewFilledPurchase();
-  fireEvent.press(screen.getByLabelText('매입 최종 등록'));
+  const screen = await filledPurchase();
+  fireEvent.press(screen.getByLabelText('매입 저장'));
   await waitFor(() => expect(screen.getByText('등록 결과를 확인해주세요')).toBeTruthy());
-  fireEvent.press(screen.getByLabelText('매입 최종 등록'));
+  fireEvent.press(screen.getByLabelText('매입 저장'));
   expect(mockWrite).toHaveBeenCalledTimes(1);
   expect(screen.getByText('등록 내역 확인')).toBeTruthy();
 });
 
 it('저장 후 재조회 실패는 등록 완료로 구분해 중복 등록하지 않는다', async () => {
   mockWrite.mockResolvedValue({ refreshFailed: true });
-  const screen = await reviewFilledPurchase();
-  fireEvent.press(screen.getByLabelText('매입 최종 등록'));
+  const screen = await filledPurchase();
+  fireEvent.press(screen.getByLabelText('매입 저장'));
   await waitFor(() => expect(screen.getByText('등록은 완료됐어요. 목록에서 합계를 다시 불러와 주세요.')).toBeTruthy());
-  expect(screen.queryByLabelText('매입 최종 등록')).toBeNull();
+  expect(screen.queryByLabelText('매입 저장')).toBeNull();
   expect(mockWrite).toHaveBeenCalledTimes(1);
 });
 
-it('같은 품목 data에서 선택·선택 취소와 추가 후 비활성을 반영한다', () => {
-  const screen = render(<NewPurchaseScreen />);
-  fireEvent.changeText(screen.getByLabelText('거래처명'), '검증 거래처');
-  fireEvent.press(screen.getByText('품목 입력으로'));
-  fireEvent.press(screen.getByText('+ 추가'));
-  fireEvent.press(screen.getByText('쌀'));
-  expect(screen.getByText('1개 추가')).toBeTruthy();
-  fireEvent.press(screen.getByText('쌀'));
-  expect(screen.queryByText('1개 추가')).toBeNull();
-  fireEvent.press(screen.getByText('쌀'));
-  fireEvent.press(screen.getByText('1개 추가'));
-  fireEvent.press(screen.getByText('+ 추가'));
-  fireEvent.press(within(screen.UNSAFE_getByType(FlatList)).getByText('쌀'));
-  expect(screen.queryByText('1개 추가')).toBeNull();
-});
-
-it('미리보기에서 재고에 없는 품목을 빠르게 등록해도 실제 식자재를 만들지 않는다', async () => {
- mockMode='regular';const view=render(<NewPurchaseScreen/>);
- fireEvent.changeText(view.getByLabelText('거래처명'),'가상 거래처');fireEvent.press(view.getByText('품목 입력으로'));
- fireEvent.press(view.getByText('+ 추가'));fireEvent.press(view.getByText('+ 재고에 없는 품목 바로 추가'));
- fireEvent.changeText(view.getByPlaceholderText('예: 삼겹살'),'가상 품목');fireEvent.press(view.getByText('추가'));
- await waitFor(()=>expect(mockQuickCreate).not.toHaveBeenCalled());
-});
-
 async function stageReceipt(screen: ReturnType<typeof render>) {
+ if (screen.queryByText('수기 입력')) fireEvent.press(screen.getByText('수기 입력'));
  await act(async()=>{fireEvent.press(screen.getByText('파일 선택'));});
  expect(screen.getByLabelText('영수증.jpg 미리보기')).toBeTruthy();
 }
 it('registration drafts stay local then automatically upload exactly once for saved purchase ID', async()=>{
  mockWrite.mockResolvedValue({purchaseId:'saved-purchase',refreshFailed:false});
- const screen=await reviewFilledPurchase();await stageReceipt(screen);
- fireEvent.press(screen.getByText('입력 내용 검토'));
+ const screen=await filledPurchase();await stageReceipt(screen);
  expect(mockReserveEvidence).not.toHaveBeenCalled();expect(mockUploadEvidence).not.toHaveBeenCalled();
- fireEvent.press(screen.getByLabelText('매입 최종 등록'));
+ fireEvent.press(screen.getByLabelText('매입 저장'));
  await waitFor(()=>expect(mockUploadEvidence).toHaveBeenCalledTimes(1));
  expect(mockReserveEvidence).toHaveBeenCalledWith({kind:'purchase',id:'saved-purchase',storeId:'store'},expect.objectContaining({id:'draft-id'}));
  expect(mockWrite).toHaveBeenCalledTimes(1);
 });
 it('save rejection preserves staged previews and only retries the business write explicitly',async()=>{
  mockWrite.mockRejectedValueOnce(new PurchaseWriteError('rejected','bad input'));
- const screen=await reviewFilledPurchase();await stageReceipt(screen);
- fireEvent.press(screen.getByText('입력 내용 검토'));
- fireEvent.press(screen.getByLabelText('매입 최종 등록'));
+ const screen=await filledPurchase();await stageReceipt(screen);
+ fireEvent.press(screen.getByLabelText('매입 저장'));
  await waitFor(()=>expect(screen.getByText('다시 등록')).toBeTruthy());
  expect(screen.getByLabelText('영수증.jpg 미리보기')).toBeTruthy();expect(mockReserveEvidence).not.toHaveBeenCalled();
 });
 it('unknown save result keeps drafts without reservation or automatic retry',async()=>{
  mockWrite.mockRejectedValueOnce(new PurchaseWriteError('unknown','response lost'));
- const screen=await reviewFilledPurchase();await stageReceipt(screen);
- fireEvent.press(screen.getByText('입력 내용 검토'));
- fireEvent.press(screen.getByLabelText('매입 최종 등록'));
+ const screen=await filledPurchase();await stageReceipt(screen);
+ fireEvent.press(screen.getByLabelText('매입 저장'));
  await waitFor(()=>expect(screen.getByText('등록 결과를 확인해주세요')).toBeTruthy());
  expect(screen.getByLabelText('영수증.jpg 미리보기')).toBeTruthy();expect(mockUploadEvidence).not.toHaveBeenCalled();
  expect(mockReserveEvidence).not.toHaveBeenCalled();expect(mockWrite).toHaveBeenCalledTimes(1);
@@ -178,50 +150,26 @@ it('unknown save result keeps drafts without reservation or automatic retry',asy
 it('failed evidence retry never repeats purchase registration',async()=>{
  mockWrite.mockResolvedValue({purchaseId:'saved-purchase',refreshFailed:false});
  mockUploadEvidence.mockRejectedValueOnce(Error('offline')).mockResolvedValue(undefined);
- const screen=await reviewFilledPurchase();await stageReceipt(screen);
- fireEvent.press(screen.getByText('입력 내용 검토'));
- fireEvent.press(screen.getByLabelText('매입 최종 등록'));
+ const screen=await filledPurchase();await stageReceipt(screen);
+ fireEvent.press(screen.getByLabelText('매입 저장'));
  await waitFor(()=>expect(screen.getByText('이 파일 다시 업로드')).toBeTruthy());
  await act(async()=>{fireEvent.press(screen.getByText('이 파일 다시 업로드'));});
  await waitFor(()=>expect(mockUploadEvidence).toHaveBeenCalledTimes(2));expect(mockWrite).toHaveBeenCalledTimes(1);
 });
 it('store change immediately drops draft and ignores an old in-flight save result',async()=>{
  let resolve!: (value: unknown)=>void;mockWrite.mockImplementation(()=>new Promise(r=>{resolve=r;}));
- const screen=await reviewFilledPurchase();await stageReceipt(screen);
- fireEvent.press(screen.getByText('입력 내용 검토'));
- fireEvent.press(screen.getByLabelText('매입 최종 등록'));
+ const screen=await filledPurchase();await stageReceipt(screen);
+ fireEvent.press(screen.getByLabelText('매입 저장'));
  await act(async()=>{mockStoreId='other';screen.rerender(<NewPurchaseScreen />);});
  expect(screen.queryByLabelText('영수증.jpg 미리보기')).toBeNull();expect(mockCacheDelete).toHaveBeenCalled();
  await act(async()=>{resolve({purchaseId:'old-purchase',refreshFailed:false});});
  expect(mockReserveEvidence).not.toHaveBeenCalled();expect(mockUploadEvidence).not.toHaveBeenCalled();
 });
 it('leaving removes owned cached drafts and individual removal removes preview',async()=>{
- const screen=await reviewFilledPurchase();await stageReceipt(screen);
- fireEvent.press(screen.getByText('입력 내용 검토'));
+ const screen=await filledPurchase();await stageReceipt(screen);
  fireEvent.press(screen.getByLabelText('영수증.jpg 선택 삭제'));
  expect(screen.queryByLabelText('영수증.jpg 미리보기')).toBeNull();expect(mockCacheDelete).toHaveBeenCalledTimes(1);
  await stageReceipt(screen);screen.unmount();expect(mockCacheDelete).toHaveBeenCalledTimes(2);
-});
-
-it('keeps a suggested total empty until chosen and gates saving on reconciliation and review', async () => {
-  mockRecognize.mockResolvedValue({ lines: [{ text: '금일합계 19,000', confidence: 1, box: { x: .1, y: .2, w: .5, h: .02 } }] });
-  const view = await reviewFilledPurchase();
-  await stageReceipt(view);
-  expect(mockRecognize).toHaveBeenCalledWith('file:///cache/picked.jpg');
-  const input = view.getByLabelText('대조할 영수증 합계');
-  expect(input.props.value).toBe('');
-  fireEvent.press(view.getByText('이 합계 적용'));
-  expect(input.props.value).toBe('19000');
-  fireEvent.press(view.getByText('입력 내용 검토'));
-  fireEvent.press(view.getByLabelText('매입 최종 등록'));
-  expect(mockWrite).not.toHaveBeenCalled();
-  fireEvent.changeText(input, '20000');
-  fireEvent.press(view.getByLabelText('매입 최종 등록'));
-  expect(mockWrite).not.toHaveBeenCalled();
-  fireEvent.press(view.getByText('영수증과 입력 내용을 확인했어요'));
-  mockWrite.mockResolvedValue({ refreshFailed: false });
-  fireEvent.press(view.getByLabelText('매입 최종 등록'));
-  await waitFor(() => expect(mockWrite).toHaveBeenCalledTimes(1));
 });
 
 it('preserves an edited total when recognition finishes later', async () => {
@@ -286,7 +234,7 @@ it('shows malformed thousands grouping guidance without offering the candidate',
 
 it('stages a PDF without scheduling receipt recognition', async () => {
  mockPick.mockResolvedValue({ canceled: false, assets: [{uri:'file:///cache/test.pdf',name:'test.pdf',mimeType:'application/pdf',size:100}] });
- const view = render(<NewPurchaseScreen />);
+ const view = manualForm();
  await act(async () => { fireEvent.press(view.getByText('파일 선택')); });
  expect(view.getByLabelText('test.pdf 미리보기')).toBeTruthy();
  expect(mockRecognize).not.toHaveBeenCalled();
@@ -295,62 +243,10 @@ it('stages a PDF without scheduling receipt recognition', async () => {
 
 it('recognizes the original HEIC selected from the album before upload', async () => {
  const view = render(<NewPurchaseScreen />);
- await act(async () => { fireEvent.press(view.getByText('사진 보관함')); });
+ await act(async () => { fireEvent.press(view.getByText('앨범')); });
  expect(mockRecognize).toHaveBeenCalledWith('file:///cache/original.heic');
  expect(mockUploadEvidence).not.toHaveBeenCalled();
  expect(mockPick).not.toHaveBeenCalled();
-});
-
-it('사진의 금액만 읽은 행을 바로 보여주고 재고 품목·수량·단가와 최종 확인을 거쳐 저장한다', async () => {
-  const row = (values: string[], y: number) => values.map((text, index) =>
-    ({ text, confidence: 1, box: { x: index ? .75 : .1, y, w: .15, h: .02 } }));
-  mockRecognize.mockResolvedValue({ lines: [...row(['품목명', '금액'], .2), ...row(['가상 백미', '6,000'], .3), ...row(['총합계', '6,000'], .5)] });
-  const view = render(<NewPurchaseScreen />);
-  await stageReceipt(view);
-  expect(view.getByLabelText('가상 백미 금액').props.value).toBe('6000');
-  expect(view.getByLabelText('가상 백미 수량').props.value).toBe('');
-  fireEvent.changeText(view.getByLabelText('가상 백미 항목명'), '쌀');
-  fireEvent.press(await view.findByText('쌀 · kg'));
-  expect(view.getByLabelText('가상 백미 항목명').props.value).toBe('쌀');
-  expect(view.getByLabelText('가상 백미 금액').props.value).toBe('6000');
-  fireEvent.press(view.getByText('입력 내용 검토'));
-  expect(view.getByText('가상 백미의 수량과 단가를 확인해 주세요.')).toBeTruthy();
-  fireEvent.changeText(view.getByLabelText('가상 백미 수량'), '2');
-  fireEvent.changeText(view.getByLabelText('가상 백미 단가'), '3000');
-  fireEvent.changeText(view.getByLabelText('대조할 영수증 합계'), '6000');
-  fireEvent.press(view.getByText('입력 내용 검토'));
-  fireEvent.changeText(view.getByLabelText('거래처명'), '가상 거래처');
-  fireEvent.press(view.getByLabelText('다음 단계'));
-  expect(mockWrite).not.toHaveBeenCalled();
-  fireEvent.press(view.getByText('영수증과 입력 내용을 확인했어요'));
-  mockWrite.mockResolvedValue({ refreshFailed: false });
-  await act(async () => fireEvent.press(view.getByLabelText('매입 최종 등록')));
-  expect(mockWrite).toHaveBeenCalledWith(expect.objectContaining({
-    items: [expect.objectContaining({ ingredient_id: 'rice', quantity: 2, unit_price: 3000 })],
-  }));
-});
-
-it('읽은 수량과 단가를 채우고 뒤로 갔다 돌아와도 사용자가 수정한 값을 보존한다', async () => {
-  const row = (values: string[], y: number) => values.map((text, i) => ({
-    text, confidence: 1, box: { x: [.1, .5, .65, .8][i], y, w: .08, h: .02 },
-  }));
-  mockRecognize.mockResolvedValue({ lines: [
-    ...row(['품목명', '수량', '단가', '금액'], .2), ...row(['쌀', '2', '3,000', '6,000'], .3),
-  ] });
-  const view = render(<NewPurchaseScreen />);
-  fireEvent.changeText(view.getByLabelText('거래처명'), '가상 거래처');
-  await stageReceipt(view);
-  expect(view.getByLabelText('쌀 수량').props.value).toBe('2');
-  expect(view.getByLabelText('쌀 단가').props.value).toBe('3000');
-  fireEvent.changeText(view.getByLabelText('쌀 항목명'), '쌀');
-  fireEvent.press(await view.findByText('쌀 · kg'));
-  fireEvent.changeText(view.getByLabelText('쌀 수량'), '3');
-  fireEvent.press(view.getByLabelText('뒤로'));
-  fireEvent.press(view.getByText('품목 입력으로'));
-  expect(view.getByLabelText('쌀 수량').props.value).toBe('3');
-  fireEvent.press(view.getByText('입력 내용 검토'));
-  expect(view.getByText('쌀의 금액과 수량 × 단가가 달라요.')).toBeTruthy();
-  expect(mockWrite).not.toHaveBeenCalled();
 });
 
 it('항목명을 고쳐 검색하고 결과가 없으면 입력한 이름으로 새 재고 품목 등록을 연다', async () => {
@@ -366,4 +262,47 @@ it('항목명을 고쳐 검색하고 결과가 없으면 입력한 이름으로 
   fireEvent.press(await view.findByText('새 품목으로 추가'));
   expect(view.getByPlaceholderText('예: 삼겹살').props.value).toBe('가상 현미');
   expect(mockWrite).not.toHaveBeenCalled();
+});
+
+it('파생된 주류 금액을 빈칸과 제안으로 보여주고 확인한 뒤에만 저장한다', async () => {
+  const header = ['품명','규격','수량','단가','공급가','세액','보증금'];
+  const values = ['가상 주류','소병','2','5,200','10,400','1,040','300'];
+  mockRecognize.mockResolvedValue({ lines: [header, values].flatMap((row, i) => row.map((text, j) =>
+    ({ text, box: { x: .03 + j * .14, y: .1 + i * .1, w: .08, h: .02 }, confidence: .91 }))) });
+  const view = render(<NewPurchaseScreen />);
+  await act(async () => fireEvent.press(view.getByText('앨범')));
+  expect(view.getByLabelText('가상 주류 금액').props.value).toBe('');
+  expect(view.getByText('확인 필요')).toBeTruthy();
+  fireEvent.changeText(view.getByLabelText('거래처명'), '가상 거래처');
+  fireEvent.press(view.getByText('매입 저장'));
+  expect(view.getByText('확인이 필요한 품목의 금액을 확인해 주세요.')).toBeTruthy();
+  expect(mockWrite).not.toHaveBeenCalled();
+  fireEvent.press(view.getByText('계산 금액 11,740원 적용'));
+  expect(view.queryByText('확인 필요')).toBeNull();
+  mockWrite.mockResolvedValue({ purchaseId: 'saved' });
+  await act(async () => fireEvent.press(view.getByText('매입 저장')));
+  expect(mockWrite).toHaveBeenCalledWith(expect.objectContaining({ items: [expect.objectContaining({ amount: 11740 })] }));
+});
+
+it('촬영을 취소하면 시작 화면에 머물고 증빙이나 매입을 만들지 않는다', async () => {
+  const view = render(<NewPurchaseScreen />);
+  await act(async () => fireEvent.press(view.getByText('사진 촬영')));
+  expect(view.getByText('수기 입력')).toBeTruthy();
+  expect(view.queryByText('매입 저장')).toBeNull();
+  expect(mockRecognize).not.toHaveBeenCalled();
+  expect(mockWrite).not.toHaveBeenCalled();
+});
+
+it('여러 개 주문한 상품의 표시 가격은 보여주고 품목 금액은 직접 입력하게 한다', async () => {
+  mockRecognize.mockResolvedValue({ lines: ['쿠팡 주문 완료', '가상 접시', '4,120원', '수량: 2개']
+    .map((text, index) => ({ text, box: { x: .35, y: .04 * index, w: .08, h: .02 }, confidence: .91 })) });
+  const view = render(<NewPurchaseScreen />);
+  await act(async () => fireEvent.press(view.getByText('앨범')));
+  expect(view.getByText('표시 가격 4,120원')).toBeTruthy();
+  expect(view.getByLabelText('가상 접시 금액').props.value).toBe('');
+  expect(view.queryByText(/4,120원 적용/)).toBeNull();
+  fireEvent.changeText(view.getByLabelText('가상 접시 금액'), '8240');
+  expect(view.queryByText('확인 필요')).toBeNull();
+  fireEvent.changeText(view.getByLabelText('거래처명'), '가상 상점');
+  expect(view.getByLabelText('가상 접시 금액').props.value).toBe('8240');
 });

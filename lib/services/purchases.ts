@@ -12,18 +12,25 @@ export class PurchaseWriteError extends Error {
   }
 }
 
-// 품목 매입 등록: 카테고리별 매입 분할 + 재고 증가 + last_price 갱신 (원자적, RPC)
-export async function createPurchaseWithItems(input: {
-  store_id: string;
-  date: string;
-  supplier: string;
-  type: PurchaseType;
-  items: PurchaseItemInput[];
-  returnId?: boolean;
-}): Promise<{ refreshFailed: boolean; purchaseId?: string }> {
+type BasePurchaseInput = { date: string; supplier: string; type: PurchaseType };
+export type PurchaseFormInput = BasePurchaseInput & (
+  { category: string; returnId: true; items: { ingredient_id: string | null; name: string; quantity: number; unit: string; amount: number }[] } |
+  { category?: undefined; returnId?: boolean; items: PurchaseItemInput[] }
+);
+
+export async function getPurchaseSuppliers(storeId: string, signal: AbortSignal) {
+  const rows = await readAllRows<{ supplier: string }>((from, to) =>
+    supabase.rpc('list_purchase_suppliers', { p_store_id: storeId }).range(from, to).abortSignal(signal));
+  return rows.map(row => row.supplier);
+}
+
+export async function createPurchaseWithItems(input: PurchaseFormInput & { store_id: string }): Promise<{ refreshFailed: boolean; purchaseId?: string }> {
   let result;
   try {
-    result = await supabase.rpc(input.returnId ? 'create_purchase_with_evidence' : 'create_purchase_with_items', {
+    const rpc = input.category !== undefined ? 'create_purchase_with_amounts'
+      : input.returnId ? 'create_purchase_with_evidence' : 'create_purchase_with_items';
+    result = await supabase.rpc(rpc, {
+      ...(input.category !== undefined && { p_category: input.category }),
       p_store_id: input.store_id,
       p_date: input.date,
       p_supplier: input.supplier,
