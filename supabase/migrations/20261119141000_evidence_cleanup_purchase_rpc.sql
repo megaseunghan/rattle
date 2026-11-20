@@ -154,18 +154,20 @@ LANGUAGE sql SECURITY DEFINER SET search_path=pg_catalog,pg_temp AS $$
    WHERE s.deleted_at IS NOT NULL AND s.purge_after <= clock_timestamp()
    ORDER BY s.id FOR UPDATE SKIP LOCKED
  ), due AS MATERIALIZED (
-   SELECT id FROM locked WHERE purge_after <= clock_timestamp()
+   SELECT id,purge_after FROM locked WHERE purge_after <= clock_timestamp()
  ), candidates AS (
-   SELECT o.name AS path,d.id AS store_id,o.id AS object_id,o.version AS object_version,NULL::timestamptz AS attempted_at
+   SELECT o.name AS path,d.id AS store_id,o.id AS object_id,o.version AS object_version,d.purge_after AS eligible_at
    FROM storage.objects o JOIN due d ON d.id::text=split_part(o.name,'/',1)
    WHERE o.bucket_id='transaction-evidence'
      AND NOT EXISTS (SELECT 1 FROM private.evidence_purge_attempts a WHERE a.path=o.name)
    UNION ALL
-   SELECT a.path,a.store_id,a.object_id,a.object_version,a.attempted_at FROM private.evidence_purge_attempts a
+   -- The 5-minute lease prevents duplicate claims. The scheduler retries the next day.
+   SELECT a.path,a.store_id,a.object_id,a.object_version,a.attempted_at + interval '5 minutes' FROM private.evidence_purge_attempts a
    JOIN due d ON d.id=a.store_id
    WHERE a.outcome <> 'confirmed' AND a.attempted_at <= clock_timestamp()-interval '5 minutes'
  ), batch AS (
-   SELECT path,store_id,object_id,object_version FROM candidates ORDER BY attempted_at NULLS FIRST,path LIMIT 100
+   -- Old retries and newly expired stores share the same bounded daily batch.
+   SELECT path,store_id,object_id,object_version FROM candidates ORDER BY eligible_at,path LIMIT 100
  )
  INSERT INTO private.evidence_purge_attempts(path,store_id,object_id,object_version,attempted_at)
  SELECT path,store_id,object_id,object_version,clock_timestamp() FROM batch
@@ -259,11 +261,12 @@ CREATE TABLE private.evidence_purge_requests (
 CREATE INDEX evidence_purge_requests_pending ON private.evidence_purge_requests(queued_at) WHERE result='pending';
 REVOKE ALL ON private.evidence_purge_requests FROM PUBLIC,anon,authenticated;
 
--- Retry leases keep moving; measure the unresolved interval from the first claim.
+-- Allow the next daily dispatch plus 15 minutes before flagging an unresolved path.
+-- HTTP responses have a separate 2-minute grace period (the request timeout is 60 seconds).
 CREATE VIEW private.evidence_purge_alerts WITH (security_invoker=true) AS
  SELECT a.outcome AS issue,a.first_attempted_at AS since,a.store_id,a.path,NULL::bigint AS request_id,NULL::integer AS http_status
  FROM private.evidence_purge_attempts a
- WHERE a.outcome <> 'confirmed' AND a.first_attempted_at <= now()-interval '15 minutes'
+ WHERE a.outcome <> 'confirmed' AND a.first_attempted_at <= now()-interval '24 hours 15 minutes'
  UNION ALL
  SELECT CASE WHEN r.result='pending' THEN 'overdue' ELSE r.result END,
         r.queued_at,NULL::uuid,NULL::text,r.request_id,r.http_status
@@ -283,6 +286,7 @@ BEGIN
 
  UPDATE private.evidence_purge_requests SET result='missing'
  WHERE result='pending' AND queued_at < clock_timestamp()-interval '2 minutes';
+ -- Retention applies only to successful HTTP receipts, never unresolved paths.
  DELETE FROM private.evidence_purge_requests
  WHERE result='success' AND queued_at < clock_timestamp()-interval '30 days';
 END $$;
@@ -329,7 +333,9 @@ BEGIN
      AND lower(rtrim(btrim(command),';'))='select public.purge_expired_deleted_stores()'
      AND has_function_privilege(username,'public.purge_expired_deleted_stores()','EXECUTE')
  ) THEN RAISE EXCEPTION 'EVIDENCE_DAILY_PURGE_JOB_REQUIRED'; END IF;
- PERFORM cron.schedule('rattle-expired-evidence-storage','*/5 * * * *','SELECT private.dispatch_evidence_purge()');
- PERFORM cron.schedule('rattle-evidence-storage-results','* * * * *','SELECT private.check_evidence_purge_responses()');
+ -- After the 03:17 store purge (UTC default), send once, then collect responses
+ -- at +3 and +18 minutes. Neither collection dispatches another deletion.
+ PERFORM cron.schedule('rattle-expired-evidence-storage','27 3 * * *','SELECT private.dispatch_evidence_purge()');
+ PERFORM cron.schedule('rattle-evidence-storage-results','30,45 3 * * *','SELECT private.check_evidence_purge_responses()');
 END $schedule$;
 COMMIT;
