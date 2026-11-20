@@ -27,6 +27,10 @@ export interface ReceiptItem {
   amount: ReceiptField<number> | null;
   arithmeticMatches: boolean | null;
   needsReview?: boolean;
+  /** Parsed card options. name retains the full label for existing consumers. */
+  productName?: ReceiptField<string>;
+  specification?: ReceiptField<string>;
+  packQuantity?: ReceiptField<number>;
   /** Printed order-card price when the unit/extended-price scope needs review. */
   printedPrice?: ReceiptField<number>;
 }
@@ -189,6 +193,27 @@ function prepare(lines: readonly RecognizedLine[]) {
 
 type ItemField = <T>(value: T, cells: RecognizedLine[], confidence?: number, source?: 'observed' | 'derived', tokens?: MoneyToken[]) => ReceiptField<T>;
 
+function cardOptions(label: ReceiptField<string>, cells: RecognizedLine[], field: ItemField) {
+  // Allow only standalone, comma-delimited options. Leave model numbers, combined
+  // options, thousands separators and unlabelled counts in the original label.
+  if (/\d,\d/.test(label.value)) return {};
+  const parts = label.value.split(',').map(part => part.trim());
+  const count = parts.at(-1)?.match(/^([1-9]\d*)\s*개$/);
+  if (!count || parts.length < 2) return {};
+  const pack = Number(count[1]);
+  if (!Number.isSafeInteger(pack)) return {};
+  parts.pop();
+  const size = parts.at(-1)?.match(/^(\d+(?:\.\d+)?)\s*(kg|g|ml|l)$/i);
+  if (size) parts.pop();
+  const product = parts.join(', ');
+  if (!/[가-힣a-z]/i.test(product) || parts.some(part => !part || /^\d/.test(part) && /(?:개|팩|매|입|kg|g|ml|l)$/i.test(part))) return {};
+  return {
+    productName: field(product, cells),
+    specification: size ? field(size[1] + size[2], cells) : undefined,
+    packQuantity: field(pack, cells),
+  };
+}
+
 // These editable observations are built after the independent total-evidence decision.
 function orderCardItems(rows: ReceiptRow[], field: ItemField): ReceiptItem[] | null {
   if (!rows.some(row => /쿠팡|로켓|쿠페이/.test(row.text))
@@ -235,7 +260,7 @@ function orderCardItems(rows: ReceiptRow[], field: ItemField): ReceiptItem[] | n
     // A card price alone doesn't identify unit vs extended price for multiple units.
     const printedPrice = value === null ? undefined : field(value, [price]);
     const amount = quantity?.value === 1 ? printedPrice ?? null : null;
-    result.push({ name, quantity, amount, printedPrice, unitPrice: amount, arithmeticMatches: null, needsReview: true });
+    result.push({ name, ...cardOptions(name, names, field), quantity, amount, printedPrice, unitPrice: amount, arithmeticMatches: null, needsReview: true });
   }
   return result;
 }
