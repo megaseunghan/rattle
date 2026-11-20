@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { recognizeText } from '../../modules/rattle-text-recognition';
 import { parseReceipt, type ParsedReceipt } from '../ocr/receiptParser';
 import type { EvidenceSelection } from '../types/evidence';
@@ -15,7 +15,8 @@ function readFailure(error: unknown) {
   return '영수증을 읽지 못했어요. 선명한 사진을 선택하거나 직접 입력해주세요.';
 }
 
-export function usePurchaseReceipt(files: EvidenceSelection[]) {
+export function usePurchaseReceipt(selections: EvidenceSelection[]) {
+  const files = useMemo(() => selections.filter(file => file.mimeType !== 'application/pdf'), [selections]);
   const [results, setResults] = useState<Record<string, Reading>>({});
   const [manual, setManual] = useState<{ source: string; value: string } | null>(null);
   const queue = useRef<Promise<void>>(Promise.resolve());

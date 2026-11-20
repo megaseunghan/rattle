@@ -44,7 +44,7 @@ test('editing applies only a chosen item, uploads after save and keeps manual co
   ] });
   const view = render(<PurchaseDetailScreen />);
   fireEvent.press(await view.findByLabelText(/가상 사과.*수정/));
-  await act(async () => fireEvent.press(view.getByLabelText('등록 전 증빙 선택')));
+  await act(async () => fireEvent.press(view.getByText('파일 선택')));
   expect(view.getByLabelText('매입 품목 단가').props.value).toBe('4000');
   fireEvent.press(view.getByText('가상 사과에 적용 (망)'));
   expect(view.getByLabelText('매입 품목 단가').props.value).toBe('3000');
@@ -63,7 +63,7 @@ test('keeps the draft on modal dismissal and guards navigation until save and up
   mockRecognize.mockResolvedValue({ lines: [] });
   const view = render(<PurchaseDetailScreen />);
   fireEvent.press(await view.findByLabelText(/가상 사과.*수정/));
-  await act(async () => fireEvent.press(view.getByLabelText('등록 전 증빙 선택')));
+  await act(async () => fireEvent.press(view.getByText('파일 선택')));
   fireEvent.press(view.getByText('취소'));
   expect(alert).toHaveBeenLastCalledWith('이대로 나갈까요?', expect.stringContaining('선택한 사진'), expect.any(Array));
   expect(view.getByLabelText('receipt.jpg 미리보기')).toBeTruthy();

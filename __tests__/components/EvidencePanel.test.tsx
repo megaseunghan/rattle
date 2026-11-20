@@ -11,6 +11,10 @@ let mockRole = 'owner';
 jest.mock('../../lib/contexts/AuthContext', () => ({ useAuth: () => ({ user: { id: mockUser }, store: { id: 'store' }, permissionsReady: true, storeRole: mockRole, canManageStore: ['owner','manager'].includes(mockRole), canReadFinancials: mockAccess, devPreviewMode: mockMode }) }));
 jest.mock('../../lib/services/evidence', () => ({ listEvidence: (...a: unknown[]) => mockList(...a), reserveEvidence: (...a: unknown[]) => mockReserve(...a), signEvidence: (...a: unknown[]) => mockSign(...a), discardEvidence: (...a: unknown[]) => mockDiscard(...a), discardPendingEvidence: (...a: unknown[]) => mockCleanup(...a) }));
 jest.mock('../../lib/media/evidenceUpload', () => ({ uploadEvidence: (...a: unknown[]) => mockUpload(...a) }));
+jest.mock('expo-image-picker', () => ({
+  UIImagePickerPreferredAssetRepresentationMode: { Current: 'current' },
+  launchImageLibraryAsync: async () => ({ canceled: false, assets: [{ uri:'file:///photo.jpg', mimeType:'image/jpeg', fileSize:100 }] }),
+}));
 jest.mock('expo-document-picker', () => ({ getDocumentAsync: (...a: unknown[]) => mockPick(...a) }));
 jest.mock('expo-crypto', () => ({ randomUUID: () => 'selection-id' }));
 jest.mock('expo-web-browser', () => ({ openBrowserAsync: jest.fn() }));
@@ -36,8 +40,8 @@ test('thumbnail signed only after expansion; full image signed only after tap', 
 test('failed file retries the same reservation ID without a business write', async () => {
  mockUpload.mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce(undefined);
  render(<EvidencePanel target={target} initiallyExpanded />);
- await waitFor(()=>expect(screen.getByText('증빙 여러 개 첨부').parent?.props.accessibilityState?.disabled).not.toBe(true));
- await act(async()=>{ fireEvent.press(screen.getByText('증빙 여러 개 첨부')); });
+ await waitFor(()=>expect(screen.getByText('파일 선택').parent?.props.accessibilityState?.disabled).not.toBe(true));
+ await act(async()=>{ fireEvent.press(screen.getByText('파일 선택')); });
  await waitFor(()=>expect(screen.getByText('이 파일 다시 업로드')).toBeTruthy());
  await act(async()=>{fireEvent.press(screen.getByText('이 파일 다시 업로드'));});
  await waitFor(()=>expect(mockReserve).toHaveBeenCalledTimes(2));
@@ -46,8 +50,8 @@ test('failed file retries the same reservation ID without a business write', asy
 test('switching user while picker is open discards old selection before reservation', async () => {
  let resolve!: (value: unknown)=>void;mockPick.mockImplementation(()=>new Promise(r=>{resolve=r;}));
  const view=render(<EvidencePanel target={target} initiallyExpanded />);
- await waitFor(()=>expect(screen.getByText('증빙 여러 개 첨부')).toBeTruthy());
- await act(async()=>{ fireEvent.press(screen.getByText('증빙 여러 개 첨부')); });
+ await waitFor(()=>expect(screen.getByText('파일 선택')).toBeTruthy());
+ await act(async()=>{ fireEvent.press(screen.getByText('파일 선택')); });
  await act(async()=>{mockUser='other';view.rerender(<EvidencePanel target={target} initiallyExpanded />);});
  await act(async()=>{resolve({canceled:false,assets:[{uri:'file:///x.jpg',name:'x.jpg',mimeType:'image/jpeg',size:100}]});});
  expect(mockReserve).not.toHaveBeenCalled();
@@ -81,8 +85,8 @@ test.each([
  const warn=jest.spyOn(console,'warn').mockImplementation(()=>{});
  try {
   mockReserve.mockRejectedValueOnce(error);render(<EvidencePanel target={target} initiallyExpanded />);
-  await waitFor(()=>expect(screen.getByText('증빙 여러 개 첨부')).toBeTruthy());
-  await act(async()=>{fireEvent.press(screen.getByText('증빙 여러 개 첨부'));});
+  await waitFor(()=>expect(screen.getByText('파일 선택')).toBeTruthy());
+  await act(async()=>{fireEvent.press(screen.getByText('파일 선택'));});
   await waitFor(()=>expect(screen.getByText(new RegExp(message))).toBeTruthy());
   expect(screen.queryByText('이 파일 다시 업로드')).toBeNull();expect(mockUpload).not.toHaveBeenCalled();expect(warn).toHaveBeenCalled();
  }finally{warn.mockRestore();}
@@ -98,8 +102,8 @@ test.each([
 ])('selection applies source limit for %s / %i bytes', async (mimeType, size, accepted) => {
  mockPick.mockResolvedValue({ canceled: false, assets: [{ uri: 'file:///source', name: 'source', mimeType, size }] });
  render(<EvidencePanel target={target} initiallyExpanded />);
- await waitFor(()=>expect(screen.getByText('증빙 여러 개 첨부').parent?.props.accessibilityState?.disabled).not.toBe(true));
- await act(async()=>{fireEvent.press(screen.getByText('증빙 여러 개 첨부'));});
+ await waitFor(()=>expect(screen.getByText('파일 선택').parent?.props.accessibilityState?.disabled).not.toBe(true));
+ await act(async()=>{fireEvent.press(screen.getByText('파일 선택'));});
  expect(mockReserve).toHaveBeenCalledTimes(accepted ? 1 : 0);
 });
 
@@ -108,7 +112,8 @@ test.each([['image/jpeg', true], ['application/pdf', false]])('reselection prese
  mockPick.mockResolvedValue({ canceled: false, assets: [{ uri: 'file:///cache/reselected', name: mime_type === 'application/pdf' ? 'source.pdf' : 'source.jpg', size: 12 * 1024 * 1024 }] });
  render(<EvidencePanel target={target} initiallyExpanded />);
  await waitFor(()=>expect(screen.getByText('업로드 미완료 · 파일 다시 선택')).toBeTruthy());
- await act(async()=>{fireEvent.press(screen.getByText('업로드 미완료 · 파일 다시 선택'));});
+ fireEvent.press(screen.getByText('업로드 미완료 · 파일 다시 선택'));
+ await act(async()=>{fireEvent.press(screen.getByLabelText('기존 첨부 파일 선택'));});
  expect(mockCacheDelete).toHaveBeenCalledTimes(1);
  expect(mockReserve).toHaveBeenCalledTimes(accepted ? 1 : 0);
 });
@@ -120,6 +125,7 @@ test('계정 교체 후 도착한 재선택 사본을 바로 정리한다', asyn
  const view = render(<EvidencePanel target={target} initiallyExpanded />);
  const reselect = await screen.findByText('업로드 미완료 · 파일 다시 선택');
  fireEvent.press(reselect);
+ fireEvent.press(screen.getByLabelText('기존 첨부 파일 선택'));
  mockUser = 'other';
  view.rerender(<EvidencePanel target={target} initiallyExpanded />);
  await act(async () => finish({canceled:false,assets:[{uri:'file:///cache/late',name:'late.jpg',size:10}]}));
@@ -130,8 +136,8 @@ test('계정 교체 후 도착한 재선택 사본을 바로 정리한다', asyn
 test('generic MIME PDF extension is normalized before reservation', async () => {
  mockPick.mockResolvedValue({ canceled:false, assets:[{ uri:'file:///receipt',name:'receipt.PDF',mimeType:'application/octet-stream',size:100 }] });
  render(<EvidencePanel target={target} initiallyExpanded />);
- await waitFor(()=>expect(screen.getByText('증빙 여러 개 첨부').parent?.props.accessibilityState?.disabled).not.toBe(true));
- await act(async()=>{fireEvent.press(screen.getByText('증빙 여러 개 첨부'));});
+ await waitFor(()=>expect(screen.getByText('파일 선택').parent?.props.accessibilityState?.disabled).not.toBe(true));
+ await act(async()=>{fireEvent.press(screen.getByText('파일 선택'));});
  expect(mockReserve).toHaveBeenCalledWith(target,expect.objectContaining({mimeType:'application/pdf'}));
 });
 test('bulk cleanup confirms, refreshes target and skips completed evidence', async () => {
@@ -230,7 +236,7 @@ it.each([
   render(<EvidencePanel initiallyExpanded target={{ ...target, kind: 'purchase' }} />);
   if (shared) await waitFor(() => expect(mockList).toHaveBeenCalled());
   else expect(mockList).not.toHaveBeenCalled();
-  expect(Boolean(screen.queryByText('증빙 여러 개 첨부'))).toBe(writable);
+  expect(Boolean(screen.queryByText('파일 선택'))).toBe(writable);
 });
 
 test('예전 썸네일은 원본 열기를 제공하고 재첨부는 새 예약으로 진행한다', async () => {

@@ -1,9 +1,9 @@
 import { memo, useEffect, useRef, useState } from 'react';
 import { Alert, FlatList, Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Image } from 'expo-image';
-import * as DocumentPicker from 'expo-document-picker';
+import { EvidenceSourceButtons } from './EvidenceSourceButtons';
 import * as WebBrowser from 'expo-web-browser';
-import { disposeEvidenceCache, pickEvidenceSelections } from '../media/evidencePicker';
+import { disposeEvidenceCache, pickEvidenceSelections, type EvidenceSource } from '../media/evidencePicker';
 import { EvidenceLocalPreview } from './EvidenceLocalPreview';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors } from '../../constants/colors';
@@ -12,7 +12,6 @@ import { useAuth } from '../contexts/AuthContext';
 import { useStorePermissions } from '../hooks/useStorePermissions';
 import { EvidenceFile, EvidenceSelection, EvidenceTarget, MAX_EVIDENCE_FILES } from '../types/evidence';
 import { discardEvidence, discardPendingEvidence, listEvidence, reserveEvidence, signEvidence } from '../services/evidence';
-import { prepareEvidenceSelection } from '../media/evidenceSelection';
 import { UserFacingError } from '../utils/error';
 import { uploadEvidence } from '../media/evidenceUpload';
 import { EvidenceReuploadRequired, evidenceFailure, logEvidenceFailure, type EvidenceFailure } from '../utils/evidenceError';
@@ -62,6 +61,8 @@ export function EvidencePanel(props: EvidencePanelProps) {
   return <EvidencePanelContent key={key} {...props} account={user.id} canManageStore={canManageStore} />;
 }
 function EvidencePanelContent({ target, disabled = false, initiallyExpanded = false, initialSelections = [], onPendingChange, account, canManageStore }: EvidencePanelProps & { account: string; canManageStore: boolean }) {
+  const [reselectId, setReselectId] = useState<string | null>(null);
+  const [pickerError, setPickerError] = useState('');
   const [expanded, setExpanded] = useState(initiallyExpanded);
   const [files, setFiles] = useState<EvidenceFile[]>([]);
   const [jobs, setJobs] = useState<Job[]>(() => initialSelections.map(selection => ({ selection, status: 'queued' })));
@@ -149,17 +150,18 @@ function EvidencePanelContent({ target, disabled = false, initiallyExpanded = fa
     void run(initialSelections.map(selection => ({ selection, status: 'queued' })));
   }, [loaded, error, disabled, canWrite]);
   const attachmentCount = new Set([...files.map(f => f.id), ...jobs.map(j => j.selection.id)]).size;
-  async function pick() {
+  async function pick(source: EvidenceSource = 'library') {
     if (!alive.current || lock.current || disabled || !loaded || !canWrite) return;
     lock.current = true; setBusy(true);
+    setPickerError('');
     let batch: Job[] = [];
     try {
-      const selected = await pickEvidenceSelections(attachmentCount, () => alive.current);
+      const selected = await pickEvidenceSelections(attachmentCount, () => alive.current, source);
       if (!alive.current) return;
       selected.forEach(file => ownedCache.current.add(file.uri));
       batch = selected.map(selection => ({ selection, status: 'queued' }));
       setJobs(previous => [...previous, ...batch]);
-    } catch (error) { if (alive.current) setError(error instanceof UserFacingError ? error.message : '파일을 선택하지 못했어요. 다시 시도해주세요.'); }
+    } catch (error) { if (alive.current) setPickerError(error instanceof UserFacingError ? error.message : '파일을 선택하지 못했어요. 다시 시도해주세요.'); }
     finally { lock.current = false; if (alive.current) setBusy(false); }
     if (batch.length && alive.current) await run(batch);
   }
@@ -175,23 +177,23 @@ function EvidencePanelContent({ target, disabled = false, initiallyExpanded = fa
     if (reserved) void remove(reserved, true);
     else { canceledJobs.current.add(job.selection.id); setJobs(previous => previous.filter(value => value.selection.id !== job.selection.id)); }
   }
-  async function reselect(file: EvidenceFile) {
+  async function reselect(file: EvidenceFile, source: EvidenceSource) {
     if (!alive.current || lock.current || disabled || !canWrite) return;
     lock.current = true; setBusy(true);
     let job: Job | undefined;
     let pickedUri: string | undefined;
+    setPickerError('');
     try {
-      const result = await DocumentPicker.getDocumentAsync({ type: '*/*', multiple: false, copyToCacheDirectory: true });
-      if (result.canceled) return;
-      const asset = result.assets[0];
+      const [asset] = await pickEvidenceSelections(0, () => alive.current, source, true);
+      if (!asset) return;
       pickedUri = asset.uri;
       if (!alive.current) return;
-      const prepared = prepareEvidenceSelection(asset);
-      if ((prepared.mimeType === 'application/pdf') !== (file.mime_type === 'application/pdf')) throw new UserFacingError('기존 첨부와 같은 종류의 파일을 선택해주세요.');
-      job = { row: file, status: 'queued', selection: { id: file.id, uri: asset.uri, name: file.name, ...prepared } };
+      if ((asset.mimeType === 'application/pdf') !== (file.mime_type === 'application/pdf')) throw new UserFacingError('기존 첨부와 같은 종류의 파일을 선택해주세요.');
+      job = { row: file, status: 'queued', selection: { ...asset, id: file.id, name: file.name } };
+      setReselectId(null);
       ownedCache.current.add(asset.uri);
       setJobs(previous => [...previous.filter(j => j.selection.id !== file.id), job!]);
-    } catch (error) { if (alive.current) setError(error instanceof UserFacingError ? error.message : '파일을 다시 선택해주세요.'); }
+    } catch (error) { if (alive.current) setPickerError(error instanceof UserFacingError ? error.message : '파일을 다시 선택해주세요.'); }
     finally {
       if (!job && pickedUri) disposeEvidenceCache(pickedUri);
       lock.current = false;
@@ -250,7 +252,7 @@ function EvidencePanelContent({ target, disabled = false, initiallyExpanded = fa
       } else {
         Alert.alert(title, '기기에 보관한 원본을 새 증빙으로 첨부해주세요. 기존 증빙은 새 파일이 열리는지 확인한 뒤 정리해주세요.', [
           { text: '닫기', style: 'cancel' },
-          { text: '원본 선택', onPress: () => { void pick(); } },
+          { text: '원본 선택', onPress: () => { void pick(file.mime_type === 'application/pdf' ? 'file' : 'library'); } },
         ]);
       }
     }
@@ -261,11 +263,14 @@ function EvidencePanelContent({ target, disabled = false, initiallyExpanded = fa
     {expanded && <>
       <Text style={styles.help}>이미지·PDF / 건당 최대 10개 / 이미지 원본 25MiB·PDF 10MiB / 변환 후 10MiB</Text>
       {loading && <Text style={styles.help}>증빙을 불러오는 중이에요.</Text>}
+      {!!pickerError && <Text accessibilityRole="alert" style={styles.error}>{pickerError}</Text>}
       {!!error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
       {!loading && !!error && <TouchableOpacity style={styles.button} accessibilityRole="button" onPress={refresh}><Text style={styles.link}>다시 불러오기</Text></TouchableOpacity>}
       <FlatList horizontal data={files.filter(file => !jobIds.has(file.id))} initialNumToRender={3} maxToRenderPerBatch={3} windowSize={3} keyExtractor={item => item.id} style={styles.list}
         renderItem={({ item }) => <View style={styles.file}>
-          {item.status === 'ready' ? <EvidenceThumbnail file={item} account={account} onOpen={open} /> : <TouchableOpacity disabled={!canWrite || busy || disabled || (item.created_by !== account || item.status !== 'pending')} style={styles.button} accessibilityRole="button" onPress={() => { void reselect(item); }}><Text style={styles.link}>{item.status !== 'pending' ? '정리 미완료 · 다시 삭제해주세요' : item.created_by === account ? '업로드 미완료 · 파일 다시 선택' : '업로드 미완료'}</Text></TouchableOpacity>}
+          {item.status === 'ready' ? <EvidenceThumbnail file={item} account={account} onOpen={open} /> : <TouchableOpacity disabled={!canWrite || busy || disabled || (item.created_by !== account || item.status !== 'pending')} style={styles.button} accessibilityRole="button" onPress={() => setReselectId(reselectId === item.id ? null : item.id)}><Text style={styles.link}>{item.status !== 'pending' ? '정리 미완료 · 다시 삭제해주세요' : item.created_by === account ? '업로드 미완료 · 파일 다시 선택' : '업로드 미완료'}</Text></TouchableOpacity>}
+          {reselectId === item.id && canWrite && item.created_by === account && item.status === 'pending' &&
+            <EvidenceSourceButtons replacing disabled={busy || disabled} pdfOnly={item.mime_type === 'application/pdf'} onPick={source => void reselect(item, source)} />}
           <Text numberOfLines={2} style={styles.name}>{item.name}</Text>
           {canWrite && (item.created_by === account || canManageStore) && <TouchableOpacity disabled={busy || disabled} style={styles.button} accessibilityRole="button" accessibilityLabel={`${item.name} 첨부 삭제`} onPress={() => Alert.alert('첨부 삭제', '이 증빙 파일을 삭제할까요?', [{ text: '취소', style: 'cancel' }, { text: '삭제', style: 'destructive', onPress: () => { void remove(item); } }])}><Text style={styles.error}>삭제</Text></TouchableOpacity>}
         </View>} />
@@ -277,7 +282,7 @@ function EvidencePanelContent({ target, disabled = false, initiallyExpanded = fa
       </View>)}
       {!loading && loaded && files.length === 0 && jobs.length === 0 && <Text style={styles.help}>첨부한 증빙이 없어요.</Text>}
       {canWrite && files.some(file => file.status !== 'ready' && (file.created_by === account || canManageStore)) && <TouchableOpacity disabled={busy || disabled || !loaded} style={styles.button} accessibilityRole="button" onPress={() => Alert.alert('미완료 첨부 정리', '업로드가 끝나지 않은 첨부를 모두 삭제할까요? 정리 후에는 파일을 다시 선택해야 해요. 완료된 증빙은 유지돼요.', [{ text: '취소', style: 'cancel' }, { text: '정리', style: 'destructive', onPress: () => { void cleanupPending(); } }])}><Text style={styles.error}>미완료 첨부 일괄 삭제</Text></TouchableOpacity>}
-      {canWrite && <TouchableOpacity disabled={busy || disabled || !loaded || !!error} style={styles.button} accessibilityRole="button" accessibilityState={{ disabled: busy || disabled || !loaded || !!error, busy }} onPress={pick}><Text style={styles.link}>{busy ? '처리 중…' : '증빙 여러 개 첨부'}</Text></TouchableOpacity>}
+      {canWrite && <EvidenceSourceButtons disabled={busy || disabled || !loaded || !!error} onPick={pick} />}
     </>}
     <Modal visible={!!viewer} animationType="fade" onRequestClose={() => setViewer(null)}>
       <SafeAreaView style={styles.viewer}>

@@ -9,7 +9,7 @@ export function EvidenceLocalPreview({ selection }: { selection: EvidenceSelecti
   const [open, setOpen] = useState(false);
   return <>
     <TouchableOpacity accessibilityRole="button" accessibilityLabel={`${selection.name} 미리보기`} style={styles.thumbnail} onPress={() => {
-      if (selection.mimeType === 'application/pdf') Alert.alert('PDF 업로드 중', 'PDF는 업로드가 끝난 뒤 첨부 목록에서 열 수 있어요.');
+      if (selection.mimeType === 'application/pdf') Alert.alert('PDF 미리보기', 'PDF는 업로드가 끝난 뒤 첨부 목록에서 열 수 있어요.');
       else setOpen(true);
     }}>
       {selection.mimeType === 'application/pdf' ? <Text>PDF</Text> : <Image source={{ uri: selection.uri }} style={styles.image} contentFit="contain" cachePolicy="none" recyclingKey={selection.id} />}
