@@ -18,23 +18,81 @@ ALTER TABLE public.purchase_items ALTER COLUMN created_at SET DEFAULT clock_time
 CREATE INDEX IF NOT EXISTS purchase_items_ingredient_receipt_idx ON public.purchase_items
   (store_id,ingredient_id,created_at DESC,id DESC) WHERE ingredient_id IS NOT NULL;
 
--- 마지막 매입까지 삭제하면 첫 입고 직전의 재료 단가로 돌아간다.
--- 마이그레이션 전부터 입고가 있던 재료는 이전 기준 단가를 추정하지 않는다.
-ALTER TABLE public.ingredients ADD COLUMN IF NOT EXISTS price_before_purchases numeric;
-CREATE OR REPLACE FUNCTION private.remember_price_before_purchases() RETURNS trigger
-LANGUAGE plpgsql SECURITY DEFINER SET search_path='' AS $$
+-- 재료마다 마지막 직접 입력값과 변경 번호를 보관한다. 같은 번호로 입고된 행만
+-- 복원 후보가 되므로 수동 변경과 입고의 시각이 같아도 이전 단가가 되살아나지 않는다.
+-- 이관 이전 입고의 기준가는 현재 자료로 확인되는 경우만 기록한다. 0원과 NULL은 별개다.
+ALTER TABLE public.ingredients ADD COLUMN IF NOT EXISTS price_before_purchases numeric,
+  ADD COLUMN IF NOT EXISTS manual_price_version bigint NOT NULL DEFAULT 0;
+ALTER TABLE public.purchase_items ADD COLUMN IF NOT EXISTS manual_price_version bigint NOT NULL DEFAULT 0;
+WITH latest AS (
+  SELECT DISTINCT ON (store_id,ingredient_id) store_id,ingredient_id,unit_price
+  FROM public.purchase_items WHERE ingredient_id IS NOT NULL
+  ORDER BY store_id,ingredient_id,created_at DESC,id DESC
+)
+UPDATE public.ingredients g SET price_before_purchases=g.last_price,manual_price_version=1
+FROM latest l WHERE g.store_id=l.store_id AND g.id=l.ingredient_id AND g.manual_price_version=0
+  AND g.last_price IS DISTINCT FROM l.unit_price;
+
+CREATE OR REPLACE FUNCTION private.remember_manual_ingredient_price() RETURNS trigger
+LANGUAGE plpgsql SET search_path='' AS $$
 BEGIN
-  UPDATE public.ingredients g SET price_before_purchases=g.last_price
-  WHERE g.id=NEW.ingredient_id AND g.store_id=NEW.store_id AND NOT EXISTS (
-    SELECT 1 FROM public.purchase_items i WHERE i.store_id=g.store_id AND i.ingredient_id=g.id
-  );
+  NEW.price_before_purchases := NEW.last_price;
+  NEW.manual_price_version := OLD.manual_price_version+1;
   RETURN NEW;
 END;
 $$;
-REVOKE ALL ON FUNCTION private.remember_price_before_purchases() FROM PUBLIC,anon,authenticated;
-DROP TRIGGER IF EXISTS remember_price_before_purchases ON public.purchase_items;
-CREATE TRIGGER remember_price_before_purchases BEFORE INSERT ON public.purchase_items
-FOR EACH ROW WHEN (NEW.ingredient_id IS NOT NULL) EXECUTE FUNCTION private.remember_price_before_purchases();
+REVOKE ALL ON FUNCTION private.remember_manual_ingredient_price() FROM PUBLIC,anon,authenticated;
+DROP TRIGGER IF EXISTS remember_manual_ingredient_price ON public.ingredients;
+-- 입고/삭제 트리거에서 계산한 단가는 직접 입력 기록이 아니다. 기존 RPC가 입고 직후
+-- 같은 값으로 갱신할 때도 기존 기준가를 유지한다.
+CREATE TRIGGER remember_manual_ingredient_price BEFORE UPDATE OF last_price ON public.ingredients
+FOR EACH ROW WHEN (pg_trigger_depth()=0 AND OLD.last_price IS DISTINCT FROM NEW.last_price)
+EXECUTE FUNCTION private.remember_manual_ingredient_price();
+
+CREATE OR REPLACE FUNCTION private.stamp_purchase_price_version() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path='' AS $$
+BEGIN
+  SELECT g.manual_price_version INTO NEW.manual_price_version FROM public.ingredients g
+  WHERE g.store_id=NEW.store_id AND g.id=NEW.ingredient_id FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'PURCHASE_INGREDIENT_STORE_MISMATCH'; END IF;
+  -- 같은 재료의 입력 순서가 시계 해상도에 묶이지 않도록 재료 잠금 안에서 정렬한다.
+  NEW.created_at := greatest(NEW.created_at,(SELECT i.created_at+interval '1 microsecond'
+    FROM public.purchase_items i WHERE i.store_id=NEW.store_id AND i.ingredient_id=NEW.ingredient_id
+    ORDER BY i.created_at DESC,i.id DESC LIMIT 1));
+  RETURN NEW;
+END;
+$$;
+REVOKE ALL ON FUNCTION private.stamp_purchase_price_version() FROM PUBLIC,anon,authenticated;
+DROP TRIGGER IF EXISTS stamp_purchase_price_version ON public.purchase_items;
+CREATE TRIGGER stamp_purchase_price_version BEFORE INSERT ON public.purchase_items
+FOR EACH ROW WHEN (NEW.ingredient_id IS NOT NULL) EXECUTE FUNCTION private.stamp_purchase_price_version();
+
+CREATE OR REPLACE FUNCTION private.apply_purchase_item_price() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path='' AS $$
+BEGIN
+  IF TG_OP='INSERT' THEN
+    UPDATE public.ingredients g SET
+      price_before_purchases=CASE WHEN NOT EXISTS (
+        SELECT 1 FROM public.purchase_items i WHERE i.store_id=g.store_id
+          AND i.ingredient_id=g.id AND i.id<>NEW.id
+      ) THEN g.last_price ELSE g.price_before_purchases END,
+      last_price=NEW.unit_price
+    WHERE g.store_id=NEW.store_id AND g.id=NEW.ingredient_id;
+  ELSE
+    -- 과거 입고를 수정해도 이후 직접 입력/새 입고의 단가를 덮지 않는다.
+    UPDATE public.ingredients g SET last_price=NEW.unit_price,updated_at=now()
+    WHERE g.store_id=NEW.store_id AND g.id=NEW.ingredient_id
+      AND NEW.manual_price_version=g.manual_price_version
+      AND NEW.id=(SELECT i.id FROM public.purchase_items i WHERE i.store_id=g.store_id AND i.ingredient_id=g.id
+        ORDER BY i.created_at DESC,i.id DESC LIMIT 1);
+  END IF;
+  RETURN NULL;
+END;
+$$;
+REVOKE ALL ON FUNCTION private.apply_purchase_item_price() FROM PUBLIC,anon,authenticated;
+DROP TRIGGER IF EXISTS apply_purchase_item_price ON public.purchase_items;
+CREATE TRIGGER apply_purchase_item_price AFTER INSERT OR UPDATE OF unit_price ON public.purchase_items
+FOR EACH ROW WHEN (NEW.ingredient_id IS NOT NULL) EXECUTE FUNCTION private.apply_purchase_item_price();
 
 -- 신규 매장만 1.1.0 기본 세 분류로 시작한다. 기존 매장의 주류·사용자 분류와 순서는 보존한다.
 ALTER TABLE public.stores ALTER COLUMN purchase_categories SET DEFAULT ARRAY['식자재','비품','소모품'];
@@ -305,18 +363,9 @@ BEGIN
     FROM public.purchase_items WHERE purchase_id=parent_id AND id<>p_item_id AND subtotal<>round(subtotal)
   ), normalized AS (
     SELECT id,whole+CASE WHEN priority<=extra THEN 1 ELSE 0 END AS amount FROM fractions
-  ), changed AS (
-    UPDATE public.purchase_items i SET subtotal=n.amount,unit_price=n.amount/i.quantity
-    FROM normalized n WHERE i.id=n.id RETURNING i.id,i.ingredient_id,i.unit_price
-  ), prices AS (
-    SELECT id,ingredient_id,unit_price FROM changed
-    UNION ALL SELECT old_item.id,old_item.ingredient_id,price
   )
-  UPDATE public.ingredients g SET last_price=v.unit_price,updated_at=now() FROM prices v
-  WHERE g.store_id=parent_store AND g.id=v.ingredient_id AND v.id=(
-    SELECT i.id FROM public.purchase_items i WHERE i.store_id=parent_store AND i.ingredient_id=g.id
-    ORDER BY i.created_at DESC,i.id DESC LIMIT 1
-  );
+  UPDATE public.purchase_items i SET subtotal=n.amount,unit_price=n.amount/i.quantity
+  FROM normalized n WHERE i.id=n.id;
   UPDATE public.ingredients SET current_stock=current_stock+(p_quantity-old_item.quantity),updated_at=now()
   WHERE store_id=parent_store AND id=old_item.ingredient_id;
   PERFORM private.refresh_purchase_totals(parent_id);
@@ -355,15 +404,17 @@ BEGIN
     PERFORM 1 FROM public.ingredients WHERE id=received.ingredient_id AND store_id=OLD.store_id FOR UPDATE;
     -- 마지막 입고의 단가를 되돌린다. 이후 별도로 직접 수정한 단가는 보존한다.
     WITH latest AS (
-      SELECT i.purchase_id,i.unit_price FROM public.purchase_items i
+      SELECT i.purchase_id,i.manual_price_version AS receipt_version FROM public.purchase_items i
       WHERE i.store_id=OLD.store_id AND i.ingredient_id=received.ingredient_id
       ORDER BY i.created_at DESC,i.id DESC LIMIT 1
     )
-    UPDATE public.ingredients SET current_stock=current_stock-received.quantity,
-      last_price=CASE WHEN EXISTS (SELECT 1 FROM latest WHERE purchase_id=OLD.id AND unit_price=last_price)
+    UPDATE public.ingredients g SET current_stock=current_stock-received.quantity,
+      last_price=CASE WHEN EXISTS (SELECT 1 FROM latest WHERE purchase_id=OLD.id
+        AND receipt_version=g.manual_price_version)
       THEN coalesce((SELECT i.unit_price FROM public.purchase_items i WHERE i.store_id=OLD.store_id
         AND i.ingredient_id=received.ingredient_id AND i.purchase_id<>OLD.id
-        ORDER BY i.created_at DESC,i.id DESC LIMIT 1),price_before_purchases,0) ELSE last_price END,updated_at=now()
+        AND i.manual_price_version=g.manual_price_version
+        ORDER BY i.created_at DESC,i.id DESC LIMIT 1),price_before_purchases) ELSE last_price END,updated_at=now()
     WHERE id=received.ingredient_id AND store_id=OLD.store_id;
   END LOOP;
   RETURN OLD;

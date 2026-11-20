@@ -15,11 +15,12 @@ let mockPickerIngredients: any[] = [];
 let mockAdmin = false;
 let mockReady = true;
 let mockParams: { id?: string } = { id: 'i' };
+let mockPrice: number | null = 3;
 let mockItemStore = 's';
 let mockRecipesPopulated = false;
 const mockUpdate = jest.fn(), mockCreate = jest.fn(), mockRemove = jest.fn(), mockPush = jest.fn();
 const mockRefetch = jest.fn();
-const mockIngredient = () => ({ id: 'i', store_id: mockItemStore, name: '우유', category: '유제품', unit: 'mL', current_stock: 10, min_stock: 2, last_price: 3 });
+const mockIngredient = () => ({ id: 'i', store_id: mockItemStore, name: '우유', category: '유제품', unit: 'mL', current_stock: 10, min_stock: 2, last_price: mockPrice });
 const mockRecipe = () => ({ id: 'r', store_id: mockItemStore, name: '라떼', category: '음료', selling_price: 5000, cost: 0, margin_rate: 100, recipe_ingredients: mockRecipeIngredients });
 jest.mock('expo-router', () => ({ router: { back: jest.fn(), push: (...args: unknown[]) => mockPush(...args) }, useLocalSearchParams: () => mockParams, useFocusEffect: (callback: () => unknown) => {
   const React = require('react'); React.useEffect(callback, [callback]);
@@ -39,7 +40,7 @@ jest.mock('../../lib/components/CategoryManageModal', () => ({ CategoryManageMod
 jest.mock('../../lib/components/CatalogImportModal', () => ({ CatalogImportModal: () => null }));
 jest.mock('../../lib/components/BulkCategoryModal', () => ({ BulkCategoryModal: () => null }));
 jest.mock('../../lib/components/ui/SheetModal', () => ({ SheetModal: ({ visible, children }: any) => visible ? children : null }));
-beforeEach(() => { jest.clearAllMocks(); mockManage = false; mockMode='self'; mockRecipeIngredients=[];mockPickerIngredients=[]; mockAdmin = false; mockReady = true; mockParams = { id: 'i' }; mockItemStore = 's'; mockRecipesPopulated = false; mockUpdate.mockResolvedValue(undefined); });
+beforeEach(() => { jest.clearAllMocks(); mockPrice = 3; mockManage = false; mockMode='self'; mockRecipeIngredients=[];mockPickerIngredients=[]; mockAdmin = false; mockReady = true; mockParams = { id: 'i' }; mockItemStore = 's'; mockRecipesPopulated = false; mockUpdate.mockResolvedValue(undefined); });
 it('PT 재고 상세는 수량만 편집하고 저장 payload도 한 필드뿐이다', async () => {
   render(<StockDetail />);
   await waitFor(() => expect(screen.getByLabelText('현재 재고 수량')).toBeTruthy());
@@ -56,7 +57,16 @@ it('확인된 관리자는 기존 재고 전체 필드 저장을 유지한다', 
   await waitFor(() => expect(screen.getByLabelText('식자재명')).toBeTruthy());
   fireEvent.changeText(screen.getByLabelText('식자재명'), '새 우유');
   fireEvent.press(screen.getByText('저장'));
-  await waitFor(() => expect(mockUpdate).toHaveBeenCalledWith('i', expect.objectContaining({ name: '새 우유', category: '유제품', unit: 'mL', min_stock: 2, last_price: 3 })));
+  await waitFor(() => expect(mockUpdate).toHaveBeenCalledWith('i', expect.objectContaining({ name: '새 우유', category: '유제품', unit: 'mL', min_stock: 2 })));
+});
+it('미확인 단가는 빈칸으로 읽고 이름만 수정하면 단가를 보내지 않는다', async () => {
+  mockManage = true; mockAdmin = true; mockPrice = null;
+  render(<StockDetail />);
+  expect((await screen.findByLabelText('식자재 단가')).props.value).toBe('');
+  fireEvent.changeText(screen.getByLabelText('식자재명'), '새 우유');
+  fireEvent.press(screen.getByText('저장'));
+  await waitFor(() => expect(mockUpdate).toHaveBeenCalledTimes(1));
+  expect(mockUpdate.mock.calls[0][1]).not.toHaveProperty('last_price');
 });
 it('타매장 품목은 편집 폼과 저장을 열지 않는다', async () => {
   mockItemStore = 'other'; render(<StockDetail />);

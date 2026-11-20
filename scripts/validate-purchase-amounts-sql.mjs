@@ -96,6 +96,11 @@ export async function validatePurchaseAmounts({ db, as, reserve, id, admin, memb
   assert.equal((await db.query('SELECT current_stock=17 AS unchanged FROM ingredients WHERE id=$1', [id(910)])).rows[0].unchanged, true);
   await assert.rejects(write(lines, '소모품', otherStore), /FINANCIAL_SHARING_DENIED/);
   await db.exec('RESET ROLE');
+  // 이관 전 1,200원으로 등록하고 6,500원에 한 번 입고한 재료. DB에는 입고 전 단가 기록이 없었다.
+  await db.query("INSERT INTO ingredients(id,store_id,current_stock,last_price,unit) VALUES($1,$2,4,1200,'개')",[id(1033),store]);
+  await as(admin);
+  const beforeHistory = (await write([{name:'과거 유일 입고',amount:6500,ingredient_id:id(1033)}])).rows[0].id;
+  await db.exec('RESET ROLE');
   const entryMigration = await migration('20261120121000_purchase_entry_modes.sql');
   await db.exec(entryMigration);
   await db.query('INSERT INTO stores(id) VALUES($1)', [id(1018)]);
@@ -233,6 +238,32 @@ export async function validatePurchaseAmounts({ db, as, reserve, id, admin, memb
   const onlyEntry = (await entry('items',[{name:'최초 입고',category:'소모품',amount:8000,ingredient_id:id(1032)}])).rows[0].id;
   await remove(onlyEntry);
   assert.deepEqual((await db.query('SELECT current_stock,last_price FROM ingredients WHERE id=$1',[id(1032)])).rows[0],{current_stock:'7',last_price:'1200'});
+  const stockAndPrice = async ingredient => {
+    const {current_stock,last_price} = (await db.query('SELECT current_stock,last_price FROM ingredients WHERE id=$1',[ingredient])).rows[0];
+    return {current_stock:Number(current_stock),last_price:last_price===null ? null : Number(last_price)};
+  };
+  await remove(beforeHistory);
+  assert.deepEqual(await stockAndPrice(id(1033)),{current_stock:4,last_price:null});
+
+  const receive = async amount => (await entry('items',[{name:'직접단가',category:'소모품',amount,ingredient_id:id(1032)}])).rows[0].id;
+  const setPrice = price => db.query('UPDATE ingredients SET last_price=$1 WHERE id=$2',[price,id(1032)]);
+  for (const manualPrice of [5100,0,null]) {
+    const oldReceipt = await receive(3700);
+    await setPrice(manualPrice);
+    const newReceipt = await receive(8000);
+    assert.equal((await stockAndPrice(id(1032))).last_price,8000);
+    await remove(newReceipt);
+    assert.deepEqual(await stockAndPrice(id(1032)),{current_stock:8,last_price:manualPrice});
+    await remove(oldReceipt);
+    assert.deepEqual(await stockAndPrice(id(1032)),{current_stock:7,last_price:manualPrice});
+  }
+  const oldReceipt = await receive(3700);
+  await setPrice(5100);
+  const newReceipt = await receive(8000);
+  await remove(oldReceipt);
+  assert.equal((await stockAndPrice(id(1032))).last_price,8000);
+  await remove(newReceipt);
+  assert.equal((await stockAndPrice(id(1032))).last_price,5100);
   const earlier = (await entry('items',[{...splitItems[0],amount:3500,quantity:1}])).rows[0].id;
   const later = (await entry('items',[{...splitItems[0],amount:8000,quantity:1}])).rows[0].id;
   assert.equal(Number((await balances()).last_price),8000);
