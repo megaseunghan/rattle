@@ -176,6 +176,7 @@ export function parseReceipt(lines: readonly RecognizedLine[], sourceImageId = '
   const spaceNormalized = new Set<RecognizedLine>();
   const invalidGrouping = new Set<RecognizedLine>();
   const invalidTotalCandidates = new Set<TotalCandidate>();
+  const nonEmptyValueLabels = new Set<RecognizedLine>();
   const headerIndex = rows.findIndex(r => /품목명|상품명|품명/.test(compact(r.text)));
   const headers = headerIndex < 0 ? [] : rows[headerIndex].cells;
   const field = <T,>(value: T, cells: RecognizedLine[], confidence = .7, source: 'observed' | 'derived' = 'observed', moneyTokens: MoneyToken[] = []): ReceiptField<T> => {
@@ -191,6 +192,7 @@ export function parseReceipt(lines: readonly RecognizedLine[], sourceImageId = '
   const amounts: ParsedReceipt['amounts'] = { supply: null, vat: null, deposit: null, returns: null, goods: null, shipping: null, discount: null, balance: null };
   const amountCells = new Map<keyof typeof amounts, RecognizedLine[]>();
   const amountStatus = Object.fromEntries(Object.keys(amounts).map(key => [key, 'absent'])) as Record<keyof typeof amounts, 'absent' | 'observed' | 'unreadable'>;
+  const amountsWithContent = new Set<keyof typeof amounts>();
   const dates: ReceiptField<string>[] = [];
   const vendors: ReceiptField<string>[] = [];
   const aliases: [string, RegExp][] = [['바른종합식자재', /바른종합식자재/], ['포도주류', /포도주류/], ['신선한 식탁', /신선한식탁/], ['수원축산', /수원축산/], ['쿠팡', /쿠팡/], ['네이버', /네이버/]];
@@ -202,6 +204,8 @@ export function parseReceipt(lines: readonly RecognizedLine[], sourceImageId = '
     const normalized = normalizeMoney(text).trim()
       .replace(/^(?:총|쿠페이\s*(?:머니)?|[가-힣A-Za-z]+카드\s*\/\s*(?:일시불|일시물))\s*(?=[₩W(+\-\d])/, '')
       .replace(/\s+인수(?:자)?\s*$/, '');
+    // Preserve content even when parsing fails: unreadable digits are not a blank ancillary field.
+    if (normalized) nonEmptyValueLabels.add(label);
     const observed = wholeMoney(normalized);
     if (observed !== null) return observed;
     if (valueCells.length === 1 && /^(?:[+-]\s*)?[₩W]?\s*\d{1,3}(?:\s+\d{3})+(?:\s*원)?$/.test(normalized)) {
@@ -256,6 +260,7 @@ export function parseReceipt(lines: readonly RecognizedLine[], sourceImageId = '
           for (let occurrence = 0; occurrence < count; occurrence++) {
             const reading = valueFor(row, cell, pattern, occurrence);
             const value = reading?.value ?? null;
+            if (nonEmptyValueLabels.has(cell)) amountsWithContent.add(key);
             if (value === null || (amounts[key] !== null && amounts[key]!.value !== value)) amountStatus[key] = 'unreadable';
             else {
               if (amountStatus[key] !== 'unreadable') amountStatus[key] = 'observed';
@@ -407,7 +412,7 @@ export function parseReceipt(lines: readonly RecognizedLine[], sourceImageId = '
   if (grossRow) {
     const label = grossRow.cells.find(l => /매출합계|매출총계/.test(compact(l.text)))!;
     const reading = valueFor(grossRow, label, /매출합계|매출총계/);
-    if (!spaceNormalized.has(label)) { gross = reading?.value ?? null; grossTokens = reading?.tokens ?? []; }
+    if (!spaceNormalized.has(label) && !invalidGrouping.has(label)) { gross = reading?.value ?? null; grossTokens = reading?.tokens ?? []; }
   }
   if (amountStatus.returns !== 'absent') {
     if (gross !== null && amounts.returns && amountStatus.returns === 'observed') {
@@ -426,9 +431,9 @@ export function parseReceipt(lines: readonly RecognizedLine[], sourceImageId = '
     } else if (supplyPlusVat !== null && itemSum !== amounts.supply?.value && itemSum !== supplyPlusVat) totalConflict = true;
   }
   // Tax proof confirms the labelled sales amount. Empty return/deposit metadata
-  // remains advisory; known returns and unreadable explicit payments stay strict.
+  // remains advisory only when actually blank; failed/conflicting return readings stay strict.
   const salesTaxProof = supplyPlusVat !== null && supplyPayable === supplyPlusVat
-    && !(amountStatus.returns === 'observed' && amounts.returns?.value !== 0);
+    && (!amountsWithContent.has('returns') || (amountStatus.returns === 'observed' && amounts.returns?.value === 0));
   payableTotals = currentTotals.filter(candidate => !isSalesTotal(candidate) || salesTaxProof);
   const incompleteFor = (candidate: TotalCandidate) => salesTaxProof && isSalesTotal(candidate)
     ? financialKeys.some(key => key !== 'returns' && key !== 'deposit' && amountStatus[key] === 'unreadable')

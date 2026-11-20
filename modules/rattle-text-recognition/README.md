@@ -326,3 +326,37 @@ OCR 대상 **8 suites/167 tests 통과**, 기본 timeout, 2.507초(`/tmp/rattle-
 구현자 자체 검토이며 같은 검토자의 후속 검토는 PL이 이어서 배정한다. 차단 대상은 selected/suggested의 잘못된 금액 승격 경로이며, 이번 범위 밖의 안전한 미확정은 기존 backlog에 유지한다.
 
 최종 검증(2026-11-20, macOS 로컬, 기준 ae73f68 위 이 과제의 미커밋 코드·합성 fixture): `npm run typecheck` **통과**(`/tmp/rattle-ocr-device-typecheck-final.log`), 전체 `npx jest --runInBand --no-coverage --testPathIgnorePatterns='/node_modules/' '/__tests__/setup\.ts' '<rootDir>/supabase/functions/' '<rootDir>/dev/'` **199 suites/1741 tests 통과**, 기본 timeout, 50.675초, 종료 0(`/tmp/rattle-ocr-device-full-jest.log`). 실행 전후 소스 SHA는 `/tmp/rattle-ocr-device-final-source.sha256`과 대조해 일치했다. 새 iPhone 평가·기존 10쌍 평가의 파서 SHA도 최종 소스와 일치했고 `git diff --check`·두 외부 평가기 `node --check` 통과.
+
+## 독립 검토 8회차 반영 · OCR-R13 회수 관측과 저신뢰 검산 (2026-11-20)
+
+작업 `task_f6b5d085cbcb`, 기준 `feature/evidence-attachments@265f472`. `amountStatus=unreadable`은 빈 라벨뿐 아니라 금액 충돌·숫자 오독도 포함한다. 이 상태만 보고 회수 부가란을 면제하던 경로를 수정했다. 기존 세금·매출합계 규칙에서 ‘빈 회수란’은 **실제 값 영역에 내용이 한 번도 없었던 경우**를 뜻하며, 숫자가 있었던 미확인 회수란까지 포함하지 않는다.
+
+금액을 해석하는 시점에 값 영역의 내용 존재를 별도로 누적한다. 비영 회수 뒤 빈 중복 라벨, 서로 다른 회수 금액, `3,O00` 같은 오독은 이후 상태가 unreadable로 합쳐져도 빈 부가란이 되지 않는다. 정상 0원 관측과 실제 빈 라벨만 있는 경우를 구분하고, 빈 라벨을 앞뒤에 추가해 비영 관측을 면제할 수 없게 했다. 공개 amountStatus 계약과 후보 보존은 유지했다. 보수적으로 null이 되는 추가 형태는 기존 backlog 기준을 따른다.
+
+또한 비정상 쉼표 그룹의 매출합계·매출총계는 회수 차감 식의 피연산자와 소계 비교 근거에서 제외했다. 원래 숫자 순서를 유지한 낮은 신뢰도 후보와 안내 코드는 남긴다. 정상 결제금액이 이 저신뢰 숫자에만 의존해 selected로 승격되던 경로를 차단했다.
+
+`deviceReceiptPatterns.test.ts`에 가상 값·좌표로 12개 회귀를 추가했다. 기존 R1~R12 표와 기대값은 유지했다.
+
+| 합성 입력 / 원 단위 | 기대값 |
+| --- | --- |
+| 공급가 21,818 + VAT 2,182 = 매출합계 24,000, 회수 3,000 뒤 빈 회수란 / 반대 순서 | 후보 보존, selected/suggested null |
+| 같은 세금·매출합계, 회수 3,000과 4,000 / 뒤에 빈 라벨 추가 | 충돌 보존, 두 값 null |
+| 회수 0 → 3,000 → 빈 라벨 | 첫 0원으로 충돌을 면제하지 않음, 두 값 null |
+| 회수 `3,O00` 단독 / 빈 라벨 추가 / 정상 비영 회수와 병존 | 숫자 오독을 빈 값으로 면제하지 않음, 두 값 null |
+| 한 관측의 `회수 3,O00` | 두 값 null |
+| 독립 세금·매출합계와 내용 없는 중복 회수·보증금 부가란 | selected 24,000, suggested null 유지 |
+| 매출합계 또는 매출총계 `3,40,120` − 회수 120, 정상 결제 340,000 | 저신뢰 매출액은 검산 불가, 후보만 보존·두 값 null |
+
+수정 전 새 회귀 12개 중 11개 실패로 두 오확정 경로를 재현했다(`/tmp/rattle-ocr-r13-red.log`). 수정 후 OCR **8 suites/179 tests 통과**, 기본 timeout, 2.493초(`/tmp/rattle-ocr-r13-target.log`), `npm run typecheck` 통과(`/tmp/rattle-ocr-r13-typecheck.log`).
+
+외부 `iphone/compare-r13.mjs`, `android/compare-r13.mjs`로 기준 265f472와 최종 소스를 같은 raw에 재실행했다. 결과는 각각 `/private/tmp/rattle-ocr-bench/iphone/r13-comparison.json`, `/private/tmp/rattle-ocr-bench/android/parser-r13-comparison.json`이며 로그와 실제 파싱 결과도 모두 이 외부 디렉터리에 유지했다. 입력 불변성과 파서 SHA-256 일치를 확인했다.
+
+| 개발 표본 / 장수 | 265f472 selected/suggested/null | 수정본 selected/suggested/null | 잘못된 selected/suggested |
+| --- | --- | --- | --- |
+| 신규 iPhone 10장 | 1 / 2 / 7 | **1 / 2 / 7** | **0 / 0** |
+| 기존 Android 10장 | 3 / 0 / 7 | **3 / 0 / 7** | **0 / 0** |
+| 기존 Mac 10장 | 4 / 0 / 6 | **4 / 0 / 6** | **0 / 0** |
+
+이 표본들은 이미 규칙 작성에 사용한 개발 자료이며 독립 holdout 정확도가 아니다. 저장소에는 합성 회귀와 집계만 기록했고 실영수증·원문·이미지·거래내역을 추가하지 않았다. 구현자 자체 검토이며 같은 검토자의 후속 재검토는 PL이 배정한다. 오확정 경로만 차단한다는 종료 기준과 안전한 null의 backlog는 유지한다. 새 기기 OCR·화면·빌드·설치·EAS·원격 변경은 실행하지 않았다.
+
+최종 검증(2026-11-20, macOS 로컬, 기준 265f472 위 이 과제의 미커밋 파서·합성 회귀): 전체 `npx jest --runInBand --no-coverage --testPathIgnorePatterns='/node_modules/' '/__tests__/setup\.ts' '<rootDir>/supabase/functions/' '<rootDir>/dev/'` **199 suites/1753 tests 통과**, 기본 timeout, 49.148초, 종료 0(`/tmp/rattle-ocr-r13-full-jest.log`). 실행 전후 파서·회귀 소스 SHA는 `/tmp/rattle-ocr-r13-final-source.sha256`과 일치했고 두 raw 평가기의 파서 SHA도 최종 소스와 일치했다. `git diff --check`와 두 외부 평가기 `node --check` 통과.
