@@ -16,7 +16,7 @@ import { RattleQueryProvider } from '../query';
 WebBrowser.maybeCompleteAuthSession();
 
 function RootNavigator() {
-  const { user, store, loading, canReadFinancials, currentRole } = useAuth();
+  const { user, store, loading, canReadFinancials, currentRole, permissionsPending } = useAuth();
   const router = useRouter();
   const segments = useSegments();
   const pathname = usePathname();
@@ -48,9 +48,9 @@ function RootNavigator() {
   }, [loading, user, store]);
 
   useEffect(() => {
-    if (!loading && user && store && ((!canReadFinancials && isFinancialRoute(pathname)) ||
+    if (!loading && !permissionsPending && user && store && ((!canReadFinancials && isFinancialRoute(pathname)) ||
       (currentRole !== 'admin' && (pathname.startsWith('/admin') || pathname.startsWith('/profit-loss') || pathname.startsWith('/settings/pos-sync'))))) router.replace('/(tabs)');
-  }, [loading, user?.id, store?.id, canReadFinancials, currentRole, pathname]);
+  }, [loading, user?.id, store?.id, canReadFinancials, currentRole, pathname, permissionsPending]);
 
   // 브라우저 OAuth 콜백 딥링크 처리 (카카오·Google)
   useEffect(() => {

@@ -1,7 +1,7 @@
 jest.mock('../../lib/services/cacheInvalidation', () => ({ invalidateCachedStore: jest.fn().mockResolvedValue(undefined) }));
 import { invalidateCachedStore } from '../../lib/services/cacheInvalidation';
 jest.mock('@supabase/supabase-js', () => ({ createClient: jest.fn() }));
-jest.mock('expo-secure-store', () => ({ getItemAsync: jest.fn(), setItemAsync: jest.fn(), WHEN_UNLOCKED_THIS_DEVICE_ONLY: 'device' }));
+jest.mock('expo-secure-store', () => ({ getItemAsync: jest.fn(), deleteItemAsync: jest.fn(), setItemAsync: jest.fn(), WHEN_UNLOCKED_THIS_DEVICE_ONLY: 'device' }));
 jest.mock('../../lib/supabase', () => ({ supabase: { rpc: jest.fn() } }));
 import { createClient } from '@supabase/supabase-js';
 import * as SecureStore from 'expo-secure-store';
@@ -124,4 +124,24 @@ it('퇴근 자동 반영 뒤 홈/손익·실패 목록 캐시를 갱신하고 �
  expect(invalidateCachedStore).toHaveBeenCalledWith(storeId,expect.arrayContaining(['financial','payroll','daily-work','attendance-work-issues']));
  (invalidateCachedStore as jest.Mock).mockRejectedValueOnce(new Error('cache'));
  expect(await enrollment.scan(employeeQr)).toMatchObject({status:'saved',refreshRequired:true});
+});
+
+it.each(['ATTENDANCE_SCANNER_REVOKED', 'ATTENDANCE_SCANNER_INVALID'])('서버가 %s를 확인하면 기기 자격을 삭제한다', async code => {
+ await enrollment.exchangeAndStoreAttendanceScannerPairingQr({ qr });
+ rpc.mockResolvedValueOnce({ data: null, error: { code: 'P0001', message: code } });
+ (SecureStore.deleteItemAsync as jest.Mock).mockImplementation(async key => storage.delete(key));
+ expect(await enrollment.leaveScannerMode()).toBe('left');
+ expect(await enrollment.loadStoredAttendanceScannerRegistration()).toBeNull();
+});
+it('유효한 등록이나 통신 실패는 저장된 자격을 보존한다', async () => {
+ await enrollment.exchangeAndStoreAttendanceScannerPairingQr({ qr });
+ expect(await enrollment.leaveScannerMode()).toBe('active');
+ rpc.mockRejectedValueOnce(new Error('offline'));
+ expect(await enrollment.leaveScannerMode()).toBe('unknown');
+ expect(SecureStore.deleteItemAsync).not.toHaveBeenCalled();
+});
+it('등록 전 복귀에는 서버 요청이나 키 삭제가 필요 없다', async () => {
+ expect(await enrollment.leaveScannerMode()).toBe('left');
+ expect(rpc).not.toHaveBeenCalled();
+ expect(SecureStore.deleteItemAsync).not.toHaveBeenCalled();
 });

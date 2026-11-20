@@ -24,12 +24,13 @@ it('매장 전환 시 이전 금액을 숨기고 늦은 응답도 무시한다',
   await act(async () => { resolveOld([{ id: 'a' }]); await oldRequest; });
   expect(result.current.purchases).toEqual([{ id: 'b' }]);
 });
-it('쓰기 성공 뒤 목록 조회 실패도 재등록할 실패로 던지지 않는다', async () => {
-  mockWrite.mockResolvedValue({ refreshFailed: false });
+it('등록 폼은 저장 성공 후 목록을 중복 조회하지 않고 갱신 결과를 반환한다', async () => {
+  mockWrite.mockResolvedValue({ refreshFailed: true });
   mockGet.mockRejectedValue(new Error('offline'));
   const { result } = renderHook(() => usePurchases('2026-10'));
   await act(async () => {
     await expect(result.current.addWithItems({ date: '2026-10-01', supplier: '거래처', type: '수기', items: [] })).resolves.toEqual({ refreshFailed: true });
   });
   expect(mockWrite).toHaveBeenCalledTimes(1);
+  expect(mockGet).not.toHaveBeenCalled();
 });

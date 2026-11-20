@@ -151,11 +151,21 @@ it('현재 월 스냅샷은 변경일별 금액으로 누적하고 지난 월은
     .resolves.toMatchObject({ regularGross: 4700000, laborCost: 4700000 });
 });
 
-it('거래처명이 객체 예약어여도 누락하거나 금액을 문자열로 만들지 않는다', async () => {
+it('거래처명과 분류명이 객체 예약어여도 누락하거나 금액을 문자열로 만들지 않는다', async () => {
   setup([]);
-  mockPurchases.mockResolvedValue([{ id: 'p1', category: '식자재', supplier: '__proto__', amount: 100 }, { id: 'p2', category: '비품', supplier: 'constructor', amount: 35 }]);
+  mockPurchases.mockResolvedValue([{ id: 'p1', category: '식자재', supplier: '__proto__', amount: 100, category_amounts: { ['__proto__']: 40, constructor: 60 } }, { id: 'p2', category: 'constructor', supplier: 'constructor', amount: 35 }]);
   const result = await getProfitLossByMonth('store', '2026-09', '23:00');
+  expect(result.purchaseByCategory['__proto__']).toBe(40);
+  expect(result.purchaseByCategory.constructor).toBe(95);
   expect(result.purchaseBySupplier?.['__proto__']).toBe(100);
   expect(result.purchaseBySupplier?.constructor).toBe(35);
   expect(Object.values(result.purchaseBySupplier!).reduce((sum, amount) => sum + amount, 0)).toBe(result.purchaseCost);
+});
+
+it('한 매입의 카테고리별 금액을 나누고 손익 합계에는 한 번만 포함한다', async () => {
+  setup([]);
+  mockPurchases.mockResolvedValue([{ category: '식자재', amount: 3500, category_amounts: { 식자재: 2000, 비품: 1500 } }]);
+  await expect(getProfitLossByMonth('store', '2026-09', '23:00')).resolves.toMatchObject({
+    purchaseCost: 3500, purchaseByCategory: { 식자재: 2000, 비품: 1500 },
+  });
 });

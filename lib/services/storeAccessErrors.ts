@@ -8,7 +8,7 @@ export const STORE_ACCESS_ERROR_CATEGORIES = {
   MANAGER_REVISION_INVALID: 'server', VISIBILITY_REVISION_INVALID: 'server',
   ATTENDANCE_OWNER_REQUIRED: 'permission', ATTENDANCE_ADMIN_REQUIRED: 'permission',
 } as const;
-export type StoreAccessError = { code: keyof typeof STORE_ACCESS_ERROR_CATEGORIES | 'STORE_REQUEST_UNKNOWN' | 'STORE_REQUEST_REJECTED' | 'STORE_REQUEST_INVALID'; category: 'permission' | 'conflict' | 'input' | 'server' | 'unknown' };
+export type StoreAccessError = { transient?: boolean; code: keyof typeof STORE_ACCESS_ERROR_CATEGORIES | 'STORE_REQUEST_UNKNOWN' | 'STORE_REQUEST_REJECTED' | 'STORE_REQUEST_INVALID'; category: 'permission' | 'conflict' | 'input' | 'server' | 'unknown' };
 export function classifyStoreAccessError(error: unknown): StoreAccessError {
   const value = error as { code?: unknown; message?: unknown } | null;
   for (const token of [value?.message, value?.code]) {

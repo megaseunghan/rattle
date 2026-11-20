@@ -6,7 +6,8 @@ import { notifyIfEnabled } from './notifications';
 export async function getIngredients(
   storeId: string,
   page?: number,
-  pageSize = 20
+  pageSize = 20,
+  signal?: AbortSignal
 ): Promise<Ingredient[]> {
   let query = supabase
     .from('ingredients')
@@ -19,6 +20,7 @@ export async function getIngredients(
     query = query.range(from, from + pageSize - 1);
   }
 
+  if (signal) query = query.order('id', { ascending: true }).abortSignal(signal);
   const { data, error } = await query;
   if (error) throw new Error(error.message);
   return (data ?? []) as Ingredient[];
@@ -45,7 +47,7 @@ export async function createIngredient(
     .single();
 
   if (error) throw new Error(error.message);
-  await invalidateCachedStore(data.store_id);
+  await invalidateCachedStore(data.store_id, ['ingredients']);
   return result as Ingredient;
 }
 

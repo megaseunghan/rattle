@@ -1,14 +1,13 @@
-import { memo, useMemo } from 'react';
+import { memo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { AppIcon } from '../icons/AppIcon';
 import { router } from 'expo-router';
 import { Colors } from '../../constants/colors';
 import { NumericText } from './ui/NumericText';
 import { RecipeWithIngredients } from '../services/recipes';
-import { recipeLineCost } from '../utils/unit';
 
 /**
- * 레시피 카드 — 재고의 last_price 기준으로 원가·마진율을 실시간 계산해 표시.
+ * 레시피 카드 — recipe_costs에서 조회한 원가·마진율을 표시.
  * 재고 허브(레시피 세그먼트)와 레시피 단독 화면에서 공용으로 사용.
  */
 export const RecipeCard = memo(function RecipeCard({
@@ -27,26 +26,17 @@ export const RecipeCard = memo(function RecipeCard({
     ]);
   }
 
-  const costKnown = recipe.recipe_ingredients.length > 0 && recipe.recipe_ingredients.every(ri => ri.ingredient !== null && ri.ingredient.last_price != null);
-  const currentCost = useMemo(() => {
-    return recipe.recipe_ingredients.reduce((sum, ri) => {
-      if (!ri.ingredient) return sum;
-      return sum + recipeLineCost(ri.quantity, ri.unit ?? ri.ingredient.unit, ri.ingredient);
-    }, 0);
-  }, [recipe]);
-
-  const currentMarginRate = useMemo(() => {
-    if (recipe.selling_price <= 0) return 0;
-    return ((recipe.selling_price - currentCost) / recipe.selling_price) * 100;
-  }, [recipe.selling_price, currentCost]);
-
-  const marginColor = !costKnown || recipe.selling_price <= 0 ? Colors.gray600 : currentMarginRate >= 60
+  const currentCost = recipe.cost;
+  const currentMarginRate = recipe.margin_rate;
+  const costKnown = currentCost != null && recipe.recipe_ingredients.length > 0
+    && recipe.recipe_ingredients.every(ri => ri.ingredient?.last_price != null);
+  const marginColor = !costKnown || currentMarginRate == null || recipe.selling_price <= 0 ? Colors.gray600 : currentMarginRate >= 60
     ? Colors.success
     : currentMarginRate >= 30
     ? Colors.warning
     : Colors.danger;
 
-  const marginBarWidth = `${Math.min(Math.max(currentMarginRate, 0), 100)}%` as `${number}%`;
+  const marginBarWidth = `${Math.min(Math.max(currentMarginRate ?? 0, 0), 100)}%` as `${number}%`;
 
   return (
     <TouchableOpacity
@@ -83,14 +73,14 @@ export const RecipeCard = memo(function RecipeCard({
         <View style={styles.recipeStat}>
           <Text style={styles.recipeStatLabel}>마진율</Text>
           <NumericText style={[styles.recipeStatValue, styles.recipeStatMargin, { color: marginColor }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
-            {costKnown && recipe.selling_price > 0 ? `${currentMarginRate.toFixed(1)}%` : '확인 필요'}
+            {costKnown && currentMarginRate != null && recipe.selling_price > 0 ? `${currentMarginRate.toFixed(1)}%` : '확인 필요'}
           </NumericText>
         </View>
       </View>
 
       {/* 마진율 시각 바 */}
       {!costKnown && <Text style={styles.recipeStatLabel}>{recipe.recipe_ingredients.length ? '재료 단가를 확인해주세요' : '재료 미등록'}</Text>}
-      {costKnown && recipe.selling_price > 0 && <View style={styles.marginBarTrack}>
+      {costKnown && currentMarginRate != null && recipe.selling_price > 0 && <View style={styles.marginBarTrack}>
         <View style={[styles.marginBarFill, { width: marginBarWidth, backgroundColor: marginColor }]} />
       </View>}
     </TouchableOpacity>

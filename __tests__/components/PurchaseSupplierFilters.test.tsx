@@ -1,13 +1,22 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react-native';
+import { router } from 'expo-router';
+import { act, render, screen, fireEvent, waitFor } from '@testing-library/react-native';
 import { PurchasesScreen } from '../../app/(tabs)/purchases';
 let mockManagementCapability = true;
 let mockPurchases: any[] = [];
 const mockRefetch = jest.fn().mockResolvedValue(undefined);
+const mockReadPurchases = jest.fn().mockResolvedValue(true);
+const mockFocusListeners = new Set<() => void>();
 const mockCategory = { categories: ['식자재'], loading: false, error: null, refetch: mockRefetch, add: jest.fn(), rename: jest.fn(), remove: jest.fn() };
-jest.mock('expo-router', () => ({ router: { push: jest.fn() }, useFocusEffect: jest.fn() }));
+jest.mock('expo-router', () => ({ router: { push: jest.fn() }, useFocusEffect: (callback: () => void) => {
+  require('react').useEffect(() => {
+    mockFocusListeners.add(callback);
+    callback();
+    return () => { mockFocusListeners.delete(callback); };
+  }, [callback]);
+} }));
 jest.mock('../../lib/contexts/AuthContext', () => ({ useAuth: () => ({ store: { id: 'store' }, currentRole: 'admin', canManageStore: mockManagementCapability }) }));
 jest.mock('../../lib/contexts/TabPagerContext', () => ({ useTabPager: () => ({ selectedMonth: '2026-10', setSelectedMonth: jest.fn(), viewState: {} }) }));
-jest.mock('../../lib/hooks/usePurchases', () => ({ usePurchases: () => ({ purchases: mockPurchases, loaded: true, loading: false, error: null, refetch: mockRefetch, remove: jest.fn() }) }));
+jest.mock('../../lib/hooks/usePurchases', () => ({ usePurchases: () => ({ purchases: mockPurchases, loaded: true, loading: false, error: null, refetch: mockReadPurchases, remove: jest.fn() }) }));
 jest.mock('../../lib/hooks/useExpenses', () => ({ useExpenses: () => ({ expenses: [], loading: false, refetch: mockRefetch }) }));
 jest.mock('../../lib/hooks/usePurchaseCategories', () => ({ usePurchaseCategories: () => mockCategory }));
 jest.mock('../../lib/components/ExpensesPanel', () => ({ ExpensesPanel: () => null }));
@@ -53,4 +62,33 @@ it('이전 관리자 역할이 있어도 현재 권한이 없으면 카테고리
   render(<PurchasesScreen />);
   await waitFor(() => expect(mockRefetch).toHaveBeenCalled());
   expect(screen.queryByLabelText('매입 카테고리 관리')).toBeNull();
+});
+
+it('복수 분류 매입은 목록 한 건으로 표시하고 선택한 분류의 금액만 합산한다', async () => {
+  mockPurchases = [{ id: 'mixed', supplier: '가상 상점', type: '수기', category: '식자재', date: '2026-10-01',
+    amount: 3500, category_amounts: { 식자재: 2000, 비품: 1500 }, item_count: 0 }];
+  render(<PurchasesScreen />);
+  await waitFor(() => expect(mockRefetch).toHaveBeenCalled());
+  expect(screen.getByText('식자재 · 비품')).toBeTruthy();
+  fireEvent.press(screen.getByLabelText('매입 카테고리 비품'));
+  expect(screen.getAllByText('1,500원').length).toBeGreaterThan(0);
+  expect(screen.queryByText('3,500원')).toBeNull();
+});
+
+it('매입 탭에서 선택일로 등록을 열고 돌아오면 목록과 상단 건수를 한 번의 조회로 갱신한다', async () => {
+  const view = render(<PurchasesScreen />);
+  fireEvent.press(screen.getByText('날짜로 찾기 · 달력 펼치기'));
+  fireEvent.press(screen.getByLabelText('2026년 10월 9일'));
+  fireEvent.press(screen.getByText('+ 매입 추가'));
+  expect(router.push).toHaveBeenCalledWith({ pathname: '/purchases/new', params: { date: '2026-10-09' } });
+  mockReadPurchases.mockClear();
+  mockReadPurchases.mockImplementationOnce(async () => {
+    mockPurchases = [{ id: 'new', supplier: '새 납품처', type: '수기', category: '식자재', date: '2026-10-09', amount: 3700 }];
+  });
+  await act(async () => { mockFocusListeners.forEach(onFocus => onFocus()); });
+  view.rerender(<PurchasesScreen />);
+  expect(screen.getByText(/2026-10 매입 1건/)).toBeTruthy();
+  expect(screen.getAllByText('새 납품처').length).toBeGreaterThan(0);
+  expect(mockReadPurchases).toHaveBeenCalledTimes(1);
+  expect(screen.getByLabelText('2026년 10월 9일').props.accessibilityState.selected).toBe(true);
 });

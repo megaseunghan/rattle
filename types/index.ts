@@ -64,7 +64,7 @@ export interface Ingredient {
   current_stock: number;
   unit: string;
   min_stock: number;  // 품절 임박 기준
-  last_price: number;
+  last_price: number | null;
   unit_volume?: number | null;       // 개수 재고의 1개당 용량 (레시피 원가 환산용)
   unit_volume_unit?: string | null;  // 개당 용량의 단위 (g / mL)
   updated_at: string;
@@ -387,6 +387,7 @@ export type PurchaseCategory = string;
 export type PurchaseType = string;
 
 export interface Purchase {
+  category_amounts?: Record<string, number>;
   id: string;
   store_id: string;
   category_id?: string | null;

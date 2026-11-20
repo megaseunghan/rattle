@@ -1,3 +1,4 @@
+jest.mock('../../lib/components/EvidencePanel', () => ({ EvidencePanel: () => null }));
 jest.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 0, left: 0, right: 0, bottom: 34 }) }));
 import React from 'react';
 import { Alert } from 'react-native';
@@ -8,7 +9,7 @@ const mockAdd=jest.fn(),mockUpdate=jest.fn(),mockCopy=jest.fn(),mockRefetch=jest
 let mockUser='u';
 let mockExpenses:any[]=[];
 let mockCarried:any[]=[];
-jest.mock('../../lib/contexts/AuthContext',()=>({useAuth:()=>({user:{id:mockUser},store:{id:'s'},currentRole:'admin',devPreviewMode:'self'})}));
+jest.mock('../../lib/contexts/AuthContext',()=>({useAuth:()=>({user:{id:mockUser},store:{id:'s'},storeRole:'owner',canManageStore:true,devPreviewMode:'self'})}));
 jest.mock('../../lib/hooks/useExpenses',()=>({useExpenses:()=>({expenses:mockExpenses,carriedFixedExpenses:mockCarried,loading:false,error:null,refetch:mockRefetch,add:mockAdd,update:mockUpdate,remove:jest.fn(),copyCarriedFixedExpenses:mockCopy})}));
 const mockRecurringSave=jest.fn();
 let mockRecurringData:any={rules:[],occurrences:[],adoptedSourceIds:[]};
@@ -122,4 +123,18 @@ test('미래 및 중단 규칙은 이번 달 발생이 없으면 월 금액처�
  expect(screen.getAllByText('이번 달 발생 없음')).toHaveLength(2);
  expect(screen.queryByText('321,000원')).toBeNull();expect(screen.queryByText('123,000원')).toBeNull();
  expect(screen.getByLabelText('고정비 접기').props.accessibilityValue.text).toBe('0원, 2개 항목');
+});
+
+test('new cost completion does not leave the subsequent legacy fixed-cost copy locked',async()=>{
+ mockCarried=[{id:'legacy-proof',category:'고정비',name:'지난 임대료',amount:100,year_month:'2026-10',occurred_on:null}];
+ mockAdd.mockResolvedValue({id:'created-proof',category:'공과금',name:'전기',amount:20,year_month:'2026-11',occurred_on:'2026-11-05'});
+ render(<ExpensesPanel selectedMonth="2026-11"/>);await ready();expand('공과금');fireEvent.press(screen.getByLabelText('공과금 항목 추가'));
+ fireEvent.changeText(screen.getByPlaceholderText('예: 임대료, 인스타그램 광고'),'전기');fireEvent.changeText(screen.getByPlaceholderText('0'),'20');fireEvent.changeText(screen.getByLabelText('비용 발생일'),'2026-11-05');
+ await act(async()=>{fireEvent.press(screen.getByLabelText('비용 저장'));});
+ await waitFor(()=>expect(screen.getByText('완료')).toBeTruthy());
+ fireEvent.press(screen.getByLabelText('비용 저장'));expand('고정비');
+ fireEvent.press(screen.getByText('발생일 확인 후 이번 달로 전체 복사'));
+ const date=screen.getByPlaceholderText('YYYY-MM-DD');expect(date.props.editable).toBe(true);
+ fireEvent.changeText(date,'2026-11-07');await act(async()=>{fireEvent.press(screen.getByLabelText('비용 저장'));});
+ expect(mockCopy).toHaveBeenCalledWith([{id:'legacy-proof',occurred_on:'2026-11-07'}]);
 });

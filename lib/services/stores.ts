@@ -128,7 +128,7 @@ export async function loadMyStores(userId: string): Promise<MyStores> {
   const { data, error } = await supabase.rpc('get_my_store_bootstrap');
   if (error) {
     if (error.code === 'PGRST202') return loadMyStoresLegacy(userId);
-    throw new Error(error.message);
+    throw Object.assign(new Error(error.message), { code: error.code });
   }
   const result: MyStores = { stores: [], roles: {}, access: {} };
   for (const row of (data ?? []) as { store: Store; member_role: 'admin' | 'member' | null; financial_access: boolean }[]) {
@@ -144,8 +144,8 @@ async function loadMyStoresLegacy(userId: string): Promise<MyStores> {
     supabase.from('stores').select('*').eq('owner_id', userId).order('created_at', { ascending: true }),
     supabase.from('store_members').select('store_id, role, stores(*)').eq('user_id', userId).eq('status', 'approved'),
   ]);
-  if (ownedRes.error) throw new Error(ownedRes.error.message);
-  if (memberRes.error) throw new Error(memberRes.error.message);
+  if (ownedRes.error) throw Object.assign(new Error(ownedRes.error.message), { code: ownedRes.error.code });
+  if (memberRes.error) throw Object.assign(new Error(memberRes.error.message), { code: memberRes.error.code });
   const roles: Record<string, 'admin' | 'member'> = {};
   // 소유 매장 우선, 멤버 매장 중복 제거 후 병합
   const storeMap = new Map<string, Store>();

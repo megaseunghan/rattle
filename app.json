@@ -15,7 +15,9 @@
       "bundleIdentifier": "com.seunghan.rattle",
       "buildNumber": "4",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSCameraUsageDescription": "증빙 사진을 찍거나 직원의 출퇴근 QR을 읽으려면 카메라 권한이 필요해요.",
+        "NSPhotoLibraryUsageDescription": "매입·비용 증빙으로 첨부할 사진을 선택할 수 있어요."
       }
     },
     "android": {
@@ -26,7 +28,23 @@
       },
       "predictiveBackGestureEnabled": false,
       "package": "com.seunghan.rattle",
-      "versionCode": 3
+      "versionCode": 4,
+      "permissions": [
+        "android.permission.CAMERA"
+      ],
+      "blockedPermissions": [
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_MEDIA_VIDEO",
+        "android.permission.READ_MEDIA_AUDIO",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_BACKGROUND_LOCATION",
+        "android.permission.READ_CONTACTS",
+        "android.permission.WRITE_CONTACTS",
+        "android.permission.SYSTEM_ALERT_WINDOW"
+      ]
     },
     "web": {
       "favicon": "./assets/Rattle_192x192.png"
@@ -38,7 +56,11 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#ffffff"
+          "backgroundColor": "#ffffff",
+          "android": {
+            "image": "./assets/Rattle_adaptive_fg.png",
+            "imageWidth": 160
+          }
         }
       ],
       "@react-native-community/datetimepicker",
@@ -48,9 +70,17 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "매장폰으로 직원의 출퇴근 QR을 읽으려면 카메라 권한이 필요해요.",
+          "cameraPermission": "증빙 사진을 찍거나 직원의 출퇴근 QR을 읽으려면 카메라 권한이 필요해요.",
           "microphonePermission": false,
           "recordAudioAndroid": false
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "매입·비용 증빙으로 첨부할 사진을 선택할 수 있어요.",
+          "cameraPermission": "증빙 사진을 찍거나 직원의 출퇴근 QR을 읽으려면 카메라 권한이 필요해요.",
+          "microphonePermission": false
         }
       ]
     ],

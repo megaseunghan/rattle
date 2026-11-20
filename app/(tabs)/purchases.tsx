@@ -60,7 +60,7 @@ function MonthNav({ year, month, onPrev, onNext }: { year: number; month: number
 }
 
 // ─── 매입 뷰 ───────────────────────────────────────────────
-function PurchasesView({ active }: { active: boolean }) {
+function PurchasesView({ active, ledger }: { active: boolean; ledger: ReturnType<typeof usePurchases> }) {
   const today = new Date();
   const { selectedMonth, setSelectedMonth, viewState, setViewState } = useTabPager();
   const year = Number(selectedMonth.slice(0, 4));
@@ -78,12 +78,11 @@ function PurchasesView({ active }: { active: boolean }) {
   const [categoryModal, setCategoryModal] = useState(false);
   const [activeCategory, setActiveCategory] = useState('전체');
   const categoryOptions = ['전체', ...new Set(category.categories)];
-  const yearMonth = toYearMonth(year, month);
-  const { purchases, loaded, loading, error, refetch, remove } = usePurchases(yearMonth);
+  const { purchases, loaded, loading, error, refetch, remove } = ledger;
 
   useFocusEffect(useCallback(() => {
-    if (active) { void refetch(); void category.refetch(); }
-  }, [active, refetch, category.refetch]));
+    if (active) void category.refetch();
+  }, [active, category.refetch]));
 
   const [refreshing, setRefreshing] = useState(false);
   async function onRefresh() {
@@ -98,9 +97,15 @@ function PurchasesView({ active }: { active: boolean }) {
     }
   }, [loaded, loading, error, purchaseTabs.join('|'), activeTab]);
   const days = useMemo(() => getCalendarDays(year, month), [year, month]);
-  const availableCategories = [...new Set([...categoryOptions, ...purchases.map(p => p.category)])];
+  const availableCategories = [...new Set([...categoryOptions, ...purchases.flatMap(p => Object.keys(p.category_amounts ?? { [p.category]: p.amount }))])];
   useEffect(() => { if (!category.loading && !category.error && loaded && !loading && !error && !availableCategories.includes(activeCategory)) setActiveCategory('전체'); }, [category.loading, category.error, loaded, loading, error, availableCategories.join('|'), activeCategory]);
-  const filtered = useMemo(() => purchases.filter(p => (activeTab === '전체' || p.supplier === activeTab) && (activeCategory === '전체' || p.category === activeCategory)), [purchases, activeTab, activeCategory]);
+  const filtered = useMemo(() => purchases.flatMap(purchase => {
+    if (activeTab !== '전체' && purchase.supplier !== activeTab) return [];
+    if (activeCategory === '전체') return [purchase];
+    const amounts = purchase.category_amounts ?? { [purchase.category]: purchase.amount };
+    if (!Object.hasOwn(amounts, activeCategory)) return [];
+    return [{ ...purchase, amount: amounts[activeCategory] }];
+  }), [purchases, activeTab, activeCategory]);
   const purchaseByDay = useMemo(() => {
     const grouped = new Map<string, typeof filtered>();
     filtered.forEach(p => {
@@ -198,7 +203,7 @@ function PurchasesView({ active }: { active: boolean }) {
                       {(p.item_count ?? 0) > 0 && (
                         <Text style={styles.purchaseItemCount}>{p.item_count}개 품목</Text>
                       )}
-                      <Badge label={p.category} variant="neutral" />
+                      <Badge label={activeCategory !== '전체' ? activeCategory : Object.keys(p.category_amounts ?? { [p.category]: p.amount }).join(' · ')} variant="neutral" />
                     </View>
                     <NumericText style={styles.purchaseAmount} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>{p.amount.toLocaleString()}원</NumericText>
                     <TouchableOpacity onPress={() => confirmDeletePurchase(p.id)} accessibilityRole="button" accessibilityLabel={`${p.supplier} 매입 삭제`} hitSlop={8} style={styles.deleteIconBtn}>
@@ -236,7 +241,11 @@ export function PurchasesScreen({ active = true }: { active?: boolean }) {
   const [innerTab, setInnerTabLocal] = useState<InnerTab>(viewState?.['purchase.section'] === '비용' ? '비용' : '매입');
   function setInnerTab(value: InnerTab) { setInnerTabLocal(value); setViewState?.('purchase.section', value); }
 
-  const { purchases, loading: purchasesLoading, error: purchasesError, refetch: refetchPurchases } = usePurchases(selectedMonth);
+  const ledger = usePurchases(selectedMonth);
+  const { purchases, loading: purchasesLoading, error: purchasesError, refetch: refetchPurchases } = ledger;
+  useFocusEffect(useCallback(() => {
+    if (active) void refetchPurchases();
+  }, [active, refetchPurchases]));
   const { expenses, loading: expensesLoading, error: expensesError, refetch: refetchExpenses } = useExpenses(selectedMonth);
   const expenseScope = `${store?.id}:${selectedMonth}`;
 
@@ -244,10 +253,9 @@ export function PurchasesScreen({ active = true }: { active?: boolean }) {
   useEffect(() => {
     if (!active) return;
     let current = true;
-    void refetchPurchases();
     void refetchExpenses().finally(() => { if (current) setExpenseReadyStore(expenseScope); });
     return () => { current = false; };
-  }, [active, expenseScope, refetchPurchases, refetchExpenses]);
+  }, [active, expenseScope, refetchExpenses]);
 
   const monthPurchaseCount = purchases.length;
   const monthExpenseCount = expenses.length;
@@ -275,7 +283,7 @@ export function PurchasesScreen({ active = true }: { active?: boolean }) {
         </View>
       </View>
 
-      {innerTab === '매입' ? <PurchasesView active={active} /> : <View style={{ flex: 1 }}><ExpensesPanel selectedMonth={selectedMonth} onMonthChange={setSelectedMonth} /><View style={styles.fabShelf} /></View>}
+      {innerTab === '매입' ? <PurchasesView active={active} ledger={ledger} /> : <View style={{ flex: 1 }}><ExpensesPanel selectedMonth={selectedMonth} onMonthChange={setSelectedMonth} /><View style={styles.fabShelf} /></View>}
     </SafeAreaView>
   );
 }

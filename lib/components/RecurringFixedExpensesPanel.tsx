@@ -1,3 +1,4 @@
+import { EvidencePanel } from './EvidencePanel';
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { Keyboard, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { randomUUID } from 'expo-crypto';
@@ -25,17 +26,19 @@ export const RecurringFixedExpensesPanel = forwardRef<FixedExpenseEditorHandle, 
   rowsVisible?: boolean; onDeleteSource?: (id: string, onDeleted: () => void) => void;
   yearMonth: string; legacyExpenses: DatedExpense[]; onChanged: () => Promise<void>; recurring: ReturnType<typeof useRecurringFixedExpenses>;
 }>(function FixedExpenseEditor({ yearMonth, legacyExpenses, onChanged, recurring, rowsVisible = true, onDeleteSource }, ref) {
-  const { store, currentRole } = useAuth();
+  const { store, canManageStore, devPreviewMode } = useAuth();
   const insets = useSafeAreaInsets();
   const { identity, data, loading, error, refetch, save } = recurring;
   const scope = useRef(identity); scope.current = identity;
   const saving = useRef(false);
   const [busy, setBusy] = useState(false);
+  const [savedRuleId, setSavedRuleId] = useState<string>();
+  const [savedEvidenceMonth, setSavedEvidenceMonth] = useState(yearMonth);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [formError, setFormError] = useState('');
   const [monthPicker, setMonthPicker] = useState<'effective' | 'end' | null>(null);
   const [pickerYear, setPickerYear] = useState(Number(koreaExpenseMonth().slice(0, 4)));
-  useEffect(() => { setMonthPicker(null); }, [draft?.id]);
+  useEffect(() => { setMonthPicker(null); setSavedRuleId(undefined); }, [draft?.id]);
   useEffect(() => { setDraft(null); setFormError(''); }, [identity]);
   const sources = legacyExpenses.filter(e => e.category === '고정비');
   function open(rule?: RecurringFixedExpenseRule) {
@@ -60,11 +63,11 @@ export const RecurringFixedExpensesPanel = forwardRef<FixedExpenseEditorHandle, 
       effective: [nextExpenseMonth(source.year_month), koreaExpenseMonth()].sort().at(-1)!, end: '', active: true, finite: false });
   }
   useImperativeHandle(ref, () => ({
-    openNew: () => { if (!loading && !error && currentRole === 'admin') open(); },
-    openRule: rule => { if (currentRole === 'admin') open(rule); },
-    openSource: source => { if (currentRole === 'admin') openSource(source); },
+    openNew: () => { if (!loading && !error && canManageStore && devPreviewMode === 'self') open(); },
+    openRule: rule => { if (canManageStore && devPreviewMode === 'self') open(rule); },
+    openSource: source => { if (canManageStore && devPreviewMode === 'self') openSource(source); },
   }));
-  function patch(values: Partial<Draft>) { if (!busy) { setFormError(''); setDraft(prev => prev ? { ...prev, ...values } : prev); } }
+  function patch(values: Partial<Draft>) { if (!busy && !savedRuleId) { setFormError(''); setDraft(prev => prev ? { ...prev, ...values } : prev); } }
   function minimumMonth(field: 'effective' | 'end') {
     if (field === 'end') return draft?.effective ?? koreaExpenseMonth();
     const base = draft?.expectedRevision != null ? nextExpenseMonth(koreaExpenseMonth()) : koreaExpenseMonth();
@@ -98,6 +101,7 @@ export const RecurringFixedExpensesPanel = forwardRef<FixedExpenseEditorHandle, 
     </View>;
   }
   async function submit() {
+    if (savedRuleId) { setDraft(null); return; }
     if (!draft || !store || saving.current) return;
     const savedIdentity = identity;
     try {
@@ -111,8 +115,8 @@ export const RecurringFixedExpensesPanel = forwardRef<FixedExpenseEditorHandle, 
       const source = sources.find(e => e.id === draft.sourceId);
       if (source && source.year_month >= input.effective_month) throw new UserFacingError('기존 비용의 다음 달부터 반복 일정을 적용해주세요.');
       setFormError(''); saving.current = true; setBusy(true);
-      await save(input);
-      if (scope.current === savedIdentity) { setDraft(null); void onChanged(); }
+      const ruleId = await save(input);
+      if (scope.current === savedIdentity) { setSavedEvidenceMonth(draft.expectedRevision == null ? input.effective_month : yearMonth); setSavedRuleId(ruleId); void onChanged(); }
     } catch (caught) {
       if (scope.current === savedIdentity) setFormError(getErrorMessage(caught));
     } finally { saving.current = false; setBusy(false); }
@@ -138,7 +142,7 @@ export const RecurringFixedExpensesPanel = forwardRef<FixedExpenseEditorHandle, 
     : `${nextVersion.effective_month}부터 발생 중단` : null;
   const canDeleteSource = !!onDeleteSource && draftSource?.year_month === yearMonth && !data?.adoptedSourceIds.includes(draftSource.id);
 
-  if (currentRole !== 'admin') return null;
+  if (!canManageStore || devPreviewMode !== 'self') return null;
   return <View style={styles.section}>
     {rowsVisible && (loading ? <Text>고정비 불러오는 중</Text> : error ? <>
       <Text accessibilityRole="alert">고정비 조회 실패: {error}</Text>
@@ -162,19 +166,22 @@ export const RecurringFixedExpensesPanel = forwardRef<FixedExpenseEditorHandle, 
           </View>
           {!!formError && <Text accessibilityRole="alert" accessibilityLiveRegion="assertive" style={styles.error}>{formError}</Text>}
           <ScrollView style={styles.scroll} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.fields}>
-            <Field label="항목명" accessibilityLabel="고정비 항목명" placeholder="예: 임대료, 장비 할부" value={draft?.name ?? ''} editable={!busy} onChangeText={name => patch({ name })} style={styles.name} />
+            {savedRuleId && <Text style={styles.help}>고정비가 저장됐어요. 증빙을 첨부하거나 완료를 눌러주세요.</Text>}
+            {store && draft?.sourceId && <><Text style={styles.help}>기존 비용 증빙 자료</Text><EvidencePanel target={{ kind: 'expense', storeId: store.id, id: draft.sourceId }} disabled={busy} /></>}
+            {store && draft && (savedRuleId || draft.expectedRevision != null) && <><Text style={styles.help}>{savedRuleId ? savedEvidenceMonth : yearMonth} 증빙 자료</Text><EvidencePanel target={{ kind: 'recurring', storeId: store.id, id: savedRuleId ?? draft.id, month: savedRuleId ? savedEvidenceMonth : yearMonth }} disabled={busy} initiallyExpanded={!!savedRuleId} /></>}
+            <Field label="항목명" accessibilityLabel="고정비 항목명" placeholder="예: 임대료, 장비 할부" value={draft?.name ?? ''} editable={!busy && !savedRuleId} onChangeText={name => patch({ name })} style={styles.name} />
             <View>
               <Text style={styles.label}>월 발생금액</Text>
               <View style={styles.money}>
                 <TextInput accessibilityLabel="고정비 월 금액" keyboardType="numeric" placeholder="0" placeholderTextColor={Colors.gray400}
-                  value={draft?.amount ?? ''} editable={!busy} onChangeText={amount => patch({ amount })}
+                  value={draft?.amount ?? ''} editable={!busy && !savedRuleId} onChangeText={amount => patch({ amount })}
                   onBlur={() => { if (draft) { const value = Number(draft.amount.replace(/,/g, '')); if (Number.isFinite(value) && value > 0) patch({ amount: value.toLocaleString('ko-KR') }); } }} style={styles.amount} />
                 <Text style={styles.currency}>원</Text>
               </View>
             </View>
             <View style={styles.dateRow}>
-              <View style={styles.dateColumn}><Field label={editing ? '변경 적용월' : '처음 발생월'} accessibilityLabel="고정비 적용월" placeholder="YYYY-MM" value={draft?.effective ?? ''} editable={!busy} onChangeText={effective => patch({ effective })} rightSlot={monthButton('effective')} style={styles.dateInput} /></View>
-              <View style={styles.dateColumn}><Field label="발생일 (매월)" accessibilityLabel="고정비 발생일" placeholder="1~31일" keyboardType="number-pad" value={draft?.day ?? ''} editable={!busy} onChangeText={day => patch({ day })} style={styles.dateInput} /></View>
+              <View style={styles.dateColumn}><Field label={editing ? '변경 적용월' : '처음 발생월'} accessibilityLabel="고정비 적용월" placeholder="YYYY-MM" value={draft?.effective ?? ''} editable={!busy && !savedRuleId} onChangeText={effective => patch({ effective })} rightSlot={monthButton('effective')} style={styles.dateInput} /></View>
+              <View style={styles.dateColumn}><Field label="발생일 (매월)" accessibilityLabel="고정비 발생일" placeholder="1~31일" keyboardType="number-pad" value={draft?.day ?? ''} editable={!busy && !savedRuleId} onChangeText={day => patch({ day })} style={styles.dateInput} /></View>
             </View>
             {monthChoices('effective')}
             {editing && <Text style={styles.help}>변경 적용월부터 반영하고, 이전 내역은 그대로 남아요.</Text>}
@@ -189,7 +196,7 @@ export const RecurringFixedExpensesPanel = forwardRef<FixedExpenseEditorHandle, 
                 </TouchableOpacity>)}
               </View>
             </View>
-            {draft?.finite && <Field label="마지막 발생월" accessibilityLabel="고정비 종료월" placeholder="YYYY-MM" value={draft.end} editable={!busy} onChangeText={end => patch({ end })} rightSlot={monthButton('end')} helpText="선택한 월까지 포함해요." />}
+            {draft?.finite && <Field label="마지막 발생월" accessibilityLabel="고정비 종료월" placeholder="YYYY-MM" value={draft.end} editable={!busy && !savedRuleId} onChangeText={end => patch({ end })} rightSlot={monthButton('end')} helpText="선택한 월까지 포함해요." />}
             {draft?.finite && monthChoices('end')}
             {!!preview && <View style={styles.summary} accessibilityLiveRegion="polite">
               <Text style={styles.summaryTitle}>매월 {Number(draft?.day)}일{draft?.finite ? ` · ${duration == null ? '종료월 확인' : `${duration}개월`}` : ', 계속 반복'}</Text>
@@ -202,7 +209,7 @@ export const RecurringFixedExpensesPanel = forwardRef<FixedExpenseEditorHandle, 
           </ScrollView>
           <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 20) }]}>
             <TouchableOpacity disabled={busy} accessibilityRole="button" accessibilityLabel="비용 저장" accessibilityState={{ busy, disabled: busy }} onPress={submit} style={styles.save}>
-              <Text style={styles.saveText}>{busy ? '저장 중' : editing ? '변경 저장' : '고정비 추가'}</Text>
+              <Text style={styles.saveText}>{busy ? '저장 중' : savedRuleId ? '완료' : editing ? '변경 저장' : '고정비 추가'}</Text>
             </TouchableOpacity>
           </View>
         </View>

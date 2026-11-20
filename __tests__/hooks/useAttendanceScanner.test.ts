@@ -6,7 +6,7 @@ const saved = { scannerId: 'scanner', storeId: 'store', storeName: '가상 매�
 const receipt = { status: 'saved', data: { employee_name: '김**', kind: 'clock_in', punched_at: '2026-11-18T09:00:00+09:00', duplicate: false } };
 const unknown = { status: 'unknown', error: { code: 'ATTENDANCE_TIMEOUT' } };
 function service(): ScannerUiService {
-  return { loadStoredAttendanceScannerRegistration: jest.fn().mockResolvedValue(saved), scannerStatus: jest.fn().mockResolvedValue({ status: 'success', data: saved }),
+  return { leaveScannerMode: jest.fn(), loadStoredAttendanceScannerRegistration: jest.fn().mockResolvedValue(saved), scannerStatus: jest.fn().mockResolvedValue({ status: 'success', data: saved }),
     issueAttendanceScannerPairingQr: jest.fn(), exchangeAndStoreAttendanceScannerPairingQr: jest.fn().mockResolvedValue({ status: 'success', data: saved }), scan: jest.fn().mockResolvedValue(receipt) };
 }
 beforeEach(() => { Object.defineProperty(AppState, 'currentState', { configurable: true, value: 'active' }); });
@@ -32,6 +32,8 @@ it.each(['ATTENDANCE_SCANNER_INVALID', 'ATTENDANCE_SCANNER_REVOKED'])('status의
   const api = service(); (api.scannerStatus as jest.Mock).mockResolvedValue({ status: 'server_rejected', error: { code } });
   const { result } = renderHook(() => useAttendanceScanner(api)); await waitFor(() => expect(result.current.state).toBe('revoked'));
   expect(result.current.ready).toBe(false); expect(result.current.title).toBe('등록이 해제됐어요');
+  act(() => result.current.clearNotice());
+  expect(result.current.canLeave).toBe(true);
   await act(async () => { result.current.clearNotice(); await result.current.scan('new-registration'); });
   expect(api.exchangeAndStoreAttendanceScannerPairingQr).toHaveBeenCalledWith({ qr: 'new-registration' }); expect(api.scan).not.toHaveBeenCalled();
 });

@@ -71,7 +71,7 @@ export default function EditIngredientScreen() {
         setUnit(item.unit);
         setCurrentStock(String(item.current_stock));
         setMinStock(String(item.min_stock));
-        setLastPrice(String(item.last_price));
+        setLastPrice(String(item.last_price ?? ''));
       })
       .catch((e) => { if (!cancelled) setFetchError(getErrorMessage(e, '식자재를 불러오지 못했습니다.')); })
       .finally(() => { if (!cancelled) setFetchLoading(false); });
@@ -84,7 +84,7 @@ export default function EditIngredientScreen() {
       || category !== ingredient.category
       || unit !== ingredient.unit
       || minStock !== String(ingredient.min_stock)
-      || lastPrice !== String(ingredient.last_price)))
+      || lastPrice !== String(ingredient.last_price ?? '')))
   );
   const bypassLeaveGuard = useConfirmLeave(isDirty && !savedNeedsRefresh, { blockLeave: submitting, message: '지금 나가면 수정한 재고 정보가 저장되지 않아요.' });
 
@@ -98,6 +98,11 @@ export default function EditIngredientScreen() {
       Alert.alert('입력 오류', '식자재명을 입력해주세요.');
       return;
     }
+    const price = lastPrice.trim() ? Number(lastPrice) : null;
+    if (canManageStock && price !== null && (!Number.isFinite(price) || price < 0)) {
+      Alert.alert('입력 오류', '단가는 0원 이상으로 입력해주세요.');
+      return;
+    }
     savingLock.current = true;
     setSubmitting(true);
     try {
@@ -107,7 +112,7 @@ export default function EditIngredientScreen() {
         unit,
         current_stock: parseFloat(currentStock) || 0,
         min_stock: parseFloat(minStock) || 0,
-        last_price: parseFloat(lastPrice) || 0,
+        ...(price !== ingredient.last_price && { last_price: price }),
       } : { current_stock: parseFloat(currentStock) || 0 });
       if (active.current !== scope) return;
       if (saved?.cacheRefreshFailed) {
@@ -229,7 +234,7 @@ export default function EditIngredientScreen() {
             accessibilityLabel="식자재 단가"
             onChangeText={setLastPrice}
             keyboardType="numeric"
-            placeholder="0"
+            placeholder="미확인"
             placeholderTextColor={Colors.gray400}
           />
 
