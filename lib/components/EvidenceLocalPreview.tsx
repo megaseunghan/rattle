@@ -1,3 +1,4 @@
+import { EvidencePhoto } from './EvidencePhoto';
 import { useState } from 'react';
 import { Alert, Modal, StyleSheet, Text, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -15,9 +16,9 @@ export function EvidenceLocalPreview({ selection }: { selection: EvidenceSelecti
       {selection.mimeType === 'application/pdf' ? <Text>PDF</Text> : <Image source={{ uri: selection.uri }} style={styles.image} contentFit="contain" cachePolicy="none" recyclingKey={selection.id} />}
     </TouchableOpacity>
     <Modal visible={open} onRequestClose={() => setOpen(false)}>
-      <SafeAreaView style={styles.viewer}>
+      <SafeAreaView style={styles.viewer} onAccessibilityEscape={() => setOpen(false)}>
         <TouchableOpacity accessibilityRole="button" accessibilityLabel="증빙 미리보기 닫기" style={styles.close} onPress={() => setOpen(false)}><Text>닫기</Text></TouchableOpacity>
-        {open && <Image source={{ uri: selection.uri }} style={styles.original} contentFit="contain" cachePolicy="none" />}
+        {open && <EvidencePhoto onClose={() => setOpen(false)} source={{ uri: selection.uri }} style={styles.original} contentFit="contain" cachePolicy="none" />}
       </SafeAreaView>
     </Modal>
   </>;
