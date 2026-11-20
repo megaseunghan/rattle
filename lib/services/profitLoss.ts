@@ -101,7 +101,7 @@ export async function getProfitLossByMonth(
     return s + (card + cash > 0 ? card + cash : Number(r.total_amount ?? 0));
   }, 0) + manualSalesTotals.total;
 
-  const purchaseByCategory: Partial<Record<PurchaseCategory, number>> = {};
+  const purchaseByCategory: Partial<Record<PurchaseCategory, number>> = Object.create(null);
   for (const purchase of purchases) {
     const amounts = purchase.category_amounts ?? { [purchase.category]: purchase.amount };
     for (const [category, amount] of Object.entries(amounts)) {
