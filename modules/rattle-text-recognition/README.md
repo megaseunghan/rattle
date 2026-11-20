@@ -360,3 +360,31 @@ OCR 대상 **8 suites/167 tests 통과**, 기본 timeout, 2.507초(`/tmp/rattle-
 이 표본들은 이미 규칙 작성에 사용한 개발 자료이며 독립 holdout 정확도가 아니다. 저장소에는 합성 회귀와 집계만 기록했고 실영수증·원문·이미지·거래내역을 추가하지 않았다. 구현자 자체 검토이며 같은 검토자의 후속 재검토는 PL이 배정한다. 오확정 경로만 차단한다는 종료 기준과 안전한 null의 backlog는 유지한다. 새 기기 OCR·화면·빌드·설치·EAS·원격 변경은 실행하지 않았다.
 
 최종 검증(2026-11-20, macOS 로컬, 기준 265f472 위 이 과제의 미커밋 파서·합성 회귀): 전체 `npx jest --runInBand --no-coverage --testPathIgnorePatterns='/node_modules/' '/__tests__/setup\.ts' '<rootDir>/supabase/functions/' '<rootDir>/dev/'` **199 suites/1753 tests 통과**, 기본 timeout, 49.148초, 종료 0(`/tmp/rattle-ocr-r13-full-jest.log`). 실행 전후 파서·회귀 소스 SHA는 `/tmp/rattle-ocr-r13-final-source.sha256`과 일치했고 두 raw 평가기의 파서 SHA도 최종 소스와 일치했다. `git diff --check`와 두 외부 평가기 `node --check` 통과.
+
+## 독립 검토 9회차 반영 · R13 숫자 없는 인라인 값 (2026-11-20)
+
+작업 `task_70f0c6ea4da3`, 기준 `feature/evidence-attachments@88f9402`. 앞선 R13 수정은 별도 셀과 숫자가 포함된 값의 내용을 보존했으나, 숫자가 전혀 없는 인라인 값은 `summaryValue`를 호출하지 않아 빈 부가란으로 면제하는 경로가 남아 있었다. 라벨 끝부터 다음 라벨 앞까지의 실제 값 영역을 확인해, 내용이 있으면 숫자 유무와 관계없이 기존 금액 해석 경로를 거치게 했다. `l,OOO` 같은 전부 문자 오독과 `삼천원`은 새 숫자 지원 없이 unreadable로 남고 selected/suggested 모두 null이 된다.
+
+빈 `회수액` 라벨의 ‘액’을 값으로 오인하지 않도록 라벨 경계에 포함했다. 원래의 빈 회수·용기 회수액 부가란은 독립 공급가+VAT와 매출합계가 맞으면 selected를 유지한다. 기존 R1~R13의 숫자 충돌·비영 회수·저신뢰 매출액 차단과 토큰 독립성은 유지했다.
+
+`deviceReceiptPatterns.test.ts`에 합성 회귀 7개를 추가했다. 모두 가상 공급가 21,818 + VAT 2,182 = 매출합계 24,000을 대조한다.
+
+| 값 영역 / 배치 | 기대값 |
+| --- | --- |
+| 한 관측 `회수 l,OOO` / `회수 삼천원` | 회수 unreadable, 후보 보존, selected/suggested null |
+| 라벨과 값이 별도 셀인 `l,OOO` / `삼천원` | 같은 unreadable·null 판정 유지 |
+| 값 없는 `회수` / `회수액` / `용기 회수액` | 정상 빈 부가란, selected 24,000·suggested null 유지 |
+
+수정 전 신규 7개 중 인라인 2개가 실패했다(`/tmp/rattle-ocr-r13-inline-red.log`). 수정 후 OCR **8 suites/186 tests 통과**, 기본 timeout, 3.434초(`/tmp/rattle-ocr-r13-inline-target.log`), `npm run typecheck` 통과(`/tmp/rattle-ocr-r13-inline-typecheck.log`).
+
+외부 `iphone/compare-r13-inline.mjs`, `android/compare-r13-inline.mjs`로 88f9402와 최종 파서를 같은 raw에 재실행했다. 결과는 `/private/tmp/rattle-ocr-bench/iphone/r13-inline-comparison.json`, `/private/tmp/rattle-ocr-bench/android/parser-r13-inline-comparison.json`이고, 파싱 출력·로그·원문은 모두 외부 벤치 안에 유지했다. 입력 불변성과 최종 파서 SHA-256 일치를 확인했다.
+
+| 개발 표본 / 장수 | 88f9402 selected/suggested/null | 수정본 selected/suggested/null | 잘못된 selected/suggested |
+| --- | --- | --- | --- |
+| iPhone 신규 표본 10장 | 1 / 2 / 7 | **1 / 2 / 7** | **0 / 0** |
+| 기존 Android 10장 | 3 / 0 / 7 | **3 / 0 / 7** | **0 / 0** |
+| 기존 Mac 10장 | 4 / 0 / 6 | **4 / 0 / 6** | **0 / 0** |
+
+같은 개발 표본의 재평가이며 독립 holdout 성능이 아니다. 구현자 자체 검토이며 같은 검토자의 후속 검토는 PL이 배정한다. 안전한 null은 기존 backlog에 유지하고 원문은 저장소에 추가하지 않았다. 새 기기 OCR·화면·네이티브 빌드·설치·EAS·원격 변경은 실행하지 않았다.
+
+최종 검증(2026-11-20, macOS 로컬, 기준 88f9402 위 이 과제의 미커밋 파서·합성 회귀): 전체 `npx jest --runInBand --no-coverage --testPathIgnorePatterns='/node_modules/' '/__tests__/setup\.ts' '<rootDir>/supabase/functions/' '<rootDir>/dev/'` **199 suites/1760 tests 통과**, 기본 timeout, 52.046초, 종료 0(`/tmp/rattle-ocr-r13-inline-full-jest.log`). 실행 전후 파서·회귀 SHA는 `/tmp/rattle-ocr-r13-inline-final-source.sha256`과 일치했다. `git diff --check`와 두 외부 평가기 `node --check` 통과.

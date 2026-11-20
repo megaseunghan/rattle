@@ -7,6 +7,21 @@ const pair = (label: string, value: string, y: number) => [cell(label, .1, y), c
 const tax = () => [...pair('공급가', '21.818', .3), ...pair('부가세', '2,182', .4)];
 
 describe('실기기 후속 · 합성 문서 구조', () => {
+  it.each(['l,OOO', '삼천원'])('R13 잔여: 숫자가 없는 인라인 회수 %s도 미확인 값으로 차단한다', value => {
+    const parsed = parseReceipt([...tax(), ...pair('매출합계', '24,000', .5), cell(`회수 ${value}`, .1, .6)]);
+    expect(parsed.amountStatus.returns).toBe('unreadable');
+    expect(parsed.selectedTotal).toBeNull(); expect(parsed.suggestedTotal).toBeNull();
+    expect(parsed.totalCandidates.some(candidate => candidate.value === 24000)).toBe(true);
+  });
+  it.each(['l,OOO', '삼천원'])('R13 대조: 별도 셀 회수 %s도 미확인 값으로 차단한다', value => {
+    const parsed = parseReceipt([...tax(), ...pair('매출합계', '24,000', .5), ...pair('회수', value, .6)]);
+    expect(parsed.amountStatus.returns).toBe('unreadable');
+    expect(parsed.selectedTotal).toBeNull(); expect(parsed.suggestedTotal).toBeNull();
+  });
+  it.each(['회수', '회수액', '용기 회수액'])('R13 대조: 값 없는 %s 라벨은 빈 부가란으로 유지한다', label => {
+    const parsed = parseReceipt([...tax(), ...pair('매출합계', '24,000', .5), cell(label, .1, .6)]);
+    expect(parsed.selectedTotal?.value).toBe(24000); expect(parsed.suggestedTotal).toBeNull();
+  });
   it.each([
     ['비영 회수 뒤 빈 중복란', ['3,000', '']],
     ['빈 중복란 뒤 비영 회수', ['', '3,000']],

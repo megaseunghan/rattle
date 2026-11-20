@@ -87,7 +87,7 @@ function scalar(line: RecognizedLine): boolean { return wholeMoney(line.text) !=
 
 const columnNames = ['품목명[규격]', '품목명', '상품명', '공급가액', '공급가', '부가세', '보증금', '매출합계', '품명', '규격', '입수', 'BOX', 'EA', '단가', '금액', '수량', '단위', '비고'];
 const joinableLabels = [...columnNames, '금일합계', '총결제금액', '결제금액', '청구금액', '총합계', '합계금액', '매출총계', '전일잔액', '미수잔액', '이월잔액', '총계', '합계'];
-const summaryLabels = /금일합계|총결제금액|결제금액|실결제|청구금액|총합계|합계금액|매출총계|매출합계|상품금액|상품액|주문금액|공급가액|공급가|부가세|세액|VAT|보증금|공병반납|용기반납|회수|배송비|할인|쿠폰|전일잔액|미수잔액|이월잔액|잔액|총계|합계/gi;
+const summaryLabels = /금일합계|총결제금액|결제금액|실결제|청구금액|총합계|합계금액|매출총계|매출합계|상품금액|상품액|주문금액|공급가액|공급가|부가세|세액|VAT|보증금|공병반납|용기반납|회수(?:액)?|배송비|할인|쿠폰|전일잔액|미수잔액|이월잔액|잔액|총계|합계/gi;
 const numericTokens = /[0-9]+(?:[,.]\s*[0-9]+)*(?:\s+[0-9]{3})*/g;
 function normalizedOffsets(text: string) {
   let normalized = '', offset = 0;
@@ -204,7 +204,7 @@ export function parseReceipt(lines: readonly RecognizedLine[], sourceImageId = '
     const normalized = normalizeMoney(text).trim()
       .replace(/^(?:총|쿠페이\s*(?:머니)?|[가-힣A-Za-z]+카드\s*\/\s*(?:일시불|일시물))\s*(?=[₩W(+\-\d])/, '')
       .replace(/\s+인수(?:자)?\s*$/, '');
-    // Preserve content even when parsing fails: unreadable digits are not a blank ancillary field.
+    // Preserve content even when parsing fails: unreadable text is not a blank ancillary field.
     if (normalized) nonEmptyValueLabels.add(label);
     const observed = wholeMoney(normalized);
     if (observed !== null) return observed;
@@ -232,9 +232,14 @@ export function parseReceipt(lines: readonly RecognizedLine[], sourceImageId = '
     }));
     const markerIndex = labels.map((marker, index) => pattern.test(marker.text) ? index : -1).filter(index => index >= 0)[occurrence] ?? -1;
     const marker = labels[markerIndex];
-    if (/\d/.test(normalized)) {
+    const inlineStart = marker?.end ?? normalized.length;
+    const inlineEnd = labels[markerIndex + 1]?.start ?? normalized.length;
+    const inlineContent = normalized.slice(inlineStart, inlineEnd).replace(/^[\s:/|：]+|[\s/|]+$/g, '');
+    // A textual inline value must be read (and retained as unreadable), not skipped
+    // in favour of the separate-cell path merely because it contains no digits.
+    if (/\d/.test(normalized) || inlineContent) {
       let start = marker?.end ?? normalized.search(/[₩W(+\-\d]/);
-      let end = labels[markerIndex + 1]?.start ?? normalized.length;
+      let end = inlineEnd;
       // A shared trailing value remains a candidate, but its token identity
       // will prevent it from corroborating another field that consumed it.
       if (!/\d/.test(normalized.slice(start, end)) && [...normalized.matchAll(numericTokens)].length === 1) {
