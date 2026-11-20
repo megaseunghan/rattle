@@ -86,8 +86,31 @@ export function extractMoney(text: string): number[] { return moneyValues(text, 
 function scalar(line: RecognizedLine): boolean { return wholeMoney(line.text) !== null; }
 
 const columnNames = ['품목명[규격]', '품목명', '상품명', '공급가액', '공급가', '부가세', '보증금', '매출합계', '품명', '규격', '입수', 'BOX', 'EA', '단가', '금액', '수량', '단위', '비고'];
-const joinableLabels = [...columnNames, '금일합계', '총결제금액', '결제금액', '청구금액', '총합계', '합계금액', '매출총계', '전일잔액', '미수잔액', '이월잔액', '총계', '합계'];
-const summaryLabels = /금일합계|총결제금액|결제금액|실결제|청구금액|총합계|합계금액|매출총계|매출합계|상품금액|상품액|주문금액|공급가액|공급가|부가세|세액|VAT|보증금|공병반납|용기반납|회수(?:액)?|배송비|할인|쿠폰|전일잔액|미수잔액|이월잔액|잔액|총계|합계/gi;
+// One registry owns total label recognition, score and scope. Generic totals may
+// also name a verified subtotal/cumulative amount; order amounts are not final.
+const totalLabelDefinitions = [
+  { label: '금일합계', score: 120, kind: 'daily' },
+  { label: '총결제금액', score: 110, kind: 'payment' },
+  { label: '결제금액', score: 110, kind: 'payment' },
+  { label: '실결제금액', score: 110, kind: 'payment' },
+  { label: '실결제', score: 110, kind: 'payment' },
+  { label: '청구금액', score: 110, kind: 'payment' },
+  { label: '받을금액', score: 110, kind: 'payment' },
+  { label: '총합계', score: 100, kind: 'generic' },
+  { label: '합계금액', score: 100, kind: 'generic' },
+  { label: '매출총계', score: 90, kind: 'sales' },
+  { label: '매출합계', score: 90, kind: 'sales' },
+  { label: '총계', score: 90, kind: 'generic' },
+  { label: '합계', score: 65, kind: 'generic' },
+  { label: '주문금액', score: 60, kind: 'order' },
+] as const;
+type TotalLabelDefinition = typeof totalLabelDefinitions[number];
+const totalDefinitionByName = new Map<string, TotalLabelDefinition>(totalLabelDefinitions.map(definition => [definition.label, definition]));
+const totalLabelNames = totalLabelDefinitions.map(definition => definition.label).sort((a, b) => b.length - a.length);
+const finalTotalPattern = new RegExp(totalLabelDefinitions.filter(definition => definition.kind !== 'order').map(definition => definition.label).join('|'), 'i');
+const salesTotalPattern = new RegExp(totalLabelDefinitions.filter(definition => definition.kind === 'sales').map(definition => definition.label).join('|'), 'i');
+const joinableLabels = [...columnNames, ...totalLabelNames, '전일잔액', '미수잔액', '이월잔액'];
+const summaryLabels = new RegExp([...totalLabelNames, '상품금액', '상품액', '공급가액', '공급가', '부가세', '세액', 'VAT', '보증금', '공병반납', '용기반납', '회수(?:액)?', '배송비', '할인', '쿠폰', '전일잔액', '미수잔액', '이월잔액', '잔액'].join('|'), 'gi');
 const numericTokens = /[0-9]+(?:[,.]\s*[0-9]+)*(?:\s+[0-9]{3})*/g;
 function normalizedOffsets(text: string) {
   let normalized = '', offset = 0;
@@ -187,7 +210,7 @@ export function parseReceipt(lines: readonly RecognizedLine[], sourceImageId = '
   };
   const totalCandidates: TotalCandidate[] = [];
   let totalLabelCount = 0;
-  let unreadableDefinitiveTotal = false;
+  const candidateDefinitions = new Map<TotalCandidate, TotalLabelDefinition>();
   const amounts: ParsedReceipt['amounts'] = { supply: null, vat: null, deposit: null, returns: null, goods: null, shipping: null, discount: null, balance: null };
   const amountCells = new Map<keyof typeof amounts, RecognizedLine[]>();
   const amountStatus = Object.fromEntries(Object.keys(amounts).map(key => [key, 'absent'])) as Record<keyof typeof amounts, 'absent' | 'observed' | 'unreadable'>;
@@ -223,7 +246,7 @@ export function parseReceipt(lines: readonly RecognizedLine[], sourceImageId = '
     | { state: 'empty' | 'unparsed' }
     | { state: 'parsed'; value: number }
   );
-  interface ValueSegment { name: string; start: number; end: number; content: string; reading: ValueReading }
+  interface ValueSegment { name: string; prefix: string; start: number; end: number; content: string; reading: ValueReading }
   const classifyValue = (content: string, label: RecognizedLine, valueCells: RecognizedLine[], tokens: MoneyToken[], name: string): ValueReading => {
     if (!content.trim()) return { state: 'empty', label: name, tokens: [] };
     const value = summaryValue(content, label, valueCells);
@@ -250,7 +273,7 @@ export function parseReceipt(lines: readonly RecognizedLine[], sourceImageId = '
       const start = marker.end, end = markers[index + 1]?.start ?? normalized.length;
       const content = normalized.slice(start, end).replace(/^[\s:/|：]+/g, '')
         .replace(index + 1 < markers.length ? /[\s/|]+$/g : /\s+$/g, '');
-      return { name: marker.text, start, end, content, reading: classifyValue(content, cell, [cell], tokensFor(cell, start, end), markers.length > 1 ? marker.text : cell.text) };
+      return { name: marker.text, prefix: normalized.slice(index ? markers[index - 1].end : 0, marker.start), start, end, content, reading: classifyValue(content, cell, [cell], tokensFor(cell, start, end), markers.length > 1 ? marker.text : cell.text) };
     });
     // A fallback depends on the requested pattern; known summary markers do not.
     if (knownMarkers) segmentCache.set(cell, segments);
@@ -280,8 +303,54 @@ export function parseReceipt(lines: readonly RecognizedLine[], sourceImageId = '
     const reading = readingFor(row, label, pattern, occurrence);
     return reading.state === 'parsed' ? reading : null;
   };
+  const totalReadings: { definition: TotalLabelDefinition; reading: ValueReading; invalidGrouping: boolean }[] = [];
+  const tableSummaries: number[][] = [];
+  const balancePattern = semanticLabels.find(([key]) => key === 'balance')![1];
+  const isExcludedTotalScope = (row: ReceiptRow, cell: RecognizedLine, segments: ValueSegment[], index: number) => {
+    const segment = segments[index], previous = segments[index - 1];
+    // An explicit scope prefix or an empty balance/total alias names past amounts.
+    // A preceding balance with its own value cannot hide a new competing total.
+    return (index === 0 && balancePattern.test(compact(segment.prefix)))
+      || !!(previous && balancePattern.test(previous.name) && previous.reading.state === 'empty')
+      || row.cells.some(other => other !== cell && compact(other.text).match(balancePattern)?.[0] === compact(other.text)
+        && readingFor(row, other, balancePattern).state === 'empty');
+  };
+  const isTableSummary = (row: ReceiptRow, cell: RecognizedLine, definition: TotalLabelDefinition) => {
+    if (definition.label !== '합계' || compact(cell.text) !== definition.label) return false;
+    const values = row.cells.filter(other => other !== cell && cx(other) > cx(cell));
+    const rowIndex = rows.indexOf(row);
+    return values.length >= 2 && values.every(value => wholeMoney(value.text) !== null)
+      && rows.slice(0, rowIndex).some(header => header.cells.filter(column => /^(?:공급가(?:액)?|부가세|VAT|보증금)$/.test(compact(column.text))
+        || totalDefinitionByName.get(compact(column.text))?.kind === 'sales').length >= 2
+        && !header.cells.some(column => wholeMoney(column.text) !== null));
+  };
+  const tableTotalReading = (row: ReceiptRow, cell: RecognizedLine, definition: TotalLabelDefinition): ValueReading | null => {
+    if (definition.label !== '합계' || compact(cell.text) !== definition.label) return null;
+    // Quantity scribbles beside a total are a different column, not part of its
+    // value span. Require an explicit quantity/amount header and one strict amount.
+    for (const header of rows.slice(0, rows.indexOf(row)).reverse()) {
+      const quantity = header.cells.find(column => compact(column.text) === '수량');
+      const amountColumns = header.cells.filter(column => compact(column.text) === '금액'
+        || totalDefinitionByName.get(compact(column.text))?.kind === 'sales');
+      if (!quantity || amountColumns.length !== 1 || cx(quantity) >= cx(amountColumns[0])) continue;
+      const column = amountColumns[0], boundary = (cx(quantity) + cx(column)) / 2;
+      const values = row.cells.filter(other => other !== cell && cx(other) > boundary);
+      if (values.length === 1 && Math.abs(cx(values[0]) - cx(column)) < Math.max(column.box.w / 2, .055)
+        && wholeMoney(values[0].text) !== null) {
+        return classifyValue(values[0].text, cell, values, tokensFor(values[0]), cell.text);
+      }
+      return null;
+    }
+    return null;
+  };
   for (const row of rows) {
-    const isTableHeader = row.cells.filter(l => columnNames.includes(compact(l.text))).length >= 2 && !row.cells.some(l => wholeMoney(l.text) !== null);
+    const isTableHeader = row.cells.filter(l => columnNames.includes(compact(l.text))).length >= 2
+      && !row.cells.some(l => wholeMoney(l.text) !== null)
+      && row.cells.every(cell => {
+        const segments = segmentsFor(cell, /$^/);
+        return segments.every((segment, index) => readingFor(row, cell, new RegExp(`^${segment.name}$`, 'i'),
+          segments.slice(0, index).filter(previous => previous.name === segment.name).length).state === 'empty');
+      });
     for (const cell of row.cells) {
       const text = compact(normalizeMoney(cell.text));
       for (const [key, pattern] of semanticLabels) {
@@ -300,25 +369,26 @@ export function parseReceipt(lines: readonly RecognizedLine[], sourceImageId = '
           }
         }
       }
-      if (!isTableHeader && !excluded.test(text)) {
-        const scoreFor = (label: string) => /금일합계/.test(label) ? 120 : /총결제금액|결제금액|실결제|청구금액/.test(label) ? 110
-          : /총합계|합계금액/.test(label) ? 100 : /매출합계|매출총계|^총계(?:[₩W\d(+\-]|$)/.test(label) ? 90
-          : /^합계(?:[₩W\d(+\-]|$)/.test(label) ? 65 : /주문금액/.test(label) ? 60 : 0;
-        const markers = [...text.matchAll(summaryLabels)].map(match => match[0]).filter(label => scoreFor(label) > 0);
-        // Preserve every printed total in a composite observation, including
-        // repeated/conflicting labels; splitting must not hide a second total.
-        const labels = markers.length ? markers : [text];
-        for (const [index, label] of labels.entries()) {
-          let score = scoreFor(label);
-          if (row.cells.some(other => other !== cell && excluded.test(compact(other.text)))) score = 0;
-          if (score) totalLabelCount += 1;
-          const pattern = markers.length ? new RegExp(`^${label}$`, 'i') : /금일합계|총계|합계|결제금액|주문금액/;
-          const occurrence = labels.slice(0, index).filter(previous => previous === label).length;
-          const reading = score ? valueFor(row, cell, pattern, occurrence) : null;
-          if (!reading && score && /금일합계|결제|청구|매출합계|매출총계/.test(label)) unreadableDefinitiveTotal = true;
-          if (reading) {
-            const candidate = { ...field(reading.value, row.cells, score >= 100 ? .85 : .6, 'observed', reading.tokens), label: reading.label, score };
+      if (!isTableHeader) {
+        const segments = segmentsFor(cell, /$^/);
+        for (const [index, segment] of segments.entries()) {
+          const definition = totalDefinitionByName.get(segment.name);
+          if (!definition || isExcludedTotalScope(row, cell, segments, index)) continue;
+          const occurrence = segments.slice(0, index).filter(previous => previous.name === segment.name).length;
+          let reading = readingFor(row, cell, new RegExp(`^${definition.label}$`, 'i'), occurrence);
+          if (reading.state !== 'parsed') reading = tableTotalReading(row, cell, definition) ?? reading;
+          // Several individually parsed monetary columns under a known header
+          // are a table summary, not an unreadable competing final amount.
+          if (reading.state !== 'parsed' && isTableSummary(row, cell, definition)) {
+            tableSummaries.push(row.cells.filter(other => other !== cell && cx(other) > cx(cell)).map(value => wholeMoney(value.text)!));
+            continue;
+          }
+          totalLabelCount += 1;
+          totalReadings.push({ definition, reading, invalidGrouping: invalidGrouping.has(cell) });
+          if (reading.state === 'parsed') {
+            const candidate = { ...field(reading.value, row.cells, definition.score >= 100 ? .85 : .6, 'observed', reading.tokens), label: reading.label, score: definition.score };
             totalCandidates.push(candidate);
+            candidateDefinitions.set(candidate, definition);
             if (invalidGrouping.has(cell)) invalidTotalCandidates.add(candidate);
           }
         }
@@ -354,7 +424,7 @@ export function parseReceipt(lines: readonly RecognizedLine[], sourceImageId = '
     return value === null ? null : field(value, [cell], .7, 'observed', tokensFor(cell));
   };
   for (const [index, row] of rows.entries()) {
-    if (headerIndex >= 0 && index > headerIndex && /공지사항|금일합계|총합계|송합계|손합계|매출총계|결제금액|전일잔액|미수잔액/.test(compact(row.text))) break;
+    if (headerIndex >= 0 && index > headerIndex && (finalTotalPattern.test(compact(row.text)) || /공지사항|송합계|손합계|전일잔액|미수잔액/.test(compact(row.text)))) break;
     if (index <= headerIndex || excluded.test(compact(row.text)) || /합계|총계|공급가|부가세|보증금|회수|배송비|할인|결제|전화|주소|입금/.test(compact(row.text))) continue;
     const names = row.cells.filter(l => /[가-힣A-Za-z]/.test(l.text) && !/^[₩W\d.,\s]+원?$/.test(l.text) && l.box.x < .6);
     if (!names.length) continue;
@@ -380,18 +450,30 @@ export function parseReceipt(lines: readonly RecognizedLine[], sourceImageId = '
   // geometry are never a substitute for an independent arithmetic check.
   totalCandidates.sort((a, b) => b.score - a.score);
   const printedTotals = [...totalCandidates];
-  const isSalesTotal = (candidate: TotalCandidate) => /매출합계|매출총계/.test(compact(candidate.label));
-  const dailyTotals = printedTotals.filter(c => /금일합계/.test(compact(c.label)) && !invalidTotalCandidates.has(c));
+  const isSalesTotal = (candidate: TotalCandidate) => candidateDefinitions.get(candidate)?.kind === 'sales';
+  const dailyTotals = printedTotals.filter(c => candidateDefinitions.get(c)?.kind === 'daily' && !invalidTotalCandidates.has(c));
   const daily = new Set(dailyTotals.map(c => c.value)).size === 1 ? dailyTotals[0] : undefined;
   // Classify a competing generic total only with an independent printed balance relation.
   const cumulativeTotals = new Set(printedTotals.filter(candidate => daily && amountStatus.balance === 'observed' && amounts.balance
-    && /^(?:합계|총합계|합계금액)(?:[₩W(+\-\d]|$)/.test(compact(candidate.label))
+    && candidateDefinitions.get(candidate)?.kind === 'generic'
     && !invalidTotalCandidates.has(candidate) && candidate.value === daily.value + amounts.balance.value
     && disjoint([daily.moneyTokens ?? [], amounts.balance.moneyTokens ?? [], candidate.moneyTokens ?? []])));
   const currentTotals = printedTotals.filter(candidate => !cumulativeTotals.has(candidate));
   const currentLabelCount = totalLabelCount - cumulativeTotals.size;
   let payableTotals: TotalCandidate[] = [];
-  const isFinalPayment = (candidate: TotalCandidate) => /금일합계|결제|청구/.test(compact(candidate.label)) || isSalesTotal(candidate);
+  const isFinalPayment = (candidate: TotalCandidate) => {
+    const kind = candidateDefinitions.get(candidate)?.kind;
+    return kind === 'daily' || kind === 'payment' || kind === 'sales';
+  };
+  // No sales-tax exception can waive a current final label without a parsed value.
+  const unreadableDefinitiveTotal = totalReadings.some(({ definition, reading, invalidGrouping: invalid }) =>
+    definition.kind !== 'order' && (reading.state !== 'parsed' || invalid))
+    || tableSummaries.some(values => {
+      if (amountStatus.supply !== 'observed' || amountStatus.vat !== 'observed' || !amounts.supply || !amounts.vat) return true;
+      const expected = [amounts.supply.value, amounts.vat.value, amounts.supply.value + amounts.vat.value].sort((a, b) => a - b);
+      const observed = [...values].sort((a, b) => a - b);
+      return observed.length !== expected.length || observed.some((value, index) => value !== expected[index]);
+    });
 
   type Equation = {
     value: number;
@@ -410,10 +492,10 @@ export function parseReceipt(lines: readonly RecognizedLine[], sourceImageId = '
   const goodsAdjustments = amounts.goods && amountStatus.goods === 'observed' && adjustment !== null
     ? amounts.goods.value + adjustment : null;
   const financialKeys = ['supply', 'vat', 'goods', 'shipping', 'discount', 'returns', 'deposit'] as const;
-  const blockingUnparsed = financialKeys.some(key => unparsedAmounts.has(key));
+  const blockingUnparsed = unreadableDefinitiveTotal || financialKeys.some(key => unparsedAmounts.has(key));
   const hasMaterials = items.length > 0 || amountStatus.balance !== 'absent'
     || financialKeys.some(key => amountStatus[key] !== 'absent')
-    || printedTotals.some(c => /매출합계|매출총계|주문금액/.test(compact(c.label)));
+    || printedTotals.some(c => ['sales', 'order'].includes(candidateDefinitions.get(c)!.kind));
   let incomplete = financialKeys.some(key => amountStatus[key] === 'unreadable')
     || items.some(item => item.amount === null) || totalLabelCount !== printedTotals.length;
   let totalConflict = items.some(i => i.arithmeticMatches === false);
@@ -438,12 +520,12 @@ export function parseReceipt(lines: readonly RecognizedLine[], sourceImageId = '
     label: '공급가·부가세와 상품·조정 관계 (합계 라벨 확인)', score: 105 });
   if (goodsAdjustments !== null && amountStatus.returns === 'absent') equations.push({ value: goodsAdjustments, operands: operandsFor('goods', 'shipping', 'discount'),
     cells: cellsFor('goods', 'shipping', 'discount'), label: '상품 + 배송 − 할인 (합계 라벨 확인)', score: 105 });
-  const grossRow = rows.find(r => /매출합계|매출총계/.test(compact(r.text)) && !excluded.test(compact(r.text)));
+  const grossRow = rows.find(r => salesTotalPattern.test(compact(r.text)) && !excluded.test(compact(r.text)));
   let gross: number | null = null;
   let grossTokens: MoneyToken[] = [];
   if (grossRow) {
-    const label = grossRow.cells.find(l => /매출합계|매출총계/.test(compact(l.text)))!;
-    const reading = valueFor(grossRow, label, /매출합계|매출총계/);
+    const label = grossRow.cells.find(l => salesTotalPattern.test(compact(l.text)))!;
+    const reading = valueFor(grossRow, label, salesTotalPattern);
     if (!spaceNormalized.has(label) && !invalidGrouping.has(label)) { gross = reading?.value ?? null; grossTokens = reading?.tokens ?? []; }
   }
   if (amountStatus.returns !== 'absent') {
@@ -510,7 +592,7 @@ export function parseReceipt(lines: readonly RecognizedLine[], sourceImageId = '
   } else if (!blockingUnparsed && (!hasMaterials || (daily && payableTotals.length === 1 && payableTotals[0] === daily && equations.length === 0
     && financialKeys.every(key => amountStatus[key] === 'absent') && !totalConflict && !multipleTotals))
     && currentLabelCount === 1 && payableTotals.length === 1 && payableTotals[0].source === 'observed'
-    && !/주문금액/.test(compact(payableTotals[0].label))) {
+    && candidateDefinitions.get(payableTotals[0])?.kind !== 'order') {
     suggestedTotal = { ...payableTotals[0], parserConfidence: Math.min(payableTotals[0].parserConfidence, .4),
       warnings: [...payableTotals[0].warnings, '영수증 합계를 확인해주세요'] };
   }
@@ -532,6 +614,7 @@ export function parseReceipt(lines: readonly RecognizedLine[], sourceImageId = '
   if (guidanceCodes.includes('WHOLE_ORDER_TOTAL')) warnings.push('주문 전체 결제금액이에요');
   if (guidanceCodes.includes('PAYMENT_SCREEN_REQUIRED')) warnings.push('결제 화면을 함께 올려주세요');
   if (invalidGrouping.size) warnings.push('금액의 천단위 구분이 이상해요. 원문을 확인해 주세요');
+  if (unreadableDefinitiveTotal) warnings.push('읽지 못한 최종 합계가 있어 금액을 확정하지 않았어요');
   if (sharedEvidence) warnings.push('같은 금액 토큰이 공유되어 독립 검산으로 합계를 확정하지 않았어요');
   if (incomplete && !selectedTotal) warnings.push('검산 자료가 불완전해 합계를 확정하지 않았어요');
   if (unresolvedReturns) warnings.push('회수액 또는 실결제액이 미확인이라 매출총계를 결제 합계로 선택하지 않았어요');
