@@ -7,6 +7,7 @@ jest.mock('expo-router', () => ({ router: { push: jest.fn() } }));
 function recipe(price: number | null | undefined): RecipeWithIngredients {
   return {
     id: 'recipe', name: '메뉴', category: '음료', selling_price: 1000,
+    cost: price ?? null, margin_rate: price == null ? null : (1000 - price) / 10,
     recipe_ingredients: price === undefined ? [] : [{
       quantity: 1, unit: '개', ingredient: { name: '재료', unit: '개', last_price: price },
     }],
@@ -19,6 +20,13 @@ it('재료 미등록과 단가 미확인을 무료 재료로 표시하지 않는
   expect(screen.queryByText('100.0%')).toBeNull();
   rerender(<RecipeCard recipe={recipe(null)} onDelete={jest.fn()} />);
   expect(screen.getByText('재료 단가를 확인해주세요')).toBeTruthy();
+  expect(screen.queryByText('100.0%')).toBeNull();
+});
+
+it('재료 조회 후 원가 뷰가 미확인을 반환하면 카드도 확인 필요로 표시한다', () => {
+  const current = { ...recipe(0), cost: null, margin_rate: null };
+  render(<RecipeCard recipe={current} onDelete={jest.fn()} />);
+  expect(screen.getAllByText('확인 필요')).toHaveLength(2);
   expect(screen.queryByText('100.0%')).toBeNull();
 });
 

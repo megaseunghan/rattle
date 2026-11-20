@@ -141,6 +141,16 @@ describe('레시피 공통 원가 View', () => {
     expect(rows).toEqual([{ ...recipe, cost: 2500, margin_rate: 75 }]);
     expect(mockFrom).toHaveBeenCalledWith('recipe_costs');
   });
+  it('미확인 단가와 확인된 0원 레시피를 같은 목록에서 구분한다', async () => {
+    mockRecipes([recipe, { ...recipe, id: 'zero' }], [
+      { recipe_id: 'recipe', cost: null, margin_rate: null },
+      { recipe_id: 'zero', cost: 0, margin_rate: 100 },
+    ]);
+    const rows = await getRecipes('store');
+    expect(rows.map(({ cost, margin_rate }) => [cost, margin_rate])).toEqual([[null, null], [0, 100]]);
+    mockRecipes(recipe, [{ recipe_id: 'recipe', cost: null, margin_rate: null }]);
+    await expect(getRecipeById('recipe')).resolves.toMatchObject({ cost: null, margin_rate: null });
+  });
   it('상세에서도 목록과 같은 View 원가를 사용한다', async () => {
     mockRecipes(recipe, [{ recipe_id: 'recipe', store_id: 'store', cost: 2500, margin_rate: 75 }]);
     await expect(getRecipeById('recipe')).resolves.toEqual({ ...recipe, cost: 2500, margin_rate: 75 });

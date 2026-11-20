@@ -13,7 +13,7 @@ DROP TRIGGER IF EXISTS bump_purchase_version ON public.purchases;
 CREATE TRIGGER bump_purchase_version BEFORE UPDATE ON public.purchases
 FOR EACH ROW EXECUTE FUNCTION private.bump_purchase_version();
 
--- 한 트랜잭션의 여러 입고 행에도 실제 입력 순서가 남는다. 과거 동시각 행은 UUID로 정렬한다.
+-- 한 트랜잭션의 여러 입고 행에도 실제 입력 순서가 남는다.
 ALTER TABLE public.purchase_items ALTER COLUMN created_at SET DEFAULT clock_timestamp();
 CREATE INDEX IF NOT EXISTS purchase_items_ingredient_receipt_idx ON public.purchase_items
   (store_id,ingredient_id,created_at DESC,id DESC) WHERE ingredient_id IS NOT NULL;
@@ -24,14 +24,32 @@ CREATE INDEX IF NOT EXISTS purchase_items_ingredient_receipt_idx ON public.purch
 ALTER TABLE public.ingredients ADD COLUMN IF NOT EXISTS price_before_purchases numeric,
   ADD COLUMN IF NOT EXISTS manual_price_version bigint NOT NULL DEFAULT 0;
 ALTER TABLE public.purchase_items ADD COLUMN IF NOT EXISTS manual_price_version bigint NOT NULL DEFAULT 0;
-WITH latest AS (
-  SELECT DISTINCT ON (store_id,ingredient_id) store_id,ingredient_id,unit_price
-  FROM public.purchase_items WHERE ingredient_id IS NOT NULL
-  ORDER BY store_id,ingredient_id,created_at DESC,id DESC
-)
-UPDATE public.ingredients g SET price_before_purchases=g.last_price,manual_price_version=1
-FROM latest l WHERE g.store_id=l.store_id AND g.id=l.ingredient_id AND g.manual_price_version=0
-  AND g.last_price IS DISTINCT FROM l.unit_price;
+-- 과거 now() 입고에는 행 순번이 없다. 최신 시각이 겹치면 실제 남은 단가와
+-- 일치하는 행을 우선하고, 구분할 수 없는 후보끼리만 UUID로 순서를 고정한다.
+DO $backfill$
+DECLARE prior_guard text := current_setting('rattle.store_purge',true);
+BEGIN
+  IF EXISTS (SELECT FROM pg_attribute WHERE attrelid='public.ingredients'::regclass
+    AND attname='legacy_latest_receipt_id' AND NOT attisdropped) THEN RETURN; END IF;
+  ALTER TABLE public.ingredients ADD COLUMN legacy_latest_receipt_id uuid;
+  -- 복구 유예 중인 매장도 같은 메타데이터를 채운다. 기존 가드 예외는 이 UPDATE에만 사용한다.
+  PERFORM set_config('rattle.store_purge','on',true);
+  WITH latest AS (
+    SELECT DISTINCT ON (i.store_id,i.ingredient_id) i.store_id,i.ingredient_id,i.id,
+      i.unit_price IS DISTINCT FROM g.last_price AS manual,
+      count(*) OVER (PARTITION BY i.store_id,i.ingredient_id,i.created_at)>1 AS tied
+    FROM public.purchase_items i JOIN public.ingredients g ON g.id=i.ingredient_id AND g.store_id=i.store_id
+    ORDER BY i.store_id,i.ingredient_id,i.created_at DESC,
+      (i.unit_price IS NOT DISTINCT FROM g.last_price) DESC,i.id DESC
+  )
+  UPDATE public.ingredients g SET
+    legacy_latest_receipt_id=CASE WHEN NOT l.manual THEN l.id END,
+    price_before_purchases=CASE WHEN l.manual THEN g.last_price END,
+    manual_price_version=CASE WHEN l.manual THEN 1 ELSE 0 END
+  FROM latest l WHERE g.store_id=l.store_id AND g.id=l.ingredient_id AND (l.tied OR l.manual);
+  PERFORM set_config('rattle.store_purge',coalesce(prior_guard,''),true);
+END;
+$backfill$;
 
 CREATE OR REPLACE FUNCTION private.remember_manual_ingredient_price() RETURNS trigger
 LANGUAGE plpgsql SET search_path='' AS $$
@@ -84,7 +102,7 @@ BEGIN
     WHERE g.store_id=NEW.store_id AND g.id=NEW.ingredient_id
       AND NEW.manual_price_version=g.manual_price_version
       AND NEW.id=(SELECT i.id FROM public.purchase_items i WHERE i.store_id=g.store_id AND i.ingredient_id=g.id
-        ORDER BY i.created_at DESC,i.id DESC LIMIT 1);
+        ORDER BY i.created_at DESC,(i.id=g.legacy_latest_receipt_id) DESC,i.id DESC LIMIT 1);
   END IF;
   RETURN NULL;
 END;
@@ -395,18 +413,19 @@ CREATE OR REPLACE FUNCTION private.reverse_purchase_stock() RETURNS trigger
 LANGUAGE plpgsql SECURITY DEFINER SET search_path='' AS $$
 DECLARE
   received record;
+  legacy_latest uuid;
 BEGIN
   FOR received IN
     SELECT ingredient_id,sum(quantity) AS quantity FROM public.purchase_items
     WHERE purchase_id=OLD.id AND store_id=OLD.store_id AND ingredient_id IS NOT NULL
     GROUP BY ingredient_id ORDER BY ingredient_id
   LOOP
-    PERFORM 1 FROM public.ingredients WHERE id=received.ingredient_id AND store_id=OLD.store_id FOR UPDATE;
+    SELECT legacy_latest_receipt_id INTO legacy_latest FROM public.ingredients WHERE id=received.ingredient_id AND store_id=OLD.store_id FOR UPDATE;
     -- 마지막 입고의 단가를 되돌린다. 이후 별도로 직접 수정한 단가는 보존한다.
     WITH latest AS (
       SELECT i.purchase_id,i.manual_price_version AS receipt_version FROM public.purchase_items i
       WHERE i.store_id=OLD.store_id AND i.ingredient_id=received.ingredient_id
-      ORDER BY i.created_at DESC,i.id DESC LIMIT 1
+      ORDER BY i.created_at DESC,(i.id=legacy_latest) DESC,i.id DESC LIMIT 1
     )
     UPDATE public.ingredients g SET current_stock=current_stock-received.quantity,
       last_price=CASE WHEN EXISTS (SELECT 1 FROM latest WHERE purchase_id=OLD.id
@@ -414,7 +433,7 @@ BEGIN
       THEN coalesce((SELECT i.unit_price FROM public.purchase_items i WHERE i.store_id=OLD.store_id
         AND i.ingredient_id=received.ingredient_id AND i.purchase_id<>OLD.id
         AND i.manual_price_version=g.manual_price_version
-        ORDER BY i.created_at DESC,i.id DESC LIMIT 1),price_before_purchases) ELSE last_price END,updated_at=now()
+        ORDER BY i.created_at DESC,(i.id=legacy_latest) DESC,i.id DESC LIMIT 1),price_before_purchases) ELSE last_price END,updated_at=now()
     WHERE id=received.ingredient_id AND store_id=OLD.store_id;
   END LOOP;
   RETURN OLD;

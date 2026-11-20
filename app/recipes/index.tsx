@@ -162,8 +162,16 @@ export default function RecipesScreen() {
     return data
       .filter(r => activeCategory === '전체' || r.category === activeCategory)
       .sort((a, b) => {
-        if (sortBy === 'margin_desc') return b.margin_rate - a.margin_rate;
-        if (sortBy === 'cost_asc') return a.cost - b.cost;
+        if (sortBy === 'margin_desc') {
+          if (a.margin_rate === null) return b.margin_rate === null ? 0 : 1;
+          if (b.margin_rate === null) return -1;
+          return b.margin_rate - a.margin_rate;
+        }
+        if (sortBy === 'cost_asc') {
+          if (a.cost === null) return b.cost === null ? 0 : 1;
+          if (b.cost === null) return -1;
+          return a.cost - b.cost;
+        }
         return a.name.localeCompare(b.name);
       });
   }, [data, activeCategory, sortBy]);

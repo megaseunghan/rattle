@@ -2,7 +2,9 @@ import { invalidateCachedStore } from './cacheInvalidation';
 import { supabase } from '../supabase';
 import { Recipe, RecipeIngredient, Ingredient } from '../../types';
 
-export type RecipeWithIngredients = Recipe & {
+export type RecipeWithIngredients = Omit<Recipe, 'cost' | 'margin_rate'> & {
+  cost: number | null;
+  margin_rate: number | null;
   recipe_ingredients: (RecipeIngredient & { ingredient: Ingredient | null })[];
 };
 
@@ -14,6 +16,9 @@ async function withCurrentCosts(rows: RecipeWithIngredients[]): Promise<RecipeWi
   const costs = new Map((data ?? []).map(row => [row.recipe_id, row]));
   return rows.map(row => {
     const cost = costs.get(row.id);
+    if (cost?.cost === null && cost.margin_rate === null) {
+      return { ...row, cost: null, margin_rate: null };
+    }
     if (!cost || cost.cost == null || cost.margin_rate == null
       || !Number.isFinite(Number(cost.cost)) || !Number.isFinite(Number(cost.margin_rate))) {
       throw new Error('RECIPE_COST_REQUIRED');
