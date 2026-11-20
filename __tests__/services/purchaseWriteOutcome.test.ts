@@ -1,3 +1,4 @@
+import { queryClient, queryKeys, subscribeAccessInvalidation } from '../../lib/query/client';
 import { createPurchaseWithItems, updatePurchaseAmounts, PurchaseWriteError } from '../../lib/services/purchases';
 import { invalidateCachedStore } from '../../lib/services/cacheInvalidation';
 const mockRpc = jest.fn();
@@ -66,4 +67,28 @@ it('금액별 충돌은 화면에서 재조회할 수 있게 구분하고 재시
     .rejects.toThrow('PURCHASE_CHANGED');
   expect(mockRpc).toHaveBeenCalledTimes(1);
   expect(invalidateCachedStore).not.toHaveBeenCalled();
+});
+
+it.each(['items', 'amounts'] as const)('%s 등록은 관련 금액을 갱신하고 권한 재조회를 발생시키지 않는다', async mode => {
+  const refreshAccess = jest.fn();
+  const unsubscribe = subscribeAccessInvalidation(refreshAccess);
+  const key = (domain: string, store = input.store_id) => queryKeys.store('user', store, domain);
+  for (const domain of ['financial', 'ingredients', 'recipes', 'schedule']) queryClient.setQueryData(key(domain), 1);
+  queryClient.setQueryData(key('financial', 'other'), 2);
+  try {
+    jest.mocked(invalidateCachedStore).mockImplementationOnce(jest.requireActual('../../lib/services/cacheInvalidation').invalidateCachedStore);
+    mockRpc.mockResolvedValue({ data: 'saved', error: null });
+    const row = { category: '식자재', amount: 3700 };
+    await createPurchaseWithItems(mode === 'items'
+      ? { ...input, mode, returnId: true, rows: [{ ...row, name: '쌀', unit: 'kg', quantity: 1, ingredient_id: 'rice' }] }
+      : { ...input, mode, returnId: true, rows: [row] });
+    expect(refreshAccess).not.toHaveBeenCalled();
+    expect(queryClient.getQueryState(key('financial'))?.isInvalidated).toBe(true);
+    for (const domain of ['ingredients', 'recipes']) expect(queryClient.getQueryState(key(domain))?.isInvalidated).toBe(mode === 'items');
+    expect(queryClient.getQueryState(key('schedule'))?.isInvalidated).toBe(false);
+    expect(queryClient.getQueryState(key('financial', 'other'))?.isInvalidated).toBe(false);
+  } finally {
+    unsubscribe();
+    queryClient.clear();
+  }
 });

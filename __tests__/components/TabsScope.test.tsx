@@ -127,12 +127,14 @@ it('탭을 누르는 즉시 선택하고 이전 탭 콜백이 새 선택을 되�
   expect(mockPager.setPage).not.toHaveBeenCalled();
 });
 
-it('전체 홈에서도 플로팅 등록을 제공하고 매입 등록 전 매장을 선택한다', () => {
+it('전체 홈 FAB에서 매장을 고르면 기존 탭 위에 매입 등록을 연다', async () => {
   const view = renderTabs();
   fireEvent.press(view.getByLabelText('빠른 등록 열기'));
   fireEvent.press(view.getByText('매입 등록'));
   expect(view.getByText('이 업무를 진행할 매장을 먼저 선택해 주세요.')).toBeTruthy();
   expect(mockPush).not.toHaveBeenCalled();
+  fireEvent.press(view.getByText('나매장'));
+  await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/purchases/new'));
 });
 
 it('직원 등록은 매장 전환 성공 후 선택한 매장에만 요청한다', async () => {

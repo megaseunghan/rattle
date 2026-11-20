@@ -1,3 +1,7 @@
+import { router } from 'expo-router';
+import { renderRouter } from 'expo-router/testing-library';
+import { Text } from 'react-native';
+import { useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as purchaseFlag from '../../lib/ocr/purchaseOcrFlag';
 jest.mock('@react-native-async-storage/async-storage', () => ({ getItem: jest.fn().mockResolvedValue(null), setItem: jest.fn().mockResolvedValue(undefined) }));
@@ -27,7 +31,7 @@ jest.mock('../../lib/services/evidence', () => ({ listEvidence: jest.fn().mockRe
 jest.mock('../../lib/media/evidenceUpload', () => ({ uploadEvidence: (...a: unknown[]) => mockUploadEvidence(...a) }));
 const mockIngredient = { id: 'rice', name: '쌀', category: '식자재', unit: 'kg', last_price: 0 };
 const mockIngredients = [mockIngredient];
-jest.mock('expo-router', () => ({ router: { back: jest.fn(), push: jest.fn() }, useLocalSearchParams: () => ({ date: '2026-10-01' }) }));
+jest.mock('expo-router', () => ({ router: { back: jest.fn(), push: jest.fn(), replace: jest.fn(), canGoBack: jest.fn(() => true) }, useLocalSearchParams: () => ({ date: '2026-10-01' }) }));
 jest.mock('@react-native-community/datetimepicker', () => 'DateTimePicker');
 jest.mock('../../lib/contexts/AuthContext', () => ({ useAuth: () => ({ user: { id: 'user' }, store: { id: mockStoreId, name: '검증 매장' }, currentRole: 'admin', canReadFinancials: true, canManageStore: true, storeRole: 'owner', devPreviewMode: mockMode }) }));
 jest.mock('../../lib/hooks/usePurchases', () => ({ usePurchases: () => ({ purchases: [], addWithItems: mockWrite, refetch: jest.fn() }) }));
@@ -49,7 +53,7 @@ jest.mock('../../lib/services/purchases', () => ({ getPurchaseSuppliers: jest.fn
 } }));
 beforeEach(() => {
  mockRecognize.mockReset().mockRejectedValue({ code: 'ERR_OCR_UNAVAILABLE' });
- jest.clearAllMocks(); mockMode='self'; mockQuickCreate.mockReset(); mockStoreId = 'store'; mockWrite.mockReset();
+ jest.clearAllMocks(); jest.mocked(router.canGoBack).mockReturnValue(true); mockMode='self'; mockQuickCreate.mockReset(); mockStoreId = 'store'; mockWrite.mockReset();
  mockPick.mockResolvedValue({ canceled: false, assets: [{uri:'file:///cache/picked.jpg',name:'영수증.jpg',mimeType:'image/jpeg',size:100}] });
  mockReserveEvidence.mockResolvedValue({id:'draft-id',status:'pending',mime_type:'image/jpeg'});
  mockUploadEvidence.mockResolvedValue(undefined);
@@ -142,6 +146,8 @@ it('금액별은 입력한 분류만 저장하고 품목별 초안은 전환 중
   await act(async () => fireEvent.press(view.getByText('매입 저장')));
   expect(mockWrite).toHaveBeenCalledWith(expect.objectContaining({ mode: 'amounts', rows: [{ category: '비품', amount: 1200 }] }));
   expect(AsyncStorage.setItem).toHaveBeenCalledWith('purchase-entry-mode:user', 'amounts');
+  expect(router.back).toHaveBeenCalledTimes(1);
+  expect(router.replace).not.toHaveBeenCalled();
 });
 it.each(['items', 'amounts'])('OCR off: %s 방식에서 사진은 증빙으로만 보관하고 관련 문구를 숨긴다', async mode => {
   jest.mocked(AsyncStorage.getItem).mockResolvedValueOnce(mode);
@@ -155,13 +161,60 @@ it.each(['items', 'amounts'])('OCR off: %s 방식에서 사진은 증빙으로�
   expect(mockRecognize).not.toHaveBeenCalled();
 });
 
-it('registration drafts stay local then automatically upload exactly once for saved purchase ID', async()=>{
+it.each([true, false])('품목 저장 후 이전 화면이 있으면 복귀하고 직접 진입이면 해당 월의 매입을 연다 (%s)', async hasHistory => {
+  jest.mocked(router.canGoBack).mockReturnValue(hasHistory);
+  mockWrite.mockResolvedValue({ purchaseId: 'saved', refreshFailed: false });
+  const view = await filledPurchase();
+  await act(async () => fireEvent.press(view.getByLabelText('매입 저장')));
+  expect(router.back).toHaveBeenCalledTimes(hasHistory ? 1 : 0);
+  expect(router.replace).toHaveBeenCalledTimes(hasHistory ? 0 : 1);
+  if (!hasHistory) expect(router.replace).toHaveBeenCalledWith({
+    pathname: '/(tabs)', params: { targetTab: 'purchases', month: '2026-10', homeScope: 'store' },
+  });
+});
+it.each(['items', 'amounts'] as const)('%s 저장은 실제 스택을 한 단계만 닫고 이전 화면의 선택을 보존한다', async mode => {
+  const actual = jest.requireActual<typeof import('expo-router')>('expo-router');
+  jest.mocked(router.back).mockImplementationOnce(actual.router.back);
+  jest.mocked(router.canGoBack).mockImplementationOnce(actual.router.canGoBack);
+  mockWrite.mockResolvedValue({ purchaseId: 'saved', refreshFailed: false });
+  function Origin() {
+    const [selectedDay, selectDay] = useState(1);
+    return <>
+      <Text onPress={() => selectDay(9)}>선택일 {selectedDay}</Text>
+      <Text onPress={() => actual.router.push('/purchases/new')}>등록 열기</Text>
+    </>;
+  }
+  const view = renderRouter({ _layout: () => <actual.Stack screenOptions={{ animation: 'none', headerShown: false }} />, index: Origin, 'purchases/new': NewPurchaseScreen });
+  fireEvent.press(view.getByText('선택일 1'));
+  expect(view.getByText('선택일 9')).toBeTruthy();
+  fireEvent.press(view.getByText('등록 열기'));
+  fireEvent.changeText(await view.findByLabelText('거래처명'), '가상 거래처');
+  if (mode === 'items') {
+    fireEvent.changeText(view.getByLabelText('1번째 항목명'), '쌀');
+    fireEvent.changeText(view.getByLabelText('1번째 금액'), '3700');
+  } else {
+    fireEvent.press(view.getByText('금액별'));
+    fireEvent.changeText(view.getByLabelText('식자재 금액'), '3700');
+  }
+  await act(async () => fireEvent.press(view.getByLabelText('매입 저장')));
+  expect(await view.findByText('선택일 9')).toBeTruthy();
+  expect(view.queryByLabelText('매입 저장')).toBeNull();
+  expect(mockWrite).toHaveBeenCalledTimes(1);
+  expect(router.replace).not.toHaveBeenCalled();
+});
+
+it('증빙이 있으면 매입을 한 번 저장하고 업로드가 완료된 뒤 복귀한다', async()=>{
+ let finish!: () => void;
+ mockUploadEvidence.mockImplementationOnce(() => new Promise<void>(resolve => { finish = resolve; }));
  mockWrite.mockResolvedValue({purchaseId:'saved-purchase',refreshFailed:false});
  const screen=await filledPurchase();await stageReceipt(screen);
  expect(mockReserveEvidence).not.toHaveBeenCalled();expect(mockUploadEvidence).not.toHaveBeenCalled();
  fireEvent.press(screen.getByLabelText('매입 저장'));
  await waitFor(()=>expect(mockUploadEvidence).toHaveBeenCalledTimes(1));
  expect(mockReserveEvidence).toHaveBeenCalledWith({kind:'purchase',id:'saved-purchase',storeId:'store'},expect.objectContaining({id:'draft-id'}));
+ expect(router.back).not.toHaveBeenCalled();
+ await act(async () => finish());
+ await waitFor(()=>expect(router.back).toHaveBeenCalledTimes(1));
  expect(mockWrite).toHaveBeenCalledTimes(1);
 });
 it('save rejection preserves staged previews and only retries the business write explicitly',async()=>{
@@ -185,7 +238,9 @@ it('failed evidence retry never repeats purchase registration',async()=>{
  const screen=await filledPurchase();await stageReceipt(screen);
  fireEvent.press(screen.getByLabelText('매입 저장'));
  await waitFor(()=>expect(screen.getByText('이 파일 다시 업로드')).toBeTruthy());
+ expect(router.back).not.toHaveBeenCalled();
  await act(async()=>{fireEvent.press(screen.getByText('이 파일 다시 업로드'));});
+ await waitFor(()=>expect(router.back).toHaveBeenCalledTimes(1));
  await waitFor(()=>expect(mockUploadEvidence).toHaveBeenCalledTimes(2));expect(mockWrite).toHaveBeenCalledTimes(1);
 });
 it('store change immediately drops draft and ignores an old in-flight save result',async()=>{
