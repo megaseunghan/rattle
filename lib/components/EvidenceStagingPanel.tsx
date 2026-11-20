@@ -1,4 +1,3 @@
-import { PURCHASE_OCR_ENABLED } from '../ocr/purchaseOcrFlag';
 import { useEffect, useRef, useState } from 'react';
 import { FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Colors } from '../../constants/colors';
@@ -29,7 +28,6 @@ export function EvidenceStagingPanel({ files, onChange, disabled = false, onPick
   }
   return <View style={styles.container}>
     <Text style={styles.title}>증빙 자료 (선택)</Text>
-    {!PURCHASE_OCR_ENABLED && <Text style={styles.help}>사진으로 자동 입력은 준비 중이에요</Text>}
     <Text style={styles.help}>{edit ? '품목 수정 저장 후 사진을 증빙으로 올려요.' : '등록 전에는 기기에만 보관해요. 매입 등록 후 자동으로 업로드해요.'}</Text>
     <Text style={styles.help}>최대 10개 · 이미지 원본 25MiB · PDF 10MiB</Text>
     {!!error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}

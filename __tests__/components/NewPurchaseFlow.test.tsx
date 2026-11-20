@@ -143,12 +143,15 @@ it('금액별은 입력한 분류만 저장하고 품목별 초안은 전환 중
   expect(mockWrite).toHaveBeenCalledWith(expect.objectContaining({ mode: 'amounts', rows: [{ category: '비품', amount: 1200 }] }));
   expect(AsyncStorage.setItem).toHaveBeenCalledWith('purchase-entry-mode:user', 'amounts');
 });
-it('마지막 사용 방식을 불러오고 사진을 인식 없이 증빙으로 보관한다', async () => {
-  jest.mocked(AsyncStorage.getItem).mockResolvedValueOnce('amounts');
+it.each(['items', 'amounts'])('OCR off: %s 방식에서 사진은 증빙으로만 보관하고 관련 문구를 숨긴다', async mode => {
+  jest.mocked(AsyncStorage.getItem).mockResolvedValueOnce(mode);
   const view = manualForm();
-  expect(await view.findByLabelText('비품 금액')).toBeTruthy();
+  expect(await view.findByLabelText(mode === 'amounts' ? '비품 금액' : '1번째 항목명')).toBeTruthy();
+  expect(view.queryByText(/준비 중|OCR|자동 입력|인식/)).toBeNull();
   await stageReceipt(view);
-  expect(view.getByText('사진으로 자동 입력은 준비 중이에요')).toBeTruthy();
+  expect(view.queryByText(/준비 중|OCR|자동 입력|인식|휴대폰에서 읽고|다시 읽기|합계 후보/)).toBeNull();
+  expect(view.queryByLabelText(/준비 중|OCR|자동 입력|인식/)).toBeNull();
+  expect(view.getByLabelText('영수증.jpg 미리보기')).toBeTruthy();
   expect(mockRecognize).not.toHaveBeenCalled();
 });
 
