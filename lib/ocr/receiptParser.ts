@@ -306,14 +306,13 @@ export function parseReceipt(lines: readonly RecognizedLine[], sourceImageId = '
   const totalReadings: { definition: TotalLabelDefinition; reading: ValueReading; invalidGrouping: boolean }[] = [];
   const tableSummaries: number[][] = [];
   const balancePattern = semanticLabels.find(([key]) => key === 'balance')![1];
-  const isExcludedTotalScope = (row: ReceiptRow, cell: RecognizedLine, segments: ValueSegment[], index: number) => {
+  const isExcludedTotalScope = (segments: ValueSegment[], index: number) => {
     const segment = segments[index], previous = segments[index - 1];
     // An explicit scope prefix or an empty balance/total alias names past amounts.
-    // A preceding balance with its own value cannot hide a new competing total.
+    // Scope belongs to this observation's label chain, never a parallel blank
+    // balance cell. A balance with its own value cannot hide a new current total.
     return (index === 0 && balancePattern.test(compact(segment.prefix)))
-      || !!(previous && balancePattern.test(previous.name) && previous.reading.state === 'empty')
-      || row.cells.some(other => other !== cell && compact(other.text).match(balancePattern)?.[0] === compact(other.text)
-        && readingFor(row, other, balancePattern).state === 'empty');
+      || !!(previous && balancePattern.test(previous.name) && previous.reading.state === 'empty');
   };
   const isTableSummary = (row: ReceiptRow, cell: RecognizedLine, definition: TotalLabelDefinition) => {
     if (definition.label !== '합계' || compact(cell.text) !== definition.label) return false;
@@ -373,7 +372,7 @@ export function parseReceipt(lines: readonly RecognizedLine[], sourceImageId = '
         const segments = segmentsFor(cell, /$^/);
         for (const [index, segment] of segments.entries()) {
           const definition = totalDefinitionByName.get(segment.name);
-          if (!definition || isExcludedTotalScope(row, cell, segments, index)) continue;
+          if (!definition || isExcludedTotalScope(segments, index)) continue;
           const occurrence = segments.slice(0, index).filter(previous => previous.name === segment.name).length;
           let reading = readingFor(row, cell, new RegExp(`^${definition.label}$`, 'i'), occurrence);
           if (reading.state !== 'parsed') reading = tableTotalReading(row, cell, definition) ?? reading;
