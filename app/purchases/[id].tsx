@@ -43,6 +43,7 @@ function PurchaseDetailContent({ id }: { id: string }) {
     if (!count) setUploadBatch(previous => previous.length ? [] : previous);
   }, []);
   const [picking, setPicking] = useState(false);
+  const editScroll = useRef<ScrollView>(null);
   const cache = useRef(new Set<string>());
   const receipt = usePurchaseReceipt(photos);
   useEffect(() => () => cache.current.forEach(disposeEvidenceCache), []);
@@ -242,7 +243,7 @@ function PurchaseDetailContent({ id }: { id: string }) {
 
       <SheetModal visible={editTarget != null} onRequestClose={cancelEdit}>
         <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-          <View style={styles.modalSheet}>
+          <SafeAreaView edges={['bottom']} style={styles.modalSheet}>
             <View style={styles.modalHandle} />
             <View style={styles.sheetHeader}>
               <TouchableOpacity disabled={saving} onPress={cancelEdit} style={styles.headerAction} accessibilityRole="button">
@@ -256,7 +257,7 @@ function PurchaseDetailContent({ id }: { id: string }) {
               </TouchableOpacity>
             </View>
 
-            <ScrollView keyboardShouldPersistTaps="handled">
+            <ScrollView ref={editScroll} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
             {pending > 0 && <Text>진행 중인 증빙을 올리거나 취소한 뒤 사진을 추가할 수 있어요.</Text>}
             {editTarget && canManageStock && canReadFinancials && !pending && <>
               <EvidenceStagingPanel files={photos} onChange={changePhotos} disabled={saving} onPickingChange={setPicking} edit />
@@ -270,6 +271,7 @@ function PurchaseDetailContent({ id }: { id: string }) {
             </>}
             <Text style={styles.fieldLabel}>수량 ({editTarget?.unit})</Text>
             <TextInput
+              onFocus={event => editScroll.current?.getScrollResponder()?.scrollResponderScrollNativeHandleToKeyboard(event.nativeEvent.target, 24, true)}
               style={styles.input}
               accessibilityLabel="매입 품목 수량"
               editable={!saving}
@@ -282,6 +284,7 @@ function PurchaseDetailContent({ id }: { id: string }) {
 
             <Text style={styles.fieldLabel}>단가 (원/{editTarget?.unit})</Text>
             <TextInput
+              onFocus={event => editScroll.current?.getScrollResponder()?.scrollResponderScrollNativeHandleToKeyboard(event.nativeEvent.target, 24, true)}
               style={styles.input}
               accessibilityLabel="매입 품목 단가"
               editable={!saving}
@@ -296,7 +299,7 @@ function PurchaseDetailContent({ id }: { id: string }) {
               합계 {((Number(editQuantity.replace(/,/g, '')) || 0) * (Number(editUnitPrice.replace(/,/g, '')) || 0)).toLocaleString()}원
             </Text>
             </ScrollView>
-          </View>
+          </SafeAreaView>
         </KeyboardAvoidingView>
       </SheetModal>
     </SafeAreaView>
@@ -350,7 +353,7 @@ const styles = StyleSheet.create({
   itemSubtotal: { flexShrink: 1, fontFamily: Fonts.geistSemiBold, fontVariant: ['tabular-nums'], fontSize: 14, fontWeight: '600', color: Colors.black },
 
   modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: Colors.overlay },
-  modalSheet: { maxHeight: '90%', backgroundColor: Colors.homeCanvas, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20},
+  modalSheet: { height: '90%', backgroundColor: Colors.homeCanvas, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20},
   modalHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: Colors.gray200, alignSelf: 'center', marginBottom: 20 },
   sheetHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 16, paddingBottom: 12, borderBottomWidth: 0.5, borderBottomColor: Colors.gray100 },
   sheetHeaderTitle: { fontSize: 16, fontWeight: '700', color: Colors.black, flex: 1, textAlign: 'center' },

@@ -309,8 +309,10 @@ it('사진의 금액만 읽은 행을 바로 보여주고 재고 품목·수량�
   await stageReceipt(view);
   expect(view.getByLabelText('가상 백미 금액').props.value).toBe('6000');
   expect(view.getByLabelText('가상 백미 수량').props.value).toBe('');
-  fireEvent.press(view.getByLabelText('가상 백미 재고 품목 선택'));
-  fireEvent.press(view.getByText('쌀'));
+  fireEvent.changeText(view.getByLabelText('가상 백미 항목명'), '쌀');
+  fireEvent.press(await view.findByText('쌀 · kg'));
+  expect(view.getByLabelText('가상 백미 항목명').props.value).toBe('쌀');
+  expect(view.getByLabelText('가상 백미 금액').props.value).toBe('6000');
   fireEvent.press(view.getByText('입력 내용 검토'));
   expect(view.getByText('가상 백미의 수량과 단가를 확인해 주세요.')).toBeTruthy();
   fireEvent.changeText(view.getByLabelText('가상 백미 수량'), '2');
@@ -340,11 +342,28 @@ it('읽은 수량과 단가를 채우고 뒤로 갔다 돌아와도 사용자가
   await stageReceipt(view);
   expect(view.getByLabelText('쌀 수량').props.value).toBe('2');
   expect(view.getByLabelText('쌀 단가').props.value).toBe('3000');
+  fireEvent.changeText(view.getByLabelText('쌀 항목명'), '쌀');
+  fireEvent.press(await view.findByText('쌀 · kg'));
   fireEvent.changeText(view.getByLabelText('쌀 수량'), '3');
   fireEvent.press(view.getByLabelText('뒤로'));
   fireEvent.press(view.getByText('품목 입력으로'));
   expect(view.getByLabelText('쌀 수량').props.value).toBe('3');
   fireEvent.press(view.getByText('입력 내용 검토'));
   expect(view.getByText('쌀의 금액과 수량 × 단가가 달라요.')).toBeTruthy();
+  expect(mockWrite).not.toHaveBeenCalled();
+});
+
+it('항목명을 고쳐 검색하고 결과가 없으면 입력한 이름으로 새 재고 품목 등록을 연다', async () => {
+  const cell = (text: string, x: number, y: number) => ({ text, confidence: 1, box: { x, y, w: .1, h: .02 } });
+  mockRecognize.mockResolvedValue({ lines: [cell('품목명', .1, .2), cell('금액', .8, .2),
+    cell('가상 백미', .1, .3), cell('6,000', .8, .3)] });
+  const view = render(<NewPurchaseScreen />);
+  await stageReceipt(view);
+  const name = view.getByLabelText('가상 백미 항목명');
+  expect(name.props.value).toBe('가상 백미');
+  fireEvent.changeText(name, '가상 현미');
+  expect(view.getByText('사진 속 이름 · 가상 백미')).toBeTruthy();
+  fireEvent.press(await view.findByText('새 품목으로 추가'));
+  expect(view.getByPlaceholderText('예: 삼겹살').props.value).toBe('가상 현미');
   expect(mockWrite).not.toHaveBeenCalled();
 });

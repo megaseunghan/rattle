@@ -26,6 +26,7 @@ import {
   Platform,
   Keyboard,
   BackHandler,
+  Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppIcon } from '../../lib/icons/AppIcon';
@@ -174,11 +175,10 @@ function NewPurchaseContent() {
   const receiptRows = useMemo<ReceiptDraftRow[]>(() => receipt.readings.flatMap(({ file, result }) =>
     result && 'receipt' in result ? result.receipt.items.map((row, index) => {
       const id = file.id + ':' + index;
-      const matches = ingredients.filter(ingredient => ingredient.name === row.name.value);
       return { id, name: row.name.value, amount: String(row.amount?.value ?? ''),
         quantity: String(row.quantity?.value ?? ''), unit_price: String(row.unitPrice?.value ?? ''),
-        ingredient: matches.length === 1 ? matches[0] : undefined, ...rowEdits[id] };
-    }).filter(row => !row.removed) : []), [receipt.readings, rowEdits, ingredients]);
+        ...rowEdits[id] };
+    }).filter(row => !row.removed) : []), [receipt.readings, rowEdits]);
   const items = useMemo(() => [...manualItems, ...receiptRows.flatMap(row => row.ingredient ? [{
     ingredient: row.ingredient, unit: row.ingredient.unit, quantity: row.quantity, unit_price: row.unit_price,
   }] : [])], [manualItems, receiptRows]);
@@ -241,18 +241,13 @@ function NewPurchaseContent() {
   }
 
   const toggleIngredient = useCallback((ingredient: Ingredient) => {
-    if (linkRow) {
-      changeRow(linkRow, { ingredient });
-      closePicker();
-      return;
-    }
     if (items.some(i => i.ingredient.id === ingredient.id)) return;
     setSelectedIngredients(prev => {
       const next = new Set(prev);
       next.has(ingredient.id) ? next.delete(ingredient.id) : next.add(ingredient.id);
       return next;
     });
-  }, [items, linkRow]);
+  }, [items]);
 
   function handleBulkAdd() {
     ingredients
@@ -314,11 +309,14 @@ function NewPurchaseContent() {
       if (purchaseTypes.loading || purchaseTypes.error || !purchaseTypes.types.includes(purchaseType)) next.type = '매입 유형을 불러온 뒤 선택해주세요.';
     } else {
       if (!items.length) next.items = '매입 품목을 1개 이상 추가해주세요.';
+      const linked = new Set(manualItems.map(row => row.ingredient.id));
       for (const row of receiptRows) {
         if (!row.ingredient) next.items = row.name + '에 연결할 재고 품목을 선택해 주세요.';
+        else if (linked.has(row.ingredient.id)) next.items = row.ingredient.name + ' 품목이 중복됐어요. 한 행으로 합쳐 주세요.';
         else if (!row.quantity.trim() || !row.unit_price.trim() || Number(row.quantity) <= 0 || Number(row.unit_price) < 0 ||
           !Number.isFinite(Number(row.quantity) * Number(row.unit_price))) next.items = row.name + '의 수량과 단가를 확인해 주세요.';
         else if (row.amount && (!/^\d+$/.test(row.amount) || Math.abs(Number(row.amount) - Number(row.quantity) * Number(row.unit_price)) > 0.000001)) next.items = row.name + '의 금액과 수량 × 단가가 달라요.';
+        if (row.ingredient) linked.add(row.ingredient.id);
       }
       for (const item of items) {
         const quantity = Number(item.quantity), price = Number(item.unit_price);
@@ -414,8 +412,8 @@ function NewPurchaseContent() {
   const pickerExtraData = useMemo(() => ({ items, selectedIngredients }), [items, selectedIngredients]);
   const addedIngredientIds = useMemo(() => new Set(items.map(row => row.ingredient.id)), [items]);
   const renderPickerItem = useCallback(({ item }: { item: Ingredient }) => (
-    <IngredientPickerRow item={item} already={!linkRow && addedIngredientIds.has(item.id)} checked={selectedIngredients.has(item.id)} onSelect={toggleIngredient} />
-  ), [addedIngredientIds, selectedIngredients, toggleIngredient, linkRow]);
+    <IngredientPickerRow item={item} already={addedIngredientIds.has(item.id)} checked={selectedIngredients.has(item.id)} onSelect={toggleIngredient} />
+  ), [addedIngredientIds, selectedIngredients, toggleIngredient]);
 
   const totalAmount = items.reduce((sum, item) => sum + (Number(item.quantity) || 0) * (Number(item.unit_price) || 0), 0);
   const amountsComplete = manualItems.every(row => row.quantity.trim() && row.unit_price.trim()) &&
@@ -520,9 +518,14 @@ function NewPurchaseContent() {
             </TouchableOpacity>
           </View>
 
-          {receipt.readings.length > 0 && !receipt.busy && <PurchaseReceiptRows rows={receiptRows} change={changeRow} select={row => {
-            setLinkRow(row.id); setSearchQuery(''); setQuickName(row.name); setShowPicker(true);
-          }} />}
+          {receipt.readings.length > 0 && !receipt.busy && <PurchaseReceiptRows rows={receiptRows} change={changeRow}
+            inventory={ingredients} complete={!ingredientsLoading && !ingredientsError && !hasMore} storeId={store?.id ?? ''}
+            used={(id, rowId) => manualItems.some(item => item.ingredient.id === id) ||
+              receiptRows.some(row => row.id !== rowId && row.ingredient?.id === id)}
+            focus={target => scrollRef.current?.getScrollResponder()?.scrollResponderScrollNativeHandleToKeyboard(target, 156, true)}
+            create={(row, name) => {
+              setLinkRow(row.id); setQuickName(name); setShowQuickAdd(true); setShowPicker(true);
+            }} />}
           {errors.items && <Text style={styles.fieldError}>{errors.items}</Text>}
           {manualItems.length === 0 ? (receipt.readings.length && !receipt.busy ? null :
             <View style={styles.emptyItems}>
@@ -672,12 +675,13 @@ function NewPurchaseContent() {
 
       {/* 식자재 선택 모달 */}
       <SheetModal visible={showPicker} onRequestClose={closePicker} onDismiss={() => { if (sheetHandoff.current === 'categories') { sheetHandoff.current = null; setIngredientCategoryModalVisible(true); } }}>
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={closePicker} accessible={false}>
-          <TouchableOpacity activeOpacity={1} onPress={() => {}} style={styles.modalSheet} accessible={false}>
+        <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <Pressable accessible={false} style={StyleSheet.absoluteFill} onPress={closePicker} />
+          <SafeAreaView edges={['bottom']} style={styles.modalSheet}>
             <View style={styles.modalHeader}>
               {showQuickAdd ? (
                 <>
-                  <TouchableOpacity onPress={() => setShowQuickAdd(false)} style={styles.actionButton} accessibilityRole="button">
+                  <TouchableOpacity onPress={() => linkRow ? closePicker() : setShowQuickAdd(false)} style={styles.actionButton} accessibilityRole="button">
                     <Text style={styles.modalCancel}>취소</Text>
                   </TouchableOpacity>
                   <Text style={styles.modalTitle}>새 품목 등록</Text>
@@ -696,7 +700,7 @@ function NewPurchaseContent() {
             </View>
 
             {showQuickAdd ? (
-              <ScrollView contentContainerStyle={styles.quickAddForm}>
+              <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.quickAddForm}>
                 <Text style={styles.quickLabel}>품목명</Text>
                 <TextInput
                   style={styles.quickInput}
@@ -786,7 +790,7 @@ function NewPurchaseContent() {
                     </Text>
                   </View>
                 ) : (
-                  <FlatList
+                  <FlatList keyboardShouldPersistTaps="handled"
                     initialNumToRender={5}
                     maxToRenderPerBatch={10}
                     windowSize={5}
@@ -810,8 +814,8 @@ function NewPurchaseContent() {
                 )}
               </>
             )}
-          </TouchableOpacity>
-        </TouchableOpacity>
+          </SafeAreaView>
+        </KeyboardAvoidingView>
       </SheetModal>
 
       <CategoryManageModal visible={typeModalVisible} onClose={() => setTypeModalVisible(false)} title="매입 유형 관리" noun="유형"
