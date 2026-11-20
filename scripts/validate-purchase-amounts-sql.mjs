@@ -101,8 +101,47 @@ export async function validatePurchaseAmounts({ db, as, reserve, id, admin, memb
   await as(admin);
   const beforeHistory = (await write([{name:'과거 유일 입고',amount:6500,ingredient_id:id(1033)}])).rows[0].id;
   await db.exec('RESET ROLE');
+  const tiedIngredient = id(1061), pendingIngredient = id(1062);
+  await db.query("INSERT INTO ingredients(id,store_id,current_stock,last_price) VALUES($1,$2,0,1200),($3,$4,1,5100)",
+    [tiedIngredient,store,pendingIngredient,disabled]);
+  const pairedIngredient = id(1066);
+  await db.query('INSERT INTO ingredients(id,store_id,current_stock,last_price) VALUES($1,$2,0,1200)',[pairedIngredient,store]);
+  await as(admin);
+  const oldTied = (await write([{name:'첫 입고',amount:3700,ingredient_id:tiedIngredient}])).rows[0].id;
+  const lastTied = (await write([{name:'마지막 입고',amount:8000,ingredient_id:tiedIngredient}])).rows[0].id;
+  const pairedReceipt = (await write([
+    {name:'같은 매입 첫 행',amount:3700,ingredient_id:pairedIngredient},
+    {name:'같은 매입 마지막 행',amount:8000,ingredient_id:pairedIngredient},
+  ])).rows[0].id;
+  await db.exec('RESET ROLE');
+  await db.query(`UPDATE purchase_items SET created_at='2026-11-01',id=CASE WHEN purchase_id=$1 THEN $3::uuid ELSE $4::uuid END
+    WHERE purchase_id IN ($1,$2)`,[oldTied,lastTied,id(1064),id(1063)]);
+  await db.query(`UPDATE purchase_items SET created_at='2026-11-01',id=CASE WHEN unit_price=3700 THEN $2::uuid ELSE $3::uuid END
+    WHERE purchase_id=$1`,[pairedReceipt,id(1068),id(1067)]);
+  await db.query("INSERT INTO purchases(id,store_id,category,type,amount) VALUES($1,$2,'주류','수기',3700)",[id(1065),disabled]);
+  await db.query(`INSERT INTO purchase_items(purchase_id,store_id,ingredient_id,name,category,quantity,unit_price,subtotal)
+    VALUES($1,$2,$3,'삭제 유예 입고','주류',1,3700,3700)`,[id(1065),disabled,pendingIngredient]);
+  await db.query("UPDATE stores SET deleted_at='2026-11-01',purge_after='2026-12-01' WHERE id=$1",[disabled]);
+  await db.exec(`CREATE TRIGGER guard_deleted_store_store_id BEFORE INSERT OR UPDATE ON ingredients
+    FOR EACH ROW EXECUTE FUNCTION guard_deleted_store_write('store_id')`);
+  const guardedWrite = () => db.query('UPDATE ingredients SET last_price=0 WHERE id=$1',[pendingIngredient]);
+  await assert.rejects(guardedWrite(),/STORE_DELETED/);
   const entryMigration = await migration('20261120121000_purchase_entry_modes.sql');
   await db.exec(entryMigration);
+  await assert.rejects(guardedWrite(),/STORE_DELETED/);
+  assert.deepEqual((await db.query(`SELECT last_price,price_before_purchases,manual_price_version::int AS version,
+    deleted_at='2026-11-01' AND purge_after='2026-12-01' AS still_pending
+    FROM ingredients i JOIN stores s ON s.id=i.store_id WHERE i.id=$1`,[pendingIngredient])).rows[0],
+    {last_price:'5100',price_before_purchases:'5100',version:1,still_pending:true});
+  const tiedPrice = async () => (await db.query('SELECT last_price::int,manual_price_version::int AS version FROM ingredients WHERE id=$1',[tiedIngredient])).rows[0];
+  assert.deepEqual(await tiedPrice(),{last_price:8000,version:0});
+  await db.query('DELETE FROM purchases WHERE id=$1',[lastTied]);
+  assert.deepEqual(await tiedPrice(),{last_price:3700,version:0});
+  await db.query('DELETE FROM purchases WHERE id=$1',[oldTied]);
+  assert.deepEqual(await tiedPrice(),{last_price:null,version:0});
+  await db.query('DELETE FROM purchases WHERE id=$1',[pairedReceipt]);
+  assert.deepEqual((await db.query('SELECT last_price,current_stock::int AS stock FROM ingredients WHERE id=$1',[pairedIngredient])).rows[0],
+    {last_price:null,stock:0});
   await db.query('INSERT INTO stores(id) VALUES($1)', [id(1018)]);
   assert.deepEqual(await categories(id(1018)), ['식자재','비품','소모품']);
   assert.deepEqual(await categories(fresh), ['식자재','주류','비품','소모품']);

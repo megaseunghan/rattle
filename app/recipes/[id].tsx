@@ -78,8 +78,9 @@ export default function RecipeDetailScreen() {
   if (loading) return <LoadingSpinner />;
   if (error || !recipe) return <ErrorMessage message={error || '레시피를 찾을 수 없습니다.'} onRetry={loadRecipe} />;
 
-  const costKnown = recipe.recipe_ingredients.length > 0 && recipe.recipe_ingredients.every(ri => ri.ingredient !== null && ri.ingredient.last_price != null);
-  const marginRate = recipe.selling_price > 0 ? (recipe.selling_price - recipe.cost) / recipe.selling_price * 100 : null;
+  const cost = recipe.cost;
+  const costKnown = cost != null && recipe.recipe_ingredients.length > 0 && recipe.recipe_ingredients.every(ri => ri.ingredient !== null && ri.ingredient.last_price != null);
+  const marginRate = costKnown && recipe.selling_price > 0 ? (recipe.selling_price - cost) / recipe.selling_price * 100 : null;
   const marginColor = !costKnown || marginRate === null ? Colors.gray600 : marginRate >= 60
     ? Colors.success
     : (marginRate ?? 0) >= 30
@@ -118,11 +119,11 @@ export default function RecipeDetailScreen() {
           <View style={styles.statsRow}>
             <View style={styles.statBox}>
               <Text style={styles.statLabel}>원가</Text>
-              <NumericText style={styles.statValue}>{costKnown ? `${recipe.cost.toLocaleString()}원` : '확인 필요'}</NumericText>
+              <NumericText style={styles.statValue}>{costKnown ? `${cost.toLocaleString()}원` : '확인 필요'}</NumericText>
             </View>
             <View style={styles.statBox}>
               <Text style={styles.statLabel}>마진</Text>
-              <NumericText style={styles.statValue}>{costKnown ? `${(recipe.selling_price - recipe.cost).toLocaleString()}원` : '확인 필요'}</NumericText>
+              <NumericText style={styles.statValue}>{costKnown ? `${(recipe.selling_price - cost).toLocaleString()}원` : '확인 필요'}</NumericText>
             </View>
             <View style={styles.statBox}>
               <Text style={styles.statLabel}>마진율</Text>
