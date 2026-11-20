@@ -32,19 +32,19 @@ export function createPurchaseWithItems(input: PurchaseFormInput & { store_id: s
 }
 
 export async function updatePurchaseAmounts(
-  purchase: Pick<Purchase, 'id' | 'store_id' | 'date' | 'supplier' | 'type'>,
+  purchase: Pick<Purchase, 'id' | 'store_id' | 'date' | 'supplier' | 'type'> & { edit_version: number },
   rows: { category: string; amount: number }[],
 ) {
   if (!purchase.id?.trim()) throw new UserFacingError('수정할 매입을 다시 선택해주세요.');
-  return writePurchase({ ...purchase, mode: 'amounts', rows, returnId: true }, purchase.id);
+  return writePurchase({ ...purchase, mode: 'amounts', rows, returnId: true }, { id: purchase.id, version: purchase.edit_version });
 }
 
-async function writePurchase(input: PurchaseFormInput & { store_id: string }, purchaseId?: string): Promise<{ refreshFailed: boolean; purchaseId?: string }> {
+async function writePurchase(input: PurchaseFormInput & { store_id: string }, edit?: { id: string; version: number }): Promise<{ refreshFailed: boolean; purchaseId?: string }> {
   let result;
   try {
     const common = { p_store_id: input.store_id, p_date: input.date, p_supplier: input.supplier, p_type: input.type };
     if ('mode' in input) {
-      result = await supabase.rpc('create_purchase_entry', { ...common, p_mode: input.mode, p_rows: input.rows, ...(purchaseId && { p_purchase_id: purchaseId }) });
+      result = await supabase.rpc('create_purchase_entry', { ...common, p_mode: input.mode, p_rows: input.rows, ...(edit && { p_purchase_id: edit.id, p_expected_version: edit.version }) });
     } else {
       const rpc = input.category !== undefined ? 'create_purchase_with_amounts'
         : input.returnId ? 'create_purchase_with_evidence' : 'create_purchase_with_items';
@@ -56,6 +56,7 @@ async function writePurchase(input: PurchaseFormInput & { store_id: string }, pu
   if (result.error) {
     // SQL/PGRST rejection confirms the transaction did not succeed. Transport
     // errors and gateway timeouts can arrive after a committed write.
+    if (result.error.message === 'PURCHASE_CHANGED') throw new Error('PURCHASE_CHANGED');
     const code = result.error.code ?? '';
     const rejected = (/^[0-9A-Z]{5}$/.test(code) && !code.startsWith('08')) || /^PGRST\d+$/.test(code);
     throw new PurchaseWriteError(rejected ? 'rejected' : 'unknown', result.error);
@@ -70,7 +71,7 @@ async function writePurchase(input: PurchaseFormInput & { store_id: string }, pu
   }
 }
 
-export async function getPurchaseById(id: string): Promise<Purchase & { hasAmountLines: boolean }> {
+export async function getPurchaseById(id: string): Promise<Purchase & { hasAmountLines: boolean; edit_version: number }> {
   const { data, error } = await supabase
     .from('purchases')
     .select('*,category_amounts,purchase_amount_lines(count)')
@@ -78,7 +79,7 @@ export async function getPurchaseById(id: string): Promise<Purchase & { hasAmoun
     .single();
   if (error) throw new Error(error.message);
   const { purchase_amount_lines, ...purchase } = data;
-  return { ...purchase, hasAmountLines: Number(purchase_amount_lines?.[0]?.count) > 0 } as Purchase & { hasAmountLines: boolean };
+  return { ...purchase, hasAmountLines: Number(purchase_amount_lines?.[0]?.count) > 0 } as Purchase & { hasAmountLines: boolean; edit_version: number };
 }
 
 export async function getPurchaseItems(purchaseId: string): Promise<PurchaseItem[]> {
@@ -106,11 +107,13 @@ export async function updatePurchaseItem(
   itemId: string,
   quantity: number,
   amount: number | null,
+  expectedVersion: number,
 ): Promise<{ refreshFailed: boolean }> {
   const { error } = await supabase.rpc('update_purchase_item_amount', {
     p_item_id: itemId,
     p_quantity: quantity,
     p_amount: amount,
+    p_expected_version: expectedVersion,
   });
   if (error) throw new Error(error.message);
   try { await invalidateCachedStore(); return { refreshFailed: false }; }

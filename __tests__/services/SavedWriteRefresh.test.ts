@@ -13,11 +13,11 @@ it('재고 저장 성공 후 캐시 갱신 실패는 저장 결과와 복구 표
 });
 it('매입 품목 저장 성공 후 캐시 갱신 실패는 쓰기 실패로 던지지 않는다',async()=>{
  (invalidateCachedStore as jest.Mock).mockRejectedValueOnce(new Error('cache failed'));
- await expect(updatePurchaseItem('i',2,100)).resolves.toEqual({refreshFailed:true});expect(supabase.rpc).toHaveBeenCalledTimes(1);
+ await expect(updatePurchaseItem('i',2,100,1)).resolves.toEqual({refreshFailed:true});expect(supabase.rpc).toHaveBeenCalledTimes(1);
 });
 it('실제 재고 쓰기 거절은 저장 성공으로 표시하지 않는다',async()=>{
  chain.single.mockResolvedValue({data:null,error:{message:'write denied'}});await expect(updateIngredient('i',{current_stock:10})).rejects.toThrow('write denied');expect(invalidateCachedStore).not.toHaveBeenCalled();
 });
 it('실제 매입 품목 쓰기 거절은 후속 갱신을 실행하지 않는다',async()=>{
- (supabase.rpc as jest.Mock).mockResolvedValue({error:{message:'write denied'}});await expect(updatePurchaseItem('i',2,100)).rejects.toThrow('write denied');expect(invalidateCachedStore).not.toHaveBeenCalled();
+ (supabase.rpc as jest.Mock).mockResolvedValue({error:{message:'write denied'}});await expect(updatePurchaseItem('i',2,100,1)).rejects.toThrow('write denied');expect(invalidateCachedStore).not.toHaveBeenCalled();
 });

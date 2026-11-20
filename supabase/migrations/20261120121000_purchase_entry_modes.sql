@@ -1,6 +1,41 @@
 -- 1.1.0 매입 입력 방식. 20261120120000 다음에 적용한다. 이전 RPC는 그대로 호출할 수 있다.
 BEGIN;
 
+ALTER TABLE public.purchases ADD COLUMN IF NOT EXISTS edit_version bigint NOT NULL DEFAULT 1;
+CREATE OR REPLACE FUNCTION private.bump_purchase_version() RETURNS trigger
+LANGUAGE plpgsql SET search_path='' AS $$
+BEGIN
+  NEW.edit_version := OLD.edit_version+1;
+  RETURN NEW;
+END;
+$$;
+DROP TRIGGER IF EXISTS bump_purchase_version ON public.purchases;
+CREATE TRIGGER bump_purchase_version BEFORE UPDATE ON public.purchases
+FOR EACH ROW EXECUTE FUNCTION private.bump_purchase_version();
+
+-- 한 트랜잭션의 여러 입고 행에도 실제 입력 순서가 남는다. 과거 동시각 행은 UUID로 정렬한다.
+ALTER TABLE public.purchase_items ALTER COLUMN created_at SET DEFAULT clock_timestamp();
+CREATE INDEX IF NOT EXISTS purchase_items_ingredient_receipt_idx ON public.purchase_items
+  (store_id,ingredient_id,created_at DESC,id DESC) WHERE ingredient_id IS NOT NULL;
+
+-- 마지막 매입까지 삭제하면 첫 입고 직전의 재료 단가로 돌아간다.
+-- 마이그레이션 전부터 입고가 있던 재료는 이전 기준 단가를 추정하지 않는다.
+ALTER TABLE public.ingredients ADD COLUMN IF NOT EXISTS price_before_purchases numeric;
+CREATE OR REPLACE FUNCTION private.remember_price_before_purchases() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path='' AS $$
+BEGIN
+  UPDATE public.ingredients g SET price_before_purchases=g.last_price
+  WHERE g.id=NEW.ingredient_id AND g.store_id=NEW.store_id AND NOT EXISTS (
+    SELECT 1 FROM public.purchase_items i WHERE i.store_id=g.store_id AND i.ingredient_id=g.id
+  );
+  RETURN NEW;
+END;
+$$;
+REVOKE ALL ON FUNCTION private.remember_price_before_purchases() FROM PUBLIC,anon,authenticated;
+DROP TRIGGER IF EXISTS remember_price_before_purchases ON public.purchase_items;
+CREATE TRIGGER remember_price_before_purchases BEFORE INSERT ON public.purchase_items
+FOR EACH ROW WHEN (NEW.ingredient_id IS NOT NULL) EXECUTE FUNCTION private.remember_price_before_purchases();
+
 -- 신규 매장만 1.1.0 기본 세 분류로 시작한다. 기존 매장의 주류·사용자 분류와 순서는 보존한다.
 ALTER TABLE public.stores ALTER COLUMN purchase_categories SET DEFAULT ARRAY['식자재','비품','소모품'];
 
@@ -19,6 +54,30 @@ DROP POLICY IF EXISTS purchase_amount_read ON public.purchase_amount_lines;
 CREATE POLICY purchase_amount_read ON public.purchase_amount_lines FOR SELECT TO authenticated
 USING (EXISTS (SELECT 1 FROM public.purchases p WHERE p.id=purchase_id
   AND public.is_store_member(p.store_id) AND public.can_read_store_financials(p.store_id)));
+
+-- 분류 관리 화면도 편집 중인 명세를 바꾼다. 대표 분류가 그대로여도 버전을 갱신한다.
+CREATE OR REPLACE FUNCTION private.invalidate_purchase_category_edits() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path='' AS $$
+BEGIN
+  IF TG_TABLE_NAME='purchase_items' THEN
+    UPDATE public.purchases SET edit_version=edit_version WHERE id=NEW.purchase_id;
+  ELSE
+    UPDATE public.purchases p SET edit_version=p.edit_version WHERE p.id IN (
+      SELECT l.purchase_id FROM public.purchase_amount_lines l WHERE l.category_id=NEW.id
+    );
+  END IF;
+  RETURN NULL;
+END;
+$$;
+REVOKE ALL ON FUNCTION private.invalidate_purchase_category_edits() FROM PUBLIC,anon,authenticated;
+DROP TRIGGER IF EXISTS invalidate_amount_category_edit ON public.store_taxonomies;
+CREATE TRIGGER invalidate_amount_category_edit AFTER UPDATE OF name ON public.store_taxonomies
+FOR EACH ROW WHEN (NEW.domain='purchase' AND OLD.name IS DISTINCT FROM NEW.name)
+EXECUTE FUNCTION private.invalidate_purchase_category_edits();
+DROP TRIGGER IF EXISTS invalidate_item_category_edit ON public.purchase_items;
+CREATE TRIGGER invalidate_item_category_edit AFTER UPDATE OF category,category_id ON public.purchase_items
+FOR EACH ROW WHEN (OLD.category_id IS DISTINCT FROM NEW.category_id OR OLD.category IS DISTINCT FROM NEW.category)
+EXECUTE FUNCTION private.invalidate_purchase_category_edits();
 
 -- 분류 삭제는 품목과 마찬가지로 기타에 합친다. 배열 동기화가 잠시 비활성으로
 -- 바꾼 뒤 다시 켜는 분류가 있으므로 트랜잭션의 최종 상태에서만 옮긴다.
@@ -109,7 +168,7 @@ REVOKE ALL ON FUNCTION private.refresh_purchase_totals(uuid) FROM PUBLIC, anon, 
 
 -- 선택적 p_purchase_id는 금액별 매입을 같은 UUID에서 수정한다. 증빙은 그대로 연결된다.
 CREATE OR REPLACE FUNCTION public.create_purchase_entry(
-  p_store_id uuid,p_date date,p_supplier text,p_type text,p_mode text,p_rows jsonb,p_purchase_id uuid DEFAULT NULL
+  p_store_id uuid,p_date date,p_supplier text,p_type text,p_mode text,p_rows jsonb,p_purchase_id uuid DEFAULT NULL,p_expected_version bigint DEFAULT NULL
 ) RETURNS uuid LANGUAGE plpgsql SECURITY DEFINER SET search_path='' AS $$
 DECLARE
   row_data jsonb;
@@ -117,6 +176,7 @@ DECLARE
   total numeric := 0;
   category_id_for_line uuid;
   purchase_id_for_rows uuid;
+  locked_version bigint;
   has_rows boolean := false;
   quantity_for_line numeric;
   unit_for_line text;
@@ -134,10 +194,11 @@ BEGIN
   IF nullif(btrim(p_supplier),'') IS NULL THEN RAISE EXCEPTION 'PURCHASE_INVALID_SUPPLIER'; END IF;
 
   IF p_purchase_id IS NOT NULL THEN
-    SELECT p.id INTO purchase_id_for_rows FROM public.purchases p WHERE p.id=p_purchase_id AND p.store_id=p_store_id FOR UPDATE;
+    SELECT p.id,p.edit_version INTO purchase_id_for_rows,locked_version FROM public.purchases p WHERE p.id=p_purchase_id AND p.store_id=p_store_id FOR UPDATE;
     IF NOT FOUND OR p_mode<>'amounts' OR NOT EXISTS (
       SELECT 1 FROM public.purchase_amount_lines WHERE purchase_id=purchase_id_for_rows
     ) THEN RAISE EXCEPTION 'PURCHASE_AMOUNT_ENTRY_NOT_FOUND'; END IF;
+    IF locked_version IS DISTINCT FROM p_expected_version THEN RAISE EXCEPTION 'PURCHASE_CHANGED'; END IF;
     DELETE FROM public.purchase_amount_lines WHERE purchase_id=purchase_id_for_rows;
   END IF;
   IF p_mode='items' THEN
@@ -187,12 +248,14 @@ BEGIN
       IF nullif(btrim(row_data->>'unit'),'') IS NOT NULL AND btrim(row_data->>'unit') IS DISTINCT FROM unit_for_line THEN
         RAISE EXCEPTION 'PURCHASE_INGREDIENT_UNIT_CHANGED';
       END IF;
-      UPDATE public.ingredients SET current_stock=current_stock+quantity_for_line,last_price=price_for_unit,updated_at=now()
-      WHERE id=ingredient AND store_id=p_store_id;
     END IF;
     INSERT INTO public.purchase_items(purchase_id,store_id,category_id,ingredient_id,name,quantity,unit,unit_price,subtotal)
     VALUES(purchase_id_for_rows,p_store_id,category_id_for_line,ingredient,btrim(row_data->>'name'),quantity_for_line,
            coalesce(unit_for_line,''),price_for_unit,line_amount);
+    IF ingredient IS NOT NULL THEN
+      UPDATE public.ingredients SET current_stock=current_stock+quantity_for_line,last_price=price_for_unit,updated_at=now()
+      WHERE id=ingredient AND store_id=p_store_id;
+    END IF;
   END LOOP;
   IF NOT has_rows THEN RAISE EXCEPTION 'PURCHASE_INVALID_AMOUNT'; END IF;
   IF p_purchase_id IS NOT NULL THEN
@@ -202,33 +265,36 @@ BEGIN
   RETURN purchase_id_for_rows;
 END;
 $$;
-REVOKE ALL ON FUNCTION public.create_purchase_entry(uuid,date,text,text,text,jsonb,uuid), public.category_amounts(public.purchases) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.create_purchase_entry(uuid,date,text,text,text,jsonb,uuid), public.category_amounts(public.purchases) TO authenticated;
+REVOKE ALL ON FUNCTION public.create_purchase_entry(uuid,date,text,text,text,jsonb,uuid,bigint), public.category_amounts(public.purchases) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.create_purchase_entry(uuid,date,text,text,text,jsonb,uuid,bigint), public.category_amounts(public.purchases) TO authenticated;
 
 -- 수량만 바꿀 때는 잠금 후 읽은 소계를 보존한다. 과거 소수 원 소계는 수정 시 원 단위로 반올림한다.
-CREATE OR REPLACE FUNCTION private.edit_purchase_item(p_item_id uuid,p_quantity numeric,p_amount numeric,p_expected_price numeric)
+CREATE OR REPLACE FUNCTION private.edit_purchase_item(p_item_id uuid,p_quantity numeric,p_amount numeric,p_expected_version bigint)
 RETURNS void LANGUAGE plpgsql SECURITY INVOKER SET search_path='' AS $$
 DECLARE
   parent_id uuid;
+  locked_version bigint;
   parent_store uuid;
   old_item public.purchase_items%ROWTYPE;
   amount_won numeric;
   price numeric;
 BEGIN
-  SELECT p.id,p.store_id INTO parent_id,parent_store FROM public.purchases p
+  SELECT p.id,p.store_id,p.edit_version INTO parent_id,parent_store,locked_version FROM public.purchases p
   JOIN public.purchase_items i ON i.purchase_id=p.id AND i.store_id=p.store_id
   WHERE i.id=p_item_id AND public.is_store_member(p.store_id) AND public.can_read_store_financials(p.store_id)
   FOR UPDATE OF p;
   IF NOT FOUND THEN RAISE EXCEPTION 'FINANCIAL_SHARING_DENIED' USING ERRCODE='42501'; END IF;
   SELECT * INTO STRICT old_item FROM public.purchase_items WHERE purchase_id=parent_id AND id=p_item_id FOR UPDATE;
-  IF p_expected_price IS NOT NULL AND old_item.unit_price::double precision IS DISTINCT FROM p_expected_price::double precision THEN
-    RAISE EXCEPTION 'PURCHASE_EDIT_AMOUNT_REQUIRED';
-  END IF;
+  IF locked_version IS DISTINCT FROM p_expected_version THEN RAISE EXCEPTION 'PURCHASE_CHANGED'; END IF;
   amount_won := coalesce(p_amount,round(old_item.subtotal));
   IF p_quantity IS NULL OR p_quantity<=0 OR p_quantity>=1000000000 OR amount_won<0
      OR amount_won>=1000000000000 OR amount_won<>trunc(amount_won) THEN RAISE EXCEPTION 'PURCHASE_INVALID_AMOUNT'; END IF;
   price := amount_won/p_quantity;
   IF price>=1000000000 THEN RAISE EXCEPTION 'PURCHASE_INVALID_AMOUNT'; END IF;
+  PERFORM 1 FROM public.ingredients g WHERE g.store_id=parent_store AND g.id IN (
+    SELECT i.ingredient_id FROM public.purchase_items i WHERE i.purchase_id=parent_id
+      AND (i.id=p_item_id OR i.subtotal<>round(i.subtotal))
+  ) ORDER BY g.id FOR UPDATE;
   UPDATE public.purchase_items SET quantity=p_quantity,unit_price=price,subtotal=amount_won WHERE id=p_item_id;
   -- 구버전의 소수 원 형제 품목은 이 영수증의 종전 반올림 합계를 보존하도록
   -- 나머지가 큰 행부터 1원씩 배분한다. 정수 원 기록과 다른 영수증은 건드리지 않는다.
@@ -237,30 +303,40 @@ BEGIN
       row_number() OVER (ORDER BY subtotal-floor(subtotal) DESC,id) AS priority,
       round(old_item.subtotal+sum(subtotal-floor(subtotal)) OVER ())-round(old_item.subtotal) AS extra
     FROM public.purchase_items WHERE purchase_id=parent_id AND id<>p_item_id AND subtotal<>round(subtotal)
+  ), normalized AS (
+    SELECT id,whole+CASE WHEN priority<=extra THEN 1 ELSE 0 END AS amount FROM fractions
+  ), changed AS (
+    UPDATE public.purchase_items i SET subtotal=n.amount,unit_price=n.amount/i.quantity
+    FROM normalized n WHERE i.id=n.id RETURNING i.id,i.ingredient_id,i.unit_price
+  ), prices AS (
+    SELECT id,ingredient_id,unit_price FROM changed
+    UNION ALL SELECT old_item.id,old_item.ingredient_id,price
   )
-  UPDATE public.purchase_items i SET subtotal=f.whole+CASE WHEN f.priority<=f.extra THEN 1 ELSE 0 END
-  FROM fractions f WHERE i.id=f.id;
-  UPDATE public.ingredients SET current_stock=current_stock+(p_quantity-old_item.quantity),
-    last_price=price,updated_at=now() WHERE store_id=parent_store AND id=old_item.ingredient_id;
+  UPDATE public.ingredients g SET last_price=v.unit_price,updated_at=now() FROM prices v
+  WHERE g.store_id=parent_store AND g.id=v.ingredient_id AND v.id=(
+    SELECT i.id FROM public.purchase_items i WHERE i.store_id=parent_store AND i.ingredient_id=g.id
+    ORDER BY i.created_at DESC,i.id DESC LIMIT 1
+  );
+  UPDATE public.ingredients SET current_stock=current_stock+(p_quantity-old_item.quantity),updated_at=now()
+  WHERE store_id=parent_store AND id=old_item.ingredient_id;
   PERFORM private.refresh_purchase_totals(parent_id);
 END;
 $$;
 
-REVOKE ALL ON FUNCTION private.edit_purchase_item(uuid,numeric,numeric,numeric) FROM PUBLIC,anon,authenticated;
-CREATE OR REPLACE FUNCTION public.update_purchase_item_amount(p_item_id uuid,p_quantity numeric,p_amount numeric)
+REVOKE ALL ON FUNCTION private.edit_purchase_item(uuid,numeric,numeric,bigint) FROM PUBLIC,anon,authenticated;
+CREATE OR REPLACE FUNCTION public.update_purchase_item_amount(p_item_id uuid,p_quantity numeric,p_amount numeric,p_expected_version bigint)
 RETURNS void LANGUAGE sql SECURITY DEFINER SET search_path='' AS $$
-  SELECT private.edit_purchase_item(p_item_id,p_quantity,p_amount,NULL);
+  SELECT private.edit_purchase_item(p_item_id,p_quantity,p_amount,p_expected_version);
 $$;
--- 구앱의 수량 수정도 금액을 유지한다. 구앱에서 단가를 직접 바꾸면 저장 전에 거절한다.
+-- 버전을 보내지 못하는 구앱이 최신 수량을 덮어쓰지 않도록 기존 엔드포인트는 갱신을 요청한다.
 CREATE OR REPLACE FUNCTION public.update_purchase_item(p_item_id uuid,p_quantity numeric,p_unit_price numeric)
-RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path='' AS $$
+RETURNS void LANGUAGE plpgsql SET search_path='' AS $$
 BEGIN
-  IF p_unit_price IS NULL OR p_unit_price<0 OR p_unit_price>=1000000000 THEN RAISE EXCEPTION 'PURCHASE_INVALID_AMOUNT'; END IF;
-  PERFORM private.edit_purchase_item(p_item_id,p_quantity,NULL,p_unit_price);
+  RAISE EXCEPTION 'PURCHASE_CHANGED';
 END;
 $$;
-REVOKE ALL ON FUNCTION public.update_purchase_item_amount(uuid,numeric,numeric) FROM PUBLIC,anon;
-GRANT EXECUTE ON FUNCTION public.update_purchase_item_amount(uuid,numeric,numeric) TO authenticated;
+REVOKE ALL ON FUNCTION public.update_purchase_item_amount(uuid,numeric,numeric,bigint) FROM PUBLIC,anon;
+GRANT EXECUTE ON FUNCTION public.update_purchase_item_amount(uuid,numeric,numeric,bigint) TO authenticated;
 -- 앱의 품목 쓰기는 입고를 함께 반영하는 RPC를 거친다.
 REVOKE INSERT,UPDATE,DELETE ON public.purchase_items FROM PUBLIC,anon,authenticated;
 
@@ -276,7 +352,18 @@ BEGIN
     WHERE purchase_id=OLD.id AND store_id=OLD.store_id AND ingredient_id IS NOT NULL
     GROUP BY ingredient_id ORDER BY ingredient_id
   LOOP
-    UPDATE public.ingredients SET current_stock=current_stock-received.quantity,updated_at=now()
+    PERFORM 1 FROM public.ingredients WHERE id=received.ingredient_id AND store_id=OLD.store_id FOR UPDATE;
+    -- 마지막 입고의 단가를 되돌린다. 이후 별도로 직접 수정한 단가는 보존한다.
+    WITH latest AS (
+      SELECT i.purchase_id,i.unit_price FROM public.purchase_items i
+      WHERE i.store_id=OLD.store_id AND i.ingredient_id=received.ingredient_id
+      ORDER BY i.created_at DESC,i.id DESC LIMIT 1
+    )
+    UPDATE public.ingredients SET current_stock=current_stock-received.quantity,
+      last_price=CASE WHEN EXISTS (SELECT 1 FROM latest WHERE purchase_id=OLD.id AND unit_price=last_price)
+      THEN coalesce((SELECT i.unit_price FROM public.purchase_items i WHERE i.store_id=OLD.store_id
+        AND i.ingredient_id=received.ingredient_id AND i.purchase_id<>OLD.id
+        ORDER BY i.created_at DESC,i.id DESC LIMIT 1),price_before_purchases,0) ELSE last_price END,updated_at=now()
     WHERE id=received.ingredient_id AND store_id=OLD.store_id;
   END LOOP;
   RETURN OLD;
