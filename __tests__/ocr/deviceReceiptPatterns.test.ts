@@ -7,6 +7,36 @@ const pair = (label: string, value: string, y: number) => [cell(label, .1, y), c
 const tax = () => [...pair('공급가', '21.818', .3), ...pair('부가세', '2,182', .4)];
 
 describe('실기기 후속 · 합성 문서 구조', () => {
+  it.each([
+    ['비영 회수 뒤 빈 중복란', ['3,000', '']],
+    ['빈 중복란 뒤 비영 회수', ['', '3,000']],
+    ['회수액 충돌', ['3,000', '4,000']],
+    ['회수액 충돌 뒤 빈 중복란', ['3,000', '4,000', '']],
+    ['0원 뒤 비영 회수 충돌', ['0', '3,000', '']],
+    ['오독 숫자', ['3,O00']],
+    ['오독 숫자 뒤 빈 중복란', ['3,O00', '']],
+    ['비영 회수 뒤 오독 숫자', ['3,000', '3,O00']],
+  ])('R13: %s를 빈 부가란으로 면제하지 않는다', (_name, values) => {
+    const parsed = parseReceipt([...tax(), ...pair('매출합계', '24,000', .5),
+      ...values.flatMap((value, index) => value ? pair('회수', value, .6 + index * .05) : [cell('회수', .1, .6 + index * .05)])]);
+    expect(parsed.selectedTotal).toBeNull(); expect(parsed.suggestedTotal).toBeNull();
+    expect(parsed.totalCandidates.some(candidate => candidate.value === 24000)).toBe(true);
+  });
+  it('R13: 한 관측의 오독 회수액도 빈 부가란으로 면제하지 않는다', () => {
+    const parsed = parseReceipt([...tax(), ...pair('매출합계', '24,000', .5), cell('회수 3,O00', .1, .6)]);
+    expect(parsed.selectedTotal).toBeNull(); expect(parsed.suggestedTotal).toBeNull();
+  });
+  it('R13 대조: 숫자가 없는 중복 회수·보증금 부가란은 세금 검산을 막지 않는다', () => {
+    const parsed = parseReceipt([...tax(), ...pair('매출합계', '24,000', .5), cell('회수', .1, .6),
+      cell('용기반납', .1, .65), cell('보증금', .1, .7)]);
+    expect(parsed.selectedTotal?.value).toBe(24000); expect(parsed.suggestedTotal).toBeNull();
+  });
+  it.each(['매출합계', '매출총계'])('저신뢰 %s를 회수 차감 식의 독립 검산 근거로 사용하지 않는다', label => {
+    const parsed = parseReceipt([...pair(label, '3,40,120', .1), ...pair('회수', '120', .2), ...pair('결제금액', '340,000', .3)]);
+    expect(parsed.selectedTotal).toBeNull(); expect(parsed.suggestedTotal).toBeNull();
+    expect(parsed.totalCandidates).toEqual(expect.arrayContaining([expect.objectContaining({ value: 340120, source: 'derived' })]));
+    expect(parsed.guidanceCodes).toContain('INVALID_THOUSANDS_GROUPING');
+  });
   it('표 머리글과 빈 회수란이 있어도 독립 공급가·VAT가 맞는 명시 매출합계를 확정한다', () => {
     const parsed = parseReceipt([
       cell('공급가', .2, .1, .08), cell('부가세', .4, .1, .08), cell('보증금', .6, .1, .08),
