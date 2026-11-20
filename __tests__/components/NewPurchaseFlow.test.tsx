@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { FlatList } from 'react-native';
 import { act, fireEvent, render, waitFor, within } from '@testing-library/react-native';
 import NewPurchaseScreen from '../../app/purchases/new';
@@ -26,6 +27,11 @@ jest.mock('../../lib/hooks/usePurchaseTypes', () => ({ usePurchaseTypes: () => (
 jest.mock('../../lib/hooks/useCategories', () => ({ useCategories: () => ({ categories: ['식자재'] }) }));
 jest.mock('../../lib/services/ingredients',()=>({createIngredient:(...a:unknown[])=>mockQuickCreate(...a)}));
 jest.mock('../../lib/hooks/useConfirmLeave', () => ({ useConfirmLeave: () => jest.fn() }));
+// Exercise the picker controls without mounting native sheet animations or parsing icon SVGs.
+jest.mock('../../lib/components/ui/SheetModal', () => ({
+  SheetModal: ({ visible, children }: { visible: boolean; children: ReactNode }) => visible ? children : null,
+}));
+jest.mock('../../lib/icons/AppIcon', () => ({ AppIcon: () => null }));
 jest.mock('../../lib/components/CategoryManageModal', () => ({ CategoryManageModal: () => null }));
 jest.mock('../../lib/services/purchases', () => ({ PurchaseWriteError: class extends Error {
   outcome: 'rejected' | 'unknown';
@@ -61,8 +67,8 @@ it('기본정보·품목·검토를 나누고 단계 뒤로가도 값을 보존�
   fireEvent.press(screen.getByText('품목 수정'));
   expect(screen.getByLabelText('쌀 수량').props.value).toBe('2');
   fireEvent.press(screen.getByText('검토로 돌아가기'));
-  fireEvent.press(screen.getByLabelText('매입 최종 등록'));
-  await waitFor(() => expect(screen.getByText('매입이 등록됐어요')).toBeTruthy());
+  await act(async () => { fireEvent.press(screen.getByLabelText('매입 최종 등록')); });
+  expect(screen.getByText('매입이 등록됐어요')).toBeTruthy();
   expect(mockWrite).toHaveBeenCalledTimes(1);
   expect(mockWrite).toHaveBeenCalledWith(expect.objectContaining({ supplier: '검증 거래처', items: [expect.objectContaining({ quantity: 2, unit_price: 10000 })] }));
 });
