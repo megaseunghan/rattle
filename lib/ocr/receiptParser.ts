@@ -176,7 +176,6 @@ export function parseReceipt(lines: readonly RecognizedLine[], sourceImageId = '
   const spaceNormalized = new Set<RecognizedLine>();
   const invalidGrouping = new Set<RecognizedLine>();
   const invalidTotalCandidates = new Set<TotalCandidate>();
-  const nonEmptyValueLabels = new Set<RecognizedLine>();
   const headerIndex = rows.findIndex(r => /품목명|상품명|품명/.test(compact(r.text)));
   const headers = headerIndex < 0 ? [] : rows[headerIndex].cells;
   const field = <T,>(value: T, cells: RecognizedLine[], confidence = .7, source: 'observed' | 'derived' = 'observed', moneyTokens: MoneyToken[] = []): ReceiptField<T> => {
@@ -193,6 +192,7 @@ export function parseReceipt(lines: readonly RecognizedLine[], sourceImageId = '
   const amountCells = new Map<keyof typeof amounts, RecognizedLine[]>();
   const amountStatus = Object.fromEntries(Object.keys(amounts).map(key => [key, 'absent'])) as Record<keyof typeof amounts, 'absent' | 'observed' | 'unreadable'>;
   const amountsWithContent = new Set<keyof typeof amounts>();
+  const unparsedAmounts = new Set<keyof typeof amounts>();
   const dates: ReceiptField<string>[] = [];
   const vendors: ReceiptField<string>[] = [];
   const aliases: [string, RegExp][] = [['바른종합식자재', /바른종합식자재/], ['포도주류', /포도주류/], ['신선한 식탁', /신선한식탁/], ['수원축산', /수원축산/], ['쿠팡', /쿠팡/], ['네이버', /네이버/]];
@@ -204,8 +204,6 @@ export function parseReceipt(lines: readonly RecognizedLine[], sourceImageId = '
     const normalized = normalizeMoney(text).trim()
       .replace(/^(?:총|쿠페이\s*(?:머니)?|[가-힣A-Za-z]+카드\s*\/\s*(?:일시불|일시물))\s*(?=[₩W(+\-\d])/, '')
       .replace(/\s+인수(?:자)?\s*$/, '');
-    // Preserve content even when parsing fails: unreadable text is not a blank ancillary field.
-    if (normalized) nonEmptyValueLabels.add(label);
     const observed = wholeMoney(normalized);
     if (observed !== null) return observed;
     if (valueCells.length === 1 && /^(?:[+-]\s*)?[₩W]?\s*\d{1,3}(?:\s+\d{3})+(?:\s*원)?$/.test(normalized)) {
@@ -221,39 +219,66 @@ export function parseReceipt(lines: readonly RecognizedLine[], sourceImageId = '
     }
     return null;
   };
-  interface MoneyReading { value: number; tokens: MoneyToken[]; label: string }
-  // Track the exact numeric span, not all observations in the provenance row.
-  // Two labels may consume one token; two tokens within one observation may be independent.
-  const valueFor = (row: ReceiptRow, label: RecognizedLine, pattern: RegExp, occurrence = 0): MoneyReading | null => {
-    const normalized = normalizedOffsets(label.text).text;
+  type ValueReading = { label: string; tokens: MoneyToken[] } & (
+    | { state: 'empty' | 'unparsed' }
+    | { state: 'parsed'; value: number }
+  );
+  interface ValueSegment { name: string; start: number; end: number; content: string; reading: ValueReading }
+  const classifyValue = (content: string, label: RecognizedLine, valueCells: RecognizedLine[], tokens: MoneyToken[], name: string): ValueReading => {
+    if (!content.trim()) return { state: 'empty', label: name, tokens: [] };
+    const value = summaryValue(content, label, valueCells);
+    return value === null ? { state: 'unparsed', label: name, tokens }
+      : { state: 'parsed', value, label: name, tokens };
+  };
+  // Split every label's own span before resolving aliases. A failed parse must
+  // retain its content and cannot be replaced by another label's trailing number.
+  const segmentCache = new Map<RecognizedLine, ValueSegment[]>();
+  const segmentsFor = (cell: RecognizedLine, fallback: RegExp): ValueSegment[] => {
+    const cached = segmentCache.get(cell);
+    if (cached) return cached;
+    const normalized = normalizedOffsets(cell.text).text;
     const positions = [...normalized.matchAll(/\S/g)].map(match => match.index!);
-    const labels = [...compact(normalized).matchAll(summaryLabels)].map(match => ({
+    const markers = [...compact(normalized).matchAll(summaryLabels)].map(match => ({
       text: match[0], start: positions[match.index!], end: positions[match.index! + match[0].length - 1] + 1,
     }));
-    const markerIndex = labels.map((marker, index) => pattern.test(marker.text) ? index : -1).filter(index => index >= 0)[occurrence] ?? -1;
-    const marker = labels[markerIndex];
-    const inlineStart = marker?.end ?? normalized.length;
-    const inlineEnd = labels[markerIndex + 1]?.start ?? normalized.length;
-    const inlineContent = normalized.slice(inlineStart, inlineEnd).replace(/^[\s:/|：]+|[\s/|]+$/g, '');
-    // A textual inline value must be read (and retained as unreadable), not skipped
-    // in favour of the separate-cell path merely because it contains no digits.
-    if (/\d/.test(normalized) || inlineContent) {
-      let start = marker?.end ?? normalized.search(/[₩W(+\-\d]/);
-      let end = inlineEnd;
-      // A shared trailing value remains a candidate, but its token identity
-      // will prevent it from corroborating another field that consumed it.
-      if (!/\d/.test(normalized.slice(start, end)) && [...normalized.matchAll(numericTokens)].length === 1) {
-        start = labels[labels.length - 1]?.end ?? start; end = normalized.length;
-      }
-      const segment = normalized.slice(start, end).replace(/^[\s:/|：]+/g, '');
-      const value = summaryValue(end < normalized.length ? segment.replace(/[\s/|]+$/g, '') : segment, label, [label]);
-      return value === null ? null : { value, tokens: tokensFor(label, start, end), label: labels.length > 1 ? marker?.text ?? label.text : label.text };
+    const knownMarkers = markers.length > 0;
+    if (!markers.length) {
+      const match = compact(normalized).match(fallback);
+      if (match) markers.push({ text: match[0], start: positions[match.index!], end: positions[match.index! + match[0].length - 1] + 1 });
     }
-    const nextLabel = row.cells.find(l => cx(l) > cx(label) && /공급가|부가세|세액|VAT|보증금|회수|상품금액|배송비|할인|잔액|합계|총계|결제/.test(compact(l.text)));
-    const right = row.cells.filter(l => l !== label && cx(l) > cx(label) && (!nextLabel || cx(l) < cx(nextLabel)));
-    const signInLabel = normalized.match(/[+\-(]\s*$/)?.[0] ?? '';
-    const value = right.length ? summaryValue(signInLabel + right.map(l => l.text).join(' '), label, right) : null;
-    return value === null ? null : { value, tokens: right.flatMap(l => tokensFor(l)), label: marker?.text ?? label.text };
+    const segments = markers.map((marker, index) => {
+      const start = marker.end, end = markers[index + 1]?.start ?? normalized.length;
+      const content = normalized.slice(start, end).replace(/^[\s:/|：]+/g, '')
+        .replace(index + 1 < markers.length ? /[\s/|]+$/g : /\s+$/g, '');
+      return { name: marker.text, start, end, content, reading: classifyValue(content, cell, [cell], tokensFor(cell, start, end), markers.length > 1 ? marker.text : cell.text) };
+    });
+    // A fallback depends on the requested pattern; known summary markers do not.
+    if (knownMarkers) segmentCache.set(cell, segments);
+    return segments;
+  };
+  const readingFor = (row: ReceiptRow, label: RecognizedLine, pattern: RegExp, occurrence = 0): ValueReading => {
+    const segments = segmentsFor(label, pattern);
+    const index = segments.map((segment, i) => pattern.test(segment.name) ? i : -1).filter(i => i >= 0)[occurrence] ?? -1;
+    const own = segments[index];
+    if (!own) return { state: 'empty', label: label.text, tokens: [] };
+    if (own.reading.state !== 'empty') return own.reading;
+    const following = segments.slice(index + 1);
+    const last = following[following.length - 1];
+    // Only a genuinely empty alias chain may share the single trailing token.
+    // Token identity is preserved so R11 still rejects reused arithmetic evidence.
+    if (last?.reading.state === 'parsed' && following.slice(0, -1).every(segment => segment.reading.state === 'empty')
+      && [...normalizedOffsets(label.text).text.matchAll(numericTokens)].length === 1) {
+      return { ...last.reading, label: own.reading.label };
+    }
+    if (following.some(segment => segment.reading.state !== 'empty')) return own.reading;
+    const nextLabel = row.cells.find(cell => cell !== label && cx(cell) > cx(label)
+      && (semanticLabels.some(([, regex]) => regex.test(compact(cell.text))) || [...compact(cell.text).matchAll(summaryLabels)].length > 0));
+    const right = row.cells.filter(cell => cell !== label && cx(cell) > cx(label) && (!nextLabel || cx(cell) < cx(nextLabel)));
+    return classifyValue(right.map(cell => cell.text).join(' '), label, right, right.flatMap(cell => tokensFor(cell)), own.reading.label);
+  };
+  const valueFor = (row: ReceiptRow, label: RecognizedLine, pattern: RegExp, occurrence = 0) => {
+    const reading = readingFor(row, label, pattern, occurrence);
+    return reading.state === 'parsed' ? reading : null;
   };
   for (const row of rows) {
     const isTableHeader = row.cells.filter(l => columnNames.includes(compact(l.text))).length >= 2 && !row.cells.some(l => wholeMoney(l.text) !== null);
@@ -263,9 +288,10 @@ export function parseReceipt(lines: readonly RecognizedLine[], sourceImageId = '
         if (!isTableHeader && pattern.test(text)) {
           const count = Math.max(1, [...text.matchAll(summaryLabels)].filter(match => pattern.test(match[0])).length);
           for (let occurrence = 0; occurrence < count; occurrence++) {
-            const reading = valueFor(row, cell, pattern, occurrence);
-            const value = reading?.value ?? null;
-            if (nonEmptyValueLabels.has(cell)) amountsWithContent.add(key);
+            const reading = readingFor(row, cell, pattern, occurrence);
+            const value = reading.state === 'parsed' ? reading.value : null;
+            if (reading.state !== 'empty') amountsWithContent.add(key);
+            if (reading.state === 'unparsed') unparsedAmounts.add(key);
             if (value === null || (amounts[key] !== null && amounts[key]!.value !== value)) amountStatus[key] = 'unreadable';
             else {
               if (amountStatus[key] !== 'unreadable') amountStatus[key] = 'observed';
@@ -384,6 +410,7 @@ export function parseReceipt(lines: readonly RecognizedLine[], sourceImageId = '
   const goodsAdjustments = amounts.goods && amountStatus.goods === 'observed' && adjustment !== null
     ? amounts.goods.value + adjustment : null;
   const financialKeys = ['supply', 'vat', 'goods', 'shipping', 'discount', 'returns', 'deposit'] as const;
+  const blockingUnparsed = financialKeys.some(key => unparsedAmounts.has(key));
   const hasMaterials = items.length > 0 || amountStatus.balance !== 'absent'
     || financialKeys.some(key => amountStatus[key] !== 'absent')
     || printedTotals.some(c => /매출합계|매출총계|주문금액/.test(compact(c.label)));
@@ -470,7 +497,7 @@ export function parseReceipt(lines: readonly RecognizedLine[], sourceImageId = '
     || (matchingTotals.length > 0 && equations.length > 0 && independentMatches.every(match => match.equations.length === 0));
   let selectedTotal: TotalCandidate | null = null;
   let suggestedTotal: TotalCandidate | null = null;
-  if (matching && independentEquations.length > 0 && !sharedEvidence && !incompleteFor(matching) && !supplyScopeUnknown && !totalConflict && !multipleTotals) {
+  if (!blockingUnparsed && matching && independentEquations.length > 0 && !sharedEvidence && !incompleteFor(matching) && !supplyScopeUnknown && !totalConflict && !multipleTotals) {
     selectedTotal = matching;
     const equation = [...independentEquations].sort((a, b) => b.score - a.score)[0];
     const derived: TotalCandidate = { ...field(equation.value, equation.cells, .75, 'derived', [...equation.operands.flat(), ...(matching.moneyTokens ?? [])]), label: equation.label, score: equation.score };
@@ -480,7 +507,7 @@ export function parseReceipt(lines: readonly RecognizedLine[], sourceImageId = '
     derived.rawText += ` | ${matching.rawText}`;
     totalCandidates.push(derived);
     if (derived.score > matching.score) selectedTotal = derived;
-  } else if ((!hasMaterials || (daily && payableTotals.length === 1 && payableTotals[0] === daily && equations.length === 0
+  } else if (!blockingUnparsed && (!hasMaterials || (daily && payableTotals.length === 1 && payableTotals[0] === daily && equations.length === 0
     && financialKeys.every(key => amountStatus[key] === 'absent') && !totalConflict && !multipleTotals))
     && currentLabelCount === 1 && payableTotals.length === 1 && payableTotals[0].source === 'observed'
     && !/주문금액/.test(compact(payableTotals[0].label))) {

@@ -388,3 +388,43 @@ OCR 대상 **8 suites/167 tests 통과**, 기본 timeout, 2.507초(`/tmp/rattle-
 같은 개발 표본의 재평가이며 독립 holdout 성능이 아니다. 구현자 자체 검토이며 같은 검토자의 후속 검토는 PL이 배정한다. 안전한 null은 기존 backlog에 유지하고 원문은 저장소에 추가하지 않았다. 새 기기 OCR·화면·네이티브 빌드·설치·EAS·원격 변경은 실행하지 않았다.
 
 최종 검증(2026-11-20, macOS 로컬, 기준 88f9402 위 이 과제의 미커밋 파서·합성 회귀): 전체 `npx jest --runInBand --no-coverage --testPathIgnorePatterns='/node_modules/' '/__tests__/setup\.ts' '<rootDir>/supabase/functions/' '<rootDir>/dev/'` **199 suites/1760 tests 통과**, 기본 timeout, 52.046초, 종료 0(`/tmp/rattle-ocr-r13-inline-full-jest.log`). 실행 전후 파서·회귀 SHA는 `/tmp/rattle-ocr-r13-inline-final-source.sha256`과 일치했다. `git diff --check`와 두 외부 평가기 `node --check` 통과.
+
+## 독립 검토 10회차 반영 · R13 값 구간과 상태 분리 (2026-11-20)
+
+작업 `task_ff3f2117372d`, 기준 `feature/evidence-attachments@ffa1ba6`. 앞선 인라인 수정 이후에도 ‘구간에 숫자가 없으면 마지막 숫자를 공유’하는 분기가 남아, `회수 삼천원 / 보증금 0`의 미해석 회수액을 뒤 0으로 바꿀 수 있었다. 이번에는 내용 유무를 부수 효과로 누적하던 방식과 숫자 유무 기반 공유 분기를 제거하고, 다음 순서로 값 해석을 분리했다.
+
+1. 원본 관측 안의 라벨 위치를 찾아 각 라벨 끝부터 다음 라벨 앞까지 값 구간을 먼저 분할한다. 구간의 내용·위치·소비 토큰을 보존한다.
+2. 각 구간을 `empty`(내용 없음), `parsed`(기존 금액 해석 성공), `unparsed`(내용은 있지만 해석 실패)로 분류한다. 별도 값 셀도 같은 분류기를 사용한다. 숫자의 존재가 빈 값의 기준이 아니다.
+3. `parsed`와 `unparsed`인 구간은 그대로 유지한다. 실제 빈 별칭 구간만 뒤의 단일 금액을 공유하며, 사이에 내용 있는 구간이 있으면 건너뛰지 않는다. 공유한 경우에도 원래 토큰 ID·위치를 유지해 R11의 독립 검산 차단을 보존한다.
+4. 공급가·VAT·상품액·배송비·할인·회수·보증금 중 `unparsed` 관측이 하나라도 있으면 selected와 suggested를 모두 차단한다. 다른 정상 0원 관측이나 빈 라벨이 이를 지우지 못한다. 내용 없는 부가란의 기존 세금 검산 예외와 후보 보존은 유지한다.
+
+`__tests__/ocr/valueSegments.test.ts`에 **65개 합성 회귀**를 추가했다. 공통 금액은 가상 공급가 21,818 + VAT 2,182 = 매출합계 24,000이며, 미해석 값 `삼천원`·`l,OOO`·`3,O00`과 보증금/배송비 0을 조합했다. 아래 9개 배치는 각 6건씩, 총 54건이다. 정답은 파서에 전달하지 않으며 입력 불변성도 확인한다.
+
+| 직접 실행한 변형 배치 | 조합 수 | 결과 |
+| --- | --- | --- |
+| 인라인 회수와 별도 행의 0원 부가란 | 6 | 모두 회수 unreadable·selected/suggested null |
+| 한 행의 라벨·오독 값·부가란·0을 별도 셀로 분리 | 6 | 동일, 다른 셀의 0 차용 없음 |
+| 한 관측 `회수 미해석값 / 부가란 0` | 6 | 동일, 후행 단일 숫자 공유 차단 |
+| 세금·매출합계·회수·0원 부가란을 한 관측에 배치 | 6 | 동일, 다른 라벨 숫자로 우회하지 않음 |
+| 빈 회수 별칭 → 미해석 회수 → 0원 부가란 | 6 | 동일, unparsed 관측 유지 |
+| 미해석 회수 → 빈 회수 별칭 → 0원 부가란 | 6 | 동일, 뒤 별칭의 정상 관측이 미해석을 지우지 않음 |
+| 복합 라벨 관측 + 별도 0원 셀 | 6 | 동일, 내용 있는 구간은 별도 셀도 빌리지 않음 |
+| 0원 부가란 → 미해석 회수 | 6 | 동일, 앞 숫자 차용 없음 |
+| 미해석 회수와 배송비·보증금 모두 0, 두 부가란 순서 교환 | 6 | 동일, 숫자 개수와 무관하게 차단 |
+| 차단성 금액 라벨 7종의 한글 미해석값 + 보증금 0 | 7 | 모두 selected/suggested null |
+| 실제 빈 회수 별칭 + 보증금/배송비의 단일 0 | 2 | 동일 토큰을 공유한 0원 관측 보존, selected 24,000 유지 |
+| 값 없는 회수/회수액 부가란 | 2 | selected 24,000 유지 |
+
+최초 59건 실행에서 16건 실패로 잔여 공유 경로와 미해석 보증금 면제를 재현했다(`/tmp/rattle-ocr-r13-segments-red.log`, JSON 동명). 이후 두 0원 부가란을 함께 넣은 6건을 추가했다. 최종 변형은 **65/65 통과: 차단 61건·정상 확정 대조 4건**이다. 기존 R1~R13의 기대값은 바꾸지 않았다. OCR 대상 **9 suites/251 tests 통과**, 기본 timeout, 2.950초(`/tmp/rattle-ocr-r13-segments-target.log`), 표의 실제 assertion 결과 `/tmp/rattle-ocr-r13-segments-target.json`. `npm run typecheck` 통과(`/tmp/rattle-ocr-r13-segments-typecheck.log`).
+
+외부 `iphone/compare-r13-segments.mjs`, `android/compare-r13-segments.mjs`로 ffa1ba6과 최종 파서를 동일 raw에 재실행했다. 원문·로그·파싱 결과는 `/private/tmp/rattle-ocr-bench/` 안에만 유지했다. 집계 결과는 `iphone/r13-segments-comparison.json`, `android/parser-r13-segments-comparison.json`이며 입력 불변성과 최종 파서 SHA-256 일치를 확인했다.
+
+| 개발 표본 / 장수 | ffa1ba6 selected/suggested/null | 수정본 selected/suggested/null | 잘못된 selected/suggested |
+| --- | --- | --- | --- |
+| iPhone 신규 표본 10장 | 1 / 2 / 7 | **1 / 2 / 7** | **0 / 0** |
+| 기존 Android 10장 | 3 / 0 / 7 | **3 / 0 / 7** | **0 / 0** |
+| 기존 Mac 10장 | 4 / 0 / 6 | **4 / 0 / 6** | **0 / 0** |
+
+같은 개발 표본의 재평가이며 독립 holdout 성능은 아니다. 구현자 자체 검토로 구간 분류·공유 조건·공통 차단·원본 토큰 경계를 확인했고, 같은 검토자의 후속 재검토는 PL이 배정한다. 안전한 null의 기존 backlog는 유지하며, 숫자 해석 지원을 확장하지 않았다. 새 기기 OCR·화면·네이티브 빌드·설치·EAS·원격 변경은 실행하지 않았다.
+
+최종 검증(2026-11-20, macOS 로컬, 기준 ffa1ba6 위 이 과제의 미커밋 파서·합성 회귀): 전체 `npx jest --runInBand --no-coverage --testPathIgnorePatterns='/node_modules/' '/__tests__/setup\.ts' '<rootDir>/supabase/functions/' '<rootDir>/dev/'` **200 suites/1825 tests 통과**, 기본 timeout, 46.129초, 종료 0(`/tmp/rattle-ocr-r13-segments-full-jest.log`). 실행 전후 파서·회귀 소스 SHA는 `/tmp/rattle-ocr-r13-segments-final-source.sha256`과 일치했고 두 외부 평가 결과의 파서 SHA도 최종 소스와 일치했다. `git diff --check`와 두 외부 평가기 `node --check` 통과.
