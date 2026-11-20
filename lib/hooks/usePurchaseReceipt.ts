@@ -46,7 +46,8 @@ export function usePurchaseReceipt(files: EvidenceSelection[]) {
   }, [files]);
   const readings = files.map(file => ({ file, result: results[file.id] }));
   const single = readings.length === 1 ? readings[0].result : null;
-  const selected = single && 'receipt' in single ? single.receipt.selectedTotal : null;
+  const selected = single && 'receipt' in single && !single.receipt.guidanceCodes.includes('WHOLE_ORDER_TOTAL')
+    ? single.receipt.selectedTotal : null;
   const manualCurrent = manual && files.some(file => file.id === manual.source);
   const total = manualCurrent ? manual.value : PURCHASE_RECEIPT_POLICY.prefillSelected && selected ? String(selected.value) : '';
   function changeTotal(value: string, source = files[0]?.id) {

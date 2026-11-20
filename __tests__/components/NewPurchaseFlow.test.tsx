@@ -237,3 +237,32 @@ it('requests the payment screen for a photo with no payment total', async () => 
   expect(view.getByText('결제 화면을 함께 올려주세요.')).toBeTruthy();
   expect(view.getByLabelText('대조할 영수증 합계').props.value).toBe('');
 });
+
+it.each([false, true])('requires explicit delivery confirmation for a whole-order amount (checked=%s)', async checked => {
+  const cell = (text: string, x: number, y: number) => ({ text, box: { x, y, w: .15, h: .02 }, confidence: .9 });
+  mockRecognize.mockResolvedValue({ lines: [
+    cell('배송 4건 중 2', .05, .1),
+    ...(checked ? [cell('공급가액 90,000', .05, .2), cell('부가세 9,800', .05, .25)] : []),
+    cell('총 결제금액', .05, .3), cell('쿠페이 머니', .4, .3), cell('99,800 원', .72, .3),
+  ] });
+  const view = render(<NewPurchaseScreen />);
+  await stageReceipt(view);
+  expect(view.getByText(/이번 배송분에 해당하는 금액인지/)).toBeTruthy();
+  expect(view.getByText(checked ? '영수증 합계 99,800원' : '확인이 필요해요 · 합계 후보 99,800원')).toBeTruthy();
+  const input = view.getByLabelText('대조할 영수증 합계');
+  expect(input.props.value).toBe('');
+  fireEvent.press(view.getByText('배송분 금액 확인'));
+  fireEvent.press(view.getByText('적용 취소'));
+  expect(input.props.value).toBe('');
+  fireEvent.press(view.getByText('배송분 금액 확인'));
+  fireEvent.press(view.getByText('같아요 · 합계 적용'));
+  expect(input.props.value).toBe('99800');
+});
+
+it('shows malformed thousands grouping guidance without offering the candidate', async () => {
+  mockRecognize.mockResolvedValue({ lines: [{ text: '결제금액 3,40,120', confidence: .9, box: { x: .1, y: .3, w: .6, h: .02 } }] });
+  const view = render(<NewPurchaseScreen />);
+  await stageReceipt(view);
+  expect(view.getByText('금액의 천 단위 구분이 불분명해요. 원문을 확인해주세요.')).toBeTruthy();
+  expect(view.queryByText('이 합계 적용')).toBeNull();
+});
