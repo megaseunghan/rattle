@@ -1,3 +1,4 @@
+import { useNavigation, usePreventRemove } from '@react-navigation/native';
 import { EvidenceStagingPanel } from '../../lib/components/EvidenceStagingPanel';
 import { PurchaseReceiptReview } from '../../lib/components/PurchaseReceiptReview';
 import { usePurchaseReceipt } from '../../lib/hooks/usePurchaseReceipt';
@@ -55,11 +56,6 @@ function PurchaseDetailContent({ id }: { id: string }) {
     next.forEach(file => cache.current.add(file.uri));
     setPhotos(next);
   }
-  function cancelEdit() {
-    if (saving || picking) return;
-    changePhotos([]);
-    setEditTarget(null);
-  }
   const { canWrite } = usePreviewWriteGuard();
   const scope = useMemo(() => ({}), [id, store?.id, user?.id]);
   const active = useRef<object | null>(scope); active.current = scope;
@@ -76,6 +72,36 @@ function PurchaseDetailContent({ id }: { id: string }) {
   const [editQuantity, setEditQuantity] = useState('');
   const [editUnitPrice, setEditUnitPrice] = useState('');
   const [saving, setSaving] = useState(false);
+
+  const [editSaved, setEditSaved] = useState(false);
+  const navigation = useNavigation();
+  const dirtyEdit = !!editTarget && (photos.length > 0 || editQuantity !== String(editTarget.quantity)
+    || editUnitPrice !== String(editTarget.unit_price));
+  function confirmDiscard(leave: () => void, leavingScreen: boolean) {
+    if (saving || saveLock.current || picking) {
+      Alert.alert('처리 중이에요', '저장이나 사진 선택이 끝난 뒤 이동해 주세요.');
+      return;
+    }
+    const pendingUpload = leavingScreen && pending > 0;
+    if (!dirtyEdit && !pendingUpload) { leave(); return; }
+    const details = [
+      dirtyEdit && '저장하지 않은 품목 수정과 선택한 사진이 사라져요.',
+      pendingUpload && '올리지 못한 증빙은 사진을 다시 선택해야 해요. 이 화면에서 업로드를 마치거나 실패한 파일을 다시 올릴 수 있어요.',
+    ].filter(Boolean).join(' ');
+    Alert.alert('이대로 나갈까요?', details, [
+      { text: '계속하기', style: 'cancel' },
+      { text: '나가기', style: 'destructive', onPress: leave },
+    ]);
+  }
+  // Native stack guards hardware back, edge swipes and navigation actions alike.
+  usePreventRemove(dirtyEdit || saving || picking || pending > 0, ({ data }) =>
+    confirmDiscard(() => navigation.dispatch(data.action), true));
+  function cancelEdit() {
+    confirmDiscard(() => {
+      changePhotos([]);
+      setEditTarget(null);
+    }, false);
+  }
 
   const load = useCallback(async () => {
     const call = ++request.current;
@@ -130,6 +156,7 @@ function PurchaseDetailContent({ id }: { id: string }) {
         setUploadBatch(photos);
         setPhotos([]);
       }
+      setEditSaved(true);
       setSavedNeedsRefresh(true);
       animateListChange();
       setEditTarget(null);
@@ -154,6 +181,10 @@ function PurchaseDetailContent({ id }: { id: string }) {
         <View style={{ width: 44 }} />
       </View>
 
+      {pending > 0 && <Text accessibilityLiveRegion="polite" style={styles.errorText}>
+        {editSaved ? '품목 수정을 저장했어요. ' : ''}증빙 {pending}개가 남았어요. 실패한 파일은 증빙 자료에서 다시 올려주세요.
+      </Text>}
+      {editSaved && !pending && !savedNeedsRefresh && <Text accessibilityLiveRegion="polite" style={styles.date}>품목 수정을 저장했어요.</Text>}
       {savedNeedsRefresh && result?.scope === scope && <Text accessibilityRole="alert" style={styles.errorText}>품목 수정은 저장됐어요. 현재 내역을 다시 불러와 확인해주세요.</Text>}
       {loading && !purchase ? (
         <View style={styles.center}>

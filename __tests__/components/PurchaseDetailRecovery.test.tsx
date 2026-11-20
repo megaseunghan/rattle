@@ -1,3 +1,4 @@
+jest.mock('@react-navigation/native', () => ({ ...jest.requireActual('@react-navigation/native'), useNavigation: () => ({}), usePreventRemove: jest.fn() }));
 jest.mock('../../lib/components/EvidencePanel', () => ({ EvidencePanel: () => null }));
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { Alert } from 'react-native';
