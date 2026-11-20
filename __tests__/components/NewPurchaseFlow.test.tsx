@@ -9,6 +9,10 @@ jest.mock('../../modules/rattle-text-recognition', () => ({ recognizeText: (...a
 let mockMode='self';
 const mockWrite = jest.fn(), mockPick = jest.fn(), mockReserveEvidence = jest.fn(), mockUploadEvidence = jest.fn(), mockCacheDelete = jest.fn();
 let mockStoreId = 'store';
+jest.mock('expo-image-picker', () => ({
+  UIImagePickerPreferredAssetRepresentationMode: { Current: 'current' },
+  launchImageLibraryAsync: async () => ({ canceled: false, assets: [{ uri:'file:///cache/original.heic', fileName:null, fileSize:100, mimeType:'image/heic' }] }),
+}));
 jest.mock('expo-document-picker', () => ({ getDocumentAsync: (...a: unknown[]) => mockPick(...a) }));
 jest.mock('expo-crypto', () => ({ randomUUID: () => 'draft-id' }));
 jest.mock('expo-image', () => ({ Image: 'Image' }));
@@ -141,7 +145,7 @@ it('미리보기에서 재고에 없는 품목을 빠르게 등록해도 실제 
 });
 
 async function stageReceipt(screen: ReturnType<typeof render>) {
- await act(async()=>{fireEvent.press(screen.getByLabelText('등록 전 증빙 선택'));});
+ await act(async()=>{fireEvent.press(screen.getByText('파일 선택'));});
  expect(screen.getByLabelText('영수증.jpg 미리보기')).toBeTruthy();
 }
 it('registration drafts stay local then automatically upload exactly once for saved purchase ID', async()=>{
@@ -271,4 +275,21 @@ it('shows malformed thousands grouping guidance without offering the candidate',
   await stageReceipt(view);
   expect(view.getByText('금액의 천 단위 구분이 불분명해요. 원문을 확인해주세요.')).toBeTruthy();
   expect(view.queryByText('이 합계 적용')).toBeNull();
+});
+
+it('stages a PDF without scheduling receipt recognition', async () => {
+ mockPick.mockResolvedValue({ canceled: false, assets: [{uri:'file:///cache/test.pdf',name:'test.pdf',mimeType:'application/pdf',size:100}] });
+ const view = render(<NewPurchaseScreen />);
+ await act(async () => { fireEvent.press(view.getByText('파일 선택')); });
+ expect(view.getByLabelText('test.pdf 미리보기')).toBeTruthy();
+ expect(mockRecognize).not.toHaveBeenCalled();
+ expect(view.queryByLabelText('대조할 영수증 합계')).toBeNull();
+});
+
+it('recognizes the original HEIC selected from the album before upload', async () => {
+ const view = render(<NewPurchaseScreen />);
+ await act(async () => { fireEvent.press(view.getByText('사진 보관함')); });
+ expect(mockRecognize).toHaveBeenCalledWith('file:///cache/original.heic');
+ expect(mockUploadEvidence).not.toHaveBeenCalled();
+ expect(mockPick).not.toHaveBeenCalled();
 });
