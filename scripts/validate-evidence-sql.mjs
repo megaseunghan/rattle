@@ -103,7 +103,14 @@ try {
  await installationFails(/EVIDENCE_DAILY_PURGE_JOB_REQUIRED/);
  await db.exec('UPDATE cron.job SET active=true');
  await db.exec(reviewMigration);
- ok((await db.query('SELECT * FROM cron.job')).rows.length===3);
+ const jobs=(await db.query('SELECT jobname,schedule,command FROM cron.job')).rows;
+ assert.deepEqual(Object.fromEntries(jobs.map(j=>[j.jobname,j.schedule])),{
+   'rattle-purge-deleted-stores':'17 3 * * *',
+   'rattle-expired-evidence-storage':'27 3 * * *',
+   'rattle-evidence-storage-results':'30,45 3 * * *',
+ });
+ const dispatchJob=jobs.find(j=>j.jobname==='rattle-expired-evidence-storage').command;
+ const resultsJob=jobs.find(j=>j.jobname==='rattle-evidence-storage-results').command;
  await db.query('DELETE FROM auth.users WHERE id=$1',[id(981)]);
  ok((await db.query("SELECT id FROM storage.objects WHERE name='legacy-proof' AND owner IS NULL AND owner_id IS NULL")).rows.length===1);
  await rejected(()=>db.query('DELETE FROM auth.users WHERE id=$1',[id(982)]));
@@ -293,7 +300,7 @@ try {
    await record(outcome);
    ok((await db.query('SELECT purge_expired_deleted_stores() AS n')).rows[0].n===0);
    ok((await db.query('SELECT id FROM transaction_evidence WHERE id=$1',[id(992)])).rows.length===1);
-   await db.exec("UPDATE private.evidence_purge_attempts SET attempted_at=now()-interval '6 minutes'");
+   await db.exec("UPDATE private.evidence_purge_attempts SET attempted_at=now()-interval '24 hours'");
    ok((await db.query('SELECT claim_expired_evidence_paths() AS path')).rows[0].path===expiredPath);
  }
 
@@ -307,6 +314,30 @@ try {
    SELECT private.check_evidence_purge_responses();`);
  assert.deepEqual((await db.query('SELECT result FROM private.evidence_purge_requests ORDER BY request_id')).rows.map(r=>r.result),
    ['success','failed','timeout','missing']);
+ // Yesterday's missing HTTP receipt does not suppress today's dispatch. The
+ // two result polls can reconcile a late response without queuing another request.
+ await db.exec("UPDATE private.evidence_purge_requests SET queued_at=now()-interval '1 day'");
+ await db.exec(dispatchJob);
+ ok((await db.query('SELECT count(*)::int AS n FROM net.test_queue')).rows[0].n===5);
+ await db.exec("UPDATE private.evidence_purge_requests SET queued_at=now()-interval '3 minutes' WHERE request_id=5");
+ await db.exec(resultsJob);
+ ok((await db.query('SELECT result FROM private.evidence_purge_requests WHERE request_id=5')).rows[0].result==='missing');
+ await db.exec('INSERT INTO net._http_response VALUES(5,204,false,NULL)');
+ await db.exec(resultsJob);
+ ok((await db.query('SELECT result FROM private.evidence_purge_requests WHERE request_id=5')).rows[0].result==='success');
+ ok((await db.query('SELECT count(*)::int AS n FROM net.test_queue')).rows[0].n===5);
+ await db.exec("UPDATE private.evidence_purge_requests SET queued_at=now()-interval '31 days' WHERE request_id IN (1,2)");
+ await db.exec(resultsJob);
+ assert.deepEqual((await db.query('SELECT request_id::int AS id FROM private.evidence_purge_requests ORDER BY request_id')).rows.map(r=>r.id),[2,3,4,5]);
+
+ // An unconfirmed path from yesterday still receives a slot with 100 newer paths.
+ await db.exec('BEGIN');
+ await db.query("UPDATE private.evidence_purge_attempts SET attempted_at=now()-interval '1 day' WHERE path=$1",[expiredPath]);
+ await db.query("INSERT INTO stores(id,deleted_at,purge_after) VALUES($1,now()-interval '8 days',now()-interval '1 hour')",[id(998)]);
+ await db.query("INSERT INTO storage.objects(bucket_id,name) SELECT 'transaction-evidence',$1::text||'/file-'||i FROM generate_series(1,100) i",[id(998)]);
+ const batch=(await db.query('SELECT claim_expired_evidence_paths() AS path')).rows;
+ ok(batch.length===100 && batch.some(row=>row.path===expiredPath));
+ await db.exec('ROLLBACK');
  const automaticPath=id(990)+'/another/image.jpg';
  await db.query("INSERT INTO storage.objects(bucket_id,name) VALUES('transaction-evidence',$1)",[automaticPath]);
  ok((await db.query('SELECT claim_expired_evidence_paths() AS path')).rows[0].path===automaticPath);
@@ -316,7 +347,9 @@ try {
  const operatorSql='SELECT private.confirm_reconciled_evidence_purge($1,$2,$3,$4,$5)';
  const object=(await db.query('SELECT object_id,object_version FROM private.evidence_purge_attempts WHERE path=$1',[expiredPath])).rows[0];
  const args=[id(990),expiredPath,object.object_id,object.object_version,'QA-provider-receipt'];
- await db.exec("UPDATE private.evidence_purge_attempts SET first_attempted_at=now()-interval '20 minutes'");
+ await db.exec("UPDATE private.evidence_purge_attempts SET first_attempted_at=now()-interval '24 hours'");
+ ok((await db.query('SELECT * FROM private.evidence_purge_alerts WHERE path=$1',[expiredPath])).rows.length===0);
+ await db.exec("UPDATE private.evidence_purge_attempts SET first_attempted_at=now()-interval '24 hours 16 minutes'");
  ok((await db.query('SELECT * FROM private.evidence_purge_alerts WHERE path=$1',[expiredPath])).rows.length===1);
  ok((await db.query('SELECT * FROM private.evidence_purge_alerts WHERE request_id IS NOT NULL')).rows.length===3);
  await db.exec('SET ROLE service_role');
