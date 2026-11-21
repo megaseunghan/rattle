@@ -5,7 +5,7 @@ import { getIngredients } from '../services/ingredients';
 const PAGE = 100;
 type Result = { storeId: string; term: string; matches?: Ingredient[]; failed?: boolean };
 
-// Search locally so even an unedited OCR name stays on the device.
+// Filter on the device; load every inventory page first when the list is incomplete.
 export function useReceiptIngredientSearch(storeId: string, term: string, inventory: Ingredient[], complete: boolean) {
   const [result, setResult] = useState<Result>();
   const [attempt, setAttempt] = useState(0);

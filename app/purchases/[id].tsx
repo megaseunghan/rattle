@@ -1,7 +1,5 @@
 import { useNavigation, usePreventRemove } from '@react-navigation/native';
 import { EvidenceStagingPanel } from '../../lib/components/EvidenceStagingPanel';
-import { PurchaseReceiptReview } from '../../lib/components/PurchaseReceiptReview';
-import { usePurchaseReceipt } from '../../lib/hooks/usePurchaseReceipt';
 import { useStorePermissions } from '../../lib/hooks/useStorePermissions';
 import { disposeEvidenceCache } from '../../lib/media/evidencePicker';
 import type { EvidenceSelection } from '../../lib/types/evidence';
@@ -46,7 +44,6 @@ function PurchaseDetailContent({ id }: { id: string }) {
   const [picking, setPicking] = useState(false);
   const editScroll = useRef<ScrollView>(null);
   const cache = useRef(new Set<string>());
-  const receipt = usePurchaseReceipt(photos);
   useEffect(() => () => cache.current.forEach(disposeEvidenceCache), []);
   function changePhotos(next: EvidenceSelection[]) {
     for (const photo of photos) {
@@ -201,7 +198,7 @@ function PurchaseDetailContent({ id }: { id: string }) {
   }
 
   async function handleSaveEdit() {
-    if (picking || receipt.busy || (!editTarget && !amountRows) || saveLock.current || savedNeedsRefresh) return;
+    if (picking || (!editTarget && !amountRows) || saveLock.current || savedNeedsRefresh) return;
     if (editVersion != null && editTarget && !validQuantity) { Alert.alert('입력 오류', '수량을 올바르게 입력해주세요.'); return; }
     if (editVersion != null && editTarget && !validAmount) { Alert.alert('입력 오류', '금액을 0원 이상의 정수로 입력해주세요.'); return; }
 
@@ -337,7 +334,7 @@ function PurchaseDetailContent({ id }: { id: string }) {
                 <Text style={styles.sheetCancelText}>취소</Text>
               </TouchableOpacity>
               <Text style={styles.sheetHeaderTitle}>{amountRows ? '금액 수정' : editTarget?.name}</Text>
-              <TouchableOpacity onPress={handleSaveEdit} disabled={saving || picking || receipt.busy} style={styles.headerAction} accessibilityRole="button" accessibilityLabel={amountRows ? '금액 수정 저장' : '품목 수정 저장'} accessibilityState={{ disabled: saving, busy: saving }}>
+              <TouchableOpacity onPress={handleSaveEdit} disabled={saving || picking} style={styles.headerAction} accessibilityRole="button" accessibilityLabel={amountRows ? '금액 수정 저장' : '품목 수정 저장'} accessibilityState={{ disabled: saving, busy: saving }}>
                 {saving
                   ? <ActivityIndicator size="small" color={Colors.primary} />
                   : <Text style={styles.sheetSaveText}>{draftConflict && editVersion == null ? '다시 불러오기' : '저장'}</Text>}
@@ -358,13 +355,6 @@ function PurchaseDetailContent({ id }: { id: string }) {
             {pending > 0 && <Text>진행 중인 증빙을 올리거나 취소한 뒤 사진을 추가할 수 있어요.</Text>}
             {editTarget && canManageStock && canReadFinancials && !pending && <>
               <EvidenceStagingPanel files={photos} onChange={changePhotos} disabled={saving} onPickingChange={setPicking} edit />
-              <PurchaseReceiptReview draft={receipt} editing disabled={saving} application={row => {
-                if (row.name.value !== editTarget.name || (!row.quantity && !row.amount)) return;
-                return { label: editTarget.name + '에 적용 (' + editTarget.unit + ')', apply: () => {
-                  if (row.quantity) setEditQuantity(String(row.quantity.value));
-                  if (row.amount) setEditAmount(String(row.amount.value));
-                } };
-              }} />
             </>}
             <Text style={styles.fieldLabel}>수량 ({editTarget?.unit})</Text>
             <TextInput

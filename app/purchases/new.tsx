@@ -1,6 +1,4 @@
 import { PurchaseReceiptRows, ReceiptDraftRow } from '../../lib/components/PurchaseReceiptRows';
-import { usePurchaseReceipt } from '../../lib/hooks/usePurchaseReceipt';
-import { PurchaseReceiptReview } from '../../lib/components/PurchaseReceiptReview';
 import { useStorePermissions } from '../../lib/hooks/useStorePermissions';
 import { usePreviewWriteGuard } from '../../lib/hooks/usePreviewWriteGuard';
 import { EvidenceStagingPanel } from '../../lib/components/EvidenceStagingPanel';
@@ -100,7 +98,6 @@ function NewPurchaseContent() {
   const [submitting, setSubmitting] = useState(false);
   const [savedPurchaseId, setSavedPurchaseId] = useState<string>();
   const [stagedEvidence, setStagedEvidence] = useState<EvidenceSelection[]>([]);
-  const receipt = usePurchaseReceipt(stagedEvidence);
   const [pickingEvidence, setPickingEvidence] = useState(false);
   const [pendingEvidence, setPendingEvidence] = useState(0);
   const ownedEvidence = useRef(new Set<string>());
@@ -138,17 +135,7 @@ function NewPurchaseContent() {
     setError('');
     setEdits(previous => ({ ...previous, [id]: { ...previous[id], ...patch } }));
   }
-  const rows = useMemo(() => {
-    const scanned = receipt.readings.flatMap(({ file, result }) =>
-      result && 'receipt' in result ? result.receipt.items.map((item, index) => ({
-        id: file.id + ':' + index, name: item.name.value, quantity: String(item.quantity?.value ?? ''),
-        amount: item.needsReview ? '' : String(item.amount?.value ?? ''), needsReview: item.needsReview,
-        suggestedAmount: item.amount?.value, amountSource: item.amount?.source, warnings: item.amount?.warnings,
-        printedPrice: item.printedPrice?.value,
-      })) : []);
-    const manualRows = scanned.length && manual.length === 1 && manual[0].id === 'initial' && !edits.initial ? [] : manual;
-    return [...scanned, ...manualRows].map(row => ({ ...row, ...edits[row.id] })).filter(row => !row.removed);
-  }, [receipt.readings, manual, edits]);
+  const rows = useMemo(() => manual.map(row => ({ ...row, ...edits[row.id] })).filter(row => !row.removed), [manual, edits]);
   const amountRows = purchaseCategories.categories.map(category => ({ category, value: amounts[category] ?? '' }));
   const total = mode === 'amounts' ? amountRows.reduce((sum, row) => sum + (/^\d+$/.test(row.value) ? Number(row.value) : 0), 0) : rows.reduce((sum, row) => sum + (/^\d+$/.test(row.amount) ? Number(row.amount) : 0), 0);
   const saved = writeState.startsWith('saved');
@@ -199,7 +186,7 @@ function NewPurchaseContent() {
 
 
   async function handleSubmit() {
-    if (locked || saved || writeLock.current || receipt.busy || pickingEvidence || !store || !canWrite()) return;
+    if (locked || saved || writeLock.current || pickingEvidence || !store || !canWrite()) return;
     if (!supplier.trim()) return setError('거래처를 선택하거나 이름을 입력해 주세요.');
     if (purchaseCategories.loading || purchaseTypes.loading || !category || !purchaseCategories.categories.includes(category) || purchaseTypes.error || purchaseCategories.error)
       return setError('매입 카테고리와 유형을 다시 불러와 주세요.');
@@ -207,7 +194,6 @@ function NewPurchaseContent() {
     if (total >= 1e12) return setError('매입 합계를 확인해 주세요.');
     if (!type) return setError('매입 유형을 선택해 주세요.');
     if (mode === 'items' && !rows.length) return setError('품목을 한 개 이상 추가해 주세요.');
-    if (mode === 'items' && rows.some(row => row.needsReview)) return setError('확인이 필요한 품목의 금액을 확인해 주세요.');
     const items = (mode === 'items' ? rows : []).map(row => ({
       ingredient_id: row.ingredient?.id ?? null, name: (row.ingredient?.name ?? row.inputName ?? row.name).trim(),
       quantity: Number(row.quantity.trim() || 1), category: row.category ?? category, unit: row.ingredient?.unit ?? row.unit?.trim() ?? '', amount: Number(row.amount),
@@ -322,7 +308,6 @@ function NewPurchaseContent() {
             storeId={store?.id ?? ''} used={(id, rowId) => rows.some(row => row.id !== rowId && row.ingredient?.id === id)}
             focus={target => scrollRef.current?.getScrollResponder()?.scrollResponderScrollNativeHandleToKeyboard(target, 156, true)}
             create={(row, name) => { setLinkRow(row.id); setQuickName(name); }} />
-          <PurchaseReceiptReview draft={receipt} disabled={locked} itemTotal={total} />
           </>}
         </View>}
           {saved && !savedPurchaseId && canAttach && stagedEvidence.length > 0 &&
@@ -337,7 +322,7 @@ function NewPurchaseContent() {
       {!!error && <Text accessibilityRole="alert" style={styles.fieldError}>{error}</Text>}
       <View style={styles.bottomBar}>
         <View><Text style={styles.bottomTotalLabel}>합계</Text><Text style={styles.bottomTotalValue}>{total.toLocaleString()}원</Text></View>
-        <TouchableOpacity accessibilityRole="button" accessibilityLabel={saved ? '돌아가기' : '매입 저장'} disabled={locked || pickingEvidence || receipt.busy}
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel={saved ? '돌아가기' : '매입 저장'} disabled={locked || pickingEvidence}
           style={styles.bottomSubmit} onPress={saved ? leaveSaved : handleSubmit}>
           <Text style={styles.bottomSubmitText}>{saved ? '돌아가기' : submitting ? '저장 중…' : writeState === 'rejected' ? '다시 등록' : '매입 저장'}</Text></TouchableOpacity>
       </View>

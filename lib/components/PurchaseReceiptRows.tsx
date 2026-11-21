@@ -12,11 +12,6 @@ export interface ReceiptDraftRow {
   unit?: string;
   amount: string;
   quantity: string;
-  needsReview?: boolean;
-  suggestedAmount?: number;
-  printedPrice?: number;
-  amountSource?: 'observed' | 'derived';
-  warnings?: string[];
   ingredient?: Ingredient;
   removed?: boolean;
 }
@@ -39,7 +34,6 @@ export function PurchaseReceiptRows({ rows, change, create, inventory, complete,
   const term = (active?.ingredient?.name ?? active?.inputName ?? active?.name ?? '').trim();
   const { result, retry } = useReceiptIngredientSearch(storeId, term, inventory, complete);
   return <View style={styles.table}>
-    {rows.some(row => row.name) && <Text>사진에서 읽은 내용이에요. 맞는지 확인해 주세요.</Text>}
     <View style={styles.line}><Text style={styles.cell}>항목</Text><Text style={styles.cell}>금액 (원)</Text></View>
     {!rows.length && <Text>품목을 직접 입력해 주세요.</Text>}
     {rows.map((row, index) => {
@@ -52,9 +46,8 @@ export function PurchaseReceiptRows({ rows, change, create, inventory, complete,
           onBlur={() => setActiveId(undefined)}
           onChangeText={inputName => { setLimit(5); setActiveId(row.id); change(row.id, { inputName, ingredient: undefined }); }} />
         <TextInput style={styles.input} value={row.amount} accessibilityLabel={label + ' 금액'} keyboardType="number-pad"
-          placeholder="금액" onChangeText={amount => change(row.id, { amount, needsReview: !amount.trim() && row.suggestedAmount !== undefined })} />
+          placeholder="금액" onChangeText={amount => change(row.id, { amount })} />
       </View>
-      {!!row.name && !row.ingredient && row.inputName !== undefined && row.inputName !== row.name && <Text>사진 속 이름 · {row.name}</Text>}
       {row.id === activeId && !!term && <View>
         {result?.failed ? <TouchableOpacity style={styles.option} onPress={retry}><Text>검색 실패 · 다시 시도</Text></TouchableOpacity>
           : !result?.matches ? <Text>품목을 찾고 있어요…</Text>
@@ -71,13 +64,6 @@ export function PurchaseReceiptRows({ rows, change, create, inventory, complete,
         {result?.matches && result.matches.length > limit && <TouchableOpacity accessibilityRole="button" style={styles.option}
           onPress={() => setLimit(count => count + 5)}><Text style={styles.link}>검색 결과 더 보기</Text></TouchableOpacity>}
       </View>}
-      {row.needsReview && <Text accessibilityRole="alert">확인 필요</Text>}
-      {row.needsReview && row.suggestedAmount !== undefined &&
-        <TouchableOpacity accessibilityRole="button" style={styles.option} onPress={() => change(row.id, { amount: String(row.suggestedAmount), needsReview: false })}>
-          <Text style={{ color: Colors.gray600 }}>{row.amountSource === 'derived' ? '계산 금액' : '읽은 금액'} {row.suggestedAmount.toLocaleString()}원 적용</Text>
-        </TouchableOpacity>}
-      {row.printedPrice !== undefined && <Text>표시 가격 {row.printedPrice.toLocaleString()}원</Text>}
-      {row.needsReview && row.warnings?.map(message => <Text key={message}>{message}</Text>)}
       <View style={styles.choices}>
         {categories.map(name => <TouchableOpacity key={name} accessibilityRole="radio" accessibilityLabel={label + ' 카테고리 ' + name}
           accessibilityState={{ checked: (row.category ?? defaultCategory) === name }}
