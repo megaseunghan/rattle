@@ -16,7 +16,6 @@
 | `skills/write-swift/` | `name: write-swift`. 현대 Swift 작성법(값 타입, Swift 6 동시성, 프로토콜·제네릭, Swift Testing 등). `.claude/skills/write-swift`가 이 폴더를 가리키는 심볼릭 링크 |
 | `skills/moliboy5000-.claude-ralplan/` | `name: ralplan`. `/omc-plan --consensus` 별칭 |
 
-| `roles/` | 역할별 작업자 지침(PM·디자이너·UI-UX 검토·백엔드·프론트엔드·DBA·보안·QA). Orca에서 작업자를 띄울 때 과제와 함께 넘긴다. 공통 규칙과 보고 형식은 `roles/README.md` |
 
 ## For AI Agents
 
