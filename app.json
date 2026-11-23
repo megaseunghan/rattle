@@ -58,7 +58,7 @@
         {
           "backgroundColor": "#ffffff",
           "android": {
-            "image": "./assets/Rattle_adaptive_fg.png",
+            "image": "./assets/splash-android-blank.png",
             "imageWidth": 160
           }
         }
