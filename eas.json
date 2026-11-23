@@ -15,7 +15,8 @@
       "channel": "preview",
       "environment": "preview",
       "ios": {
-        "simulator": false
+        "simulator": false,
+        "image": "macos-tahoe-26.6-xcode-27.2"
       }
     },
     "testflight": {
@@ -25,6 +26,9 @@
       "autoIncrement": true,
       "env": {
         "EXPO_PUBLIC_QA_LOGIN": "0"
+      },
+      "ios": {
+        "image": "macos-tahoe-26.6-xcode-27.2"
       }
     },
     "production": {
@@ -38,6 +42,9 @@
         "buildType": "app-bundle",
         "autoIncrement": "versionCode",
         "credentialsSource": "local"
+      },
+      "ios": {
+        "image": "macos-tahoe-26.6-xcode-27.2"
       }
     }
   },

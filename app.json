@@ -82,6 +82,16 @@
           "cameraPermission": "증빙 사진을 찍거나 직원의 출퇴근 QR을 읽으려면 카메라 권한이 필요해요.",
           "microphonePermission": false
         }
+      ],
+      "expo-image",
+      "expo-status-bar",
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "enableSceneSupport": true
+          }
+        }
       ]
     ],
     "extra": {

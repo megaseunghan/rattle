@@ -187,7 +187,7 @@ const styles = StyleSheet.create({
   list: { gap: 8 }, panel: { padding: 8, gap: 8 },
   rows: { gap: 8 },
   row: { overflow: 'hidden', borderRadius: 14, backgroundColor: Colors.gray600 },
-  under: { ...StyleSheet.absoluteFillObject, justifyContent: 'center', alignItems: 'flex-end', paddingRight: 16 },
+  under: { ...StyleSheet.absoluteFill, justifyContent: 'center', alignItems: 'flex-end', paddingRight: 16 },
   underLabel: { color: Colors.white, fontSize: Type.sm, fontWeight: '700' },
   slide: { backgroundColor: Colors.tinted, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8, paddingVertical: 8, paddingLeft: 16, paddingRight: 8 },
   copy: { flexGrow: 1, flexShrink: 1, flexBasis: 150, minWidth: 0, gap: 4 },

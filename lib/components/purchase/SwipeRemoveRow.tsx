@@ -59,7 +59,7 @@ export function SwipeRemoveRow({ id, label, onRemove, children, disabled = false
 
 const styles = StyleSheet.create({
   clip: { marginHorizontal: -CARD_INSET, overflow: 'hidden' },
-  under: { ...StyleSheet.absoluteFillObject, flexDirection: 'row', justifyContent: 'flex-end', backgroundColor: Colors.negative },
+  under: { ...StyleSheet.absoluteFill, flexDirection: 'row', justifyContent: 'flex-end', backgroundColor: Colors.negative },
   removeButton: { width: OPEN_WIDTH, alignItems: 'center', justifyContent: 'center', gap: 4 },
   minus: { width: 22, height: 22, borderRadius: 11, backgroundColor: Colors.white, alignItems: 'center', justifyContent: 'center' },
   minusBar: { width: 10, height: 2, borderRadius: 1, backgroundColor: Colors.negative },

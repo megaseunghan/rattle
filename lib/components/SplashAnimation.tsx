@@ -123,7 +123,7 @@ export function SplashAnimation({ ready, canExit = true, onDone }: Props) {
 }
 
 const styles = StyleSheet.create({
-  overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: Colors.white, alignItems: 'center', justifyContent: 'center', zIndex: 999 },
+  overlay: { ...StyleSheet.absoluteFill, backgroundColor: Colors.white, alignItems: 'center', justifyContent: 'center', zIndex: 999 },
   scene: { width: 240, height: 240 },
   mark: { position: 'absolute', top: 48, left: 48, width: 144, height: 144 },
   mist: { position: 'absolute', top: -28, left: -28 },
