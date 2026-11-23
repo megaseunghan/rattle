@@ -41,7 +41,7 @@ function toDateKey(year: number, month: number, day: number) {
   return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
 
-export function PosScreen({ active = true, reserveFab = false }: { active?: boolean; reserveFab?: boolean }) {
+export function PosScreen({ active = true }: { active?: boolean }) {
   const tabScope = useContext(TabPagerContext);
   const { store, canManageStore } = useAuth();
   const {
@@ -495,7 +495,6 @@ export function PosScreen({ active = true, reserveFab = false }: { active?: bool
             </ScrollView>
           )
       }
-      {reserveFab && <View style={{ height: 72 }} />}
     </SafeAreaView>
   );
 }

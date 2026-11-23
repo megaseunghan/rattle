@@ -20,7 +20,7 @@ expo-router 파일 기반 라우트 루트. 루트 Stack, 인증·매장 선택 
 | Directory | Purpose |
 |---|---|
 | `(auth)/` | 로그인·매장 선택/생성/복구·매장 참여 온보딩. `(auth)/AGENTS.md` 참고 |
-| `(tabs)/` | PagerView 기반 하단 탭 셸(홈·재고·매입·인건비·매출)과 빠른 등록 FAB·더보기 드로어. `(tabs)/AGENTS.md` 참고 |
+| `(tabs)/` | PagerView 기반 하단 탭 셸(홈·재고·매입·인건비·매출)과 더보기 드로어. `(tabs)/AGENTS.md` 참고 |
 | `admin/` | `index.tsx` — 전체 매장 통합 대시보드(`AdminDashboardScreen`, `useAdminDashboard`). 홈 탭의 `dashboard` 모드에 `embedded`로 재사용. 관리자 전용 |
 | `cleaning/` | `index.tsx` 청소 체크리스트 진행, `edit.tsx` 체크리스트 편집(`useCleaningChecklist`) |
 | `legal/` | `terms.tsx` 이용약관, `privacy.tsx` 개인정보처리방침. 정적 문서, 로그인 화면에서 링크 |

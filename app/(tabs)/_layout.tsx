@@ -4,7 +4,7 @@ import { isQaLoginEnabled } from '../../lib/services/qaLogin';
 import { useNotifications } from '../../lib/hooks/useNotifications';
 /* Hallmark · genre: modern-minimal · macrostructure: Workbench · design-system: DESIGN.md · designed-as-app */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, useWindowDimensions, AppState } from 'react-native';
+import { View, Text, StyleSheet, Pressable, AppState } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { AppIcon } from '../../lib/icons/AppIcon';
 import PagerView from 'react-native-pager-view';
@@ -16,7 +16,6 @@ import { useAuth } from '../../lib/contexts/AuthContext';
 import { useEmployees } from '../../lib/hooks/useEmployees';
 import { resolveSelfEmployee } from '../../lib/utils/resolveSelfEmployee';
 import { TabPagerContext, TabName, HomeMode, useTabPager } from '../../lib/contexts/TabPagerContext';
-import { DraggableFab } from '../../lib/components/DraggableFab';
 import { StoreScopePicker } from '../../lib/components/StoreScopeHeader';
 import { MoreDrawer } from '../../lib/components/MoreDrawer';
 import { HomeScreen } from './index';
@@ -25,61 +24,6 @@ import { PurchasesScreen } from './purchases';
 import { PayrollScreen } from './payroll';
 import { AdminDashboardScreen } from '../admin/index';
 import { PosScreen } from '../pos/index';
-
-type QuickAddAction = { key: string; label: string; icon: keyof typeof AppIcon.glyphMap; route: string } | { key: string; label: string; icon: keyof typeof AppIcon.glyphMap; tab: TabName };
-
-const QUICK_ADD_ITEMS: QuickAddAction[] = [
-  { key: 'sales', label: '매출 등록', icon: 'stats-chart-outline', route: '/pos/new' },
-  { key: 'purchase', label: '매입 등록', icon: 'cart-outline', route: '/purchases/new' },
-  { key: 'stock', label: '재고 등록', icon: 'cube-outline', route: '/stock/new' },
-  { key: 'recipe', label: '레시피 등록', icon: 'restaurant-outline', route: '/recipes/new' },
-  { key: 'employee', label: '직원 등록', icon: 'people-outline', tab: 'payroll' },
-];
-
-const MENU_WIDTH = 168;
-const FAB_SIZE = 52;
-
-/** 화면 26 · FAB 팝업 메뉴 — 버튼 바로 위에 뜨는 작은 박스, 화면을 가리지 않음. FAB가 옮겨진 위치를 따라간다 */
-function QuickAddMenu({
-  visible, onClose, goToTab, fabPos, onRoute, onEmployee, onResetPosition,
-}: {
-  visible: boolean; onClose: () => void; goToTab: (tab: TabName) => void; onRoute: (route: string) => void; onEmployee: () => void; onResetPosition: () => void; fabPos: { x: number; y: number };
-}) {
-  const router = useRouter();
-  const { currentRole } = useAuth();
-  const { width, height } = useWindowDimensions();
-  if (!visible) return null;
-
-  function handleSelect(item: QuickAddAction) {
-    onClose();
-    if (item.key === 'employee') { onEmployee(); return; }
-    if ('tab' in item) goToTab(item.tab);
-    else onRoute(item.route);
-  }
-
-  // FAB 오른쪽 끝에 메뉴 오른쪽 끝을 맞추고, FAB 바로 위(아래에서부터 거리 기준)에 띄운다. 화면 밖으로 안 나가게 clamp
-  const menuLeft = Math.min(Math.max(fabPos.x + FAB_SIZE - MENU_WIDTH, 8), width - MENU_WIDTH - 8);
-  const menuHeight = (QUICK_ADD_ITEMS.length + 1) * 44 + 12;
-  const menuTop = Math.max(8, Math.min(fabPos.y - menuHeight - 8, height - menuHeight - 100));
-
-  return (
-    <>
-      <Pressable style={styles.menuOverlay} onPress={onClose} accessibilityLabel="빠른 등록 닫기" />
-      <View style={[styles.menuBox, { left: menuLeft, top: menuTop }]}>
-        {QUICK_ADD_ITEMS.filter(item => item.key !== 'employee' || currentRole === 'admin').map((item) => (
-          <Pressable key={item.key} style={({ pressed }) => [styles.menuItem, pressed && { backgroundColor: Colors.focusBg }]} accessibilityRole="button" accessibilityLabel={item.label} onPress={() => handleSelect(item)}>
-            <AppIcon name={item.icon} size={16} color={Colors.primary} accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" />
-            <Text style={styles.menuItemText}>{item.label}</Text>
-          </Pressable>
-        ))}
-        <Pressable style={({ pressed }) => [styles.menuItem, pressed && { backgroundColor: Colors.focusBg }]} accessibilityRole="button" accessibilityLabel="버튼 위치 초기화" onPress={() => { onResetPosition(); onClose(); }}>
-          <AppIcon name="refresh-outline" size={16} color={Colors.gray600} accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" />
-          <Text style={styles.menuItemText}>버튼 위치 초기화</Text>
-        </Pressable>
-      </View>
-    </>
-  );
-}
 
 const TAB_CONFIG: Record<TabName, { label: string; icon: keyof typeof AppIcon.glyphMap; iconActive: keyof typeof AppIcon.glyphMap }> = {
   home:      { label: '홈',   icon: 'home-outline',        iconActive: 'home' },
@@ -139,15 +83,9 @@ export default function TabsLayout() {
   const requestedPage = useRef<number | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
   const [visited, setVisited] = useState<Set<number>>(new Set([0]));
-  const [quickAddVisible, setQuickAddVisible] = useState(false);
-  const [fabPos, setFabPos] = useState({ x: 0, y: 0 });
-  const [fabResetRequest, setFabResetRequest] = useState(0);
   const [moreOpen, setMoreOpen] = useState(false);
   const [pickerVisible, setPickerVisible] = useState(false);
   const [pendingTab, setPendingTab] = useState<TabName | undefined>();
-  const [pendingRoute, setPendingRoute] = useState<string | undefined>();
-  const [pendingEmployee, setPendingEmployee] = useState(false);
-  const [employeeRegistration, setEmployeeRegistration] = useState<{ storeId: string; id: number }>();
   const [containerHeight, setContainerHeight] = useState<number>();
   const [switching, setSwitching] = useState(false);
   const [innerGestureActive, setInnerGestureActive] = useState(false);
@@ -179,7 +117,7 @@ export default function TabsLayout() {
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
   });
   const openStorePicker = useCallback((targetTab?: TabName) => {
-    setPendingTab(targetTab); setPendingRoute(undefined); setPendingEmployee(false); setSwitchError(null); setPickerVisible(true);
+    setPendingTab(targetTab); setSwitchError(null); setPickerVisible(true);
   }, []);
   const selectStoreScope = useCallback(async (storeId: string, targetTab?: TabName) => {
     if (switching) return;
@@ -194,30 +132,12 @@ export default function TabsLayout() {
         const index = tabs.indexOf(destination);
         if (index >= 0) { setVisited(prev => new Set(prev).add(index)); setActiveIndex(index); pagerRef.current?.setPageWithoutAnimation(index); }
       }
-      if (pendingRoute) tabRouter.push(pendingRoute as any);
-      if (pendingEmployee && currentRole === 'admin') setEmployeeRegistration({ storeId, id: Date.now() });
-      setPendingEmployee(false);
-      setPendingTab(undefined); setPendingRoute(undefined);
+      setPendingTab(undefined);
     } catch (error) {
       setSwitchError('매장을 바꾸지 못했어요. 다시 선택해 주세요.');
       throw error;
     } finally { setSwitching(false); }
-  }, [switching, switchStore, effectiveHomeMode, setHomeMode, pendingTab, tabs, pendingRoute, pendingEmployee, currentRole, tabRouter]);
-  function openQuickRoute(route: string) {
-    if (effectiveHomeMode === 'dashboard') {
-      openStorePicker(); setPendingRoute(route);
-    } else tabRouter.push(route as any);
-  }
-  function openEmployeeRegistration() {
-    if (currentRole !== 'admin') return;
-    if (effectiveHomeMode === 'dashboard') {
-      openStorePicker('payroll'); setPendingEmployee(true);
-    } else if (store) {
-      goToTab('payroll');
-      setEmployeeRegistration({ storeId: store.id, id: Date.now() });
-    }
-  }
-
+  }, [switching, switchStore, effectiveHomeMode, setHomeMode, pendingTab, tabs]);
   const routeParams = useLocalSearchParams<{ targetTab?: string; homeScope?: string; month?: string }>();
   useEffect(() => {
     if (!routeParams.targetTab) return;
@@ -254,7 +174,6 @@ export default function TabsLayout() {
     requestedPage.current = idx;
     setActiveIndex(idx);
     setVisited(previous => previous.has(idx) ? previous : new Set(previous).add(idx));
-    setQuickAddVisible(false);
     pagerRef.current?.setPageWithoutAnimation(idx);
   }, [effectiveHomeMode, openStorePicker, tabs, activeIndex]);
 
@@ -269,9 +188,7 @@ export default function TabsLayout() {
   }
 
   const activeTab = tabs[activeIndex] ?? 'home';
-  const consumeEmployeeRegistration = useCallback(() => setEmployeeRegistration(undefined), []);
-  const pagerValue = useMemo(() => ({ activeTab, goToTab, homeMode: effectiveHomeMode, setHomeMode, openStorePicker, selectStoreScope, selectedMonth, setSelectedMonth, returnScope, viewState, setViewState, employeeRegistration, consumeEmployeeRegistration, innerGestureActive, setPagerGestureActive, setAlertGestureActive: setPagerGestureActive }), [activeTab, goToTab, effectiveHomeMode, setHomeMode, openStorePicker, selectStoreScope, selectedMonth, returnScope, viewState, setViewState, employeeRegistration, consumeEmployeeRegistration, innerGestureActive, setPagerGestureActive]);
-  const costShelf = activeTab === 'purchases' && viewState['purchase.section'] === '비용';
+  const pagerValue = useMemo(() => ({ activeTab, goToTab, homeMode: effectiveHomeMode, setHomeMode, openStorePicker, selectStoreScope, selectedMonth, setSelectedMonth, returnScope, viewState, setViewState, innerGestureActive, setPagerGestureActive, setAlertGestureActive: setPagerGestureActive }), [activeTab, goToTab, effectiveHomeMode, setHomeMode, openStorePicker, selectStoreScope, selectedMonth, returnScope, viewState, setViewState, innerGestureActive, setPagerGestureActive]);
 
   return (
     <TabPagerContext.Provider value={pagerValue}>
@@ -281,7 +198,7 @@ export default function TabsLayout() {
         <GlassBackdrop />
         <View style={{ paddingTop: insets.top }}>
           <StoreAppBar name={effectiveHomeMode === 'dashboard' ? '전체 매장' : store?.name ?? '매장 선택'} unreadCount={unreadCount}
-            onMenu={() => { setQuickAddVisible(false); setMoreOpen(true); }}
+            onMenu={() => setMoreOpen(true)}
             onNotifications={() => tabRouter.push('/notifications')} />
         </View>
         <PagerView
@@ -293,7 +210,7 @@ export default function TabsLayout() {
         >
           {tabs.map((tab, idx) => (
             <View key={tab} style={styles.flex}>
-              {visited.has(idx) ? <TabPage key={store?.id} tab={tab} active={activeIndex === idx} reserveFab={!isPartTime && canReadFinancials} /> : null}
+              {visited.has(idx) ? <TabPage key={store?.id} tab={tab} active={activeIndex === idx} /> : null}
             </View>
           ))}
         </PagerView>
@@ -308,28 +225,12 @@ export default function TabsLayout() {
         </GlassCard>
         </View>
 
-        <StoreScopePicker key={pickerVisible ? 'open' : 'closed'} visible={pickerVisible} stores={stores} selectedId={store?.id} allSelected={effectiveHomeMode === 'dashboard'} allowAll={isOwnerAdminSelf} required={!!pendingTab || !!pendingRoute} busy={switching} error={switchError}
+        <StoreScopePicker key={pickerVisible ? 'open' : 'closed'} visible={pickerVisible} stores={stores} selectedId={store?.id} allSelected={effectiveHomeMode === 'dashboard'} allowAll={isOwnerAdminSelf} required={!!pendingTab} busy={switching} error={switchError}
           onSelect={id => { void selectStoreScope(id).catch(() => {}); }}
           onAll={() => { setHomeMode('dashboard'); setPickerVisible(false); goToTab('home'); }}
-          onClose={() => { if (!switching) { setPickerVisible(false); setPendingTab(undefined); setPendingRoute(undefined); setPendingEmployee(false); } }} />
+          onClose={() => { if (!switching) { setPickerVisible(false); setPendingTab(undefined); } }} />
 
-        {!isPartTime && canReadFinancials && (
-          <>
-            <QuickAddMenu visible={quickAddVisible} onClose={() => setQuickAddVisible(false)} goToTab={goToTab} onRoute={openQuickRoute} onEmployee={openEmployeeRegistration} onResetPosition={() => setFabResetRequest(value => value + 1)} fabPos={fabPos} />
-            <DraggableFab
-              visible
-              iconName={quickAddVisible ? 'close' : 'add'}
-              onPress={() => setQuickAddVisible(v => !v)}
-              onDragEnd={(x, y) => setFabPos({ x, y })}
-              bottomInset={activeTab === 'purchases' && !costShelf ? 88 : 0}
-              dockBottom={costShelf || activeTab === 'sales'}
-              containerHeight={containerHeight}
-              tabBarHeight={tabBarHeight}
-              resetRequest={fabResetRequest}
-            />
-          </>
-        )}
-        <MoreDrawer visible={moreOpen} onOpen={pickerVisible || quickAddVisible ? undefined : () => setMoreOpen(true)} onClose={() => setMoreOpen(false)}
+        <MoreDrawer visible={moreOpen} onOpen={pickerVisible ? undefined : () => setMoreOpen(true)} onClose={() => setMoreOpen(false)}
           allSelected={effectiveHomeMode === 'dashboard'}
           onSelectStore={id => selectStoreScope(id)}
           onAllStores={isOwnerAdminSelf ? () => { setHomeMode('dashboard'); goToTab('home'); } : undefined} />
@@ -338,14 +239,14 @@ export default function TabsLayout() {
   );
 }
 
-function TabPage({ tab, active, reserveFab }: { tab: TabName; active: boolean; reserveFab: boolean }) {
+function TabPage({ tab, active }: { tab: TabName; active: boolean }) {
   const { homeMode } = useTabPager();
   switch (tab) {
     case 'home': return homeMode === 'dashboard' ? <AdminDashboardScreen embedded /> : <HomeScreen active={active} />;
     case 'stock': return <StockScreen active={active} />;
     case 'purchases': return <PurchasesScreen active={active} />;
     case 'payroll': return <PayrollScreen active={active} />;
-    case 'sales': return <PosScreen active={active} reserveFab={reserveFab} />;
+    case 'sales': return <PosScreen active={active} />;
     case 'more': return null;
   }
 }
@@ -377,34 +278,4 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   badgeText: { fontSize: 9, fontWeight: '700', color: Colors.white },
-  menuOverlay: {
-    position: 'absolute',
-    top: 0, left: 0, right: 0, bottom: 0,
-    zIndex: 10,
-  },
-  menuBox: {
-    position: 'absolute',
-    zIndex: 11,
-    width: MENU_WIDTH,
-    backgroundColor: Colors.white,
-    borderRadius: 14,
-    paddingVertical: 6,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.15,
-    shadowRadius: 20,
-    elevation: 10,
-  },
-  menuItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingVertical: 11,
-    paddingHorizontal: 16,
-  },
-  menuItemText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: Colors.black,
-  },
 });

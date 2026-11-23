@@ -25,7 +25,6 @@
 | `DashboardSchedule.tsx` | 통합 대시보드 주간 근무 요약과 일별 근무 목록 |
 | `DevRoleSwitcher.tsx` | 관리자 전용 역할 미리보기 스위처(직원/파트타이머 화면 확인용, `app/_layout.tsx`). 실제 직원 JWT/RLS 테스트를 대체하지 않음 |
 | `DonutChart.tsx` | 범용 도넛 차트·범례. 2026-11-17 기준 import하는 곳 없음 |
-| `DraggableFab.tsx` | 일반 탭의 드래그 가능한 플로팅 빠른 등록 버튼(경계 고무줄 효과, 하단 도킹) |
 | `ErrorMessage.tsx` | 공통 오류 표시와 재시도. 루트 규칙상 오류 UI는 이것을 사용 |
 | `ExpensesPanel.tsx` | 월 비용 장부 패널(카테고리 펼침, 반복 고정비, 필터) |
 | `FinancialSharingChoices.tsx` | 손익 공유 범위(공유 안 함/직원만/직원과 파트타이머) 선택 카드 |
@@ -76,7 +75,7 @@
 
 - 컴포넌트에서 `supabase`를 import하지 않는다. 데이터는 `../hooks`로 받거나 props로 전달받는다. 일부 컴포넌트가 서비스 함수를 직접 호출(`MoreDrawer` → `account`/`socialAuth`, `StoreSetupWizard` → `stores`)하는 기존 구조는 유지하되 새로 늘리지 않는다.
 - 색상은 `Colors.*`(`constants/colors.ts`), 서체는 `Fonts.*`(`constants/fonts.ts`), 크기·반경은 `constants/designTokens.ts`를 쓴다. `HomeWorkflowEditor`·`home-financial/theme.ts`에 남은 hex 값은 기존 예외이며 새 하드코딩을 추가하지 않는다.
-- 모바일 기준(터치 44pt 이상, 키보드 가림, 안전영역, 투명도 줄이기·Android 대체)을 지킨다. `GlassCard`·`useReducedTransparency` 대체와 FAB 하단 여백을 제거하지 않는다.
+- 모바일 기준(터치 44pt 이상, 키보드 가림, 안전영역, 투명도 줄이기·Android 대체)을 지킨다. `GlassCard`·`useReducedTransparency` 대체를 제거하지 않는다.
 - 미확인 금액·진행률을 0으로 표시하지 않는다. 내부 오류 원문을 사용자 문구로 노출하지 않는다.
 - 미사용 컴포넌트(`IntentCard`, `KakaoMap`, `DonutChart`, `StaffWorkHome`)를 다시 쓰기 전에 루트 제품 범위(의도 카드 폐기, 위치정보 출퇴근 미제공)를 확인한다.
 - 화면 변경 검증은 루트 규칙대로 빌드된 앱 시뮬레이터 전후 비교가 기준이다. 디자인 기준은 `DESIGN.md`.
