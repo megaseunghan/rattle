@@ -1,7 +1,7 @@
 import { EvidencePhoto } from './EvidencePhoto';
 import { useState } from 'react';
 import { Alert, Modal, StyleSheet, Text, TouchableOpacity, type StyleProp, type ViewStyle } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { initialWindowMetrics, SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { Colors } from '../../constants/colors';
 import { EvidenceSelection } from '../types/evidence';
@@ -16,10 +16,11 @@ export function EvidenceLocalPreview({ selection, style, fit = 'contain' }: { se
       {selection.mimeType === 'application/pdf' ? <Text>PDF</Text> : <Image source={{ uri: selection.uri }} style={styles.image} contentFit={fit} cachePolicy="none" recyclingKey={selection.id} />}
     </TouchableOpacity>
     <Modal visible={open} onRequestClose={() => setOpen(false)}>
-      <SafeAreaView style={styles.viewer} onAccessibilityEscape={() => setOpen(false)}>
+      {/* 모달은 별도 창이라 안에서 안전영역을 다시 재야 닫기가 상태 표시줄 아래로 내려온다. */}
+      <SafeAreaProvider initialMetrics={initialWindowMetrics}><SafeAreaView style={styles.viewer} onAccessibilityEscape={() => setOpen(false)}>
         <TouchableOpacity accessibilityRole="button" accessibilityLabel="증빙 미리보기 닫기" style={styles.close} onPress={() => setOpen(false)}><Text>닫기</Text></TouchableOpacity>
         {open && <EvidencePhoto onClose={() => setOpen(false)} source={{ uri: selection.uri }} style={styles.original} contentFit="contain" cachePolicy="none" />}
-      </SafeAreaView>
+      </SafeAreaView></SafeAreaProvider>
     </Modal>
   </>;
 }

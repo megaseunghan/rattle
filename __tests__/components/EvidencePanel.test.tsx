@@ -20,6 +20,7 @@ jest.mock('expo-crypto', () => ({ randomUUID: () => 'selection-id' }));
 jest.mock('expo-web-browser', () => ({ openBrowserAsync: jest.fn() }));
 jest.mock('expo-file-system', () => ({ Paths: { cache: {uri:'file:///cache'} }, File: jest.fn().mockImplementation(() => ({ delete: mockCacheDelete, open: () => ({ readBytes: () => new Uint8Array(), close: jest.fn() }) })) }));
 jest.mock('expo-image', () => ({ Image: 'Image' }));
+jest.mock('react-native-safe-area-context', () => require('react-native-safe-area-context/jest/mock').default);
 const target = { kind: 'expense' as const, storeId: 'store', id: 'expense' };
 const readyFile = { id:'file',store_id:'store',name:'receipt.jpg',mime_type:'image/jpeg',status:'ready',created_by:'user' };
 beforeEach(() => { jest.clearAllMocks(); mockUser='user';mockMode='self';mockAccess=true;mockRole='owner';mockList.mockResolvedValue([]);mockReserve.mockResolvedValue({id:'selection-id',status:'pending'});mockUpload.mockResolvedValue(undefined);mockSign.mockResolvedValue('https://example.test/signed');mockPick.mockResolvedValue({canceled:false,assets:[{uri:'file:///test.jpg',name:'test.jpg',mimeType:'image/jpeg',size:100}]}); });

@@ -6,7 +6,7 @@ import { EvidenceSourceButtons } from './EvidenceSourceButtons';
 import * as WebBrowser from 'expo-web-browser';
 import { disposeEvidenceCache, pickEvidenceSelections, type EvidenceSource } from '../media/evidencePicker';
 import { EvidenceLocalPreview } from './EvidenceLocalPreview';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { initialWindowMetrics, SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { Colors } from '../../constants/colors';
 import { Fonts } from '../../constants/fonts';
 import { useAuth } from '../contexts/AuthContext';
@@ -283,10 +283,11 @@ function EvidencePanelContent({ target, disabled = false, initiallyExpanded = fa
   }
   const jobIds = new Set(jobs.map(job => job.selection.id));
   const viewerModal = <Modal visible={!!viewer} animationType="fade" onRequestClose={() => setViewer(null)}>
-      <SafeAreaView style={styles.viewer} onAccessibilityEscape={() => setViewer(null)}>
+      {/* 모달은 별도 창이라 바깥 SafeAreaProvider 값을 받지 못한다. 안에서 다시 재야 닫기가 상태 표시줄 아래로 내려온다. */}
+      <SafeAreaProvider initialMetrics={initialWindowMetrics}><SafeAreaView style={styles.viewer} onAccessibilityEscape={() => setViewer(null)}>
         <TouchableOpacity accessibilityRole="button" style={styles.button} onPress={() => setViewer(null)}><Text style={styles.link}>닫기</Text></TouchableOpacity>
         {viewer && <EvidencePhoto key={viewer.file.id} onClose={() => setViewer(null)} style={styles.original} source={{ uri: viewer.url, cacheKey: `${account}:${viewer.file.id}:full` }} placeholder={viewer.thumb ? { uri: viewer.thumb, cacheKey: `${account}:${viewer.file.id}:thumb` } : undefined} cachePolicy="memory" contentFit="contain" placeholderContentFit="contain" transition={150} onError={() => { setViewer(null); setError('이미지를 불러오지 못했어요. 다시 열어주세요.'); }} />}
-      </SafeAreaView>
+      </SafeAreaView></SafeAreaProvider>
     </Modal>;
   if (purchaseCard) {
     const canRemove = (file: EvidenceFile) => canWrite && (file.created_by === account || canManageStore);
