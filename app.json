@@ -101,9 +101,7 @@
       }
     },
     "owner": "megaseunghan",
-    "runtimeVersion": {
-      "policy": "appVersion"
-    },
+    "runtimeVersion": "1.1.0-sdk57",
     "updates": {
       "url": "https://u.expo.dev/1522aa21-1ffc-4a8c-b13c-c572ebbb3719",
       "enabled": true,
