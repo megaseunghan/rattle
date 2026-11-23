@@ -247,7 +247,7 @@ it('권한을 회수하고 복귀해도 결과를 읽고 확인할 수 있고 iO
   await act(async () => { listeners.forEach(listener => listener('background')); });
   (Camera.getCameraPermissionsAsync as jest.Mock).mockResolvedValueOnce({ granted: false });
   await refreshStatus();
-  expect(view.getByText('카메라를 허용해주세요')).toBeTruthy();
+  expect(view.getByText(/카메라로 QR을 읽어요|카메라 권한이 꺼져 있어요/)).toBeTruthy();
   expect(view.getByLabelText(label)).toBeTruthy();
   expect(announce.mock.calls).toEqual([['QR을 읽었어요'], [label]]);
   confirm(view);

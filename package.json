@@ -74,7 +74,6 @@
     "react-native": "0.86.3",
     "react-native-draggable-flatlist": "^4.0.3",
     "react-native-gesture-handler": "~2.32.0",
-    "react-native-maps": "1.27.2",
     "react-native-pager-view": "8.0.2",
     "react-native-qrcode-svg": "^6.3.54",
     "react-native-reanimated": "4.5.1",
