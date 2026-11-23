@@ -403,8 +403,9 @@ it('이름 없는 빈 줄을 빼면 빈 품목이라고 알려준다', () => {
 });
 
 it('키보드가 올라오면 하단 바는 홈 막대 여백을 두지 않는다', () => {
-  const listeners: Record<string, () => void> = {};
-  jest.spyOn(Keyboard, 'addListener').mockImplementation(((event: string, listener: () => void) => {
+  type KeyboardListener = (event?: { endCoordinates: { height: number } }) => void;
+  const listeners: Record<string, KeyboardListener> = {};
+  jest.spyOn(Keyboard, 'addListener').mockImplementation(((event: string, listener: KeyboardListener) => {
     listeners[event] = listener;
     return { remove: jest.fn() };
   }) as never);
@@ -412,9 +413,12 @@ it('키보드가 올라오면 하단 바는 홈 막대 여백을 두지 않는�
   // 하단 바(SafeAreaView)의 아래쪽 안전영역 여백 사용 여부
   const bottomInset = () => view.getByLabelText('합계 0원').parent?.parent?.props.edges?.bottom;
   expect(bottomInset()).toBe('additive');
-  act(() => listeners.keyboardWillShow());
+  act(() => listeners.keyboardWillShow({ endCoordinates: { height: 336 } }));
   expect(bottomInset()).toBe('off');
   act(() => listeners.keyboardWillHide());
+  expect(bottomInset()).toBe('additive');
+  // 떠 있는 키보드·하드웨어 키보드 도구막대는 화면 아래를 가리지 않으므로 여백을 유지한다
+  act(() => listeners.keyboardWillShow({ endCoordinates: { height: 0 } }));
   expect(bottomInset()).toBe('additive');
 });
 

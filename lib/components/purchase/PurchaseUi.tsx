@@ -113,12 +113,18 @@ export function FieldError({ message }: { message?: string }) {
 }
 
 /** 키보드가 올라와 있는지. 올라와 있으면 홈 막대 자리가 키보드에 덮이므로 그 여백을 두지 않는다. */
+/** 이보다 낮으면 화면 아래에 붙은 키보드가 아니라 떠 있는 키보드·도구막대로 본다(바 아래 여백 유지) */
+const MIN_DOCKED_KEYBOARD_HEIGHT = 120;
+
 function useKeyboardShown(): boolean {
   const [shown, setShown] = useState(false);
   useEffect(() => {
     const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
     const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
-    const subs = [Keyboard.addListener(showEvent, () => setShown(true)), Keyboard.addListener(hideEvent, () => setShown(false))];
+    const subs = [
+      Keyboard.addListener(showEvent, event => setShown((event?.endCoordinates?.height ?? 0) >= MIN_DOCKED_KEYBOARD_HEIGHT)),
+      Keyboard.addListener(hideEvent, () => setShown(false)),
+    ];
     return () => subs.forEach(sub => sub.remove());
   }, []);
   return shown;
