@@ -1,6 +1,6 @@
 import { EvidencePhoto } from './EvidencePhoto';
 import { memo, useEffect, useRef, useState } from 'react';
-import { Alert, FlatList, Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, FlatList, Modal, StyleSheet, Text, TouchableOpacity, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Image } from 'expo-image';
 import { EvidenceSourceButtons } from './EvidenceSourceButtons';
 import * as WebBrowser from 'expo-web-browser';
@@ -15,6 +15,8 @@ import { EvidenceFile, EvidenceSelection, EvidenceTarget, MAX_EVIDENCE_FILES } f
 import { discardEvidence, discardPendingEvidence, listEvidence, reserveEvidence, signEvidence } from '../services/evidence';
 import { UserFacingError } from '../utils/error';
 import { uploadEvidence } from '../media/evidenceUpload';
+import { EvidencePhotoCard, EvidenceSourceSheet, PhotoThumb, photoStyles } from './purchase/EvidencePhotoCard';
+import { FieldError } from './purchase/PurchaseUi';
 import { EvidenceReuploadRequired, evidenceFailure, logEvidenceFailure, type EvidenceFailure } from '../utils/evidenceError';
 
 type Job = { selection: EvidenceSelection; status: 'queued' | 'uploading' | 'failed'; row?: EvidenceFile; failure?: EvidenceFailure };
@@ -30,7 +32,7 @@ async function discardCanceledUpload(file: EvidenceFile): Promise<void> {
   }
 }
 
-const EvidenceThumbnail = memo(function EvidenceThumbnail({ file, account, onOpen }: { file: EvidenceFile; account: string; onOpen: (file: EvidenceFile, thumbnail?: string) => void }) {
+const EvidenceThumbnail = memo(function EvidenceThumbnail({ file, account, onOpen, style, fit = 'contain' }: { file: EvidenceFile; account: string; onOpen: (file: EvidenceFile, thumbnail?: string) => void; style?: StyleProp<ViewStyle>; fit?: 'contain' | 'cover' }) {
   const [url, setUrl] = useState<string>();
   const [failure, setFailure] = useState<'retry' | 'original' | null>(null);
   const [attempt, setAttempt] = useState(0);
@@ -46,12 +48,21 @@ const EvidenceThumbnail = memo(function EvidenceThumbnail({ file, account, onOpe
     return () => { active = false; };
   }, [file.id, file.status, attempt]);
   const action = failure === 'retry' ? '다시 불러오기' : failure === 'original' ? '원본 열기' : '열기';
-  return <TouchableOpacity accessibilityRole="button" accessibilityLabel={`${file.name} ${action}`} style={styles.preview} onPress={() => failure === 'retry' ? setAttempt(x => x + 1) : onOpen(file, url)}>
-    {url && !failure ? <Image style={styles.image} source={{ uri: url, cacheKey: `${account}:${file.id}:thumb` }} cachePolicy="memory-disk" contentFit="contain" recyclingKey={file.id} onError={() => setFailure('retry')} /> : <Text style={styles.help}>{failure ? action : file.mime_type === 'application/pdf' ? 'PDF' : '불러오는 중'}</Text>}
+  return <TouchableOpacity accessibilityRole="button" accessibilityLabel={`${file.name} ${action}`} style={[styles.preview, style]} onPress={() => failure === 'retry' ? setAttempt(x => x + 1) : onOpen(file, url)}>
+    {url && !failure ? <Image style={styles.image} source={{ uri: url, cacheKey: `${account}:${file.id}:thumb` }} cachePolicy="memory-disk" contentFit={fit} recyclingKey={file.id} onError={() => setFailure('retry')} /> : <Text style={styles.help}>{failure ? action : file.mime_type === 'application/pdf' ? 'PDF' : '불러오는 중'}</Text>}
   </TouchableOpacity>;
 });
 
-type EvidencePanelProps = { target: EvidenceTarget; disabled?: boolean; initiallyExpanded?: boolean; initialSelections?: EvidenceSelection[]; onPendingChange?: (count: number) => void };
+/** blocked: 목록 조회 실패·권한 없음으로 남은 사진 업로드를 시작할 수 없는 상태 */
+export type EvidenceUploadStatus = { pending: number; failed: number; uploading: number; blocked?: boolean };
+type EvidencePanelProps = {
+  target: EvidenceTarget; disabled?: boolean; initiallyExpanded?: boolean; initialSelections?: EvidenceSelection[];
+  /** 'purchase': 매입 확정 시안의 증빙 사진 카드(펼친 상태, 사진만). 업로드·삭제 동작은 같다. */
+  variant?: 'default' | 'purchase';
+  onStatusChange?: (status: EvidenceUploadStatus) => void;
+  /** 값이 바뀔 때마다 실패한 사진을 다시 올린다. */
+  retrySignal?: number;
+};
 
 /** Collapsed until requested: no object URL, thumbnail or original request while closed. */
 export function EvidencePanel(props: EvidencePanelProps) {
@@ -61,10 +72,12 @@ export function EvidencePanel(props: EvidencePanelProps) {
   if (!user || store?.id !== props.target.storeId || !canReadFinancials || devPreviewMode !== 'self' || (props.target.kind === 'recurring' && !canManageStore)) return null;
   return <EvidencePanelContent key={key} {...props} account={user.id} canManageStore={canManageStore} />;
 }
-function EvidencePanelContent({ target, disabled = false, initiallyExpanded = false, initialSelections = [], onPendingChange, account, canManageStore }: EvidencePanelProps & { account: string; canManageStore: boolean }) {
+function EvidencePanelContent({ target, disabled = false, initiallyExpanded = false, initialSelections = [], account, canManageStore, variant = 'default', onStatusChange, retrySignal = 0 }: EvidencePanelProps & { account: string; canManageStore: boolean }) {
+  const purchaseCard = variant === 'purchase';
+  const [sheetFor, setSheetFor] = useState<'add' | EvidenceFile | null>(null);
   const [reselectId, setReselectId] = useState<string | null>(null);
   const [pickerError, setPickerError] = useState('');
-  const [expanded, setExpanded] = useState(initiallyExpanded);
+  const [expanded, setExpanded] = useState(initiallyExpanded || variant === 'purchase');
   const [files, setFiles] = useState<EvidenceFile[]>([]);
   const [jobs, setJobs] = useState<Job[]>(() => initialSelections.map(selection => ({ selection, status: 'queued' })));
   const [loading, setLoading] = useState(false);
@@ -76,12 +89,15 @@ function EvidencePanelContent({ target, disabled = false, initiallyExpanded = fa
   const cancelRequests = useRef(new Set<string>());
   const autoStarted = useRef(false);
   const ownedCache = useRef(new Set<string>());
-  useEffect(() => { onPendingChange?.(jobs.length); }, [jobs.length, onPendingChange]);
+  const failedJobs = jobs.filter(job => job.status === 'failed').length;
+  const uploadingJobs = jobs.filter(job => job.status === 'uploading').length;
   useEffect(() => () => { ownedCache.current.forEach(disposeEvidenceCache); }, []);
   const alive = useRef(true), lock = useRef(false), generation = useRef(0);
   const signed = useRef(new Map<string, { url: string; expires: number }>());
   const permissions = useStorePermissions();
   const canWrite = permissions.canManageStock && (canManageStore || target.kind === 'purchase');
+  const blocked = !busy && !loading && uploadingJobs === 0 && jobs.some(job => job.status === 'queued') && (!!error || !canWrite);
+  useEffect(() => { onStatusChange?.({ pending: jobs.length, failed: failedJobs, uploading: uploadingJobs, blocked }); }, [jobs.length, failedJobs, uploadingJobs, blocked, onStatusChange]);
   useEffect(() => { alive.current = true; return () => { alive.current = false; signed.current.clear(); }; }, []);
   async function refresh() {
     const request = ++generation.current;
@@ -151,6 +167,13 @@ function EvidencePanelContent({ target, disabled = false, initiallyExpanded = fa
     void run(initialSelections.map(selection => ({ selection, status: 'queued' })));
   }, [loaded, error, disabled, canWrite]);
   const attachmentCount = new Set([...files.map(f => f.id), ...jobs.map(j => j.selection.id)]).size;
+  useEffect(() => {
+    if (!retrySignal) return;
+    // 목록 조회 실패로 자동 업로드가 시작되지 않았다면 다시 불러온 뒤 자동 업로드에 맡긴다.
+    if (!autoStarted.current) { void refresh(); return; }
+    const failed = jobs.filter(job => job.status === 'failed' && job.failure?.retryable !== false);
+    if (failed.length) void run(failed);
+  }, [retrySignal]);
   async function pick(source: EvidenceSource = 'library') {
     if (!alive.current || lock.current || disabled || !loaded || !canWrite) return;
     lock.current = true; setBusy(true);
@@ -253,12 +276,61 @@ function EvidencePanelContent({ target, disabled = false, initiallyExpanded = fa
       } else {
         Alert.alert(title, '기기에 보관한 원본을 새 증빙으로 첨부해주세요. 기존 증빙은 새 파일이 열리는지 확인한 뒤 정리해주세요.', [
           { text: '닫기', style: 'cancel' },
-          { text: '원본 선택', onPress: () => { void pick(file.mime_type === 'application/pdf' ? 'file' : 'library'); } },
+          { text: '원본 선택', onPress: () => { void pick(file.mime_type === 'application/pdf' && !purchaseCard ? 'file' : 'library'); } },
         ]);
       }
     }
   }
   const jobIds = new Set(jobs.map(job => job.selection.id));
+  const viewerModal = <Modal visible={!!viewer} animationType="fade" onRequestClose={() => setViewer(null)}>
+      <SafeAreaView style={styles.viewer} onAccessibilityEscape={() => setViewer(null)}>
+        <TouchableOpacity accessibilityRole="button" style={styles.button} onPress={() => setViewer(null)}><Text style={styles.link}>닫기</Text></TouchableOpacity>
+        {viewer && <EvidencePhoto key={viewer.file.id} onClose={() => setViewer(null)} style={styles.original} source={{ uri: viewer.url, cacheKey: `${account}:${viewer.file.id}:full` }} placeholder={viewer.thumb ? { uri: viewer.thumb, cacheKey: `${account}:${viewer.file.id}:thumb` } : undefined} cachePolicy="memory" contentFit="contain" placeholderContentFit="contain" transition={150} onError={() => { setViewer(null); setError('이미지를 불러오지 못했어요. 다시 열어주세요.'); }} />}
+      </SafeAreaView>
+    </Modal>;
+  if (purchaseCard) {
+    const canRemove = (file: EvidenceFile) => canWrite && (file.created_by === account || canManageStore);
+    const confirmRemove = (file: EvidenceFile) => Alert.alert('이 사진을 뺄까요?', '빼면 되돌릴 수 없어요.', [
+      { text: '취소', style: 'cancel' },
+      { text: '빼기', style: 'destructive', onPress: () => { void remove(file); } },
+    ]);
+    const confirmCleanup = () => Alert.alert('올리다 만 사진 정리', '끝까지 올라가지 않은 사진을 모두 지울까요? 다 올라간 사진은 그대로 있어요.', [
+      { text: '취소', style: 'cancel' },
+      { text: '정리', style: 'destructive', onPress: () => { void cleanupPending(); } },
+    ]);
+    const retryFailed = () => { void run(jobs.filter(job => job.status === 'failed' && job.failure?.retryable !== false)); };
+    const hasPendingOwned = canWrite && files.some(file => file.status !== 'ready' && (file.created_by === account || canManageStore));
+    return <View>
+      <EvidencePhotoCard count={attachmentCount} disabled={!canWrite || busy || disabled || !loaded || !!error} onAdd={() => setSheetFor('add')}
+        footer={<>
+          {loading && !loaded && <Text style={styles.help}>사진을 불러오고 있어요.</Text>}
+          <FieldError message={pickerError} />
+          <FieldError message={error} />
+          {!loading && !!error && <TouchableOpacity style={styles.button} accessibilityRole="button" onPress={refresh}><Text style={styles.link}>다시 불러오기</Text></TouchableOpacity>}
+          {failedJobs > 0 && <FieldError message={`사진 ${failedJobs}장을 올리지 못했어요.`} />}
+          {failedJobs > 0 && <TouchableOpacity disabled={busy || disabled} style={styles.button} accessibilityRole="button" onPress={retryFailed}><Text style={styles.link}>다시 올리기</Text></TouchableOpacity>}
+          {hasPendingOwned && <TouchableOpacity disabled={busy || disabled || !loaded} style={styles.button} accessibilityRole="button" onPress={confirmCleanup}>
+            <Text style={styles.error}>올리다 만 사진 정리</Text></TouchableOpacity>}
+        </>}>
+        {files.filter(file => !jobIds.has(file.id)).map(item => <PhotoThumb key={item.id} removeLabel={`${item.name} 빼기`} removeDisabled={busy || disabled}
+          onRemove={canRemove(item) ? () => confirmRemove(item) : undefined}
+          status={item.status === 'ready' ? undefined : <View style={photoStyles.status}><Text style={photoStyles.statusText}>{item.status === 'pending' ? '올리다 멈춤' : '정리 중'}</Text></View>}>
+          {item.status === 'ready' ? <EvidenceThumbnail file={item} account={account} onOpen={open} style={photoStyles.fill} fit="cover" />
+            : <TouchableOpacity accessibilityRole="button" accessibilityLabel={`${item.name} 다시 고르기`} style={[photoStyles.fill, styles.center]}
+              disabled={!canWrite || busy || disabled || item.created_by !== account || item.status !== 'pending'} onPress={() => setSheetFor(item)}>
+              <Text style={photoStyles.placeholder}>다시 고르기</Text></TouchableOpacity>}
+        </PhotoThumb>)}
+        {jobs.map(job => <PhotoThumb key={job.selection.id} removeLabel={`${job.selection.name} 올리기 취소`} removeDisabled={disabled || (busy && job.status === 'failed')}
+          onRemove={() => cancelJob(job)}
+          status={<View style={photoStyles.status}><Text accessibilityLiveRegion="polite" style={photoStyles.statusText}>{job.status === 'failed' ? '실패' : job.status === 'queued' ? '대기' : '올리는 중'}</Text></View>}>
+          <EvidenceLocalPreview selection={job.selection} style={photoStyles.fill} fit="cover" />
+        </PhotoThumb>)}
+      </EvidencePhotoCard>
+      <EvidenceSourceSheet visible={!!sheetFor} remaining={sheetFor && sheetFor !== 'add' ? 1 : MAX_EVIDENCE_FILES - attachmentCount} onClose={() => setSheetFor(null)}
+        onPick={source => { if (sheetFor === 'add') void pick(source); else if (sheetFor) void reselect(sheetFor, source); }} />
+      {viewerModal}
+    </View>;
+  }
   return <View style={styles.container}>
     <TouchableOpacity accessibilityRole="button" accessibilityState={{ expanded }} style={styles.button} onPress={() => setExpanded(value => !value)}><Text style={styles.title}>증빙 자료 {expanded ? '접기' : '열기'}</Text></TouchableOpacity>
     {expanded && <>
@@ -285,12 +357,7 @@ function EvidencePanelContent({ target, disabled = false, initiallyExpanded = fa
       {canWrite && files.some(file => file.status !== 'ready' && (file.created_by === account || canManageStore)) && <TouchableOpacity disabled={busy || disabled || !loaded} style={styles.button} accessibilityRole="button" onPress={() => Alert.alert('미완료 첨부 정리', '업로드가 끝나지 않은 첨부를 모두 삭제할까요? 정리 후에는 파일을 다시 선택해야 해요. 완료된 증빙은 유지돼요.', [{ text: '취소', style: 'cancel' }, { text: '정리', style: 'destructive', onPress: () => { void cleanupPending(); } }])}><Text style={styles.error}>미완료 첨부 일괄 삭제</Text></TouchableOpacity>}
       {canWrite && <EvidenceSourceButtons disabled={busy || disabled || !loaded || !!error} onPick={pick} />}
     </>}
-    <Modal visible={!!viewer} animationType="fade" onRequestClose={() => setViewer(null)}>
-      <SafeAreaView style={styles.viewer} onAccessibilityEscape={() => setViewer(null)}>
-        <TouchableOpacity accessibilityRole="button" style={styles.button} onPress={() => setViewer(null)}><Text style={styles.link}>닫기</Text></TouchableOpacity>
-        {viewer && <EvidencePhoto key={viewer.file.id} onClose={() => setViewer(null)} style={styles.original} source={{ uri: viewer.url, cacheKey: `${account}:${viewer.file.id}:full` }} placeholder={viewer.thumb ? { uri: viewer.thumb, cacheKey: `${account}:${viewer.file.id}:thumb` } : undefined} cachePolicy="memory" contentFit="contain" placeholderContentFit="contain" transition={150} onError={() => { setViewer(null); setError('이미지를 불러오지 못했어요. 다시 열어주세요.'); }} />}
-      </SafeAreaView>
-    </Modal>
+    {viewerModal}
   </View>;
 }
 const styles = StyleSheet.create({
@@ -306,4 +373,5 @@ const styles = StyleSheet.create({
   name: { fontFamily: Fonts.wantedRegular, fontSize: 13, color: Colors.black },
   job: { gap: 4, paddingVertical: 8 },
   viewer: { flex: 1, backgroundColor: Colors.homeCanvas }, original: { flex: 1, width: '100%' },
+  center: { alignItems: 'center', justifyContent: 'center' },
 });

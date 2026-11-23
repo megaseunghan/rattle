@@ -21,6 +21,12 @@ export const Colors = {
   focusBg: '#F4F8FF',
   fieldErrorBg: '#FFF1F2',
   totalBg: '#173B70',
+  // 입력 카드 안쪽 구분(매입 등록·상세 확정 시안 2026-11-21)
+  hairline: '#EEF3F9',
+  segmentTrack: '#E7EDF5',
+  chipBg: '#F4F7FB',
+  fieldTint: '#F7FAFE',
+  scrimStrong: 'rgba(25,31,40,0.6)',
 
   gray50: '#F9FAFB',
   gray100: '#F3F4F6',

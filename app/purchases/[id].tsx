@@ -1,28 +1,32 @@
+/* Hallmark · genre: modern-minimal · macrostructure: Workbench · design-system: DESIGN.md · designed-as-app
+ * 매입 상세·수정 확정 시안 purchase-edit-v2(2026-11-23): 상세에서 바로 고치기, 바꾼 뒤에만 [취소 | 변경 저장]. 서버 수정 범위는 그대로다. */
 import { useNavigation, usePreventRemove } from '@react-navigation/native';
-import { EvidenceStagingPanel } from '../../lib/components/EvidenceStagingPanel';
-import { useStorePermissions } from '../../lib/hooks/useStorePermissions';
-import { disposeEvidenceCache } from '../../lib/media/evidencePicker';
-import type { EvidenceSelection } from '../../lib/types/evidence';
-import { usePreviewWriteGuard } from '../../lib/hooks/usePreviewWriteGuard';
-import { EvidencePanel } from '../../lib/components/EvidencePanel';
-import { SheetModal } from '../../lib/components/ui/SheetModal';
-import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
-import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator,
-  Modal, TextInput, Alert, KeyboardAvoidingView, Platform,
-} from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { usePurchaseTypes } from '../../lib/hooks/usePurchaseTypes';
+import { MAX_TOTAL, itemAmountError } from '../../lib/utils/purchaseDraft';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { AppIcon } from '../../lib/icons/AppIcon';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Colors } from '../../constants/colors';
 import { Fonts } from '../../constants/fonts';
-import { getPurchaseById, getPurchaseItems, updatePurchaseItem, updatePurchaseAmounts } from '../../lib/services/purchases';
-import { purchaseCategoryTaxonomy } from '../../lib/services/purchaseCategories';
-import { PurchaseItem } from '../../types';
-import { getErrorMessage } from '../../lib/utils/error';
 import { useAuth } from '../../lib/contexts/AuthContext';
+import { usePreviewWriteGuard } from '../../lib/hooks/usePreviewWriteGuard';
+import { deletePurchase, getPurchaseById, getPurchaseItems, updatePurchaseAmounts, updatePurchaseItems } from '../../lib/services/purchases';
+import { purchaseCategoryTaxonomy } from '../../lib/services/purchaseCategories';
+import type { PurchaseItem } from '../../types';
+import { getErrorMessage } from '../../lib/utils/error';
 import { ErrorMessage } from '../../lib/components/ErrorMessage';
-import { animateListChange } from '../../lib/utils/layoutAnimation';
+import { AppIcon } from '../../lib/icons/AppIcon';
+import { EvidencePanel, type EvidenceUploadStatus } from '../../lib/components/EvidencePanel';
+import { dateLabel } from '../../lib/components/purchase/PurchaseHeaderCard';
+import { AmountLine } from '../../lib/components/purchase/PurchaseEntryInputs';
+import { LatestAmount, PurchaseItemEditRow, itemBase, type ItemDraft } from '../../lib/components/purchase/PurchaseItemEditRow';
+import { BarButton, BlueNotice, BottomBar, CardHeader, FieldError, InlineToast, PurchaseAppBar, PurchaseCard, ui, useBarToast, useKeyboardScroll, won } from '../../lib/components/purchase/PurchaseUi';
+
+const TOAST_MS = 2000;
+const LEAVE_AFTER_DELETE_MS = 900;
+const STORE_MISMATCH = 'PURCHASE_STORE_MISMATCH';
+type Loaded = Awaited<ReturnType<typeof getPurchaseById>>;
 
 export default function PurchaseDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -30,427 +34,307 @@ export default function PurchaseDetailScreen() {
   return <PurchaseDetailContent key={[id, store?.id, user?.id, storeRole, canReadFinancials, devPreviewMode].join(':')} id={id} />;
 }
 
+function parseDate(value: string): Date {
+  const [y, m, d] = value.split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+
 function PurchaseDetailContent({ id }: { id: string }) {
-  const { store, user } = useAuth();
-  const { canManageStock, canReadFinancials } = useStorePermissions();
-  const [photos, setPhotos] = useState<EvidenceSelection[]>([]);
-  const [uploadBatch, setUploadBatch] = useState<EvidenceSelection[]>([]);
-  const [panelKey, setPanelKey] = useState('existing');
-  const [pending, setPending] = useState(0);
-  const onPending = useCallback((count: number) => {
-    setPending(count);
-    if (!count) setUploadBatch(previous => previous.length ? [] : previous);
-  }, []);
-  const [picking, setPicking] = useState(false);
-  const editScroll = useRef<ScrollView>(null);
-  const cache = useRef(new Set<string>());
-  useEffect(() => () => cache.current.forEach(disposeEvidenceCache), []);
-  function changePhotos(next: EvidenceSelection[]) {
-    for (const photo of photos) {
-      if (!next.some(file => file.id === photo.id)) {
-        disposeEvidenceCache(photo.uri);
-        cache.current.delete(photo.uri);
-      }
-    }
-    next.forEach(file => cache.current.add(file.uri));
-    setPhotos(next);
-  }
-  const { canWrite } = usePreviewWriteGuard();
-  const scope = useMemo(() => ({}), [id, store?.id, user?.id]);
-  const active = useRef<object | null>(scope); active.current = scope;
-  const request = useRef(0), saveLock = useRef(false);
-  const [result, setResult] = useState<{ scope: object; purchase: Awaited<ReturnType<typeof getPurchaseById>> | null; items: PurchaseItem[]; error: string | null } | null>(null);
-  const [fetching, setFetching] = useState(false);
-  const [savedNeedsRefresh, setSavedNeedsRefresh] = useState(false);
-  const purchase = result?.scope === scope ? result.purchase : null;
-  const items = result?.scope === scope ? result.items : [];
-  const error = result?.scope === scope ? result.error : null;
-  const loading = fetching || result?.scope !== scope;
+  const { store } = useAuth();
+  const { canWrite, assertCanWrite } = usePreviewWriteGuard();
+  // 매입·매장·계정이 바뀌면 부모 key로 다시 마운트되므로, 여기서는 마운트 여부와 마지막 요청만 확인한다.
+  const alive = useRef(true), request = useRef(0), saveLock = useRef(false);
+  const [purchase, setPurchase] = useState<Loaded | null>(null);
+  const [items, setItems] = useState<PurchaseItem[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const purchaseTypes = usePurchaseTypes();
 
-  const [amountRows, setAmountRows] = useState<{ category: string; value: string; initial: string }[] | null>(null);
-  const [editTarget, setEditTarget] = useState<PurchaseItem | null>(null);
-  const [editVersion, setEditVersion] = useState<number | null>(null);
-  const [draftConflict, setDraftConflict] = useState(false);
-  const [editQuantity, setEditQuantity] = useState('');
-  const [editAmount, setEditAmount] = useState('');
-  const quantity = Number(editQuantity.replace(/,/g, ''));
-  const amountText = editAmount.replace(/,/g, '').trim();
-  const amount = Number(amountText);
-  const validAmount = /^\d+$/.test(amountText) && Number.isSafeInteger(amount) && amount < 1e12;
-  const validQuantity = Number.isFinite(quantity) && quantity > 0 && quantity < 1e9;
-  const unitPrice = validAmount && validQuantity ? Math.round(amount / quantity) : null;
+  const [taxonomy, setTaxonomy] = useState<string[]>([]);
+  // 실제로 고친 칸만 둔다. 다른 곳에서 먼저 고친 뒤에는 손대지 않은 칸이 최신 값을 따른다.
+  const [itemDrafts, setItemDrafts] = useState<Record<string, Partial<ItemDraft>>>({});
+  const [amountDrafts, setAmountDrafts] = useState<Record<string, string>>({});
+  // 수량 패널을 연 품목. 금액은 줄에서 바로 고치므로 따로 열지 않는다.
+  const [open, setOpen] = useState<string | null>(null);
+  const [rowErrors, setRowErrors] = useState<Record<string, string>>({});
+  const [formError, setFormError] = useState('');
+  const [conflict, setConflict] = useState(false);
   const [saving, setSaving] = useState(false);
-
-  const [editSaved, setEditSaved] = useState(false);
-  const navigation = useNavigation();
-  const dirtyEdit = !!amountRows?.some(row => row.initial !== row.value) || !!editTarget && (photos.length > 0 || editQuantity !== String(editTarget.quantity)
-    || editAmount !== String(Math.round(editTarget.subtotal)));
-  function confirmDiscard(leave: () => void, leavingScreen: boolean) {
-    if (saving || saveLock.current || picking) {
-      Alert.alert('처리 중이에요', '저장이나 사진 선택이 끝난 뒤 이동해 주세요.');
-      return;
-    }
-    const pendingUpload = leavingScreen && pending > 0;
-    if (!dirtyEdit && !pendingUpload) { leave(); return; }
-    const details = [
-      dirtyEdit && (amountRows ? '저장하지 않은 금액 수정이 사라져요.' : '저장하지 않은 품목 수정과 선택한 사진이 사라져요.'),
-      pendingUpload && '올리지 못한 증빙은 사진을 다시 선택해야 해요. 이 화면에서 업로드를 마치거나 실패한 파일을 다시 올릴 수 있어요.',
-    ].filter(Boolean).join(' ');
-    Alert.alert('이대로 나갈까요?', details, [
-      { text: '계속하기', style: 'cancel' },
-      { text: '나가기', style: 'destructive', onPress: leave },
-    ]);
-  }
-  // Native stack guards hardware back, edge swipes and navigation actions alike.
-  usePreventRemove(dirtyEdit || saving || picking || pending > 0, ({ data }) =>
-    confirmDiscard(() => navigation.dispatch(data.action), true));
-  function cancelEdit() {
-    confirmDiscard(() => {
-      changePhotos([]);
-      setEditTarget(null);
-      setAmountRows(null);
-    }, false);
+  const [refreshNeeded, setRefreshNeeded] = useState(false);
+  const [menu, setMenu] = useState(false);
+  const [deleted, setDeleted] = useState(false);
+  const [toast, setToast] = useState('');
+  const [upload, setUpload] = useState<EvidenceUploadStatus>({ pending: 0, failed: 0, uploading: 0 });
+  const onUploadStatus = useCallback((status: EvidenceUploadStatus) => setUpload(status), []);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (toastTimer.current) clearTimeout(toastTimer.current); }, []);
+  function showToast(message: string) {
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    setToast(message);
+    toastTimer.current = setTimeout(() => setToast(''), TOAST_MS);
   }
 
   const load = useCallback(async () => {
     const call = ++request.current;
-    const current = () => active.current === scope && call === request.current;
+    const current = () => alive.current && call === request.current;
     if (!id || !store) {
-      setFetching(false);
-      setResult({ scope, purchase: null, items: [], error: '매장과 매입 내역을 확인해주세요.' });
+      setLoading(false);
+      setError('매입을 찾지 못했어요. 목록에서 다시 열어 주세요.');
       return false;
     }
-    setFetching(true);
+    setLoading(true);
     try {
       // 헤더 버전을 먼저 읽는다. 사이에 변경된 품목은 저장 시 그 버전으로 거절된다.
       const p = await getPurchaseById(id);
       const its = await getPurchaseItems(id);
       if (!current()) return false;
-      if (p.store_id !== store.id) throw new Error('PURCHASE_STORE_MISMATCH');
-      setResult({ scope, purchase: p, items: its, error: null });
-      setSavedNeedsRefresh(false);
-      return { purchase: p, items: its };
+      if (p.store_id !== store.id) throw new Error(STORE_MISMATCH);
+      setPurchase(p); setItems(its); setError(null);
+      setRefreshNeeded(false);
+      return true;
     } catch (e) {
-      if (current()) setResult(previous => ({ scope, purchase: previous?.scope === scope ? previous.purchase : null, items: previous?.scope === scope ? previous.items : [], error: getErrorMessage(e) }));
+      if (current()) setError(e instanceof Error && e.message === STORE_MISMATCH ? '다른 매장의 매입이에요. 매장을 바꾼 뒤 다시 열어 주세요.' : getErrorMessage(e));
       return false;
-    } finally { if (current()) setFetching(false); }
-  }, [id, scope, store?.id]);
+    } finally { if (current()) setLoading(false); }
+  }, [id, store?.id]);
   useEffect(() => {
-    active.current = scope; setEditTarget(null); setSavedNeedsRefresh(false);
+    alive.current = true;
     void load();
-    return () => { active.current = null; request.current += 1; };
-  }, [load, scope]);
+    return () => { alive.current = false; request.current += 1; };
+  }, [load]);
 
-  function openEdit(item: PurchaseItem) {
-    if (!purchase || savedNeedsRefresh || saving || error) return;
-    setEditVersion(purchase.edit_version);
-    setDraftConflict(false);
-    setEditTarget(item);
-    setEditQuantity(String(item.quantity));
-    setEditAmount(String(Math.round(item.subtotal)));
+  const amountMode = !!purchase?.hasAmountLines;
+  useEffect(() => {
+    if (!amountMode || !purchase) return;
+    let current = true;
+    purchaseCategoryTaxonomy.getCategories(purchase.store_id).then(list => { if (current) setTaxonomy(list); }).catch(() => {});
+    return () => { current = false; };
+  }, [amountMode, purchase?.store_id]);
+
+  const baseAmounts = purchase?.category_amounts ?? {};
+  // 등록 화면과 같은 카테고리 순서를 먼저 두고, 지금 목록에 없는 옛 카테고리는 뒤에 붙인다.
+  const amountCategories = [...new Set([...taxonomy, ...Object.keys(baseAmounts)])];
+  const baseAmountText = (category: string) => Object.prototype.hasOwnProperty.call(baseAmounts, category) ? String(baseAmounts[category]) : '';
+  const amountValue = (category: string) => amountDrafts[category] ?? baseAmountText(category);
+  const effective = (item: PurchaseItem): ItemDraft => ({ ...itemBase(item), ...itemDrafts[item.id] });
+  const changedItems = items.filter(item => {
+    const draft = effective(item);
+    const base = itemBase(item);
+    return draft.quantity !== base.quantity || draft.amount !== base.amount;
+  });
+  const changedAmounts = amountCategories.filter(category => (Number(amountValue(category)) || 0) !== (Number(baseAmountText(category)) || 0));
+  const dirty = amountMode ? changedAmounts.length > 0 : changedItems.length > 0;
+  const original = purchase?.amount ?? 0;
+  const draftTotal = !purchase ? 0 : amountMode
+    ? amountCategories.reduce((sum, category) => sum + (Number(amountValue(category)) || 0), 0)
+    : items.length ? items.reduce((sum, item) => sum + (Number(effective(item).amount) || 0), 0) : original;
+  const editable = !!purchase && !saving && !refreshNeeded && !deleted;
+
+  const navigation = useNavigation();
+  usePreventRemove(!deleted && (dirty || saving || upload.pending > 0), ({ data }) => {
+    if (saving) { Alert.alert('저장하고 있어요', '저장이 끝난 뒤 이동해 주세요.'); return; }
+    const details = [
+      dirty && '고친 내용이 저장되지 않아요.',
+      upload.pending > 0 && '아직 올리지 못한 사진은 다시 골라야 해요.',
+    ].filter(Boolean).join(' ');
+    Alert.alert('이대로 나갈까요?', details, [
+      { text: '계속하기', style: 'cancel' },
+      { text: '나가기', style: 'destructive', onPress: () => navigation.dispatch(data.action) },
+    ]);
+  });
+
+  function resetDrafts() {
+    setItemDrafts({}); setAmountDrafts({}); setRowErrors({}); setFormError(''); setConflict(false); setOpen(null);
   }
 
-  async function openAmountEdit() {
-    if (!purchase?.hasAmountLines || !canWrite() || saveLock.current || savedNeedsRefresh) return;
-    saveLock.current = true;
-    setSaving(true);
-    try {
-      const categories = await purchaseCategoryTaxonomy.getCategories(purchase.store_id);
-      if (active.current !== scope) return;
-      setEditVersion(purchase.edit_version);
-      setDraftConflict(false);
-      const amounts = purchase.category_amounts ?? {};
-      setAmountRows([...new Set([...Object.keys(amounts), ...categories])].map(category => {
-        const initial = Object.prototype.hasOwnProperty.call(amounts, category) ? String(amounts[category]) : '';
-        return { category, initial, value: initial };
-      }));
-    } catch (e) {
-      if (active.current === scope) Alert.alert('분류를 불러오지 못했어요', getErrorMessage(e));
-    } finally {
-      saveLock.current = false;
-      setSaving(false);
+  function validate(): boolean {
+    if (amountMode) {
+      const values = amountCategories.map(category => amountValue(category));
+      const total = values.reduce((sum, value) => sum + (Number(value) || 0), 0);
+      const message = values.some(value => !/^\d*$/.test(value)) ? '금액은 원 단위 숫자로 입력해 주세요.'
+        : total <= 0 ? '적어도 한 카테고리에 금액을 입력해 주세요.' : total >= MAX_TOTAL ? '합계를 확인해 주세요.' : '';
+      setFormError(message);
+      return !message;
     }
+    const errors: Record<string, string> = {};
+    for (const item of changedItems) {
+      const draft = effective(item);
+      const message = itemAmountError(draft.amount, Number(draft.quantity));
+      if (message) errors[item.id] = message;
+    }
+    setRowErrors(errors);
+    return !Object.keys(errors).length;
   }
 
-  async function refreshDraft() {
-    setDraftConflict(true);
-    setEditVersion(null);
-    const fresh = await load();
-    if (!fresh || active.current !== scope) return;
-    if (amountRows && fresh.purchase.hasAmountLines) {
-      const amounts = fresh.purchase.category_amounts ?? {};
-      const updated = amountRows.map(row => {
-        const initial = String(amounts[row.category] ?? '');
-        return { ...row, initial, value: row.value === row.initial ? initial : row.value };
-      });
-      for (const [category, value] of Object.entries(amounts)) {
-        if (!updated.some(row => row.category === category)) updated.push({ category, initial: String(value), value: String(value) });
-      }
-      setAmountRows(updated);
-    } else if (editTarget) {
-      const latest = fresh.items.find(row => row.id === editTarget.id);
-      if (!latest) return;
-      if (editQuantity === String(editTarget.quantity)) setEditQuantity(String(latest.quantity));
-      if (editAmount === String(Math.round(editTarget.subtotal))) setEditAmount(String(Math.round(latest.subtotal)));
-      setEditTarget(latest);
-    } else return;
-    setEditVersion(fresh.purchase.edit_version);
-  }
-
-  async function handleSaveEdit() {
-    if (picking || (!editTarget && !amountRows) || saveLock.current || savedNeedsRefresh) return;
-    if (editVersion != null && editTarget && !validQuantity) { Alert.alert('입력 오류', '수량을 올바르게 입력해주세요.'); return; }
-    if (editVersion != null && editTarget && !validAmount) { Alert.alert('입력 오류', '금액을 0원 이상의 정수로 입력해주세요.'); return; }
-
+  async function handleSave() {
+    if (!purchase || !dirty || saveLock.current || refreshNeeded || !canWrite()) return;
+    if (!validate()) return;
     saveLock.current = true;
     setSaving(true);
+    setOpen(null);
     try {
-      if (!canWrite()) return;
-      if (editVersion == null) {
-        await refreshDraft();
-        return;
+      if (amountMode) {
+        await updatePurchaseAmounts(purchase, amountCategories.map(category => ({ category, amount: Number(amountValue(category)) || 0 })));
+      } else {
+        await updatePurchaseItems(purchase.id, changedItems.map(item => {
+          const draft = effective(item);
+          const amount = Number(draft.amount);
+          return { itemId: item.id, quantity: Number(draft.quantity), amount: amount === Math.round(item.subtotal) ? null : amount };
+        }), purchase.edit_version);
       }
-      if (amountRows && purchase) {
-        const rows = amountRows.map(({ category, value }) => ({ category, amount: Number(value) }));
-        if (amountRows.some(row => !/^\d*$/.test(row.value)) || !rows.some(row => row.amount > 0)
-          || rows.reduce((sum, row) => sum + row.amount, 0) >= 1e12) {
-          Alert.alert('금액 확인', '적어도 한 분류에 원 단위 금액을 입력해주세요.');
-          return;
-        }
-        await updatePurchaseAmounts({ ...purchase, edit_version: editVersion }, rows);
-      } else if (editTarget) {
-        await updatePurchaseItem(editTarget.id, quantity, amount === Math.round(editTarget.subtotal) ? null : amount, editVersion);
-      } else return;
-      if (active.current !== scope) return;
-      if (photos.length) {
-        setPending(photos.length);
-        setPanelKey(photos[0].id);
-        setUploadBatch(photos);
-        setPhotos([]);
-      }
-      setEditSaved(true);
-      setSavedNeedsRefresh(true);
-      animateListChange();
-      setEditTarget(null);
-      setAmountRows(null);
-      const refreshed = await load();
-      if (!refreshed && active.current === scope) Alert.alert('저장 완료 · 새로고침 필요', editLabel + '은 저장됐어요. 다시 불러오기로 현재 내역을 확인해주세요.');
+      if (!alive.current) return;
+      resetDrafts();
+      showToast('변경한 내용을 저장했어요.');
+      if (!await load() && alive.current) setRefreshNeeded(true);
     } catch (e: unknown) {
-      if (active.current !== scope) return;
+      if (!alive.current) return;
       if (e instanceof Error && e.message === 'PURCHASE_CHANGED') {
-        Alert.alert('다른 곳에서 먼저 수정됐어요. 최신 내용을 불러올게요');
-        await refreshDraft();
-      } else if (amountRows && (e as {outcome?: string} | null)?.outcome === 'unknown') {
-        setAmountRows(null);
-        Alert.alert('저장 결과 확인', '현재 매입을 다시 불러와 금액을 확인해주세요.');
+        // 고친 값은 그대로 두고 기준만 최신으로 바꾼다. 같은 값이 된 칸은 자연히 '고침'에서 빠진다.
         await load();
-      } else Alert.alert('저장 실패', getErrorMessage(e));
+        setConflict(true);
+        Alert.alert('다른 곳에서 먼저 고쳤어요', '고친 내용은 그대로 두고, 지금 저장된 값을 아래에 함께 보여드릴게요. 비교한 뒤 다시 저장해 주세요.', [{ text: '확인' }]);
+      } else {
+        // 품목 여러 개 중 앞쪽만 저장된 경우를 위해 현재 값을 다시 읽는다(실패해도 고친 값은 유지).
+        // 다시 읽기 전에는 옛 버전으로 다시 보내 거짓 충돌이 나므로, 끝날 때까지 기다리고 실패하면 다시 불러오기를 먼저 하게 한다.
+        if (!amountMode && changedItems.length > 1 && !await load() && alive.current) setRefreshNeeded(true);
+        if (!alive.current) return;
+        Alert.alert('저장하지 못했어요', '고친 내용은 그대로 있어요. 다시 저장해 주세요.', [
+          { text: '닫기', style: 'cancel' },
+          { text: '다시 저장', onPress: () => { void saveRef.current(); } },
+        ]);
+      }
     } finally {
       saveLock.current = false;
       setSaving(false);
     }
   }
+  const saveRef = useRef(handleSave);
+  saveRef.current = handleSave;
 
-  const editLabel = purchase?.hasAmountLines ? '금액 수정' : '품목 수정';
-  return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.headerAction} accessibilityRole="button" accessibilityLabel="뒤로">
-          <AppIcon name="chevron-back" size={24} color={Colors.black} />
-        </TouchableOpacity>
-        <Text style={styles.title}>매입 상세</Text>
-        <View style={{ width: 44 }} />
-      </View>
+  function confirmDelete() {
+    setMenu(false);
+    Alert.alert('이 매입을 삭제할까요?', '증빙 사진도 함께 지워지고 되돌릴 수 없어요. 재고에 반영한 수량도 빠져요.', [
+      { text: '취소', style: 'cancel' },
+      { text: '삭제', style: 'destructive', onPress: () => { void removePurchase(); } },
+    ]);
+  }
+  const leaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (leaveTimer.current) clearTimeout(leaveTimer.current); }, []);
+  async function removePurchase() {
+    if (!purchase || saveLock.current) return;
+    saveLock.current = true;
+    setSaving(true);
+    try {
+      assertCanWrite();
+      await deletePurchase(purchase.id);
+      if (!alive.current) return;
+      resetDrafts();
+      setDeleted(true);
+      showToast('매입을 삭제했어요. 목록으로 돌아가요.');
+      leaveTimer.current = setTimeout(() => {
+        leaveTimer.current = null;
+        if (!alive.current) return;
+        if (router.canGoBack()) router.back(); else router.replace('/(tabs)');
+      }, LEAVE_AFTER_DELETE_MS);
+    } catch (e) {
+      if (alive.current) Alert.alert('삭제하지 못했어요', getErrorMessage(e));
+    } finally { saveLock.current = false; setSaving(false); }
+  }
 
-      {pending > 0 && <Text accessibilityLiveRegion="polite" style={styles.errorText}>
-        {editSaved ? '품목 수정을 저장했어요. ' : ''}증빙 {pending}개가 남았어요. 실패한 파일은 증빙 자료에서 다시 올려주세요.
-      </Text>}
-      {editSaved && !pending && !savedNeedsRefresh && <Text accessibilityLiveRegion="polite" style={styles.date}>{editLabel}을 저장했어요.</Text>}
-      {savedNeedsRefresh && result?.scope === scope && <Text accessibilityRole="alert" style={styles.errorText}>{editLabel}은 저장됐어요. 현재 내역을 다시 불러와 확인해주세요.</Text>}
-      {loading && !purchase ? (
-        <View style={styles.center}>
-          <ActivityIndicator size="large" color={Colors.primary} />
-        </View>
-      ) : error ? (
-        <View style={styles.center}>
-          <ErrorMessage message={error} onRetry={() => { void load(); }} />
-        </View>
-      ) : purchase ? (
-        <ScrollView contentContainerStyle={styles.scroll}>
-          <View style={styles.summaryCard}>
-            <Text style={styles.supplier}>{purchase.supplier || '거래처 미입력'}</Text>
-            <View style={styles.pillRow}>
-              <View style={styles.pill}><Text style={styles.pillText}>{Object.keys(purchase.category_amounts ?? { [purchase.category]: purchase.amount }).join(' · ')}</Text></View>
-              <View style={styles.pill}><Text style={styles.pillText}>{purchase.type}</Text></View>
-            </View>
-            <Text style={styles.date}>{purchase.date}</Text>
-            <Text style={styles.amount} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{purchase.amount.toLocaleString()}원</Text>
+  const showLocked = () => showToast('매입일·거래처는 고칠 수 없어요. ⋯ 에서 삭제한 뒤 다시 등록해 주세요.');
+  const { scrollRef, focusInput, onScroll } = useKeyboardScroll();
+  const { onBarLayout, toastBottom } = useBarToast();
+  // 유형이 하나뿐인 매장에서는 늘 같은 값이라 보여주지 않는다(등록 화면과 같은 기준).
+  const showType = !!purchase?.type && purchaseTypes.types.length > 1;
+  const diff = draftTotal - original;
+
+  return <SafeAreaView edges={['top']} style={styles.container}>
+    <PurchaseAppBar title="매입 상세" storeName={store?.name} onBack={() => router.back()}
+      right={purchase && !deleted ? <TouchableOpacity accessibilityRole="button" accessibilityLabel="더보기" accessibilityState={{ expanded: menu }} disabled={saving}
+        style={styles.more} onPress={() => setMenu(value => !value)}><AppIcon name="ellipsis-horizontal" size={22} color={Colors.black} /></TouchableOpacity> : undefined} />
+    <View style={styles.flex}>
+    {loading && !purchase ? <View style={styles.center}><ActivityIndicator size="large" color={Colors.primary} /></View>
+      : !purchase ? <View style={styles.center}><ErrorMessage message={error ?? '매입을 불러오지 못했어요.'} onRetry={() => { void load(); }} /></View>
+      : <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.flex}>
+        <ScrollView ref={scrollRef} onScroll={onScroll} scrollEventThrottle={16} contentContainerStyle={ui.scroll} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
+          <View style={styles.summary}>
+            <Pressable accessibilityRole="button" accessibilityLabel={`거래처 ${purchase.supplier || '없음'}, 고칠 수 없어요`} onPress={showLocked}>
+              <Text style={styles.supplier}>{purchase.supplier || '거래처 없음'}</Text>
+              <Text style={styles.meta}>{dateLabel(parseDate(purchase.date))} 매입{showType ? ` · ${purchase.type}` : ''}</Text>
+            </Pressable>
+            <Text style={styles.total} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{won(draftTotal)}<Text style={styles.totalUnit}>원</Text></Text>
+            {dirty && diff !== 0 && <Text style={styles.diff}>처음 {won(original)}원에서 {diff > 0 ? '+' : '−'}{won(Math.abs(diff))}원</Text>}
           </View>
-
-          {store && <EvidencePanel key={panelKey} initialSelections={uploadBatch} initiallyExpanded={uploadBatch.length > 0} onPendingChange={onPending} target={{ kind: 'purchase', id: purchase.id, storeId: store.id }} disabled={saving} />}
-          <Text style={styles.sectionLabel}>품목</Text>
-          {items.length === 0 ? (
-            <View style={styles.emptyCard}>
-              <Text style={styles.emptyText}>금액만 입력된 매입이에요</Text>
-              {Object.entries(purchase.category_amounts ?? {}).map(([category, amount]) =>
-                <Text key={category} style={styles.emptyText}>{category} · {amount.toLocaleString()}원</Text>)}
-              {purchase.hasAmountLines && <TouchableOpacity accessibilityRole="button" disabled={saving || savedNeedsRefresh}
-                onPress={openAmountEdit} style={styles.headerAction}><Text style={styles.sheetSaveText}>금액 수정</Text></TouchableOpacity>}
-            </View>
-          ) : (
-            <View style={styles.listCard}>
-              {items.map((it, i) => (
-                <TouchableOpacity
-                  key={it.id}
-                  style={[styles.itemRow, i < items.length - 1 && styles.rowBorder]}
-                  disabled={saving || !!error || savedNeedsRefresh}
-                  onPress={() => openEdit(it)}
-                  activeOpacity={0.7}
-                  accessibilityRole="button"
-                  accessibilityLabel={`${it.name}, ${it.quantity}${it.unit}, 단가 ${Math.round(it.unit_price).toLocaleString()}원, 소계 ${it.subtotal.toLocaleString()}원, 수정`}
-                >
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.itemName}>{it.name}</Text>
-                    <Text style={styles.itemSub}>
-                      {it.quantity}{it.unit} × {Math.round(it.unit_price).toLocaleString()}원
-                      {it.ingredient_id ? '  · 재고 반영' : ''}
-                    </Text>
-                  </View>
-                  <Text style={styles.itemSubtotal}>{it.subtotal.toLocaleString()}원</Text>
-                  <AppIcon name="chevron-forward" size={16} color={Colors.gray300} />
-                </TouchableOpacity>
-              ))}
-            </View>
-          )}
+          {store && <EvidencePanel variant="purchase" target={{ kind: 'purchase', id: purchase.id, storeId: store.id }} disabled={saving || deleted} onStatusChange={onUploadStatus} />}
+          {amountMode ? <PurchaseCard padded label="카테고리별 금액">
+            <CardHeader title="카테고리별 금액" />
+            {amountCategories.map(category => <View key={category}>
+              <AmountLine label={category} value={amountValue(category)} changed={changedAmounts.includes(category)} editable={editable} onFocus={focusInput}
+                onChange={value => { setFormError(''); setAmountDrafts(previous => ({ ...previous, [category]: value })); }} />
+              {conflict && changedAmounts.includes(category) && <View style={styles.latestRight}><LatestAmount amount={Number(baseAmountText(category)) || 0} /></View>}
+            </View>)}
+            <FieldError message={formError} />
+          </PurchaseCard>
+          : items.length ? <PurchaseCard padded label="매입 품목">
+            <CardHeader title="매입 품목" meta={`${items.length}개`} />
+            {items.map((item, index) => {
+              const draft = effective(item);
+              const changed = changedItems.includes(item);
+              return <PurchaseItemEditRow key={item.id} item={item} draft={draft} first={index === 0} disabled={!editable} onFocus={focusInput}
+                open={open === item.id} error={rowErrors[item.id]}
+                latestAmount={conflict && changed ? Math.round(item.subtotal) : undefined}
+                onToggle={() => setOpen(current => current === item.id ? null : item.id)}
+                onChange={next => {
+                  const base = itemBase(item);
+                  const partial: Partial<ItemDraft> = {
+                    ...(next.quantity !== base.quantity && { quantity: next.quantity }),
+                    ...(next.amount !== base.amount && { amount: next.amount }),
+                  };
+                  setRowErrors(({ [item.id]: _, ...rest }) => rest);
+                  setItemDrafts(previous => ({ ...previous, [item.id]: partial }));
+                }} />;
+            })}
+          </PurchaseCard>
+          : <PurchaseCard padded label="매입 금액">
+            <CardHeader title="금액만 입력된 매입이에요" />
+            {Object.entries(baseAmounts).map(([category, amount]) => <Text key={category} style={styles.legacy}>{category} · {won(amount)}원</Text>)}
+          </PurchaseCard>}
         </ScrollView>
-      ) : null}
-
-      <SheetModal visible={editTarget != null || amountRows != null} onRequestClose={cancelEdit}>
-        <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-          <SafeAreaView edges={['bottom']} style={styles.modalSheet}>
-            <View style={styles.modalHandle} />
-            <View style={styles.sheetHeader}>
-              <TouchableOpacity disabled={saving} onPress={cancelEdit} style={styles.headerAction} accessibilityRole="button">
-                <Text style={styles.sheetCancelText}>취소</Text>
-              </TouchableOpacity>
-              <Text style={styles.sheetHeaderTitle}>{amountRows ? '금액 수정' : editTarget?.name}</Text>
-              <TouchableOpacity onPress={handleSaveEdit} disabled={saving || picking} style={styles.headerAction} accessibilityRole="button" accessibilityLabel={amountRows ? '금액 수정 저장' : '품목 수정 저장'} accessibilityState={{ disabled: saving, busy: saving }}>
-                {saving
-                  ? <ActivityIndicator size="small" color={Colors.primary} />
-                  : <Text style={styles.sheetSaveText}>{draftConflict && editVersion == null ? '다시 불러오기' : '저장'}</Text>}
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView ref={editScroll} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
-            {draftConflict && <Text accessibilityRole="alert" style={styles.errorText}>{editVersion == null
-              ? '최신 내용을 확인해야 저장할 수 있어요. 다시 불러와 주세요.'
-              : '입력을 유지했어요. 최신 값과 비교한 뒤 저장해주세요.'}</Text>}
-            {draftConflict && editTarget && <Text>현재 저장값 · 수량 {editTarget.quantity} · 금액 {Math.round(editTarget.subtotal).toLocaleString()}원</Text>}
-            {amountRows ? amountRows.map(({category, value, initial}) => <View key={category}>
-              <Text style={styles.fieldLabel}>{category} (원){draftConflict && value !== initial ? ` · 현재 ${Number(initial).toLocaleString()}원` : ''}</Text>
-              <TextInput style={styles.input} accessibilityLabel={category + ' 금액'} keyboardType="number-pad"
-                value={value} placeholder="0" editable={!saving} onChangeText={text => setAmountRows(previous =>
-                  previous?.map(row => row.category === category ? {...row, value: text.replace(/,/g, '').trim()} : row) ?? null)} />
-            </View>) : <>
-            {pending > 0 && <Text>진행 중인 증빙을 올리거나 취소한 뒤 사진을 추가할 수 있어요.</Text>}
-            {editTarget && canManageStock && canReadFinancials && !pending && <>
-              <EvidenceStagingPanel files={photos} onChange={changePhotos} disabled={saving} onPickingChange={setPicking} edit />
-            </>}
-            <Text style={styles.fieldLabel}>수량 ({editTarget?.unit})</Text>
-            <TextInput
-              onFocus={event => editScroll.current?.getScrollResponder()?.scrollResponderScrollNativeHandleToKeyboard(event.nativeEvent.target, 24, true)}
-              style={styles.input}
-              accessibilityLabel="매입 품목 수량"
-              editable={!saving}
-              value={editQuantity}
-              onChangeText={setEditQuantity}
-              keyboardType="numeric"
-              placeholder="0"
-              placeholderTextColor={Colors.gray300}
-            />
-
-            <Text style={styles.fieldLabel}>금액 (원)</Text>
-            <TextInput
-              onFocus={event => editScroll.current?.getScrollResponder()?.scrollResponderScrollNativeHandleToKeyboard(event.nativeEvent.target, 24, true)}
-              style={styles.input}
-              accessibilityLabel="매입 품목 금액"
-              editable={!saving}
-              value={editAmount}
-              onChangeText={setEditAmount}
-              keyboardType="numeric"
-              placeholder="0"
-              placeholderTextColor={Colors.gray300}
-            />
-
-            <Text style={styles.editSubtotal}>
-              단가 {unitPrice == null ? '—' : unitPrice.toLocaleString() + '원'}
-            </Text>
-            </>}
-            </ScrollView>
-          </SafeAreaView>
-        </KeyboardAvoidingView>
-      </SheetModal>
-    </SafeAreaView>
-  );
+        {!!error && <BlueNotice message="최신 내용을 불러오지 못했어요." action="다시 불러오기" onAction={() => { void load(); }} />}
+        {refreshNeeded && !error && <BlueNotice message="저장했어요. 최신 내용을 다시 불러와 주세요." action="다시 불러오기" onAction={() => { void load(); }} />}
+        {dirty && <BottomBar total={draftTotal} onLayout={onBarLayout}>
+          <BarButton secondary label="취소" disabled={saving} onPress={resetDrafts} />
+          <BarButton label={saving ? '저장 중…' : '변경 저장'} disabled={saving} onPress={() => { void handleSave(); }} />
+        </BottomBar>}
+      </KeyboardAvoidingView>}
+    {menu && <>
+      <Pressable accessibilityRole="button" accessibilityLabel="메뉴 닫기" style={StyleSheet.absoluteFill} onPress={() => setMenu(false)} />
+      <View accessibilityRole="menu" style={styles.menu}>
+        <TouchableOpacity accessibilityRole="menuitem" style={styles.menuItem} onPress={confirmDelete}>
+          <AppIcon name="trash-outline" size={18} color={Colors.negative} /><Text style={styles.menuText}>매입 삭제</Text>
+        </TouchableOpacity>
+      </View>
+    </>}
+    </View>
+    <InlineToast message={toast} bottom={toastBottom(dirty)} />
+  </SafeAreaView>;
 }
 
 const styles = StyleSheet.create({
-  headerAction: { minWidth: 44, minHeight: 44, justifyContent: 'center' },
-  container: { flex: 1, backgroundColor: Colors.homeCanvas},
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 16, backgroundColor: Colors.homeCanvas, borderBottomWidth: 0, borderBottomColor: Colors.homeBorder },
-  title: { fontSize: 22, fontWeight: '700', color: Colors.black, flexShrink: 1 },
+  container: { flex: 1, backgroundColor: Colors.homeCanvas },
+  flex: { flex: 1 },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  errorText: { fontSize: 14, color: Colors.gray500 },
-  scroll: { padding: 20, gap: 16, paddingBottom: 40 },
-
-  summaryCard: {
-    backgroundColor: Colors.white,
-    borderRadius: 24,
-    borderWidth: 1,
-    borderColor: Colors.homeBorder,
-    padding: 20,
-    gap: 6,
-  },
-  supplier: { fontSize: 18, fontWeight: '700', color: Colors.black },
-  pillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  pill: { maxWidth: '100%', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, backgroundColor: Colors.gray100 },
-  pillText: { fontSize: 11, color: Colors.gray500 },
-  date: { fontSize: 13, color: Colors.gray500, marginTop: 2 },
-  amount: { fontFamily: Fonts.spaceGroteskBold, fontVariant: ['tabular-nums'], fontSize: 26, fontWeight: '800', color: Colors.black, marginTop: 4 },
-
-  sectionLabel: { fontSize: 13, fontWeight: '500', color: Colors.gray600,  },
-  listCard: { backgroundColor: Colors.white, borderRadius: 20, borderWidth: 1, borderColor: Colors.homeBorder},
-  emptyCard: {
-    backgroundColor: Colors.white,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: Colors.homeBorder,
-    padding: 24,
-    alignItems: 'center',
-  },
-  emptyText: { fontSize: 14, color: Colors.gray400 },
-  itemRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 13, gap: 10 },
-  rowBorder: { borderBottomWidth: 0.5, borderBottomColor: Colors.gray100 },
-  itemName: { fontSize: 14, fontWeight: '500', color: Colors.black },
-  itemSub: { fontVariant: ['tabular-nums'], fontSize: 13, color: Colors.gray500, marginTop: 2 },
-  itemSubtotal: { flexShrink: 1, fontFamily: Fonts.geistSemiBold, fontVariant: ['tabular-nums'], fontSize: 14, fontWeight: '600', color: Colors.black },
-
-  modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: Colors.overlay },
-  modalSheet: { height: '90%', backgroundColor: Colors.homeCanvas, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20},
-  modalHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: Colors.gray200, alignSelf: 'center', marginBottom: 20 },
-  sheetHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 16, paddingBottom: 12, borderBottomWidth: 0.5, borderBottomColor: Colors.gray100 },
-  sheetHeaderTitle: { fontSize: 16, fontWeight: '700', color: Colors.black, flex: 1, textAlign: 'center' },
-  sheetCancelText: { fontSize: 15, fontWeight: '500', color: Colors.gray500 },
-  sheetSaveText: { fontSize: 15, fontWeight: '700', color: Colors.primary },
-  fieldLabel: { fontSize: 13, fontWeight: '600', color: Colors.gray600, marginBottom: 6, marginTop: 14 },
-  input: {
-    fontFamily: Fonts.geistRegular, fontVariant: ['tabular-nums'],
-    backgroundColor: Colors.gray50, borderWidth: 1, borderColor: Colors.homeBorder,
-    borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: Colors.black, minHeight: 44 },
-  editSubtotal: { fontFamily: Fonts.geistSemiBold, fontVariant: ['tabular-nums'], fontSize: 14, fontWeight: '600', color: Colors.gray600, marginTop: 20, textAlign: 'right' },
+  more: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  summary: { backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.homeBorder, borderRadius: 20, padding: 16, marginBottom: 16 },
+  supplier: { fontFamily: Fonts.wantedBold, fontSize: 17, color: Colors.black },
+  meta: { fontFamily: Fonts.wantedMedium, fontSize: 13, color: Colors.gray600, marginTop: 2 },
+  total: { fontFamily: Fonts.geistBold, fontVariant: ['tabular-nums'], fontSize: 30, color: Colors.black, marginTop: 10, letterSpacing: -0.5 },
+  totalUnit: { fontFamily: Fonts.wantedSemiBold, fontSize: 17 },
+  diff: { marginTop: 4, fontFamily: Fonts.wantedSemiBold, fontSize: 13, color: Colors.action },
+  latestRight: { alignItems: 'flex-end', marginTop: -4, marginBottom: 8 },
+  legacy: { fontFamily: Fonts.wantedMedium, fontSize: 14, color: Colors.gray600, paddingVertical: 6 },
+  menu: { position: 'absolute', top: 0, right: 12, backgroundColor: Colors.white, borderRadius: 14, borderWidth: 1, borderColor: Colors.homeBorder, paddingVertical: 4,
+    shadowColor: Colors.black, shadowOpacity: 0.12, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 4 },
+  menuItem: { minHeight: 48, minWidth: 160, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  menuText: { fontFamily: Fonts.wantedSemiBold, fontSize: 15, color: Colors.negative },
 });

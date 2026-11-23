@@ -1,76 +1,106 @@
 import { Text } from 'react-native';
-import { useState } from 'react';
-import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import { useState, type ReactNode } from 'react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { EvidenceStagingPanel } from '../../lib/components/EvidenceStagingPanel';
 import { EvidenceSelection } from '../../lib/types/evidence';
-const mockPick = jest.fn();
 let mockId = 0;
-jest.mock('expo-document-picker', () => ({ getDocumentAsync: (...args: unknown[]) => mockPick(...args) }));
 jest.mock('expo-crypto', () => ({ randomUUID: () => `draft-${++mockId}` }));
 jest.mock('expo-image', () => ({ Image: 'Image' }));
-jest.mock('expo-file-system', () => ({ Paths: { cache: { uri:'file:///cache' } }, File: jest.fn().mockImplementation(()=>({delete:jest.fn()})) }));
-const asset = {uri:'file:///cache/receipt.jpg',name:'receipt.jpg',mimeType:'image/jpeg',size:100};
-function Harness({initial=[]}:{initial?:EvidenceSelection[]}) { const [files,setFiles]=useState(initial);return <><Text>{`선택 ${files.length}개`}</Text><EvidenceStagingPanel files={files} onChange={setFiles} /></>; }
-beforeEach(()=>{jest.clearAllMocks();mockId=0;mockPick.mockResolvedValue({canceled:false,assets:[asset]});});
-test('빈 패널과 사진 선택 후에도 증빙 첨부만 안내한다', async () => {
- render(<Harness />);
- expect(screen.queryByText(/준비 중|OCR|자동 입력|인식/)).toBeNull();
- expect(screen.getByText('증빙 자료 (선택)')).toBeTruthy();
- await act(async () => { fireEvent.press(screen.getByText('파일 선택')); });
- expect(screen.getByText('선택 1개')).toBeTruthy();
- expect(screen.queryByText(/준비 중|OCR|자동 입력|인식/)).toBeNull();
- expect(screen.queryByLabelText(/준비 중|OCR|자동 입력|인식/)).toBeNull();
-});
-test('local staging add, image modal and accessible removal',async()=>{
- render(<Harness />);await act(async()=>{fireEvent.press(screen.getByText('파일 선택'));});
- fireEvent.press(screen.getByLabelText('receipt.jpg 미리보기'));
- expect(screen.getByLabelText('증빙 미리보기 닫기')).toBeTruthy();fireEvent.press(screen.getByLabelText('증빙 미리보기 닫기'));
- fireEvent.press(screen.getByLabelText('receipt.jpg 선택 삭제'));expect(screen.queryByLabelText('receipt.jpg 미리보기')).toBeNull();
-});
-test('ten-file cap includes existing staged selections',async()=>{
- const initial=Array.from({length:10},(_,i)=>({...asset,id:`existing-${i}`}));
- render(<Harness initial={initial} />);await act(async()=>{fireEvent.press(screen.getByText('파일 선택'));});
- expect(screen.getByText(/증빙은 한 건에 최대 10개/)).toBeTruthy();
- expect(screen.getByText('선택 10개')).toBeTruthy();
-});
-test.each([['image/heic',12*1024*1024,true],['image/jpeg',25*1024*1024+1,false],['application/pdf',100,true]])('staging source validation %s %i',async(mimeType,size,accepted)=>{
- mockPick.mockResolvedValue({canceled:false,assets:[{...asset,mimeType,size}]});
- render(<Harness />);await act(async()=>{fireEvent.press(screen.getByText('파일 선택'));});
- expect(!!screen.queryByLabelText('receipt.jpg 미리보기')).toBe(accepted);
-});
-
+jest.mock('expo-file-system', () => ({ Paths: { cache: { uri: 'file:///cache' } }, File: jest.fn().mockImplementation(() => ({ delete: jest.fn(), size: 100 })) }));
+jest.mock('../../lib/icons/AppIcon', () => ({ AppIcon: () => null }));
+jest.mock('../../lib/components/ui/SheetModal', () => ({
+  SheetModal: ({ visible, children, onDismiss }: { visible: boolean; children: ReactNode; onDismiss?: () => void }) => {
+    const { useEffect: useMockEffect, useRef: useMockRef } = jest.requireActual('react');
+    const shown = useMockRef(false);
+    useMockEffect(() => { if (visible) shown.current = true; else if (shown.current) { shown.current = false; onDismiss?.(); } }, [visible]);
+    return visible ? children : null;
+  },
+}));
 const mockAlbum = jest.fn(), mockCamera = jest.fn(), mockCameraPermission = jest.fn(), mockAlbumPermission = jest.fn();
 jest.mock('expo-image-picker', () => ({
- UIImagePickerPreferredAssetRepresentationMode: { Current: 'current' },
- launchImageLibraryAsync: (...args: unknown[]) => mockAlbum(...args), launchCameraAsync: (...args: unknown[]) => mockCamera(...args),
- requestCameraPermissionsAsync: () => mockCameraPermission(), getMediaLibraryPermissionsAsync: () => mockAlbumPermission(),
+  UIImagePickerPreferredAssetRepresentationMode: { Current: 'current' },
+  launchImageLibraryAsync: (...args: unknown[]) => mockAlbum(...args), launchCameraAsync: (...args: unknown[]) => mockCamera(...args),
+  requestCameraPermissionsAsync: () => mockCameraPermission(), getMediaLibraryPermissionsAsync: () => mockAlbumPermission(),
 }));
-test('album selects multiple originals with unavailable limited-access filenames', async () => {
- mockAlbum.mockResolvedValue({ canceled: false, assets: ['a','b'].map(name => ({
-   uri: 'file:///cache/' + name + '.heic', fileName: null, assetId: null, fileSize: 100, mimeType: 'image/heic',
- })) });
- render(<Harness />);
- await act(async () => { fireEvent.press(screen.getByText('사진 보관함')); });
- expect(mockAlbum).toHaveBeenCalledWith(expect.objectContaining({ mediaTypes:['images'], allowsMultipleSelection:true, selectionLimit:10, exif:false, quality:1 }));
- expect(screen.getByText('선택 2개')).toBeTruthy();
- expect(mockPick).not.toHaveBeenCalled();
+const asset = { uri: 'file:///cache/receipt.jpg', fileName: 'receipt.jpg', mimeType: 'image/jpeg', fileSize: 100 };
+function Harness({ initial = [] }: { initial?: EvidenceSelection[] }) {
+  const [files, setFiles] = useState(initial);
+  return <><Text>{`선택 ${files.length}개`}</Text><EvidenceStagingPanel files={files} onChange={setFiles} /></>;
+}
+beforeEach(() => {
+  jest.clearAllMocks(); mockId = 0;
+  mockAlbum.mockResolvedValue({ canceled: false, assets: [asset] });
+  mockAlbumPermission.mockResolvedValue({ status: 'granted', accessPrivileges: 'all' });
+  mockCameraPermission.mockResolvedValue({ granted: true });
 });
-test('camera denial gives settings guidance, then an allowed capture is staged', async () => {
- mockCameraPermission.mockResolvedValueOnce({ granted:false }).mockResolvedValueOnce({ granted:true });
- mockCamera.mockResolvedValue({ canceled:false, assets:[{ uri:'file:///cache/camera.jpg', fileSize:100, mimeType:'image/jpeg' }] });
- render(<Harness />);
- await act(async () => { fireEvent.press(screen.getByText('카메라로 찍기')); });
- expect(screen.getByText(/설정에서 카메라 접근/)).toBeTruthy();
- expect(mockCamera).not.toHaveBeenCalled();
- await act(async () => { fireEvent.press(screen.getByText('카메라로 찍기')); });
- expect(screen.getByText('선택 1개')).toBeTruthy();
- expect(mockCamera).toHaveBeenCalledWith(expect.objectContaining({ mediaTypes:['images'], exif:false }));
+async function choose(option: '앨범에서 선택' | '카메라 촬영') {
+  fireEvent.press(screen.getByLabelText('사진 추가'));
+  await act(async () => { fireEvent.press(screen.getByText(option)); });
+}
+
+test('증빙 사진 카드는 사진만 받고 상시 안내문·파일 선택이 없다', async () => {
+  render(<Harness />);
+  expect(screen.getByText('증빙 사진')).toBeTruthy();
+  expect(screen.queryByText(/파일 선택|PDF|MiB|기기에만 보관|OCR|인식/)).toBeNull();
+  fireEvent.press(screen.getByLabelText('사진 추가'));
+  expect(screen.getByText('10장 더 붙일 수 있어요')).toBeTruthy();
+  expect(screen.getByText('앨범에서 선택')).toBeTruthy();
+  expect(screen.getByText('카메라 촬영')).toBeTruthy();
+  await act(async () => { fireEvent.press(screen.getByText('앨범에서 선택')); });
+  await waitFor(() => expect(screen.getByText('선택 1개')).toBeTruthy());
 });
-test.each(['limited','none'])('canceled album with %s access offers settings help', async accessPrivileges => {
- mockAlbum.mockResolvedValue({ canceled:true, assets:null });
- mockAlbumPermission.mockResolvedValue({ accessPrivileges, status:accessPrivileges === 'none' ? 'denied' : 'granted' });
- render(<Harness />);
- await act(async () => { fireEvent.press(screen.getByText('사진 보관함')); });
- expect(screen.getByText(/설정에서 Rattle의 사진 접근/)).toBeTruthy();
- expect(screen.getByText('선택 0개')).toBeTruthy();
+
+test('붙인 사진은 크게 보고 ✕로 뺄 수 있다', async () => {
+  render(<Harness />);
+  await choose('앨범에서 선택');
+  await waitFor(() => expect(screen.getByLabelText('receipt.jpg 미리보기')).toBeTruthy());
+  fireEvent.press(screen.getByLabelText('receipt.jpg 미리보기'));
+  fireEvent.press(screen.getByLabelText('증빙 미리보기 닫기'));
+  fireEvent.press(screen.getByLabelText('receipt.jpg 빼기'));
+  expect(screen.queryByLabelText('receipt.jpg 미리보기')).toBeNull();
+});
+
+test('10장이면 사진 추가 버튼을 끈다', () => {
+  const initial = Array.from({ length: 10 }, (_, i) => ({ id: `existing-${i}`, uri: `file:///cache/${i}.jpg`, name: `${i}.jpg`, mimeType: 'image/jpeg', size: 100 }));
+  render(<Harness initial={initial} />);
+  const button = screen.getByLabelText('10장을 모두 붙였어요');
+  expect(button.props.accessibilityState).toMatchObject({ disabled: true });
+  expect(screen.getByText('바꾸려면 사진을 먼저 빼 주세요.')).toBeTruthy();
+});
+
+test.each([['image/heic', 12 * 1024 * 1024, true], ['image/jpeg', 25 * 1024 * 1024 + 1, false]])('원본 크기 확인 %s %i', async (mimeType, fileSize, accepted) => {
+  mockAlbum.mockResolvedValue({ canceled: false, assets: [{ ...asset, mimeType, fileSize }] });
+  render(<Harness />);
+  await choose('앨범에서 선택');
+  await waitFor(() => expect(screen.getByText(accepted ? '선택 1개' : '선택 0개')).toBeTruthy());
+  expect(!!screen.queryByLabelText('receipt.jpg 미리보기')).toBe(accepted);
+});
+
+test('앨범은 이름을 모르는 원본 여러 장을 남은 장수만큼 고른다', async () => {
+  mockAlbum.mockResolvedValue({ canceled: false, assets: ['a', 'b'].map(name => ({ uri: 'file:///cache/' + name + '.heic', fileName: null, assetId: null, fileSize: 100, mimeType: 'image/heic' })) });
+  render(<Harness />);
+  await choose('앨범에서 선택');
+  await waitFor(() => expect(screen.getByText('선택 2개')).toBeTruthy());
+  expect(mockAlbum).toHaveBeenCalledWith(expect.objectContaining({ mediaTypes: ['images'], allowsMultipleSelection: true, selectionLimit: 10, exif: false, quality: 1 }));
+});
+
+test('카메라 권한이 없으면 설정 안내 후, 허용하면 찍은 사진을 붙인다', async () => {
+  mockCameraPermission.mockResolvedValueOnce({ granted: false }).mockResolvedValueOnce({ granted: true });
+  mockCamera.mockResolvedValue({ canceled: false, assets: [{ uri: 'file:///cache/camera.jpg', fileSize: 100, mimeType: 'image/jpeg' }] });
+  render(<Harness />);
+  await choose('카메라 촬영');
+  await waitFor(() => expect(screen.getByText(/설정에서 카메라 접근/)).toBeTruthy());
+  expect(mockCamera).not.toHaveBeenCalled();
+  await choose('카메라 촬영');
+  await waitFor(() => expect(screen.getByText('선택 1개')).toBeTruthy());
+  expect(mockCamera).toHaveBeenCalledWith(expect.objectContaining({ mediaTypes: ['images'], exif: false }));
+});
+
+test.each(['limited', 'none'])('앨범을 취소했고 접근이 %s이면 설정 안내를 한다', async accessPrivileges => {
+  mockAlbum.mockResolvedValue({ canceled: true, assets: null });
+  mockAlbumPermission.mockResolvedValue({ accessPrivileges, status: accessPrivileges === 'none' ? 'denied' : 'granted' });
+  render(<Harness />);
+  await choose('앨범에서 선택');
+  await waitFor(() => expect(screen.getByText(/설정에서 Rattle의 사진 접근/)).toBeTruthy());
+  expect(screen.getByText('선택 0개')).toBeTruthy();
 });
