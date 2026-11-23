@@ -1,6 +1,7 @@
 /* Hallmark · genre: modern-minimal · macrostructure: Workbench · design-system: DESIGN.md · designed-as-app
  * 매입 상세·수정 확정 시안 purchase-edit-v2(2026-11-23): 상세에서 바로 고치기, 바꾼 뒤에만 [취소 | 변경 저장]. 서버 수정 범위는 그대로다. */
-import { useNavigation, usePreventRemove } from '@react-navigation/native';
+import { useNavigation } from 'expo-router';
+import { usePreventRemove } from 'expo-router/react-navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { usePurchaseTypes } from '../../lib/hooks/usePurchaseTypes';

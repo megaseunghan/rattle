@@ -191,4 +191,4 @@ const s = StyleSheet.create({
   noticeContent: { flexGrow: 1, gap: 16, paddingBottom: 24 },
   notice: { backgroundColor: Colors.gray900, borderRadius: Radius.xl, padding: Spacing.screenX, gap: 12, borderTopWidth: 4, marginTop: 'auto', flexShrink: 0 },
   whiteTitle: { fontFamily: Fonts.wantedSemiBold, fontSize: Type.lg, lineHeight: 26, textAlign: 'center', color: Colors.white }, whiteBody: { fontFamily: Fonts.wantedRegular, fontSize: Type.base, lineHeight: 22, textAlign: 'center', color: Colors.white }, time: { fontFamily: Fonts.geistMedium, fontSize: 32, color: Colors.white }, action: { minHeight: 44, paddingHorizontal: 16, alignItems: 'center', justifyContent: 'center' },
-  cameraFallback: { ...StyleSheet.absoluteFillObject, justifyContent: 'center', padding: 32, gap: 12 } });
+  cameraFallback: { ...StyleSheet.absoluteFill, justifyContent: 'center', padding: 32, gap: 12 } });

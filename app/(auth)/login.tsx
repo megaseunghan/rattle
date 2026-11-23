@@ -104,7 +104,7 @@ export default function LoginScreen() {
             style={({ pressed }) => [styles.appleButton, pressed && styles.pressed]}
           >
             {loading === 'apple' ? <ActivityIndicator color={Colors.white} /> : <>
-              <AntDesign name="apple1" size={20} color={Colors.white} />
+              <AntDesign name="apple" size={20} color={Colors.white} />
               <Text style={styles.appleLabel}>Apple로 계속하기</Text>
             </>}
           </Pressable>

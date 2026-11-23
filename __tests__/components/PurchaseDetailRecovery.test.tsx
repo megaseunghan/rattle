@@ -1,4 +1,4 @@
-jest.mock('@react-navigation/native', () => ({ ...jest.requireActual('@react-navigation/native'), useNavigation: () => ({}), usePreventRemove: jest.fn() }));
+jest.mock('expo-router/react-navigation', () => ({ usePreventRemove: jest.fn() }));
 jest.mock('../../lib/components/EvidencePanel', () => ({ EvidencePanel: () => null }));
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { Alert, TextInput } from 'react-native';
@@ -7,7 +7,7 @@ import PurchaseDetail from '../../app/purchases/[id]';
 const mockHeader = jest.fn(), mockItems = jest.fn(), mockSave = jest.fn(), mockAmounts = jest.fn(), mockDelete = jest.fn();
 let mockId = 'p';
 let mockMode = 'self';
-jest.mock('expo-router', () => ({ router: { back: jest.fn(), replace: jest.fn(), canGoBack: jest.fn(() => true) }, useLocalSearchParams: () => ({ id: mockId }) }));
+jest.mock('expo-router', () => ({ router: { back: jest.fn(), replace: jest.fn(), canGoBack: jest.fn(() => true) }, useLocalSearchParams: () => ({ id: mockId }), useNavigation: () => ({}) }));
 jest.mock('../../lib/contexts/AuthContext', () => ({ useAuth: () => ({ store: { id: 's', name: 'QA 매장' }, devPreviewMode: mockMode, user: { id: 'u' } }) }));
 jest.mock('../../lib/services/purchases', () => ({
   getPurchaseById: (...a: unknown[]) => mockHeader(...a), getPurchaseItems: (...a: unknown[]) => mockItems(...a),

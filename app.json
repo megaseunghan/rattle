@@ -58,7 +58,7 @@
         {
           "backgroundColor": "#ffffff",
           "android": {
-            "image": "./assets/Rattle_adaptive_fg.png",
+            "image": "./assets/splash-android-blank.png",
             "imageWidth": 160
           }
         }
@@ -82,6 +82,16 @@
           "cameraPermission": "증빙 사진을 찍거나 직원의 출퇴근 QR을 읽으려면 카메라 권한이 필요해요.",
           "microphonePermission": false
         }
+      ],
+      "expo-image",
+      "expo-status-bar",
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "enableSceneSupport": true
+          }
+        }
       ]
     ],
     "extra": {
@@ -91,9 +101,7 @@
       }
     },
     "owner": "megaseunghan",
-    "runtimeVersion": {
-      "policy": "appVersion"
-    },
+    "runtimeVersion": "1.1.0-sdk57",
     "updates": {
       "url": "https://u.expo.dev/1522aa21-1ffc-4a8c-b13c-c572ebbb3719",
       "enabled": true,

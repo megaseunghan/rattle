@@ -38,7 +38,7 @@ function ratioOfRevenue(value: number | null | undefined, revenue: number): stri
 
 function PnLDetailSheet({ pnl, month, onClose, motionStyle, onLayout }: {
   pnl: ProfitLoss; month: number; onClose: () => void;
-  motionStyle: StyleProp<ViewStyle>; onLayout: ViewProps['onLayout'];
+  motionStyle: React.ComponentProps<typeof Animated.View>['style']; onLayout: ViewProps['onLayout'];
 }) {
   const insets = useSafeAreaInsets();
   const cats = pnl.purchaseByCategory ?? {};
