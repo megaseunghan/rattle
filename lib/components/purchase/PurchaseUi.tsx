@@ -164,7 +164,7 @@ export function InlineAmount({ value, onChange, label, onFocus, editable = true 
 }) {
   return <View style={[ui.amountBox, !editable && ui.amountBoxDisabled]}>
     <TextInput style={ui.amountInput} value={value ? won(Number(value)) : ''} accessibilityLabel={label} keyboardType="number-pad"
-      placeholder="금액" placeholderTextColor={Colors.gray400} maxLength={17} editable={editable} selectTextOnFocus returnKeyType="done"
+      placeholder="금액" placeholderTextColor={Colors.gray400} maxLength={17} editable={editable} selectTextOnFocus
       onFocus={event => onFocus?.(event.currentTarget)} onChangeText={text => onChange(text.replace(/\D/g, ''))} />
     <Text style={ui.amountUnit}>원</Text>
   </View>;

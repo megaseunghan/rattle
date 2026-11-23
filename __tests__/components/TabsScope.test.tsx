@@ -37,10 +37,6 @@ jest.mock('react-native-pager-view', () => {
     return <View testID="pager" {...props} />;
   });
 });
-jest.mock('../../lib/components/DraggableFab', () => ({ DraggableFab: ({ onPress }: { onPress: () => void }) => {
-  const React = require('react'); const { Pressable } = require('react-native');
-  return React.createElement(Pressable, { onPress, accessibilityLabel: '빠른 등록 열기', accessibilityRole: 'button' });
-} }));
 jest.mock('../../lib/components/MoreDrawer', () => ({ MoreDrawer: ({ visible, onSelectStore, onAllStores, onClose }: any) => {
   if (!visible) return null;
   const React = require('react'); const { View, Text, Pressable } = require('react-native');
@@ -127,46 +123,10 @@ it('탭을 누르는 즉시 선택하고 이전 탭 콜백이 새 선택을 되�
   expect(mockPager.setPage).not.toHaveBeenCalled();
 });
 
-it('전체 홈 FAB에서 매장을 고르면 기존 탭 위에 매입 등록을 연다', async () => {
+it('하단 탭 위에 떠 있는 빠른 등록 버튼(FAB)을 두지 않는다', () => {
   const view = renderTabs();
-  fireEvent.press(view.getByLabelText('빠른 등록 열기'));
-  fireEvent.press(view.getByText('매입 등록'));
-  expect(view.getByText('이 업무를 진행할 매장을 먼저 선택해 주세요.')).toBeTruthy();
-  expect(mockPush).not.toHaveBeenCalled();
-  fireEvent.press(view.getByText('나매장'));
-  await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/purchases/new'));
-});
-
-it('직원 등록은 매장 전환 성공 후 선택한 매장에만 요청한다', async () => {
-  const view = renderTabs();
-  fireEvent.press(view.getByLabelText('빠른 등록 열기'));
-  fireEvent.press(view.getByText('직원 등록'));
-  expect(view.queryByText('등록요청 a')).toBeNull();
-  fireEvent.press(view.getByText('나매장'));
-  await waitFor(() => expect(view.getByText('등록요청 b')).toBeTruthy());
-  expect(mockPager.setPageWithoutAnimation).toHaveBeenCalledWith(3);
-});
-
-it('직원 등록 매장 선택을 취소하면 다음 일반 전환에서 등록을 열지 않는다', async () => {
-  const view = renderTabs();
-  fireEvent.press(view.getByLabelText('빠른 등록 열기'));
-  fireEvent.press(view.getByText('직원 등록'));
-  fireEvent.press(view.getByLabelText('매장 선택 닫기'));
-  fireEvent.press(view.getByRole('tab', { name: '인건비' }));
-  fireEvent.press(view.getByText('나매장'));
-  await waitFor(() => expect(mockSwitchStore).toHaveBeenCalledWith('b'));
-  expect(view.queryByText('등록요청 b')).toBeNull();
-});
-
-it('이미 인건비 탭이어도 직원 등록 요청을 반복해서 열 수 있다', () => {
-  mockRouteParams = { targetTab: 'payroll', homeScope: 'store' };
-  const view = renderTabs();
-  for (let i = 0; i < 2; i++) {
-    fireEvent.press(view.getByLabelText('빠른 등록 열기'));
-    fireEvent.press(view.getByText('직원 등록'));
-    fireEvent.press(view.getByText('등록요청 a'));
-    expect(view.queryByText('등록요청 a')).toBeNull();
-  }
+  expect(view.queryByLabelText('빠른 등록 열기')).toBeNull();
+  expect(view.queryByText('버튼 위치 초기화')).toBeNull();
 });
 
 it('첫 홈은 선택된 매장 업무 흐름이며 전체 매장 범위로 시작하지 않는다', () => {
@@ -209,12 +169,13 @@ it('더보기의 전체 매장 선택으로 대시보드를 열고 같은 매장
 });
 
 
-it('빠른 등록을 열어도 업무 범위가 같으면 컨텍스트 참조를 유지한다', () => {
+it('더보기를 열어도 업무 범위가 같으면 컨텍스트 참조를 유지한다', () => {
   mockRouteParams = {};
   const view = renderTabs();
   const previous = mockPagerContext;
-  fireEvent.press(view.getByLabelText('빠른 등록 열기'));
+  fireEvent.press(view.getByLabelText('더보기'));
   expect(mockPagerContext).toBe(previous);
+  fireEvent.press(view.getByLabelText('더보기 닫기'));
   fireEvent.press(view.getByRole('tab', { name: '재고' }));
   expect(mockPagerContext).not.toBe(previous);
 });

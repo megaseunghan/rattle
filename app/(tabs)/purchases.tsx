@@ -283,14 +283,13 @@ export function PurchasesScreen({ active = true }: { active?: boolean }) {
         </View>
       </View>
 
-      {innerTab === '매입' ? <PurchasesView active={active} ledger={ledger} /> : <View style={{ flex: 1 }}><ExpensesPanel selectedMonth={selectedMonth} onMonthChange={setSelectedMonth} /><View style={styles.fabShelf} /></View>}
+      {innerTab === '매입' ? <PurchasesView active={active} ledger={ledger} /> : <View style={{ flex: 1 }}><ExpensesPanel selectedMonth={selectedMonth} onMonthChange={setSelectedMonth} /></View>}
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: 'transparent' },
-  fabShelf: { height: 68, backgroundColor: 'transparent' },
   topBar: {
     paddingHorizontal: 20, paddingTop: 14, paddingBottom: 12,
     backgroundColor: 'transparent',
