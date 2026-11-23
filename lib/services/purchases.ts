@@ -122,6 +122,23 @@ export async function updatePurchaseItem(
   catch { return { refreshFailed: true }; }
 }
 
+/**
+ * 상세에서 여러 품목을 한 번에 고칠 때. 서버는 품목마다 매입 버전을 확인하고 올리므로,
+ * 첫 품목은 화면이 읽은 버전으로 보내고 다음 품목부터는 방금 저장 뒤의 버전을 다시 읽어 보낸다.
+ * 중간 실패 시 앞서 저장한 품목은 남는다(화면은 다시 불러와 현재 값을 보여준다).
+ */
+export async function updatePurchaseItems(
+  purchaseId: string,
+  changes: { itemId: string; quantity: number; amount: number | null }[],
+  expectedVersion: number,
+): Promise<void> {
+  let version = expectedVersion;
+  for (const [index, change] of changes.entries()) {
+    if (index > 0) version = (await getPurchaseById(purchaseId)).edit_version;
+    await updatePurchaseItem(change.itemId, change.quantity, change.amount, version);
+  }
+}
+
 function monthRange(yearMonth: string): { from: string; to: string } {
   const lastDay = new Date(Number(yearMonth.slice(0, 4)), Number(yearMonth.slice(5, 7)), 0).getDate();
   return { from: `${yearMonth}-01`, to: `${yearMonth}-${String(lastDay).padStart(2, '0')}` };

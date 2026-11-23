@@ -1,45 +1,36 @@
+/* design-system: DESIGN.md — 매입 등록 증빙 사진(저장 전 기기 보관). 사진만 받는다(2026-11-21 PDF 제외). */
 import { useEffect, useRef, useState } from 'react';
-import { FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { Colors } from '../../constants/colors';
-import { Fonts } from '../../constants/fonts';
-import { EvidenceSelection } from '../types/evidence';
-import { EvidenceSourceButtons } from './EvidenceSourceButtons';
-import { pickEvidenceSelections, type EvidenceSource } from '../media/evidencePicker';
+import { EvidenceSelection, MAX_EVIDENCE_FILES } from '../types/evidence';
+import { pickEvidenceSelections } from '../media/evidencePicker';
 import { getErrorMessage } from '../utils/error';
 import { EvidenceLocalPreview } from './EvidenceLocalPreview';
+import { EvidencePhotoCard, EvidenceSourceSheet, PhotoThumb, photoStyles, type PhotoSource } from './purchase/EvidencePhotoCard';
+import { FieldError } from './purchase/PurchaseUi';
 
-/** Local-only controlled draft. Its parent owns cache lifetime across review steps/save. */
-export function EvidenceStagingPanel({ files, onChange, disabled = false, onPickingChange, edit = false }: {
-  files: EvidenceSelection[]; onChange: (files: EvidenceSelection[]) => void; disabled?: boolean; edit?: boolean; onPickingChange?: (picking: boolean) => void;
+/** Local-only controlled draft. Its parent owns cache lifetime across save. */
+export function EvidenceStagingPanel({ files, onChange, disabled = false, onPickingChange }: {
+  files: EvidenceSelection[]; onChange: (files: EvidenceSelection[]) => void; disabled?: boolean; onPickingChange?: (picking: boolean) => void;
 }) {
-  const [picking, setPicking] = useState(false), [error, setError] = useState('');
+  const [picking, setPicking] = useState(false), [error, setError] = useState(''), [sheet, setSheet] = useState(false);
   const alive = useRef(true), lock = useRef(false);
   useEffect(() => { alive.current = true; return () => { alive.current = false; onPickingChange?.(false); }; }, []);
-  async function pick(source: EvidenceSource) {
+  async function pick(source: PhotoSource) {
     if (disabled || lock.current) return;
     lock.current = true; setPicking(true); onPickingChange?.(true); setError('');
     try {
       const selected = await pickEvidenceSelections(files.length, () => alive.current, source);
       if (alive.current && selected.length) onChange([...files, ...selected]);
-    } catch (error) {
-      if (alive.current) setError(getErrorMessage(error));
-    }
-    finally { lock.current = false; if (alive.current) { setPicking(false); onPickingChange?.(false); } }
+    } catch (pickError) {
+      if (alive.current) setError(getErrorMessage(pickError));
+    } finally { lock.current = false; if (alive.current) { setPicking(false); onPickingChange?.(false); } }
   }
-  return <View style={styles.container}>
-    <Text style={styles.title}>증빙 자료 (선택)</Text>
-    <Text style={styles.help}>{edit ? '품목 수정 저장 후 사진을 증빙으로 올려요.' : '등록 전에는 기기에만 보관해요. 매입 등록 후 자동으로 업로드해요.'}</Text>
-    <Text style={styles.help}>최대 10개 · 이미지 원본 25MiB · PDF 10MiB</Text>
-    {!!error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
-    <FlatList horizontal data={files} keyExtractor={file => file.id} initialNumToRender={3} maxToRenderPerBatch={3} windowSize={3} renderItem={({ item }) => <View style={styles.file}>
-      <EvidenceLocalPreview selection={item} /><Text numberOfLines={2} style={styles.help}>{item.name}</Text>
-      <TouchableOpacity accessibilityRole="button" accessibilityLabel={`${item.name} 선택 삭제`} disabled={disabled || picking} style={styles.button} onPress={() => onChange(files.filter(file => file.id !== item.id))}><Text style={styles.error}>삭제</Text></TouchableOpacity>
-    </View>} />
-    <EvidenceSourceButtons disabled={disabled || picking} onPick={pick} />
-  </View>;
+  return <>
+    <EvidencePhotoCard count={files.length} disabled={disabled || picking} onAdd={() => setSheet(true)} footer={<FieldError message={error} />}>
+      {files.map(item => <PhotoThumb key={item.id} removeLabel={`${item.name} 빼기`} removeDisabled={disabled || picking}
+        onRemove={disabled ? undefined : () => onChange(files.filter(file => file.id !== item.id))}>
+        <EvidenceLocalPreview selection={item} style={photoStyles.fill} fit="cover" />
+      </PhotoThumb>)}
+    </EvidencePhotoCard>
+    <EvidenceSourceSheet visible={sheet} remaining={MAX_EVIDENCE_FILES - files.length} onClose={() => setSheet(false)} onPick={source => { void pick(source); }} />
+  </>;
 }
-const styles = StyleSheet.create({
-  container: { gap: 8, paddingVertical: 12 }, title: { fontFamily: Fonts.wantedSemiBold, fontSize: 15, color: Colors.black },
-  help: { fontFamily: Fonts.wantedRegular, fontSize: 13, color: Colors.gray600 }, file: { width: 136, marginRight: 12 },
-  button: { minHeight: 44, padding: 8, justifyContent: 'center' }, link: { color: Colors.action }, error: { color: Colors.danger },
-});
