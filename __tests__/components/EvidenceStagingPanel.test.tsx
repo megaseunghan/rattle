@@ -6,6 +6,7 @@ import { EvidenceSelection } from '../../lib/types/evidence';
 let mockId = 0;
 jest.mock('expo-crypto', () => ({ randomUUID: () => `draft-${++mockId}` }));
 jest.mock('expo-image', () => ({ Image: 'Image' }));
+jest.mock('react-native-safe-area-context', () => require('react-native-safe-area-context/jest/mock').default);
 jest.mock('expo-file-system', () => ({ Paths: { cache: { uri: 'file:///cache' } }, File: jest.fn().mockImplementation(() => ({ delete: jest.fn(), size: 100 })) }));
 jest.mock('../../lib/icons/AppIcon', () => ({ AppIcon: () => null }));
 jest.mock('../../lib/components/ui/SheetModal', () => ({
