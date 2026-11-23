@@ -22,6 +22,8 @@ import { ErrorMessage } from '../../lib/components/ErrorMessage';
 import { Button, ListCard } from '../../lib/components/ui';
 import { listMyDeletedStores, restoreDeletedStore, type DeletedStore } from '../../lib/services/stores';
 import { formatRestoreDeadline } from '../../lib/utils/storeDeletion';
+import { deleteAccount } from '../../lib/services/account';
+import { isAuthCancelled } from '../../lib/services/socialAuth';
 
 export default function SelectStoreScreen() {
   const [showForm, setShowForm] = useState(false);
@@ -38,6 +40,27 @@ export default function SelectStoreScreen() {
     Alert.alert('로그아웃', '로그아웃 하시겠습니까?', [
       { text: '취소', style: 'cancel' },
       { text: '로그아웃', style: 'destructive', onPress: () => signOut() },
+    ]);
+  }
+
+  function handleDeleteAccount() {
+    if (!canWrite()) return;
+    Alert.alert('회원 탈퇴', '계정을 삭제할까요? 매장의 급여·매입 기록은 보존돼요.', [
+      { text: '취소', style: 'cancel' },
+      {
+        text: '탈퇴하기',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            if (!canWrite()) return;
+            await deleteAccount();
+            await signOut();
+          } catch (error) {
+            if (isAuthCancelled(error)) return;
+            Alert.alert('탈퇴 확인', getErrorMessage(error));
+          }
+        },
+      },
     ]);
   }
 
@@ -214,6 +237,9 @@ export default function SelectStoreScreen() {
           </View>
         )}
 
+        <TouchableOpacity style={styles.deleteAccountBtn} onPress={handleDeleteAccount} accessibilityRole="button" activeOpacity={0.7}>
+          <Text style={styles.deleteAccountText}>회원 탈퇴</Text>
+        </TouchableOpacity>
       </ScrollView>
       )}
     </SafeAreaView>
@@ -253,6 +279,19 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: Colors.gray500,
     fontWeight: '500',
+  },
+  deleteAccountBtn: {
+    alignSelf: 'center',
+    minHeight: 44,
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+    marginTop: 8,
+  },
+  deleteAccountText: {
+    fontSize: 13,
+    color: Colors.gray400,
+    fontWeight: '500',
+    textDecorationLine: 'underline',
   },
   headerSub: {
     fontSize: 13,

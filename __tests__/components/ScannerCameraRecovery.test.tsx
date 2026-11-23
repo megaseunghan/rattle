@@ -22,7 +22,7 @@ afterEach(() => jest.restoreAllMocks());
 it('설정에서 거절을 허용으로 바꿔 복귀하면 버튼을 다시 누르지 않아도 카메라를 연다', async () => {
   mockGetPermission.mockResolvedValueOnce({ granted: false }).mockResolvedValue({ granted: true });
   const view = render(<CameraSurface onScan={jest.fn()} onAvailability={jest.fn()} />);
-  await waitFor(() => expect(view.getByText('카메라를 허용해주세요')).toBeTruthy());
+  await waitFor(() => expect(view.getByText(/카메라로 QR을 읽어요|카메라 권한이 꺼져 있어요/)).toBeTruthy());
   await foreground('background'); await foreground('active');
   await waitFor(() => expect(view.getByTestId('scanner-camera')).toBeTruthy());
   expect(mockRequestPermission).not.toHaveBeenCalled(); expect(mockGetPermission).toHaveBeenCalledTimes(2);
@@ -32,7 +32,7 @@ it('설정에서 권한을 회수하고 복귀하면 이전 카메라를 다시 
   const view = render(<CameraSurface onScan={jest.fn()} onAvailability={jest.fn()} />);
   await waitFor(() => expect(view.getByTestId('scanner-camera')).toBeTruthy());
   await foreground('background'); expect(view.queryByTestId('scanner-camera')).toBeNull();
-  await foreground('active'); await waitFor(() => expect(view.getByText('카메라를 허용해주세요')).toBeTruthy());
+  await foreground('active'); await waitFor(() => expect(view.getByText(/카메라로 QR을 읽어요|카메라 권한이 꺼져 있어요/)).toBeTruthy());
   expect(view.queryByTestId('scanner-camera')).toBeNull();
 });
 it('복귀 뒤 늦은 이전 허용 응답은 새 거절 상태를 덮어쓰지 않는다', async () => {
@@ -40,7 +40,7 @@ it('복귀 뒤 늦은 이전 허용 응답은 새 거절 상태를 덮어쓰지 
   mockGetPermission.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; })).mockResolvedValue({ granted: false });
   const view = render(<CameraSurface onScan={jest.fn()} onAvailability={jest.fn()} />);
   await foreground('background'); await foreground('active');
-  await waitFor(() => expect(view.getByText('카메라를 허용해주세요')).toBeTruthy());
+  await waitFor(() => expect(view.getByText(/카메라로 QR을 읽어요|카메라 권한이 꺼져 있어요/)).toBeTruthy());
   await act(async () => { finish({ granted: true }); }); expect(view.queryByTestId('scanner-camera')).toBeNull();
 });
 
@@ -51,7 +51,7 @@ it('등록 복구는 관리자 확인 안내를 거친 명시적 행동이고 �
   await foreground('background');
   mockGetPermission.mockResolvedValue({ granted: false });
   await foreground('active');
-  expect(view.getByText('카메라를 허용해주세요')).toBeTruthy();
+  expect(view.getByText(/카메라로 QR을 읽어요|카메라 권한이 꺼져 있어요/)).toBeTruthy();
   expect(view.getByText('등록됐는지 확인하고 있어요')).toBeTruthy();
   expect(view.getByText('확인할 기록 2건이 있어요')).toBeTruthy();
   fireEvent.press(view.getByText('새 등록 준비하기'));
@@ -68,7 +68,7 @@ it('첫 권한 요청과 재요청을 거쳐 영구 거절되면 설정 버튼�
     .mockResolvedValueOnce({ status: 'denied', canAskAgain: false });
   const view = render(<CameraSurface onScan={jest.fn()} onAvailability={jest.fn()} />);
   for (let request = 0; request < 2; request++) {
-    const button = await view.findByText('카메라 허용하기');
+    const button = await view.findByText('계속');
     await act(async () => { fireEvent.press(button); });
   }
   expect(mockRequestPermission).toHaveBeenCalledTimes(2);

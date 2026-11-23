@@ -24,7 +24,7 @@ it('기존 계정 세션이 있는 매장폰 cold start는 일반 인증 모듈�
   const view = render(<Root />);
   expect(mockGeneralModule).not.toHaveBeenCalled(); expect(mockAuthStorageRead).not.toHaveBeenCalled();
   await act(async () => { finish(registration); });
-  await waitFor(() => expect(view.getByText('카메라를 허용해주세요')).toBeTruthy());
+  await waitFor(() => expect(view.getByText(/카메라로 QR을 읽어요|카메라 권한이 꺼져 있어요/)).toBeTruthy());
   expect(view.queryByText('일반 앱으로 돌아가기')).toBeNull();
   expect(mockGeneralModule).not.toHaveBeenCalled(); expect(mockAuthStorageRead).not.toHaveBeenCalled(); expect(mockAuthRefresh).not.toHaveBeenCalled();
 });

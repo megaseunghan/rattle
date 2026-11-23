@@ -54,12 +54,12 @@ export const CameraSurface = memo(function CameraSurface({ onScan, onAvailabilit
   if (['firstRequest', 'retry', 'settings'].includes(status)) {
     const settings = status === 'settings';
     return <View style={s.cameraFallback}>
-      <Text style={s.whiteTitle}>카메라를 허용해주세요</Text>
-      <Text style={s.whiteBody}>{settings ? '설정에서 카메라를 허용해주세요' : 'QR을 찍으려면 카메라를 허용해주세요'}</Text>
+      <Text style={s.whiteTitle}>{settings ? '카메라 권한이 꺼져 있어요' : '카메라로 QR을 읽어요'}</Text>
+      <Text style={s.whiteBody}>{settings ? '설정에서 카메라 권한을 켜주세요' : 'QR을 읽으려면 카메라 접근이 필요해요'}</Text>
       <Pressable accessibilityRole="button" style={s.action} onPress={() => {
         if (settings) void Linking.openSettings();
         else void readPermission(true);
-      }}><Text style={s.whiteBody}>{settings ? '설정 열기' : '카메라 허용하기'}</Text></Pressable>
+      }}><Text style={s.whiteBody}>{settings ? '설정 열기' : '계속'}</Text></Pressable>
     </View>;
   }
   const Camera = camera;

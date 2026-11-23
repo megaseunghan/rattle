@@ -36,10 +36,12 @@ it('로그인 화면에 세 로그인 수단을 표시하고 Google 인증 취�
   expect(alert).not.toHaveBeenCalled();
   alert.mockRestore();
 });
-it('Android에서도 Apple 로그인을 포함한 세 버튼을 표시한다', () => {
+it('Android에서는 Apple 로그인 없이 카카오·Google 버튼만 표시한다', () => {
   Object.defineProperty(Platform, 'OS', { value: 'android', configurable: true });
   render(<LoginScreen />);
-  expect(screen.getByLabelText('Apple로 계속하기')).toBeTruthy();
+  expect(screen.getByText('카카오로 시작하기')).toBeTruthy();
+  expect(screen.getByLabelText('Google로 계속하기')).toBeTruthy();
+  expect(screen.queryByLabelText('Apple로 계속하기')).toBeNull();
 });
 it('iOS 로그인 진행 중 다른 로그인 수단을 동시에 시작하지 않는다', async () => {
   let finish!: (value: boolean) => void;

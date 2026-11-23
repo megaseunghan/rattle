@@ -8,6 +8,7 @@ import {
   Image,
   Pressable,
   ScrollView,
+  Platform,
 } from 'react-native';
 import { AntDesign } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -95,7 +96,7 @@ export default function LoginScreen() {
               <Text style={styles.googleLabel}>Google로 계속하기</Text>
             </>}
           </Pressable>
-          <Pressable
+          {Platform.OS === 'ios' && <Pressable
             accessibilityRole="button"
             accessibilityLabel="Apple로 계속하기"
             accessibilityState={{ disabled: loading !== null, busy: loading === 'apple' }}
@@ -107,7 +108,7 @@ export default function LoginScreen() {
               <AntDesign name="apple" size={20} color={Colors.white} />
               <Text style={styles.appleLabel}>Apple로 계속하기</Text>
             </>}
-          </Pressable>
+          </Pressable>}
         </View>
 
         {isQaLoginEnabled() && <View style={styles.qaPanel}>
