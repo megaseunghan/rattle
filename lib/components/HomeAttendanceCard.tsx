@@ -10,9 +10,9 @@ import { attendanceTime, useAttendanceToday } from '../hooks/useAttendanceToday'
 import { ErrorMessage } from './ErrorMessage';
 import { LoadingSpinner } from './LoadingSpinner';
 
-export function HomeAttendanceCard({ employee, active, refreshKey }: { employee?: Employee | null; active: boolean; refreshKey: number }) {
+export function HomeAttendanceCard({ employeeId, employee, active, refreshKey }: { employeeId?: string; employee?: Employee | null; active: boolean; refreshKey: number }) {
   const { user, store, storeRole } = useAuth();
-  const record = useAttendanceToday(employee?.id, active, refreshKey);
+  const record = useAttendanceToday(employeeId, active, refreshKey);
   useFocusEffect(useCallback(() => { if (active) void record.refetch(true); }, [active, record.refetch]));
   const role = storeRole ? { owner: '사장', manager: '점장', employee: '직원', part_timer: '파트타이머' }[storeRole] : '역할 확인 중';
   return <View style={s.card}>
@@ -23,7 +23,7 @@ export function HomeAttendanceCard({ employee, active, refreshKey }: { employee?
         <Text style={s.divider}>|</Text><Text style={s.affiliation}>{store?.name}</Text>
       </Pressable>
     </ScrollView>
-    {employee && <>{record.loading ? <LoadingSpinner fullScreen={false} /> : record.error ? <ErrorMessage message={record.error} onRetry={() => { void record.refetch(); }} /> : <View style={s.times}>
+    {employeeId && <>{record.loading ? <LoadingSpinner fullScreen={false} /> : record.error ? <ErrorMessage message={record.error} onRetry={() => { void record.refetch(); }} /> : <View style={s.times}>
       <View style={s.row}><Text style={s.label}>{record.start ? '출근' : '출근 예정'}</Text><Text style={s.time}>{attendanceTime(record.start?.punched_at) || record.schedule?.start_time?.slice(0, 5) || '미정'}</Text></View>
       <View style={s.row}><Text style={s.label}>{record.end ? '퇴근' : '퇴근 예정'}</Text><Text style={s.time}>{attendanceTime(record.end?.punched_at) || record.schedule?.end_time?.slice(0, 5) || '미정'}</Text></View>
       {record.scheduleError && <Text style={s.label}>예정 시간을 불러오지 못했어요</Text>}

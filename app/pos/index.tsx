@@ -41,6 +41,29 @@ function toDateKey(year: number, month: number, day: number) {
   return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
 
+type StoreConnection = { toss_merchant_id: string | null };
+
+/** 매장 정보에 POS 연결 필드가 실려 왔을 때만 값을 돌려준다. 필드가 없으면 모름(undefined). */
+function connectionFromStore(store: { toss_merchant_id?: string | null } | null | undefined): StoreConnection | undefined {
+  if (!store || !('toss_merchant_id' in store) || store.toss_merchant_id === undefined) return undefined;
+  return { toss_merchant_id: store.toss_merchant_id ?? null };
+}
+
+/**
+ * 스택 화면에서 돌아와 다시 포커스될 때만 실행한다(첫 포커스 제외).
+ * 콜백이 바뀔 때마다 다시 실행되는 useFocusEffect 특성 때문에 탭 활성화 effect와 겹쳐 같은 요청을
+ * 두 번 보내던 문제를 막으려고, 등록 콜백은 고정하고 최신 처리만 ref로 부른다.
+ */
+function useFocusReturn(onReturn: () => void) {
+  const latest = useRef(onReturn);
+  latest.current = onReturn;
+  const focusedOnce = useRef(false);
+  useFocusEffect(useCallback(() => {
+    if (focusedOnce.current) latest.current();
+    focusedOnce.current = true;
+  }, []));
+}
+
 export function PosScreen({ active = true }: { active?: boolean }) {
   const tabScope = useContext(TabPagerContext);
   const { store, canManageStore } = useAuth();
@@ -55,8 +78,12 @@ export function PosScreen({ active = true }: { active?: boolean }) {
   const connectionKey = queryKeys.store(accessScope, store?.id ?? '', 'pos', 'connection', connectionConfig);
   const connectionDenied = isAccessDenied(queryClient.getQueryState(connectionKey)?.error);
   const cachedConnection = connectionDenied ? undefined : queryClient.getQueryData<Awaited<ReturnType<typeof getStoreDetails>>>(connectionKey);
-  const [status, setStatus] = useState<SyncStatus>(() => cachedConnection?.toss_merchant_id ? 'connected' : 'unregistered');
-  const [loadingStatus, setLoadingStatus] = useState(!cachedConnection);
+  // 앱 시작 때 받은 매장 정보(부트스트랩)에 POS 연결 여부가 있으면 첫 화면을 그 값으로 바로 연다.
+  // 서버 연결 확인(getStoreDetails)은 아래에서 그대로 다시 하며, 결과가 다르면 그 값으로 바뀐다.
+  // 연결 확인이 거절된 적이 있으면 부트스트랩 값으로 화면을 먼저 열지 않는다(거절 안내 전 "미연동" 화면 깜빡임 방지).
+  const initialConnection = connectionDenied ? undefined : cachedConnection ?? connectionFromStore(store);
+  const [status, setStatus] = useState<SyncStatus>(() => initialConnection?.toss_merchant_id ? 'connected' : 'unregistered');
+  const [loadingStatus, setLoadingStatus] = useState(!initialConnection);
 
   const initialMonth = tabScope?.selectedMonth ?? `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
   const [queryYear, setQueryYear] = useState(Number(initialMonth.slice(0, 4)));
@@ -64,7 +91,7 @@ export function PosScreen({ active = true }: { active?: boolean }) {
   const [syncing, setSyncing] = useState(false);
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
 
-  const statusStore = useRef<string | undefined>(cachedConnection ? connectionIdentity : undefined);
+  const statusStore = useRef<string | undefined>(initialConnection ? connectionIdentity : undefined);
   const statusRequest = useRef(0);
   const currentStoreId = useRef(connectionIdentity);
   currentStoreId.current = connectionIdentity;
@@ -103,10 +130,10 @@ export function PosScreen({ active = true }: { active?: boolean }) {
     refetchManualSales();
   }, [active, status, loadingStatus, connectionIdentity, refetchManualSales]);
 
-  // 매출 추가 화면(스택 push)에서 뒤로 돌아왔을 때도 목록 갱신
-  useFocusEffect(useCallback(() => {
+  // 매출 추가 화면(스택 push)에서 뒤로 돌아왔을 때도 목록 갱신. 탭 진입·재진입은 위 effect가 맡는다.
+  useFocusReturn(() => {
     if (active && !loadingStatus && currentStoreId.current === statusStore.current && status === 'unregistered') refetchManualSales();
-  }, [active, status, loadingStatus, connectionIdentity, refetchManualSales]));
+  });
 
   function prevQueryMonth() {
     const previous = new Date(queryYear, queryMonth - 2, 1);
@@ -196,11 +223,7 @@ export function PosScreen({ active = true }: { active?: boolean }) {
   useEffect(() => { if (active) void loadStoreStatus(); }, [active, loadStoreStatus]);
   // Pager activation is handled above. A stack settings screen can blur/focus
   // this mounted page without changing active; revalidate that return as well.
-  const connectionWasFocused = useRef(false);
-  useFocusEffect(useCallback(() => {
-    if (connectionWasFocused.current && active) void loadStoreStatus();
-    connectionWasFocused.current = true;
-  }, [active, loadStoreStatus]));
+  useFocusReturn(() => { if (active) void loadStoreStatus(); });
   const businessDay = getAutoSyncRange(closingTime).from;
   const shownBusinessDay = useRef(businessDay);
   useEffect(() => {

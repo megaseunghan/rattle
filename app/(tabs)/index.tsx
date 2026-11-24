@@ -17,12 +17,12 @@ import { useHomeFinancialCard } from '../../lib/hooks/useHomeFinancialCard';
 import { HomeFinancialCard } from '../../lib/components/HomeFinancialCard';
 import { useTabPager } from '../../lib/contexts/TabPagerContext';
 
-import { resolveSelfEmployee } from '../../lib/utils/resolveSelfEmployee';
+import { resolveSelfEmployee, resolveSelfEmployeeId } from '../../lib/utils/resolveSelfEmployee';
 import { HomeAttendanceCard } from '../../lib/components/HomeAttendanceCard';
 
 
 export function HomeScreen({ active = true }: { active?: boolean }) {
-  const { store, user, storeRole, canManageStore, devPreviewEmployeeId, devPreviewMode, canReadFinancials } = useAuth();
+  const { store, user, storeRole, canManageStore, devPreviewEmployeeId, devPreviewMode, canReadFinancials, access } = useAuth();
   const { goToTab, innerGestureActive } = useTabPager();
   const { refetch: refetchNotifications } = useNotifications();
   const { employees, refetch: refetchEmp } = useEmployees();
@@ -36,6 +36,8 @@ export function HomeScreen({ active = true }: { active?: boolean }) {
   const fetchTrend = financial.refetch;
   // 로그인 본인에 연결된 직원 → 파트타이머 여부 판별 (관리자 테스트 미리보기 시엔 선택된 직원)
   const myEmployee = resolveSelfEmployee(employees, user?.id, devPreviewEmployeeId);
+  // 출퇴근 조회는 직원 목록·시급을 기다리지 않고 권한 응답의 본인 직원 ID로 바로 시작한다.
+  const myEmployeeId = resolveSelfEmployeeId(access?.employee_id, devPreviewEmployeeId, employees);
   const effectiveRole: 'admin' | 'member' | 'part_time' =
     canManageStore ? 'admin'
     : storeRole === 'part_timer' ? 'part_time'
@@ -81,7 +83,7 @@ export function HomeScreen({ active = true }: { active?: boolean }) {
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />}
       >
-        <HomeAttendanceCard employee={myEmployee} active={active} refreshKey={alertRefreshKey} />
+        <HomeAttendanceCard employeeId={myEmployeeId} employee={myEmployee} active={active} refreshKey={alertRefreshKey} />
         <HomeAlertsPanel active={active} refreshKey={alertRefreshKey} todaySales={todaySales} financial={canManageStore} />
         {canReadFinancials && <>
         <HomeFinancialCard key={`${store?.id}-${user?.id}-${canManageStore}`} data={financial.data} loading={financial.loading} refreshing={financial.refreshing} error={!!financial.error} onRetry={financial.refetch} />

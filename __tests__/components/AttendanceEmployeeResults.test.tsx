@@ -31,8 +31,8 @@ it('S43은 퇴근 결과를 오늘 기록에만 반영하고 자동기록 조회
   expectNoProcessingUi(view);
 });
 it('홈은 최신 퇴근 시각과 기존 출퇴근 행동만 표시한다', () => {
-  const view = render(<HomeAttendanceCard employee={employee} active refreshKey={0} />);
-  mockToday.end = end; view.rerender(<HomeAttendanceCard employee={employee} active refreshKey={1} />);
+  const view = render(<HomeAttendanceCard employeeId={employee.id} employee={employee} active refreshKey={0} />);
+  mockToday.end = end; view.rerender(<HomeAttendanceCard employeeId={employee.id} employee={employee} active refreshKey={1} />);
   expect(view.getByText('12:00')).toBeTruthy(); expect(view.getAllByText('출근')).toHaveLength(2); expectNoProcessingUi(view);
 });
 it('직원 행이 없으면 이름·역할은 유지하고 출퇴근 시각과 행동을 숨긴다', () => {
