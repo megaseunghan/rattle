@@ -4,6 +4,7 @@ import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { getDailySummaries, getDailySummariesByRange, getDailyItems, getAutoSyncRange } from '../services/posAnalytics';
 import { queryClient, queryKeys, useQueryScope, isAccessDenied } from '../query';
+import { posRangeStaleTime } from '../query/staleTimes';
 import { DailySummary, DailyItem } from '../../types';
 
 export { clearLegacyPosCache } from '../query/legacyPosCache';
@@ -109,7 +110,7 @@ export function usePosAnalytics(initialFrom?: Date, initialTo?: Date) {
           const cutoff = new Date(Math.min(to.getTime(), Date.now()));
           return cutoff <= from ? Promise.resolve([]) : getDailySummariesByRange(store.id, closingTime, from, cutoff);
         },
-        staleTime: force ? 0 : 30_000, gcTime: 900_000 });
+        staleTime: force ? 0 : posRangeStaleTime(from, to), gcTime: 900_000 });
       if (valid()) setSummaries(result);
     } catch (e) { if (!isCancelledError(e) && valid()) { if (isAccessDenied(e)) setSummaries([]); setError(getErrorMessage(e)); } }
     finally { if (valid()) setLoadingSummaries(false); }
@@ -124,7 +125,7 @@ export function usePosAnalytics(initialFrom?: Date, initialTo?: Date) {
     setItems(cached ?? []); setLoadingItems(!cached); setError(null); setActiveCategory('전체');
     try {
       const result = await queryClient.fetchQuery({ queryKey: key,
-        queryFn: () => getDailyItems(store.id, dateFrom, dateTo), staleTime: 30_000, gcTime: 900_000 });
+        queryFn: () => getDailyItems(store.id, dateFrom, dateTo), staleTime: posRangeStaleTime(dateFrom, dateTo), gcTime: 900_000 });
       if (valid()) setItems(result);
     } catch (e) { if (!isCancelledError(e) && valid()) setError(getErrorMessage(e)); }
     finally { if (valid()) setLoadingItems(false); }

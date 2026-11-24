@@ -8,6 +8,7 @@ import { getAutoSyncRange, getBusinessDayRange, getDailySummariesByRange } from 
 import { getTossMerchantId, hasPosOrders, savePosOrders } from '../services/tossSync';
 import { coordinatePosSync, subscribePosSyncCompletion, POS_RECENT_SYNC_INTERVAL_MS, POS_HISTORY_SYNC_INTERVAL_MS } from '../services/posSyncCoordinator';
 import { queryClient, queryKeys, useQueryScope, isAccessDenied } from '../query';
+import { STALE_TIME } from '../query/staleTimes';
 import { DailySummary, TossOrder } from '../../types';
 
 export function useTossSync() {
@@ -87,7 +88,7 @@ export function useTossSync() {
       const rows = await queryClient.fetchQuery({
         queryKey: queryKeys.store(scope, storeId, 'pos', 'today', closingTime, from),
         queryFn: () => getDailySummariesByRange(storeId, closingTime, new Date(from), new Date(to)),
-        staleTime: force ? 0 : 30_000, gcTime: 900_000,
+        staleTime: force ? 0 : STALE_TIME.posToday, gcTime: 900_000,
       });
       if (!valid()) return;
       salesIdentity.current = `${identity}:${from}`;
