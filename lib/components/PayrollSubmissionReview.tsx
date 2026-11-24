@@ -27,12 +27,12 @@ export function PayrollSubmissionReview({ yearMonth, active, employees, payrolls
     if (!canWrite() || !allowed.current(employee)) return Promise.resolve();
     return onApply(employee, row);
   };
-  const { rows, loading, error, refetch } = usePayrollSubmissions(yearMonth);
+  // 탭 진입은 enabled: active와 재사용 시간(1분)이 맡는다.
+  const { rows, loading, error, refetch } = usePayrollSubmissions(yearMonth, undefined, active);
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState<string | null>(null);
   const mounted = useRef(true);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
-  useEffect(() => { if (active) void refetch(); }, [active, refetch]);
   const latest = new Map<string, PayrollWorkSubmission>();
   for (const row of rows) if (!latest.has(row.employee_id)) latest.set(row.employee_id, row);
   async function review(row: PayrollWorkSubmission, status: 'approved' | 'rejected') {

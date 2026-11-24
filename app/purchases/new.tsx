@@ -70,7 +70,6 @@ function NewPurchaseContent() {
   const [initialDate] = useState(() => formatDate(parseInitialDate(params.date)));
   const [date, setDate] = useState(() => parseInitialDate(params.date));
   const month = formatDate(date).slice(0, 7);
-  const ledger = usePurchases(month);
   const inventory = useIngredients();
   const ingredientCategories = useCategories();
 
@@ -146,6 +145,8 @@ function NewPurchaseContent() {
   const [retrySignal, setRetrySignal] = useState(0);
   const [toast, setToast] = useState('');
   const [monthCheck, setMonthCheck] = useState(false);
+  // 월 확인 창을 열 때만 이 달 목록을 받는다(openMonthCheck가 최신으로 다시 받는다).
+  const ledger = usePurchases(month, monthCheck);
   const writeLock = useRef(false);
   const formLocked = saveState !== 'idle' && saveState !== 'retry';
 

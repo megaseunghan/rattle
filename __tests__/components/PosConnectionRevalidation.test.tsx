@@ -1,5 +1,5 @@
 import { act, render, screen, waitFor, fireEvent, renderHook } from '@testing-library/react-native';
-import { queryClient, queryKeys, useQueryScope } from '../../lib/query';
+import { queryClient, queryKeys, useQueryScope, invalidateStoreData } from '../../lib/query';
 import { PosScreen } from '../../app/pos';
 jest.mock('../../lib/supabase', () => ({ supabase: {} }));
 const mockFetch = jest.fn().mockResolvedValue(undefined);
@@ -37,18 +37,20 @@ it('연동 완료 직후 재마운트는 이전 미연동 캐시를 검증해야
  await act(async () => {});
  expect(screen.queryByText('오늘 매출')).not.toBeNull();
 });
-it('현재 설정의 미연동 캐시도 진입 시 재검증하고 설정 화면 복귀를 반영한다', async () => {
+// 2026-11-24 재진입 캐시: 매장 연결 정보는 30분 재사용한다. 연결 설정 저장(updateStoreInfo)의 'pos' 무효화 뒤 복귀하면 다시 확인한다.
+it('30분 안의 미연동 캐시는 진입 때 다시 확인하지 않고, 연결 저장 무효화 뒤 설정 화면 복귀를 반영한다', async () => {
  const getDetails = require('../../lib/services/stores').getStoreDetails;
  mockStore.closing_time = '23:00'; mockSync.mockResolvedValue(undefined);
  getDetails.mockResolvedValue({ toss_merchant_id: null, closing_time: '23:00' });
  const scope = renderHook(useQueryScope);
  queryClient.setQueryData(queryKeys.store(scope.result.current, 'store', 'pos', 'connection', '23:00:'), { toss_merchant_id: null, closing_time: '23:00' });
  render(<PosScreen />); await act(async () => {});
- expect(getDetails).toHaveBeenCalledTimes(1);
+ expect(getDetails).toHaveBeenCalledTimes(0);
  const focus = require('expo-router').useFocusEffect.mock.calls.at(-1)[0];
  act(() => focus());
  getDetails.mockResolvedValue({ toss_merchant_id: 'merchant', closing_time: '23:00' });
+ await act(async () => { await invalidateStoreData('store', ['pos']); });
  await act(async () => { focus(); });
  expect(screen.queryByText('오늘 매출')).not.toBeNull();
- expect(getDetails).toHaveBeenCalledTimes(2);
+ expect(getDetails).toHaveBeenCalledTimes(1);
 });

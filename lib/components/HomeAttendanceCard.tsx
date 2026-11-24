@@ -1,6 +1,5 @@
-import { useCallback } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { router, useFocusEffect } from 'expo-router';
+import { router } from 'expo-router';
 import { Colors } from '../../constants/colors';
 import { Fonts } from '../../constants/fonts';
 import { CardStyle, Radius, Spacing, Type } from '../../constants/designTokens';
@@ -13,7 +12,6 @@ import { LoadingSpinner } from './LoadingSpinner';
 export function HomeAttendanceCard({ employeeId, employee, active, refreshKey }: { employeeId?: string; employee?: Employee | null; active: boolean; refreshKey: number }) {
   const { user, store, storeRole } = useAuth();
   const record = useAttendanceToday(employeeId, active, refreshKey);
-  useFocusEffect(useCallback(() => { if (active) void record.refetch(true); }, [active, record.refetch]));
   const role = storeRole ? { owner: '사장', manager: '점장', employee: '직원', part_timer: '파트타이머' }[storeRole] : '역할 확인 중';
   return <View style={s.card}>
     <ScrollView horizontal showsHorizontalScrollIndicator={false}>

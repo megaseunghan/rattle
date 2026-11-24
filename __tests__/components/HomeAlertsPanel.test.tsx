@@ -74,7 +74,8 @@ it('처음부터 알림이 없으면 완료로 오인시키지 않고 조회 오
   expect(screen.queryByText('모든 알림을 확인했어요')).toBeNull();
   mockData = { ...mockData, error: 'read failed' }; view.rerender(<HomeAlertsPanel />);
   fireEvent.press(screen.getByText('다시 시도'));
-  expect(mockRefetch).toHaveBeenCalledTimes(2); // mount + user retry
+  // 2026-11-24 재진입 캐시: 마운트 조회는 useHomeAlerts(active)가 맡고 패널은 다시 시도에서만 refetch한다.
+  expect(mockRefetch).toHaveBeenCalledTimes(1);
 });
 it('세로·오른쪽·짧은 스와이프를 숨김으로 처리하지 않고 왼쪽 96 이상에서 확인한다', () => {
   const create = PanResponder.create;

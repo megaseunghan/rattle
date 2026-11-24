@@ -1,18 +1,19 @@
 /* Hallmark · genre: modern-minimal · macrostructure: Workbench · design-system: DESIGN.md · designed-as-app */
 import { NumericText } from '../../lib/components/ui/NumericText';
 import { getErrorMessage } from '../../lib/utils/error';
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   Alert, ActivityIndicator, RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppIcon } from '../../lib/icons/AppIcon';
-import { router, useFocusEffect } from 'expo-router';
+import { router } from 'expo-router';
 import { Colors } from '../../constants/colors';
 import { useTabPager } from '../../lib/contexts/TabPagerContext';
 import { useAuth } from '../../lib/contexts/AuthContext';
 import { usePurchases } from '../../lib/hooks/usePurchases';
+import { useRefreshOnReturn } from '../../lib/query/useRefreshOnReturn';
 import { useExpenses } from '../../lib/hooks/useExpenses';
 import { animateListChange } from '../../lib/utils/layoutAnimation';
 import { ExpensesPanel } from '../../lib/components/ExpensesPanel';
@@ -73,17 +74,13 @@ function PurchasesView({ active, ledger }: { active: boolean; ledger: ReturnType
   function setActiveTab(value: string) { setActiveTabLocal(value); setViewState?.('purchase.supplier', value); }
   const [filterNotice, setFilterNotice] = useState(false);
 
-  // 첫 조회와 재진입 조회는 아래 focus effect 하나가 맡는다(마운트 effect와 겹치면 첫 진입에 2번 요청).
-  const category = usePurchaseCategories({ fetchOnMount: false });
+  // 첫 조회·탭 재진입은 enabled: active와 재사용 시간이, 스택 복귀는 PurchasesScreen의 useRefreshOnReturn이 맡는다.
+  const category = usePurchaseCategories({ active });
   const { canManageStore } = useAuth();
   const [categoryModal, setCategoryModal] = useState(false);
   const [activeCategory, setActiveCategory] = useState('전체');
   const categoryOptions = ['전체', ...new Set(category.categories)];
   const { purchases, loaded, loading, error, refetch, remove } = ledger;
-
-  useFocusEffect(useCallback(() => {
-    if (active) void category.refetch();
-  }, [active, category.refetch]));
 
   const [refreshing, setRefreshing] = useState(false);
   async function onRefresh() {
@@ -236,27 +233,19 @@ function PurchasesView({ active, ledger }: { active: boolean; ledger: ReturnType
 const INNER_TABS = ['매입', '비용'] as const;
 type InnerTab = (typeof INNER_TABS)[number];
 
+const PURCHASE_SCREEN_DOMAINS = ['purchases', 'expenses', 'store-taxonomies'] as const;
+
 export function PurchasesScreen({ active = true }: { active?: boolean }) {
   const { store } = useAuth();
   const { selectedMonth, setSelectedMonth, viewState, setViewState } = useTabPager();
   const [innerTab, setInnerTabLocal] = useState<InnerTab>(viewState?.['purchase.section'] === '비용' ? '비용' : '매입');
   function setInnerTab(value: InnerTab) { setInnerTabLocal(value); setViewState?.('purchase.section', value); }
 
-  const ledger = usePurchases(selectedMonth);
-  const { purchases, loading: purchasesLoading, error: purchasesError, refetch: refetchPurchases } = ledger;
-  useFocusEffect(useCallback(() => {
-    if (active) void refetchPurchases();
-  }, [active, refetchPurchases]));
-  const { expenses, loading: expensesLoading, error: expensesError, refetch: refetchExpenses } = useExpenses(selectedMonth);
-  const expenseScope = `${store?.id}:${selectedMonth}`;
-
-  const [expenseReadyStore, setExpenseReadyStore] = useState<string | undefined>();
-  useEffect(() => {
-    if (!active) return;
-    let current = true;
-    void refetchExpenses().finally(() => { if (current) setExpenseReadyStore(expenseScope); });
-    return () => { current = false; };
-  }, [active, expenseScope, refetchExpenses]);
+  // 탭 진입은 enabled: active와 재사용 시간(매입·비용 5분, 분류 30분)이, 등록 화면에서 돌아올 때는 오래된 것만 다시 받는다.
+  const ledger = usePurchases(selectedMonth, active);
+  const { purchases, loading: purchasesLoading, error: purchasesError } = ledger;
+  const { expenses, loading: expensesLoading, error: expensesError } = useExpenses(selectedMonth, active);
+  useRefreshOnReturn({ active, storeId: store?.id, domains: PURCHASE_SCREEN_DOMAINS });
 
   const monthPurchaseCount = purchases.length;
   const monthExpenseCount = expenses.length;
@@ -266,7 +255,7 @@ export function PurchasesScreen({ active = true }: { active?: boolean }) {
       <View style={styles.topBar}>
         <View style={styles.titleRow}>
           <Text style={styles.title}>매입 및 비용</Text>
-          <Text style={styles.titleSummary}>{selectedMonth} 매입 {purchasesLoading ? '불러오는 중' : purchasesError ? '조회 필요' : `${monthPurchaseCount}건`} · 비용 {expenseReadyStore !== expenseScope || expensesLoading ? '불러오는 중' : expensesError ? '조회 필요' : `${monthExpenseCount}건`}</Text>
+          <Text style={styles.titleSummary}>{selectedMonth} 매입 {purchasesLoading ? '불러오는 중' : purchasesError ? '조회 필요' : `${monthPurchaseCount}건`} · 비용 {expensesLoading ? '불러오는 중' : expensesError ? '조회 필요' : `${monthExpenseCount}건`}</Text>
         </View>
         <View style={styles.innerTabRow}>
           {INNER_TABS.map(tab => (
@@ -284,7 +273,7 @@ export function PurchasesScreen({ active = true }: { active?: boolean }) {
         </View>
       </View>
 
-      {innerTab === '매입' ? <PurchasesView active={active} ledger={ledger} /> : <View style={{ flex: 1 }}><ExpensesPanel selectedMonth={selectedMonth} onMonthChange={setSelectedMonth} /></View>}
+      {innerTab === '매입' ? <PurchasesView active={active} ledger={ledger} /> : <View style={{ flex: 1 }}><ExpensesPanel selectedMonth={selectedMonth} onMonthChange={setSelectedMonth} active={active} /></View>}
     </SafeAreaView>
   );
 }

@@ -1,5 +1,10 @@
 import { act, renderHook } from '@testing-library/react-native';
 import { useStoreWageHistory } from '../../lib/hooks/useStoreWageHistory';
+import { notifyManager } from '@tanstack/react-query';
+import { queryClient as mockSharedQueryClient } from '../../lib/query/client';
+// 훅이 공용 쿼리 캐시를 쓰므로 테스트마다 비우고, 화면 알림을 동기로 받아 act 안에서 반영되게 한다.
+notifyManager.setScheduler(callback => callback());
+beforeEach(() => { mockSharedQueryClient.clear(); });
 const mockGet = jest.fn();
 jest.mock('../../lib/services/wageHistory', () => ({ getStoreWageHistory: (...args: unknown[]) => mockGet(...args) }));
 const row = (id: string, employee_id: string) => ({ id, employee_id }) as never;
@@ -45,9 +50,12 @@ it('재조회 실패는 오류로 알리고, 늦게 끝난 이전 요청은 결�
   mockGet.mockImplementation(() => new Promise(resolve => { resolvers.push(resolve); }));
   const { result } = renderHook(() => useStoreWageHistory('s1'));
   act(() => { void result.current.refetch(); });
-  act(() => { void result.current.refetch(); });
-  await act(async () => { resolvers[1]([row('new', 'e2')]); });
   await act(async () => { resolvers[0]([row('old', 'e1')]); });
+  act(() => { void result.current.refetch(); });
+  act(() => { void result.current.refetch(); });
+  // 2026-11-24 쿼리 캐시 전환: 이미 받은 값이 있으면 새 재조회가 진행 중인 이전 재조회를 취소한다.
+  await act(async () => { resolvers[2]([row('new', 'e2')]); });
+  await act(async () => { resolvers[1]([row('stale', 'e3')]); });
   expect(Object.keys(result.current.map)).toEqual(['e2']);
   mockGet.mockRejectedValueOnce(new Error('offline'));
   await act(async () => { await result.current.refetch(); });

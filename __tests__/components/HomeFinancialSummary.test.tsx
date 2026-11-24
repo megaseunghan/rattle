@@ -4,6 +4,8 @@ import { RefreshControl, ScrollView } from 'react-native';
 import { router } from 'expo-router';
 import { HomeScreen } from '../../app/(tabs)';
 import { HomeFinancialSummary } from '../../types';
+// 홈의 스택 복귀 갱신(useRefreshOnReturn)은 네비게이션 컨테이너가 필요해 여기서는 대체한다. 계약은 __tests__/query/reentryCache.test.ts에서 확인한다.
+jest.mock('../../lib/query/useRefreshOnReturn', () => ({ useRefreshOnReturn: () => undefined }));
 
 const mockRefetch = jest.fn(async () => {});
 const mockFetchTrend = jest.fn(async () => {});

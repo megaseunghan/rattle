@@ -2,6 +2,7 @@ import { supabase } from '../supabase';
 import { UserFacingError } from '../utils/error';
 import type { Store } from '../../types';
 import { getMyStoreVisibility, setStoreVisibility } from './storeVisibility';
+import { invalidateCachedStore } from './cacheInvalidation';
 
 export interface StoreDetails {
   name: string;
@@ -35,6 +36,8 @@ export async function updateStoreInfo(
     .eq('id', storeId);
 
   if (error) throw new Error(error.message);
+  // 매출 탭의 매장 연결 정보는 30분 재사용한다. POS 연결을 바꾸면 바로 다시 확인하게 한다.
+  try { await invalidateCachedStore(storeId, ['pos']); } catch { /* 저장 성공을 조회 갱신 실패로 바꾸지 않는다. */ }
 }
 
 /** Whole-hour closing boundary; existing stores update contract. */

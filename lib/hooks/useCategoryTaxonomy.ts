@@ -1,45 +1,43 @@
 import { usePreviewWriteGuard } from './usePreviewWriteGuard';
-import { useEffect, useCallback, useRef, useState } from 'react';
+import { useCallback } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../contexts/AuthContext';
+import { queryClient, queryKeys, useQueryScope } from '../query';
+import { STALE_TIME } from '../query/staleTimes';
 import { CategoryTaxonomy } from '../services/categoryTaxonomy';
 import { UserFacingError } from '../utils/error';
 
 export interface CategoryTaxonomyOptions {
-  /** false면 마운트 때 조회하지 않는다. 화면의 focus refetch가 첫 조회를 맡을 때 이중 요청을 막는다. */
-  fetchOnMount?: boolean;
+  /** false면 자동으로 받지 않는다(숨은 탭). refetch로는 받을 수 있다. */
+  active?: boolean;
+  /** 캐시 키에 넣을 분류 이름. 분류마다 달라야 한다. */
+  cacheName?: string;
 }
+const EMPTY: string[] = [];
+const READ_ERROR = '카테고리를 불러오지 못했어요. 다시 시도해 주세요.';
 
-export function useCategoryTaxonomy(taxonomy: CategoryTaxonomy, { fetchOnMount = true }: CategoryTaxonomyOptions = {}) {
+/** 매장 카테고리 목록(설정류, 30분 재사용). 변경은 서비스의 매장 무효화로 바로 다시 받는다. */
+export function useCategoryTaxonomy(taxonomy: CategoryTaxonomy, { active = true, cacheName = 'categories' }: CategoryTaxonomyOptions = {}) {
   const { assertCanWrite } = usePreviewWriteGuard();
   const { store } = useAuth();
+  const scope = useQueryScope();
   const storeId = store?.id;
-  const currentStore = useRef(storeId);
-  currentStore.current = storeId;
-  const request = useRef(0);
-  const [state, setState] = useState<{ storeId?: string; categories: string[]; loading: boolean; error: string | null }>({ categories: [], loading: true, error: null });
-  useEffect(() => () => { request.current += 1; }, []);
+  const query = useQuery({ queryKey: queryKeys.store(scope, storeId ?? '', 'store-taxonomies', cacheName),
+    queryFn: () => taxonomy.getCategories(storeId!), enabled: active && !!storeId, staleTime: STALE_TIME.config }, queryClient);
+  const { refetch: refetchQuery } = query;
   const refetch = useCallback(async () => {
-    const id = ++request.current;
     if (!storeId) return;
-    setState(previous => ({ storeId, categories: previous.storeId === storeId ? previous.categories : [], loading: true, error: null }));
-    try {
-      const categories = await taxonomy.getCategories(storeId);
-      if (id === request.current && currentStore.current === storeId) setState({ storeId, categories, loading: false, error: null });
-    } catch {
-      if (id === request.current && currentStore.current === storeId) setState(previous => ({ ...previous, loading: false, error: '카테고리를 불러오지 못했어요. 다시 시도해 주세요.' }));
-    }
-  }, [storeId, taxonomy]);
-  useEffect(() => { if (fetchOnMount) void refetch(); }, [fetchOnMount, refetch]);
-  const categories = state.storeId === storeId ? state.categories : [];
+    await refetchQuery();
+  }, [storeId, refetchQuery]);
+  const categories = storeId ? query.data ?? EMPTY : EMPTY;
   async function change(action: 'add' | 'rename' | 'remove', name: string, next?: string) {
     assertCanWrite();
     if (!storeId) throw new UserFacingError('매장을 선택해 주세요.');
     if (action === 'add') await taxonomy.addCategory(storeId, name);
     else if (action === 'rename') await taxonomy.renameCategory(storeId, name, next!, categories);
     else await taxonomy.removeCategory(storeId, name, categories);
-    if (currentStore.current === storeId) await refetch();
   }
-  return { categories, loading: state.storeId !== storeId || state.loading, error: state.storeId === storeId ? state.error : null, refetch,
+  return { categories, loading: !storeId || query.isPending && !query.isError, error: storeId && query.isError ? READ_ERROR : null, refetch,
     add: (name: string) => change('add', name), rename: (oldName: string, newName: string) => change('rename', oldName, newName), remove: (name: string) => change('remove', name),
     countByCategory: (name: string) => storeId ? taxonomy.countByCategory(storeId, name) : Promise.resolve(0) };
 }

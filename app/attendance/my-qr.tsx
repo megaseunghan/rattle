@@ -18,15 +18,17 @@ import { ErrorMessage } from '../../lib/components/ErrorMessage';
 import { AppIcon } from '../../lib/icons/AppIcon';
 import { AttendanceQrCode } from '../../lib/components/AttendanceQrCode';
 
+const ATTENDANCE_POLL_MS = 5_000;
+
 export default function MyAttendanceQrScreen() {
   const { store, user, devPreviewMode, devPreviewEmployeeId } = useAuth();
   const [focused, setFocused] = useState(false);
   useFocusEffect(useCallback(() => { setFocused(true); return () => setFocused(false); }, []));
   const employees = useEmployees();
   const employee = resolveSelfEmployee(employees.employees, user?.id, devPreviewEmployeeId);
-  const today = useAttendanceToday(employee?.id);
+  // 화면이 보이는 동안 5초마다 같은 출퇴근 키를 갱신한다. 홈 출퇴근 카드도 이 캐시를 함께 본다.
+  const today = useAttendanceToday(employee?.id, focused, 0, ATTENDANCE_POLL_MS);
   const qr = useAttendanceQr(employee?.id, focused);
-  useFocusEffect(useCallback(() => { void employees.refetch().catch(() => {}); void today.refetch(); const timer = setInterval(() => { void today.refetch(true); }, 5000); return () => clearInterval(timer); }, [employees.refetch, today.refetch]));
   const title = qr.state === 'rate_limited' ? '잠시 후 다시 시도해주세요' : qr.state === 'loading' ? 'QR을 불러오고 있어요' : qr.state === 'unknown' ? '등록됐는지 확인하고 있어요' : qr.state === 'error' ? 'QR을 불러오지 못했어요' : qr.state === 'pending' ? '기기 변경 승인을 기다리고 있어요' : qr.state === 'unregistered' ? '이 휴대폰으로 출퇴근할까요?' : qr.state === 'denied' ? '직원 등록 상태를 확인해주세요' : '매장폰에 QR을 보여주세요';
   return <SafeAreaView style={s.root}><GlassBackdrop /><AppBar transparent title="내 출퇴근 QR" onBack={() => router.back()} />
     <ScrollView contentContainerStyle={s.content}>

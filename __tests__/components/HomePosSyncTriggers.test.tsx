@@ -5,6 +5,8 @@ import { HomeScreen } from '../../app/(tabs)/index';
 import { usePosForegroundSync } from '../../lib/hooks/usePosForegroundSync';
 import { clearPosSyncCoordinator } from '../../lib/services/posSyncCoordinator';
 import { queryClient } from '../../lib/query/client';
+// 홈의 스택 복귀 갱신(useRefreshOnReturn)은 네비게이션 컨테이너가 필요해 여기서는 대체한다. 계약은 __tests__/query/reentryCache.test.ts에서 확인한다.
+jest.mock('../../lib/query/useRefreshOnReturn', () => ({ useRefreshOnReturn: () => undefined }));
 
 const mockFetch = jest.fn();
 const mockRpc = jest.fn();
