@@ -19,6 +19,10 @@ import { useTabPager } from '../../lib/contexts/TabPagerContext';
 
 import { resolveSelfEmployee, resolveSelfEmployeeId } from '../../lib/utils/resolveSelfEmployee';
 import { HomeAttendanceCard } from '../../lib/components/HomeAttendanceCard';
+import { useRefreshOnReturn } from '../../lib/query/useRefreshOnReturn';
+
+/** 홈이 보여주는 자료. 스택 화면에서 돌아오면 이 중 오래된 활성 쿼리만 다시 받는다. */
+const HOME_SCREEN_DOMAINS = ['home-workflow', 'cleaning', 'attendance-punches', 'schedule', 'home-alerts', 'financial', 'employees'] as const;
 
 
 export function HomeScreen({ active = true }: { active?: boolean }) {
@@ -48,7 +52,8 @@ export function HomeScreen({ active = true }: { active?: boolean }) {
 
   async function loadAll(forceFinancial = false) {
     await Promise.all([
-      refetchEmp(forceFinancial),
+      // 직원 목록은 useEmployees(useQuery, 30분)가 자동으로 받는다. 당겨서 새로고침에서만 강제로 다시 받는다.
+      ...(forceFinancial ? [refetchEmp(true)] : []),
       ...(forceFinancial ? [refetchNotifications()] : []),
       ...(forceFinancial && canReadFinancials ? [fetchTrend()] : []),
       ...(canManageStore ? [loadTodaySales(forceFinancial)] : []),
@@ -71,6 +76,8 @@ export function HomeScreen({ active = true }: { active?: boolean }) {
   useEffect(() => {
     if (active) void autoSyncOnForeground();
   }, [active, autoSyncOnForeground]);
+
+  useRefreshOnReturn({ active, storeId: store?.id, domains: HOME_SCREEN_DOMAINS });
 
   const monthLabel = `${realYear}년 ${realMonth}월`;
 

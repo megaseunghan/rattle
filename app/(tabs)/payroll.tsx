@@ -4,7 +4,8 @@ import { SheetModal } from '../../lib/components/ui/SheetModal';
 /* Hallmark · genre: modern-minimal · macrostructure: Workbench · design-system: DESIGN.md · designed-as-app */
 import { getErrorMessage } from '../../lib/utils/error';
 import { useState, useCallback, useEffect, useRef, useContext, useMemo } from 'react';
-import { router, useFocusEffect } from 'expo-router';
+import { router } from 'expo-router';
+import { useRefreshOnReturn } from '../../lib/query/useRefreshOnReturn';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, Pressable,
   Modal, TextInput, Alert, KeyboardAvoidingView, Platform,
@@ -344,6 +345,8 @@ const EMPTY_FORM = {
   user_id: null as string | null,
 };
 
+const PAYROLL_SCREEN_DOMAINS = ['employees', 'payroll', 'wage-history', 'payroll-submissions', 'attendance-work-issues'] as const;
+
 export function PayrollScreen({ active = true }: { active?: boolean }) {
   const today = new Date();
   const pager = useContext(TabPagerContext);
@@ -352,7 +355,7 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
   const year = Number(yearMonth.slice(0, 4));
   const month = Number(yearMonth.slice(5, 7));
   const setYearMonth = pager?.setSelectedMonth ?? setLocalMonth;
-  const { employees: allEmployees, loading: empLoading, error: employeeError, refetch: refetchEmp, add, update, deactivate } = useEmployees(true);
+  const { employees: allEmployees, loading: empLoading, error: employeeError, refetch: refetchEmp, add, update, deactivate } = useEmployees(true, active);
   const employees = useMemo(() => allEmployees.filter(employee => employee.is_active !== false), [allEmployees]);
   const {
     payrolls,
@@ -365,7 +368,7 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
     error: payrollError,
     saveDeductions,
     remove: removePayroll,
-  } = usePayroll(yearMonth);
+  } = usePayroll(yearMonth, active);
 
   const { store, canManageStore, access, permissionRevision, user } = useAuth();
   const isAdmin = canManageStore;
@@ -391,24 +394,21 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
   const [workTarget, setWorkTarget] = useState<Employee | null>(null);
   const [workSubmission, setWorkSubmission] = useState<PayrollWorkSubmission | undefined>();
   useEffect(() => { setWorkTarget(null); setWorkSubmission(undefined); }, [workScope]);
-  const { map: histMap, loading: histLoading, error: histError, refetch: refetchHist } = useStoreWageHistory(canManageStore ? store?.id : undefined, `${user?.id}:${permissionRevision}`);
+  const { map: histMap, loading: histLoading, error: histError, refetch: refetchHist } = useStoreWageHistory(canManageStore ? store?.id : undefined, `${user?.id}:${permissionRevision}`, active);
 
   // 급여 이력 보기 모달
   const [histTarget, setHistTarget] = useState<Employee | null>(null);
   useEffect(() => { setHistTarget(null); setModalVisible(false); }, [store?.id, permissionRevision]);
 
 
-  useFocusEffect(useCallback(() => {
-    if (!active) return;
-    void refetchEmp(true);
-    void refetchPay();
-    void refetchHist();
-  }, [active, refetchEmp, refetchPay, refetchHist]));
+  // 탭 진입은 enabled: active와 재사용 시간(1분)이, 스택 화면에서 돌아올 때는 오래된 것만 다시 받는다.
+  // 당겨서 새로고침만 재사용 시간과 무관하게 다시 받는다.
+  useRefreshOnReturn({ active, storeId: store?.id, domains: PAYROLL_SCREEN_DOMAINS });
 
   const [refreshing, setRefreshing] = useState(false);
   async function onRefresh() {
     setRefreshing(true);
-    try { await Promise.all([refetchEmp(), refetchPay(), refetchHist(), workFailures.refetch()]); }
+    try { await Promise.all([refetchEmp(true), refetchPay(), refetchHist(), workFailures.refetch()]); }
     finally { setRefreshing(false); }
   }
 

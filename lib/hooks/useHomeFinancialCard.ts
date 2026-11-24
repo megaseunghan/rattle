@@ -3,6 +3,7 @@ import { scheduleIdleTask } from '../utils/scheduleIdleTask';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../contexts/AuthContext';
 import { financialSummaryOptions } from '../query/financial';
+import { STALE_TIME } from '../query/staleTimes';
 import { useQueryScope, queryClient, queryKeys, isAccessDenied } from '../query';
 import { getHomeFinancialTimeline } from '../services/homeFinancialTimeline';
 import { financialPeriod, type HomeFinancialCardData } from '../utils/homeFinancialCard';
@@ -21,7 +22,7 @@ export function useHomeFinancialCard(enabled: boolean) {
     return scheduleIdleTask(() => setReadyScope(timelineScope));
   }, [!!allowed, canManageStore, timelineScope]);
   const timeline = useQuery({ queryKey: queryKeys.store(scope, store?.id ?? '', 'financial', 'home-daily', period.date, store?.closing_time, canManageStore),
-    queryFn: () => getHomeFinancialTimeline(store!.id, store!.closing_time ?? '23:00', asOf), enabled: !!allowed && canManageStore && summary.isSuccess && readyScope === timelineScope, staleTime: 30000 }, queryClient);
+    queryFn: () => getHomeFinancialTimeline(store!.id, store!.closing_time ?? '23:00', asOf), enabled: !!allowed && canManageStore && summary.isSuccess && readyScope === timelineScope, staleTime: STALE_TIME.financialCurrent }, queryClient);
   const denied = isAccessDenied(summary.error) || (canManageStore && isAccessDenied(timeline.error));
   const data = useMemo<HomeFinancialCardData | null>(() => allowed && !denied && summary.data ? {
     date: period.date, totals: { profit: summary.data.operatingProfit, revenue: summary.data.revenue, purchase: summary.data.purchaseCost, labor: summary.data.laborCost, expense: summary.data.fixedExpense + summary.data.variableExpense },

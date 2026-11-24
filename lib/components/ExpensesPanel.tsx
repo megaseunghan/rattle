@@ -44,7 +44,7 @@ function toYearMonth(year: number, month: number) {
 }
 
 /** 비용(고정비/마케팅/시설보수/공과금) 관리 패널 — /expenses 라우트와 매입 탭의 '비용' 세그먼트가 공유한다 */
-export function ExpensesPanel({ selectedMonth, onMonthChange }: { selectedMonth?: string; onMonthChange?: (month: string) => void } = {}) {
+export function ExpensesPanel({ selectedMonth, onMonthChange, active = true }: { selectedMonth?: string; onMonthChange?: (month: string) => void; active?: boolean } = {}) {
   const { storeRole, canManageStore, store, user, devPreviewMode } = useAuth();
   const isAdmin = canManageStore && devPreviewMode === 'self';
   const { expanded, toggle } = useExpenseCategoryExpansion(user?.id, store?.id);
@@ -70,16 +70,15 @@ export function ExpensesPanel({ selectedMonth, onMonthChange }: { selectedMonth?
 
   const yearMonth = toYearMonth(year, month);
   const recurring = useRecurringFixedExpenses(yearMonth);
-  const { expenses, carriedFixedExpenses, loading: queryLoading, error, refetch, add, update, remove, copyCarriedFixedExpenses } = useExpenses(yearMonth);
+  const { expenses, carriedFixedExpenses, loading: queryLoading, error, refetch, add, update, remove, copyCarriedFixedExpenses } = useExpenses(yearMonth, active);
 
 
   const identity = `${user?.id ?? ''}:${store?.id ?? ''}:${storeRole}:${canManageStore}:${devPreviewMode}:${yearMonth}`;
   const scopeRef = useRef(identity);
   scopeRef.current = identity;
   useEffect(() => { setModalVisible(false); }, [identity]);
-  const [readyIdentity, setReadyIdentity] = useState('');
-  const loading = queryLoading || readyIdentity !== identity;
-  useEffect(() => { let current = true; void refetch().finally(() => { if (current) setReadyIdentity(identity); }); return () => { current = false; }; }, [refetch, identity]);
+  // 첫 조회·월 전환은 useExpenses(useQuery)가 맡는다. 다시 들어올 때는 재사용 시간 안이면 요청하지 않는다.
+  const loading = queryLoading;
 
   const [refreshing, setRefreshing] = useState(false);
   async function onRefresh() {

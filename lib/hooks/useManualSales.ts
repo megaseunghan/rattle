@@ -3,11 +3,13 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../contexts/AuthContext';
 import { isAccessDenied, queryClient, queryKeys, useQueryScope } from '../query';
+import { STALE_TIME } from '../query/staleTimes';
 import { getErrorMessage } from '../utils/error';
 import { getManualSalesByMonth, deleteManualSale } from '../services/manualSales';
 import { ManualSale } from '../../types';
 const EMPTY: ManualSale[] = [];
-export function useManualSales(yearMonth: string) {
+/** 수기 매출(5분 재사용). enabled가 false면 자동으로 받지 않는다(POS 미연동 확인 전·숨은 탭). */
+export function useManualSales(yearMonth: string, enabled = false) {
   const { assertCanWrite } = usePreviewWriteGuard();
   const { store } = useAuth();
   const accessScope = useQueryScope();
@@ -20,7 +22,8 @@ export function useManualSales(yearMonth: string) {
   const reads = useRef(new Map<string, number>());
   const [action, setAction] = useState<{ scope: string; id: string | null; error: string | null } | null>(null);
   const key = queryKeys.store(accessScope, storeId ?? '', 'sales', 'manual', yearMonth);
-  const query = useQuery({ queryKey: key, queryFn: () => getManualSalesByMonth(storeId!, yearMonth), enabled: false }, queryClient);
+  const query = useQuery({ queryKey: key, queryFn: () => getManualSalesByMonth(storeId!, yearMonth),
+    enabled: enabled && !!storeId, staleTime: STALE_TIME.entry }, queryClient);
   const sales = storeId && !isAccessDenied(query.error) ? query.data ?? EMPTY : EMPTY;
   const readError = query.error ? getErrorMessage(query.error) : null;
   const actionError = action?.scope === scope ? action.error : null;

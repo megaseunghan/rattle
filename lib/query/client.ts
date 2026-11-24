@@ -1,6 +1,7 @@
 import { QueryClient } from '@tanstack/react-query';
+import { STALE_TIME } from './staleTimes';
 export const queryClient = new QueryClient({ defaultOptions: { queries: {
-  staleTime: 30_000, gcTime: process.env.NODE_ENV === 'test' ? Infinity : 15 * 60_000, retry: false, refetchOnWindowFocus: true,
+  staleTime: STALE_TIME.default, gcTime: process.env.NODE_ENV === 'test' ? Infinity : 15 * 60_000, retry: false, refetchOnWindowFocus: true,
 } } });
 export const queryKeys = {
   store: (scope: string, storeId: string, domain: string, ...parts: readonly unknown[]) =>

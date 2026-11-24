@@ -26,7 +26,7 @@ export function LegacyWorkMinutesScreen({ readOnly = false }: { readOnly?: boole
   const preview = realRole === 'admin' && devPreviewMode !== 'self';
   const today = new Date();
   const [month, setMonth] = useState(`${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`);
-  const { rows, loading, error, refetch } = usePayrollSubmissions(month, employee?.id);
+  const { rows, loading, error, refetch } = usePayrollSubmissions(month, employee?.id, !!employee);
   const latest = rows[0];
   const [minutes, setMinutes] = useState('');
   const [note, setNote] = useState('');
@@ -40,7 +40,6 @@ export function LegacyWorkMinutesScreen({ readOnly = false }: { readOnly?: boole
   const scopeRef = useRef(draftScope);
   scopeRef.current = draftScope;
   useEffect(() => () => { scopeRef.current = ''; }, []);
-  useEffect(() => { if (employee) void refetch(); }, [employee?.id, refetch]);
   useEffect(() => {
     initialized.current = '';
     setMinutes(''); setNote(''); setBaseline({ minutes: '', note: '' });

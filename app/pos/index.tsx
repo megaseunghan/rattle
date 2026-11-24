@@ -15,6 +15,8 @@ import { useTossSync } from '../../lib/hooks/useTossSync';
 import { usePosAnalytics } from '../../lib/hooks/usePosAnalytics';
 import { useAuth } from '../../lib/contexts/AuthContext';
 import { queryClient, queryKeys, useQueryScope, isAccessDenied } from '../../lib/query';
+import { STALE_TIME } from '../../lib/query/staleTimes';
+import { useRefreshOnReturn } from '../../lib/query/useRefreshOnReturn';
 import { LoadingSpinner } from '../../lib/components/LoadingSpinner';
 import { getStoreDetails } from '../../lib/services/stores';
 import { useManualSales } from '../../lib/hooks/useManualSales';
@@ -54,6 +56,8 @@ function connectionFromStore(store: { toss_merchant_id?: string | null } | null 
  * 콜백이 바뀔 때마다 다시 실행되는 useFocusEffect 특성 때문에 탭 활성화 effect와 겹쳐 같은 요청을
  * 두 번 보내던 문제를 막으려고, 등록 콜백은 고정하고 최신 처리만 ref로 부른다.
  */
+const MANUAL_SALES_DOMAINS = ['sales'] as const;
+
 function useFocusReturn(onReturn: () => void) {
   const latest = useRef(onReturn);
   latest.current = onReturn;
@@ -113,6 +117,8 @@ export function PosScreen({ active = true }: { active?: boolean }) {
 
 
   const manualYearMonth = `${queryYear}-${String(queryMonth).padStart(2, '0')}`;
+  // POS 미연동이 확인된 활성 탭에서만 수기 매출을 받는다(탭 진입은 enabled 전환과 재사용 시간이 맡는다).
+  const manualSalesActive = active && !loadingStatus && currentStoreId.current === statusStore.current && status === 'unregistered';
   useEffect(() => {
     if (!tabScope?.selectedMonth || tabScope.selectedMonth === manualYearMonth) return;
     const [year, month] = tabScope.selectedMonth.split('-').map(Number);
@@ -123,17 +129,9 @@ export function PosScreen({ active = true }: { active?: boolean }) {
       void fetchSummariesByRange(from, to);
     }
   }, [tabScope?.selectedMonth, active, status, closingTime, fetchSummariesByRange]);
-  const { sales: manualSales, loading: loadingManualSales, total: manualTotal, ready: manualReady, refreshing: refreshingManualSales, error: manualError, actionError: manualActionError, removingId, refetch: refetchManualSales, remove: removeManualSale } = useManualSales(manualYearMonth);
-
-  useEffect(() => {
-    if (!active || loadingStatus || currentStoreId.current !== statusStore.current || status !== 'unregistered') return;
-    refetchManualSales();
-  }, [active, status, loadingStatus, connectionIdentity, refetchManualSales]);
-
-  // 매출 추가 화면(스택 push)에서 뒤로 돌아왔을 때도 목록 갱신. 탭 진입·재진입은 위 effect가 맡는다.
-  useFocusReturn(() => {
-    if (active && !loadingStatus && currentStoreId.current === statusStore.current && status === 'unregistered') refetchManualSales();
-  });
+  const { sales: manualSales, loading: loadingManualSales, total: manualTotal, ready: manualReady, refreshing: refreshingManualSales, error: manualError, actionError: manualActionError, removingId, refetch: refetchManualSales, remove: removeManualSale } = useManualSales(manualYearMonth, manualSalesActive);
+  // 매출 추가 화면(스택 push)에서 돌아오면 오래된 경우에만 다시 받는다. 저장은 서비스 무효화가 바로 반영한다.
+  useRefreshOnReturn({ active: manualSalesActive, storeId: store?.id, domains: MANUAL_SALES_DOMAINS });
 
   function prevQueryMonth() {
     const previous = new Date(queryYear, queryMonth - 2, 1);
@@ -181,7 +179,7 @@ export function PosScreen({ active = true }: { active?: boolean }) {
     return { from, to };
   }
 
-  const loadStoreStatus = useCallback(async () => {
+  const loadStoreStatus = useCallback(async (recheck = false) => {
     if (!store) return;
     const request = ++statusRequest.current;
     const valid = () => request === statusRequest.current && currentStoreId.current === connectionIdentity;
@@ -191,7 +189,10 @@ export function PosScreen({ active = true }: { active?: boolean }) {
     try {
       const data = await queryClient.fetchQuery({
         queryKey: queryKeys.store(accessScope, store.id, 'pos', 'connection', connectionConfig),
-        queryFn: () => getStoreDetails(store.id), staleTime: 0,
+        // 연결·해제는 서버 웹훅이 기록해 앱 무효화가 없다. 연결된 매장만 30분 재사용하고,
+        // 미연동 상태와 스택 화면(POS 설정 등)에서 돌아온 때는 항상 다시 확인한다.
+        queryFn: () => getStoreDetails(store.id),
+        staleTime: recheck ? 0 : query => (query.state.data?.toss_merchant_id ? STALE_TIME.config : 0),
       });
       if (!valid()) return;
       const newStatus: SyncStatus = data.toss_merchant_id ? 'connected' : 'unregistered';
@@ -223,7 +224,7 @@ export function PosScreen({ active = true }: { active?: boolean }) {
   useEffect(() => { if (active) void loadStoreStatus(); }, [active, loadStoreStatus]);
   // Pager activation is handled above. A stack settings screen can blur/focus
   // this mounted page without changing active; revalidate that return as well.
-  useFocusReturn(() => { if (active) void loadStoreStatus(); });
+  useFocusReturn(() => { if (active) void loadStoreStatus(true); });
   const businessDay = getAutoSyncRange(closingTime).from;
   const shownBusinessDay = useRef(businessDay);
   useEffect(() => {

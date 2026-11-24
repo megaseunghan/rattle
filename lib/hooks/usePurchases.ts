@@ -1,43 +1,45 @@
 import type { PurchaseFormInput } from '../services/purchases';
 import { usePreviewWriteGuard } from './usePreviewWriteGuard';
 import { getErrorMessage, UserFacingError } from '../utils/error';
-import { useState, useCallback, useRef } from 'react';
-import { useQueryScope } from '../query';
+import { useCallback, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { queryClient, queryKeys, useQueryScope } from '../query';
+import { STALE_TIME } from '../query/staleTimes';
 import { useAuth } from '../contexts/AuthContext';
 import { getPurchasesWithItemCountsByMonth, createPurchase, deletePurchase, createPurchaseWithItems } from '../services/purchases';
 import { Purchase, PurchaseCategory, PurchaseType } from '../../types';
 
-export function usePurchases(yearMonth: string) {
+const EMPTY: Purchase[] = [];
+
+/**
+ * 월별 매입 목록(5분 재사용). 등록·수정·삭제는 서비스의 무효화('purchases' 또는 매장 전체)로 바로 반영된다.
+ * active가 false면 자동으로 받지 않는다(숨은 탭·월 확인 창을 열기 전).
+ */
+export function usePurchases(yearMonth: string, active = true) {
   const { assertCanWrite } = usePreviewWriteGuard();
   const { store } = useAuth();
-  const [purchases, setPurchases] = useState<Purchase[]>([]);
   const scope = useQueryScope();
-  const identity = `${scope}:${store?.id ?? ''}:${yearMonth}`;
-  const active = useRef(identity);
-  active.current = identity;
-  const requestVersion = useRef(0);
-  const [loadedIdentity, setLoadedIdentity] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [errorState, setErrorState] = useState<{ identity: string; message: string } | null>(null);
-  const error = errorState?.identity === identity ? errorState.message : null;
+  const storeId = store?.id;
+  const key = useMemo(() => queryKeys.store(scope, storeId ?? '', 'purchases', yearMonth), [scope, storeId, yearMonth]);
+  const query = useQuery({ queryKey: key, queryFn: () => getPurchasesWithItemCountsByMonth(storeId!, yearMonth),
+    enabled: active && !!storeId, staleTime: STALE_TIME.entry }, queryClient);
+  const { refetch: refetchQuery } = query;
 
+  /** 당겨서 새로고침·다시 시도. 성공하면 true. */
   const refetch = useCallback(async () => {
-    if (!store || active.current !== identity) return false;
-    const version = ++requestVersion.current;
-    const current = () => active.current === identity && requestVersion.current === version;
-    setLoading(true);
-    setErrorState(null);
-    try {
-      const result = await getPurchasesWithItemCountsByMonth(store.id, yearMonth);
-      if (current()) { setPurchases(result); setLoadedIdentity(identity); }
-      return true;
-    } catch (e: any) {
-      if (current()) setErrorState({ identity, message: getErrorMessage(e) });
-      return false;
-    } finally {
-      if (current()) setLoading(false);
-    }
-  }, [store, yearMonth, identity]);
+    if (!storeId) return false;
+    const result = await refetchQuery();
+    return !result.isError;
+  }, [storeId, refetchQuery]);
+
+  /**
+   * 저장 결과를 모를 때의 확인용. 무효화가 실행되지 않았으므로 캐시된 저장 전 목록을 버리고
+   * 로딩 표시 뒤 서버의 최신 목록만 보여준다(이전 목록을 보고 중복 저장하지 않게).
+   * 캐시는 즉시 비운다. 다시 받기 실패는 쿼리 오류 상태로 화면에 드러난다.
+   */
+  const reloadFresh = useCallback(() => {
+    queryClient.resetQueries({ queryKey: key, exact: true }).catch(() => undefined);
+  }, [key]);
 
   const add = useCallback(async (data: {
     date: string;
@@ -49,23 +51,22 @@ export function usePurchases(yearMonth: string) {
   }) => {
     assertCanWrite();
     if (!store) throw new UserFacingError('매장 정보가 없습니다');
-    const created = await createPurchase({ ...data, store_id: store.id });
-    if (active.current === identity) { setPurchases(prev => [created, ...prev]); setLoadedIdentity(identity); }
-    return created;
-  }, [store, identity]);
+    return createPurchase({ ...data, store_id: store.id });
+  }, [store, assertCanWrite]);
 
   const addWithItems = useCallback(async (data: PurchaseFormInput) => {
     assertCanWrite();
     if (!store) throw new UserFacingError('매장 정보가 없습니다');
-    // The ledger owns its month and refreshes on focus when registration returns.
     return createPurchaseWithItems({ ...data, store_id: store.id });
   }, [store, assertCanWrite]);
 
   const remove = useCallback(async (id: string) => {
     assertCanWrite();
     await deletePurchase(id);
-    setPurchases(prev => prev.filter(p => p.id !== id));
-  }, []);
+  }, [assertCanWrite]);
 
-  return { loaded: loadedIdentity === identity, purchases: loadedIdentity === identity ? purchases : [], loading: !!store && (loading || (loadedIdentity !== identity && !error)), error, refetch, add, addWithItems, remove };
+  // 다시 받다가 실패해도 같은 키의 이전 목록은 유지하고 오류를 함께 보여준다.
+  const loaded = !!storeId && query.data !== undefined;
+  return { loaded, purchases: loaded ? query.data ?? EMPTY : EMPTY, loading: !!storeId && query.isPending && !query.isError,
+    error: storeId && query.isError ? getErrorMessage(query.error) : null, refetch, reloadFresh, add, addWithItems, remove };
 }

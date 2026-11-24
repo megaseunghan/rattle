@@ -33,7 +33,7 @@ export const DailyOperationsHome = memo(function DailyOperationsHome({ active, r
   const canEdit = isAdmin && currentRole === 'admin' && devPreviewMode === 'self';
   useEffect(() => { setPhase('open'); setEditorVisible(false); }, [user?.id, store?.id, currentRole, devPreviewMode]);
   const query = useDailyChecklistSummary(active, refreshKey);
-  const workflow = useHomeWorkflow(active);
+  const workflow = useHomeWorkflow(active, refreshKey);
   const configuration = workflow.data ?? DEFAULT_HOME_WORKFLOW;
   const checklist = (segment: 'open' | 'close') => router.push({ pathname: '/cleaning', params: { segment } });
   const status = (segment: 'open' | 'close') => {

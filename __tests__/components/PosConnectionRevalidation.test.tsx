@@ -52,3 +52,19 @@ it('현재 설정의 미연동 캐시도 진입 시 재검증하고 설정 화�
  expect(screen.queryByText('오늘 매출')).not.toBeNull();
  expect(getDetails).toHaveBeenCalledTimes(2);
 });
+// 2026-11-24 재진입 캐시: 연결된 매장의 연결 정보만 30분 재사용한다. 해제는 서버 웹훅이 기록하므로 설정 화면 복귀 때는 다시 확인한다.
+it('연결된 캐시는 탭 진입 때 재사용하고, 설정 화면 복귀 때는 해제를 다시 확인한다', async () => {
+  const getDetails = require('../../lib/services/stores').getStoreDetails;
+  mockStore.closing_time = '23:00'; mockSync.mockResolvedValue(undefined);
+  getDetails.mockResolvedValue({ toss_merchant_id: 'merchant', closing_time: '23:00' });
+  const scope = renderHook(useQueryScope);
+  queryClient.setQueryData(queryKeys.store(scope.result.current, 'store', 'pos', 'connection', '23:00:'), { toss_merchant_id: 'merchant', closing_time: '23:00' });
+  render(<PosScreen />); await act(async () => {});
+  expect(getDetails).toHaveBeenCalledTimes(0);
+  const focus = require('expo-router').useFocusEffect.mock.calls.at(-1)[0];
+  act(() => focus());
+  getDetails.mockResolvedValue({ toss_merchant_id: null, closing_time: '23:00' });
+  await act(async () => { focus(); });
+  expect(getDetails).toHaveBeenCalledTimes(1);
+  expect(screen.queryByText('오늘 매출')).toBeNull();
+});

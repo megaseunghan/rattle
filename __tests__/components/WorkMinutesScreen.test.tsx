@@ -14,7 +14,8 @@ jest.mock('expo-router', () => ({ router: { back: jest.fn() } }));
 jest.mock('../../lib/contexts/AuthContext', () => ({ useAuth: () => ({ user: { id: 'user' }, devPreviewEmployeeId: null,
   devPreviewMode: mockPreview ? 'part_time' : 'self', realRole: mockPreview ? 'admin' : 'member' }) }));
 jest.mock('../../lib/hooks/useEmployees', () => ({ useEmployees: () => ({ employees: [employee], loading: false, error: null, refetch: mockRefetchEmployees }) }));
-jest.mock('../../lib/hooks/usePayrollSubmissions', () => ({ usePayrollSubmissions: () => ({ rows: mockRows, loading: mockLoading, error: mockError, refetch: mockRefetchSubmissions }) }));
+const mockSubmissionsActive = jest.fn();
+jest.mock('../../lib/hooks/usePayrollSubmissions', () => ({ usePayrollSubmissions: (_month: string, _employeeId: string, active: boolean) => (mockSubmissionsActive(active), { rows: mockRows, loading: mockLoading, error: mockError, refetch: mockRefetchSubmissions }) }));
 jest.mock('../../lib/services/payrollSubmissions', () => ({ submitWorkMinutes: (...args: unknown[]) => mockSubmit(...args) }));
 jest.mock('../../lib/hooks/useConfirmLeave', () => ({ useConfirmLeave: jest.fn() }));
 beforeEach(() => { jest.clearAllMocks(); mockPreview = false; mockRows = []; mockLoading = false; mockError = null; mockSubmit.mockResolvedValue({ id: 'submitted' }); mockRefetchSubmissions.mockResolvedValue(undefined); jest.spyOn(Alert, 'alert').mockImplementation(() => {}); });
@@ -22,7 +23,8 @@ afterEach(() => jest.restoreAllMocks());
 it('화면 진입 시 직원과 제출 이력을 실제로 불러온다', async () => {
   render(<WorkMinutesScreen />);
   await waitFor(() => expect(mockRefetchEmployees).toHaveBeenCalled());
-  expect(mockRefetchSubmissions).toHaveBeenCalled();
+  // 2026-11-24 재진입 캐시: 제출 이력은 화면이 직원을 찾으면 active로 켜고 useQuery가 받는다.
+  expect(mockSubmissionsActive).toHaveBeenLastCalledWith(true);
   expect(screen.getByText('파트님의 월별 근무시간')).toBeTruthy();
 });
 it('직원은 근무 분과 근거만 제출하고 시급 입력은 하지 않는다', async () => {

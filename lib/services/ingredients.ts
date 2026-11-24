@@ -47,7 +47,7 @@ export async function createIngredient(
     .single();
 
   if (error) throw new Error(error.message);
-  await invalidateCachedStore(data.store_id, ['ingredients']);
+  await invalidateCachedStore(data.store_id, ['ingredients', 'home-alerts']);
   return result as Ingredient;
 }
 

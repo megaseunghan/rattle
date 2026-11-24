@@ -1,6 +1,11 @@
 import { act, renderHook } from '@testing-library/react-native';
 import { usePayrollSubmissions } from '../../lib/hooks/usePayrollSubmissions';
 import { getPayrollSubmissions } from '../../lib/services/payrollSubmissions';
+import { notifyManager } from '@tanstack/react-query';
+import { queryClient as mockSharedQueryClient } from '../../lib/query/client';
+// 훅이 공용 쿼리 캐시를 쓰므로 테스트마다 비우고, 화면 알림을 동기로 받아 act 안에서 반영되게 한다.
+notifyManager.setScheduler(callback => callback());
+beforeEach(() => { mockSharedQueryClient.clear(); });
 
 jest.mock('../../lib/contexts/AuthContext', () => ({ useAuth: () => ({ user: { id: 'user' }, store: { id: 'store' } }) }));
 jest.mock('../../lib/services/payrollSubmissions', () => ({ getPayrollSubmissions: jest.fn() }));

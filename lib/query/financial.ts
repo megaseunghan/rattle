@@ -1,6 +1,7 @@
 import { queryOptions } from '@tanstack/react-query';
 import { getFinancialSummaries, type StoreFinancialSummary } from '../services/homeFinancialSummary';
 import { queryClient, queryKeys } from './client';
+import { STALE_TIME } from './staleTimes';
 
 interface Pending { storeId: string; month: string; resolve: (row: StoreFinancialSummary) => void; reject: (error: unknown) => void }
 const batches = new Map<string, Pending[]>();
@@ -27,7 +28,7 @@ export function financialSummaryOptions(scope: string, storeId: string, closingT
   return queryOptions({
     queryKey: queryKeys.store(scope, storeId, 'financial', closingTime, month, requireAdmin),
     queryFn: () => queueSummary(scope, storeId, month, requireAdmin),
-    staleTime: month >= currentMonth ? 30_000 : 300_000,
+    staleTime: month >= currentMonth ? STALE_TIME.financialCurrent : STALE_TIME.financialPast,
   });
 }
 export function fetchFinancialSummary(scope: string, storeId: string, closingTime: string, month: string, requireAdmin: boolean) {

@@ -17,7 +17,7 @@ import { PurchaseWriteError } from '../../lib/services/purchases';
 const mockQuickCreate = jest.fn();
 let mockMode = 'self';
 let mockRevision = '1';
-const mockWrite = jest.fn(), mockReserveEvidence = jest.fn(), mockUploadEvidence = jest.fn(), mockCacheDelete = jest.fn(), mockRefetch = jest.fn(), mockLibrary = jest.fn(), mockCamera = jest.fn();
+const mockWrite = jest.fn(), mockReserveEvidence = jest.fn(), mockUploadEvidence = jest.fn(), mockCacheDelete = jest.fn(), mockRefetch = jest.fn(), mockReloadFresh = jest.fn(), mockLibrary = jest.fn(), mockCamera = jest.fn();
 let mockStoreId = 'store';
 let mockLedger: { id: string; date: string; supplier: string; amount: number }[] = [];
 jest.mock('expo-image-picker', () => ({
@@ -38,7 +38,7 @@ const mockIngredients = [mockIngredient];
 jest.mock('expo-router', () => ({ router: { back: jest.fn(), push: jest.fn(), replace: jest.fn(), canGoBack: jest.fn(() => true) }, useLocalSearchParams: () => ({ date: '2026-10-01' }) }));
 jest.mock('@react-native-community/datetimepicker', () => 'DateTimePicker');
 jest.mock('../../lib/contexts/AuthContext', () => ({ useAuth: () => ({ user: { id: 'user' }, store: { id: mockStoreId, name: '검증 매장' }, currentRole: 'admin', canReadFinancials: true, canManageStore: true, storeRole: 'owner', permissionRevision: mockRevision, devPreviewMode: mockMode }) }));
-jest.mock('../../lib/hooks/usePurchases', () => ({ usePurchases: () => ({ purchases: mockLedger, addWithItems: mockWrite, refetch: mockRefetch, loading: false, error: null }) }));
+jest.mock('../../lib/hooks/usePurchases', () => ({ usePurchases: () => ({ purchases: mockLedger, addWithItems: mockWrite, refetch: mockRefetch, reloadFresh: mockReloadFresh, loading: false, error: null }) }));
 jest.mock('../../lib/hooks/useIngredients', () => ({ useIngredients: () => ({ data: mockIngredients, create: jest.fn(), refetch: jest.fn(), loading: false }) }));
 jest.mock('../../lib/hooks/usePurchaseCategories', () => ({ usePurchaseCategories: () => ({ categories: ['식자재', '비품', '소모품'], loading: false }) }));
 jest.mock('../../lib/hooks/usePurchaseTypes', () => ({ usePurchaseTypes: () => ({ types: ['수기'], loading: false }) }));
@@ -63,7 +63,7 @@ jest.mock('../../lib/services/purchases', () => ({ getPurchaseSuppliers: jest.fn
 const photo = { uri: 'file:///cache/receipt.jpg', fileName: '영수증.jpg', fileSize: 100, mimeType: 'image/jpeg' };
 let alertSpy: jest.SpyInstance;
 beforeEach(() => {
-  jest.clearAllMocks(); jest.mocked(router.canGoBack).mockReturnValue(true); mockMode = 'self'; mockQuickCreate.mockReset(); mockStoreId = 'store'; mockWrite.mockReset(); mockLedger = [];
+  jest.clearAllMocks(); jest.mocked(router.canGoBack).mockReturnValue(true); mockMode = 'self'; mockQuickCreate.mockReset(); mockStoreId = 'store'; mockWrite.mockReset(); mockLedger = []; 
   mockLibrary.mockResolvedValue({ canceled: false, assets: [photo] });
   mockCamera.mockResolvedValue({ canceled: true, assets: [] });
   mockReserveEvidence.mockResolvedValue({ id: 'draft-id', status: 'pending', mime_type: 'image/jpeg' });
@@ -188,7 +188,7 @@ it('저장 결과를 모르면 잠그고 내역을 확인한 뒤 없었으면 �
   await save(view);
   expect(mockWrite).toHaveBeenCalledTimes(1);
   fireEvent.press(view.getByText('내역 확인'));
-  expect(mockRefetch).toHaveBeenCalled();
+  expect(mockReloadFresh).toHaveBeenCalled();
   expect(view.getByText('다른 거래처')).toBeTruthy();
   const back = view.getAllByLabelText('뒤로');
   fireEvent.press(back[back.length - 1]);

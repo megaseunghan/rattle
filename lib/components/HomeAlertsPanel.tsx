@@ -178,8 +178,14 @@ function AlertsContent({ data, active }: { data: AlertData; active: boolean }) {
 export function HomeAlertsPanel({ active = true, refreshKey = 0, todaySales, store, financial = true }: {
   active?: boolean; refreshKey?: number; todaySales?: number; store?: Store; financial?: boolean;
 }) {
-  const data = useHomeAlerts(todaySales, store, financial);
-  useEffect(() => { if (active) void data.refetch(); }, [active, refreshKey, data.refetch]);
+  const data = useHomeAlerts(todaySales, store, financial, active);
+  // 탭 진입은 enabled: active와 재사용 시간이 맡는다. 당겨서 새로고침(refreshKey 증가)만 다시 받는다.
+  const lastRefresh = useRef(refreshKey);
+  useEffect(() => {
+    if (lastRefresh.current === refreshKey) return;
+    lastRefresh.current = refreshKey;
+    if (active) void data.refetch();
+  }, [active, refreshKey, data.refetch]);
   // 계정·매장·공유 범위 전환 시 이전 실패/완료/실행취소와 확인창 콜백을 격리한다.
   return <AlertsContent key={data.scope} data={data} active={active} />;
 }
