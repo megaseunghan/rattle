@@ -15,9 +15,9 @@ import { useTossSync } from '../../lib/hooks/useTossSync';
 import { usePosAnalytics } from '../../lib/hooks/usePosAnalytics';
 import { useAuth } from '../../lib/contexts/AuthContext';
 import { queryClient, queryKeys, useQueryScope, isAccessDenied } from '../../lib/query';
+import { Skeleton, SkeletonGroup, SkeletonRows } from '../../lib/components/skeleton';
 import { STALE_TIME } from '../../lib/query/staleTimes';
 import { useRefreshOnReturn } from '../../lib/query/useRefreshOnReturn';
-import { LoadingSpinner } from '../../lib/components/LoadingSpinner';
 import { getStoreDetails } from '../../lib/services/stores';
 import { useManualSales } from '../../lib/hooks/useManualSales';
 import { DailySummary } from '../../types';
@@ -275,7 +275,7 @@ export function PosScreen({ active = true }: { active?: boolean }) {
 
       {statusError && <View style={styles.notice}><Text style={styles.noticeText}>{statusError}</Text><TouchableOpacity onPress={() => { void loadStoreStatus(); }} accessibilityRole="button" style={{ minHeight: 44, justifyContent: 'center' }}><Text style={{ color: Colors.action }}>다시 시도</Text></TouchableOpacity></View>}
       {connectionDenied || loadingStatus || currentStoreId.current !== statusStore.current
-        ? <View style={styles.scroll}><View style={styles.todayCard}><Text style={styles.todayLabel}>매출을 준비하고 있어요</Text><LoadingSpinner fullScreen={false} /><Text style={styles.todayOrderCount}>저장된 매출을 먼저 불러오고 있어요.</Text></View></View>
+        ? <View style={styles.scroll}><SkeletonGroup label="매출 불러오는 중" style={styles.todayCard}><Skeleton width="28%" height={12} radius={6} /><Skeleton width="64%" height={38} /><Skeleton width="40%" height={12} radius={6} /></SkeletonGroup></View>
         : status === 'connected'
           ? (() => {
               const selectedKey = selectedDay ? toDateKey(queryYear, queryMonth, selectedDay) : null;
@@ -469,7 +469,7 @@ export function PosScreen({ active = true }: { active?: boolean }) {
               {manualError && manualSales.length > 0 && <Text style={styles.noticeText}>마지막으로 조회한 내역이에요. 최신 상태는 다시 불러와 확인해주세요.</Text>}
               {refreshingManualSales && !loadingManualSales && <Text style={styles.noticeText}>수기 매출을 다시 불러오는 중이에요.</Text>}
               {loadingManualSales ? (
-                <LoadingSpinner fullScreen={false} />
+                <SkeletonRows count={4} avatar={false} label="수기 매출 불러오는 중" />
               ) : !manualReady && manualSales.length === 0 ? null : manualSales.length === 0 ? (
                 <EmptyState
                   icon="cash-outline" illustration="sales"

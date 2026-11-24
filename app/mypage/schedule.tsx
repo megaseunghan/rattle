@@ -1,7 +1,7 @@
 import { remainingScheduledDays } from '../../lib/utils/remainingSchedule';
 import { GlassBackdrop } from '../../lib/components/GlassBackdrop';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, AppState, Platform, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, AppState, Platform, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -13,6 +13,7 @@ import { useSchedule } from '../../lib/hooks/useSchedule';
 import { AppIcon } from '../../lib/icons/AppIcon';
 import { AppBar, Button } from '../../lib/components/ui';
 import { NumericText } from '../../lib/components/ui/NumericText';
+import { Skeleton, SkeletonGroup } from '../../lib/components/skeleton';
 import { getErrorMessage } from '../../lib/utils/error';
 import { resolveSelfEmployee } from '../../lib/utils/resolveSelfEmployee';
 import { ScheduleDayInput } from '../../types';
@@ -106,12 +107,19 @@ export default function ScheduleSettingsScreen() {
   const scope = `${user?.id ?? ''}:${store?.id ?? ''}:${employee?.id ?? ''}:${devPreviewMode}:${devPreviewEmployeeId ?? ''}:${requestedDay ?? ''}`;
   return <SafeAreaView style={styles.container}><GlassBackdrop />
     <AppBar transparent title="내 스케줄" onBack={() => router.back()} />
-    {!employee ? <View style={styles.empty}>
-      {loading ? <ActivityIndicator accessibilityLabel="직원 정보 불러오는 중" color={Colors.primary} />
-        : <Text style={styles.note}>{error ?? '연결된 직원 정보가 없어요'}</Text>}
-    </View> : <ScheduleContent key={scope} employeeId={employee.id} employeeName={employee.name} storeName={store?.name ?? ''}
+    {!employee ? loading ? <View style={styles.scroll}><ScheduleSkeleton label="직원 정보 불러오는 중" withIntro /></View>
+      : <View style={styles.empty}><Text style={styles.note}>{error ?? '연결된 직원 정보가 없어요'}</Text></View> : <ScheduleContent key={scope} employeeId={employee.id} employeeName={employee.name} storeName={store?.name ?? ''}
       previewing={realRole === 'admin' && devPreviewMode !== 'self'} requestedDay={requestedDay} />}
   </SafeAreaView>;
+}
+
+/** 요일별 근무 목록과 같은 높이의 자리 표시. */
+function ScheduleSkeleton({ label, withIntro = false }: { label: string; withIntro?: boolean }) {
+  return <SkeletonGroup label={label} style={styles.skeleton}>
+    {withIntro && <View style={styles.intro}><Skeleton width="44%" height={12} radius={6} /><Skeleton width="70%" height={24} /></View>}
+    <View style={styles.heading}><Skeleton width={56} height={12} radius={6} /><Skeleton width={84} height={12} radius={6} /></View>
+    <View style={styles.list}>{DISPLAY_DAYS.map(i => <View key={i} style={styles.row}><Skeleton width={28} height={14} /><Skeleton width="46%" height={14} /></View>)}</View>
+  </SkeletonGroup>;
 }
 
 function ScheduleContent({ employeeId, employeeName, storeName, previewing, requestedDay }: {
@@ -186,7 +194,7 @@ function ScheduleContent({ employeeId, employeeName, storeName, previewing, requ
     </View>
     {previewing && <Text style={styles.banner}>{employeeName}님 화면 미리보기 중이에요. 실제 제출은 본인 계정으로 로그인해야 반영돼요.</Text>}
     {pendingRequest && <Text style={styles.banner}>변경 요청 승인 대기 중이에요.</Text>}
-    {!ready ? <ActivityIndicator accessibilityLabel="스케줄 불러오는 중" color={Colors.primary} />
+    {!ready ? <ScheduleSkeleton label="스케줄 불러오는 중" />
       : error ? <View style={styles.empty}><Text style={styles.note}>{error}</Text><Button label="다시 불러오기" variant="secondary" onPress={() => { void retry(); }} /></View>
         : <>
           {schedule.length === 0 && !dirty && <Text style={styles.note}>등록된 일정이 없어요. 요일을 눌러 설정해주세요.</Text>}
@@ -224,6 +232,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.homeCanvas },
   scroll: { paddingHorizontal: Spacing.screenX, paddingBottom: 40, gap: 18 },
   intro: { paddingTop: 18, paddingBottom: 8, gap: 8 },
+  skeleton: { gap: 18 },
   title: { fontSize: 22, fontWeight: '600', color: Colors.black, letterSpacing: -0.8 },
   note: { fontSize: 12, color: Colors.gray500, lineHeight: 19 },
   heading: { flexDirection: 'row', justifyContent: 'space-between', gap: 8 },

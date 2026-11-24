@@ -3,7 +3,7 @@
 import { useNavigation } from 'expo-router';
 import { usePreventRemove } from 'expo-router/react-navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { usePurchaseTypes } from '../../lib/hooks/usePurchaseTypes';
 import { MAX_TOTAL, itemAmountError } from '../../lib/utils/purchaseDraft';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -17,6 +17,7 @@ import { purchaseCategoryTaxonomy } from '../../lib/services/purchaseCategories'
 import type { PurchaseItem } from '../../types';
 import { getErrorMessage } from '../../lib/utils/error';
 import { ErrorMessage } from '../../lib/components/ErrorMessage';
+import { Skeleton, SkeletonGroup, SkeletonRows } from '../../lib/components/skeleton';
 import { AppIcon } from '../../lib/icons/AppIcon';
 import { EvidencePanel, type EvidenceUploadStatus } from '../../lib/components/EvidencePanel';
 import { dateLabel } from '../../lib/components/purchase/PurchaseHeaderCard';
@@ -254,7 +255,12 @@ function PurchaseDetailContent({ id }: { id: string }) {
       right={purchase && !deleted ? <TouchableOpacity accessibilityRole="button" accessibilityLabel="더보기" accessibilityState={{ expanded: menu }} disabled={saving}
         style={styles.more} onPress={() => setMenu(value => !value)}><AppIcon name="ellipsis-horizontal" size={22} color={Colors.black} /></TouchableOpacity> : undefined} />
     <View style={styles.flex}>
-    {loading && !purchase ? <View style={styles.center}><ActivityIndicator size="large" color={Colors.primary} /></View>
+    {loading && !purchase ? <View style={ui.scroll}>
+        <SkeletonGroup label="매입 불러오는 중" style={styles.summary}>
+          <Skeleton width="48%" height={18} /><Skeleton width="36%" height={12} radius={6} style={styles.skeletonGap} /><Skeleton width="56%" height={28} style={styles.skeletonGapLg} />
+        </SkeletonGroup>
+        <SkeletonRows count={3} avatar={false} label="매입 품목 불러오는 중" />
+      </View>
       : !purchase ? <View style={styles.center}><ErrorMessage message={error ?? '매입을 불러오지 못했어요.'} onRetry={() => { void load(); }} /></View>
       : <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.flex}>
         <ScrollView ref={scrollRef} onScroll={onScroll} scrollEventThrottle={16} contentContainerStyle={ui.scroll} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
@@ -325,6 +331,8 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.homeCanvas },
   flex: { flex: 1 },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  skeletonGap: { marginTop: 8 },
+  skeletonGapLg: { marginTop: 14 },
   more: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   summary: { backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.homeBorder, borderRadius: 20, padding: 16, marginBottom: 16 },
   supplier: { fontFamily: Fonts.wantedBold, fontSize: 17, color: Colors.black },

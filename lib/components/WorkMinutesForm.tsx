@@ -10,7 +10,7 @@ import { getPayrollWorkHistory, probationFactor, WorkedMinutesInput } from '../s
 import { calculateHourlyGross, formatWorkedMinutes, parseWorkedMinutes } from '../utils/workMinutes';
 import { Button, Field } from './ui';
 import { ErrorMessage } from './ErrorMessage';
-import { LoadingSpinner } from './LoadingSpinner';
+import { Skeleton, SkeletonGroup } from './skeleton';
 
 export function LegacyWorkMinutesForm({ storeId, employee, payroll: initialPayroll, yearMonth, onClose, onSave, submission }: {
   storeId: string; employee: Employee; payroll?: Payroll; yearMonth: string;
@@ -97,7 +97,9 @@ export function LegacyWorkMinutesForm({ storeId, employee, payroll: initialPayro
           <Button label="근무시간 저장" onPress={save} loading={saving} disabled={saving || historyLoading || !!historyError} />
           <Button label="닫기" variant="secondary" onPress={onClose} disabled={saving} />
           <Text style={styles.title}>작성·수정 이력</Text>
-          {historyLoading ? <LoadingSpinner /> : historyError
+          {historyLoading ? <SkeletonGroup label="작성·수정 이력 불러오는 중" style={styles.skeleton}>
+            {[0, 1, 2].map(i => <View key={i} style={styles.historyRow}><Skeleton width="62%" height={12} radius={6} /><Skeleton width="40%" height={12} radius={6} /></View>)}
+          </SkeletonGroup> : historyError
             ? <ErrorMessage message={historyError} onRetry={() => setReload(n => n + 1)} />
             : history.length === 0 ? <Text style={styles.hint}>아직 작성 이력이 없어요.</Text>
             : history.map(row => (
@@ -123,6 +125,7 @@ const styles = StyleSheet.create({
   title: { fontSize: 22, fontWeight: '700', color: Colors.black, flexShrink: 1 },
   hint: { fontSize: 13, lineHeight: 20, color: Colors.gray500 },
   preview: { fontSize: 15, fontWeight: '600', color: Colors.primary, borderRadius: 24, borderWidth: 1, borderColor: Colors.homeBorder, backgroundColor: Colors.white, padding: 20 },
+  skeleton: { gap: 16 },
   historyRow: { gap: 4, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: Colors.homeBorder, borderRadius: 20, borderWidth: 1, borderColor: Colors.homeBorder, backgroundColor: Colors.white, padding: 16 },
   historyText: { fontSize: 13, color: Colors.black },
 });

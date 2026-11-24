@@ -20,7 +20,7 @@ import { useIngredients } from '../../lib/hooks/useIngredients';
 import { useCategories } from '../../lib/hooks/useCategories';
 import { getIngredientById } from '../../lib/services/ingredients';
 import { Ingredient } from '../../types';
-import { LoadingSpinner } from '../../lib/components/LoadingSpinner';
+import { Skeleton, SkeletonGroup } from '../../lib/components/skeleton';
 import { ErrorMessage } from '../../lib/components/ErrorMessage';
 import { useConfirmLeave } from '../../lib/hooks/useConfirmLeave';
 import { useAuth } from '../../lib/contexts/AuthContext';
@@ -88,7 +88,21 @@ export default function EditIngredientScreen() {
   );
   const bypassLeaveGuard = useConfirmLeave(isDirty && !savedNeedsRefresh, { blockLeave: submitting, message: '지금 나가면 수정한 재고 정보가 저장되지 않아요.' });
 
-  if (fetchLoading) return <SafeAreaView style={styles.container}><LoadingSpinner /></SafeAreaView>;
+  if (fetchLoading) return <SafeAreaView style={styles.container}>
+    <View style={styles.header}>
+      <TouchableOpacity onPress={() => router.back()} style={styles.backButton} accessibilityRole="button" accessibilityLabel="뒤로">
+        <AppIcon name="chevron-back" size={24} color={Colors.black} />
+      </TouchableOpacity>
+      <Text style={styles.title}>{canManageStock ? '식자재 수정' : '재고 수량 수정'}</Text>
+      <View style={styles.backButton} accessible={false} />
+    </View>
+    <SkeletonGroup label="식자재 정보 불러오는 중" style={styles.content}>
+      {[0, 1, 2, 3, 4].map(i => <View key={i}>
+        <Skeleton width={i % 2 ? 56 : 72} height={12} radius={6} style={styles.skeletonLabel} />
+        <Skeleton height={46} radius={12} />
+      </View>)}
+    </SkeletonGroup>
+  </SafeAreaView>;
   if (fetchError) return <SafeAreaView style={styles.container}>{savedNeedsRefresh && <Text>재고는 저장됐어요. 저장된 정보를 다시 불러와 확인해주세요.</Text>}<ErrorMessage message={fetchError} onRetry={() => setReload(n => n + 1)} /></SafeAreaView>;
   if (!ingredient) return <SafeAreaView style={styles.container}><ErrorMessage message="식자재를 찾을 수 없습니다." /></SafeAreaView>;
 
@@ -266,6 +280,7 @@ const styles = StyleSheet.create({
   submitBtnDisabled: { opacity: 0.5 },
   submitText: { color: Colors.white, fontSize: 14, fontWeight: '700' },
   content: { padding: 20, paddingBottom: 40 },
+  skeletonLabel: { marginTop: 16, marginBottom: 8 },
   label: { fontSize: 14, fontWeight: '600', color: Colors.gray700, marginBottom: 6, marginTop: 16 },
   input: {
     backgroundColor: Colors.white,

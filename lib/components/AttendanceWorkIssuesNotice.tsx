@@ -3,7 +3,7 @@ import { Colors } from '../../constants/colors';
 import { Fonts } from '../../constants/fonts';
 import { Radius, Spacing, Type } from '../../constants/designTokens';
 import { ErrorMessage } from './ErrorMessage';
-import { LoadingSpinner } from './LoadingSpinner';
+import { Skeleton, SkeletonGroup } from './skeleton';
 
 export interface AttendanceWorkIssueItem { id: string; employeeId: string; employeeName: string; workDate: string; reason: string; retryPunchId?: string | null; retryUnknown?: boolean }
 export function attendanceWorkFailureReason(code: string | null) {
@@ -18,7 +18,9 @@ export function AttendanceWorkIssuesNotice({ rows, loading, error, onReload, onE
   if (!loading && !error && rows.length === 0) return null;
   return <View style={s.card}>
     <Text style={s.title}>확인 필요</Text>
-    {loading ? <LoadingSpinner fullScreen={false} /> : error ? <ErrorMessage message={error} onRetry={onReload} /> : rows.map(row => {
+    {loading ? <SkeletonGroup label="확인 필요 근무 불러오는 중" style={s.skeleton}>
+      {[0, 1].map(i => <View key={i} style={s.row}><Skeleton width="52%" height={14} /><Skeleton width="72%" height={12} radius={6} /></View>)}
+    </SkeletonGroup> : error ? <ErrorMessage message={error} onRetry={onReload} /> : rows.map(row => {
       const [, month, day] = row.workDate.split('-');
       return <View key={row.id} style={s.row}><Pressable accessibilityRole="button" accessibilityLabel={`${row.employeeName}님 직원 정보 보기`} onPress={() => onEmployee(row.employeeId)} style={s.row}>
         <Text style={s.name}>{row.employeeName}님 · {Number(month)}월 {Number(day)}일</Text>
@@ -37,6 +39,7 @@ export function AttendanceWorkIssuesNotice({ rows, loading, error, onReload, onE
 }
 const s = StyleSheet.create({
   card: { padding: Spacing.cardPadding, borderRadius: Radius.field, backgroundColor: Colors.contextBg, gap: 12 },
+  skeleton: { gap: 12 },
   title: { color: Colors.black, fontFamily: Fonts.wantedSemiBold, fontSize: Type.base },
   row: { minHeight: 44, gap: 4, justifyContent: 'center' },
   name: { color: Colors.black, fontFamily: Fonts.wantedMedium, fontSize: Type.base },

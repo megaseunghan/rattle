@@ -12,7 +12,7 @@ import { NumericText } from '../../lib/components/ui/NumericText';
 import { getRecipeById, deleteRecipe } from '../../lib/services/recipes';
 import { useAuth } from '../../lib/contexts/AuthContext';
 import { useStorePermissions } from '../../lib/hooks/useStorePermissions';
-import { LoadingSpinner } from '../../lib/components/LoadingSpinner';
+import { Skeleton, SkeletonGroup } from '../../lib/components/skeleton';
 import { ErrorMessage } from '../../lib/components/ErrorMessage';
 import { RecipeWithIngredients } from '../../lib/services/recipes';
 import { recipeLineCost } from '../../lib/utils/unit';
@@ -75,7 +75,30 @@ export default function RecipeDetailScreen() {
   }
 
   if (!canReadRecipes) return <ErrorMessage message="매장을 선택한 뒤 레시피를 열어 주세요." />;
-  if (loading) return <LoadingSpinner />;
+  if (loading) return <SafeAreaView style={styles.container}>
+    <View style={styles.header}>
+      <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} accessibilityRole="button" accessibilityLabel="뒤로가기">
+        <AppIcon name="chevron-back" size={24} color={Colors.black} />
+      </TouchableOpacity>
+      <Text style={styles.title}>레시피 상세</Text>
+      <View style={styles.editBtn} accessible={false} />
+    </View>
+    <SkeletonGroup label="레시피 불러오는 중" style={styles.scroll}>
+      <View style={styles.card}>
+        <View style={styles.recipeHeader}>
+          <View style={styles.recipeNameBlock}><Skeleton width="60%" height={20} /><Skeleton width="30%" height={12} radius={6} style={styles.skeletonGap} /></View>
+          <Skeleton width={84} height={28} radius={14} />
+        </View>
+        <View style={styles.divider} />
+        <View style={styles.statsRow}>
+          {[0, 1, 2].map(i => <View key={i} style={styles.statBox}><Skeleton width="50%" height={10} radius={6} /><Skeleton width="80%" height={18} style={styles.skeletonGap} /></View>)}
+        </View>
+      </View>
+      <View style={[styles.card, styles.skeletonCard]}>
+        {[0, 1, 2, 3].map(i => <Skeleton key={i} width={i % 2 ? '72%' : '88%'} height={14} style={i > 0 ? styles.skeletonGap : undefined} />)}
+      </View>
+    </SkeletonGroup>
+  </SafeAreaView>;
   if (error || !recipe) return <ErrorMessage message={error || '레시피를 찾을 수 없습니다.'} onRetry={loadRecipe} />;
 
   const cost = recipe.cost;
@@ -172,6 +195,8 @@ const styles = StyleSheet.create({
   editText: { fontSize: 15, fontWeight: '600', color: Colors.primary },
   title: { fontSize: 22, fontWeight: '700', color: Colors.black, flexShrink: 1 },
   scroll: { padding: 20, paddingBottom: 48 },
+  skeletonGap: { marginTop: 8 },
+  skeletonCard: { marginTop: 16 },
   card: {
     backgroundColor: Colors.white, borderRadius: 24, padding: 20,
     borderWidth: 1, borderColor: Colors.homeBorder, marginBottom: 24,

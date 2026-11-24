@@ -1,6 +1,6 @@
 import { GlassBackdrop } from '../../lib/components/GlassBackdrop';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, AppState, View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import { AppState, View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppIcon } from '../../lib/icons/AppIcon';
 import { Illustration, IllustrationName } from '../../lib/icons/Illustration';
@@ -12,6 +12,7 @@ import { useEmployees } from '../../lib/hooks/useEmployees';
 import { useSchedule } from '../../lib/hooks/useSchedule';
 import { resolveSelfEmployee } from '../../lib/utils/resolveSelfEmployee';
 import { AppBar } from '../../lib/components/ui';
+import { Skeleton, SkeletonGroup } from '../../lib/components/skeleton';
 import { NumericText } from '../../lib/components/ui/NumericText';
 import { EmployeeSchedule } from '../../types';
 
@@ -64,7 +65,9 @@ function ScheduleSummary({ employeeId }: { employeeId: string }) {
   const todayText = todaySchedule && !todaySchedule.is_working ? '오늘은 쉬는 날이에요' : scheduleLabel(todaySchedule);
   return <View style={styles.scheduleSection}>
     <Text style={styles.sectionTitle}>근무 일정</Text>
-    {!ready || loading ? <ActivityIndicator accessibilityLabel="스케줄 불러오는 중" color={Colors.primary} style={styles.status} />
+    {!ready || loading ? <SkeletonGroup label="스케줄 불러오는 중" style={styles.summary}>
+      <View style={styles.summaryText}><Skeleton width="40%" height={12} radius={6} /><Skeleton width="62%" height={20} /></View>
+    </SkeletonGroup>
       : failed ? <View style={styles.status}>
         <Text style={styles.note}>스케줄을 불러오지 못했어요</Text>
         <TouchableOpacity accessibilityRole="button" accessibilityLabel="스케줄 다시 불러오기" onPress={() => { void retry(); }} style={styles.textAction}>

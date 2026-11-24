@@ -14,7 +14,7 @@ import { formatWorkedMinutes, parseWorkedMinutes } from '../../lib/utils/workMin
 import { resolveSelfEmployee } from '../../lib/utils/resolveSelfEmployee';
 import { AppBar, Button, Field } from '../../lib/components/ui';
 import { ErrorMessage } from '../../lib/components/ErrorMessage';
-import { LoadingSpinner } from '../../lib/components/LoadingSpinner';
+import { Skeleton, SkeletonGroup } from '../../lib/components/skeleton';
 import { useConfirmLeave } from '../../lib/hooks/useConfirmLeave';
 
 const STATUS = { pending: '관리자 확인 대기', approved: '관리자 확인 완료', rejected: '수정 후 다시 제출', superseded: '이전 제출' };
@@ -90,7 +90,7 @@ export function LegacyWorkMinutesScreen({ readOnly = false }: { readOnly?: boole
     <AppBar title="근무시간 제출" onBack={() => router.back()} />
     <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
     <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
-      {employeeLoading ? <LoadingSpinner /> : employeeError ? <ErrorMessage message={employeeError} onRetry={refetchEmployees} /> : !eligible ? <Text style={styles.hint}>연결된 파트타이머 정보가 없어요. 관리자에게 직원 계정 연결을 요청해 주세요.</Text> : <>
+      {employeeLoading ? <WorkMinutesSkeleton label="직원 정보 불러오는 중" withHeader /> : employeeError ? <ErrorMessage message={employeeError} onRetry={refetchEmployees} /> : !eligible ? <Text style={styles.hint}>연결된 파트타이머 정보가 없어요. 관리자에게 직원 계정 연결을 요청해 주세요.</Text> : <>
         <Text style={styles.title}>{employee.name}님의 월별 근무시간</Text>
         <View style={styles.monthRow}>
           <TouchableOpacity onPress={() => changeMonth(-1)} disabled={saving} accessibilityRole="button" accessibilityLabel="이전 달" accessibilityState={{ disabled: saving }} style={[styles.nav, saving && styles.navDisabled]}><Text>‹</Text></TouchableOpacity>
@@ -100,7 +100,7 @@ export function LegacyWorkMinutesScreen({ readOnly = false }: { readOnly?: boole
         {readOnly && <Text style={styles.hint}>기존 월 합계 제출 이력이에요. 새 기록은 일별 근무시간에서 입력해 주세요.</Text>}
         {preview && <Text style={styles.hint}>미리보기에서는 직원 명의로 제출할 수 없어요.</Text>}
         {error && <ErrorMessage message={error} onRetry={refetch} />}
-        {loading ? <LoadingSpinner /> : <>
+        {loading ? <WorkMinutesSkeleton label="근무시간 불러오는 중" /> : <>
           {latest && <Text style={styles.status}>{STATUS[latest.status]} · {formatWorkedMinutes(latest.worked_minutes)}</Text>}
           {latest?.review_note && <Text style={styles.hint}>관리자 메모: {latest.review_note}</Text>}
           {submitted && !dirty && <Text style={styles.status}>제출 완료 · 관리자 확인 대기</Text>}
@@ -125,10 +125,19 @@ export function LegacyWorkMinutesScreen({ readOnly = false }: { readOnly?: boole
     </KeyboardAvoidingView>
   </SafeAreaView>;
 }
+/** 제목·월 선택·입력칸 높이를 맞춘 자리 표시. */
+function WorkMinutesSkeleton({ label, withHeader = false }: { label: string; withHeader?: boolean }) {
+  return <SkeletonGroup label={label} style={styles.skeleton}>
+    {withHeader && <><Skeleton width="64%" height={24} /><Skeleton height={44} radius={12} /></>}
+    <Skeleton width="40%" height={14} />
+    {[0, 1].map(i => <View key={i} style={styles.skeletonField}><Skeleton width="34%" height={12} radius={6} /><Skeleton height={48} radius={12} /></View>)}
+  </SkeletonGroup>;
+}
+
 const styles = StyleSheet.create({
   flex: { flex: 1 }, footer: { padding: 16, borderTopWidth: 1, borderTopColor: Colors.homeBorder, backgroundColor: Colors.white },
   fieldError: { color: Colors.negative, backgroundColor: Colors.fieldErrorBg, padding: 12, borderRadius: 12, fontSize: 13, lineHeight: 20 },
-  container: { flex: 1, backgroundColor: Colors.homeCanvas }, content: { padding: 20, gap: 16, paddingBottom: 40 },
+  container: { flex: 1, backgroundColor: Colors.homeCanvas }, content: { padding: 20, gap: 16, paddingBottom: 40 }, skeleton: { gap: 16 }, skeletonField: { gap: 8 },
   title: { fontVariant: ['tabular-nums'], fontSize: 17, fontWeight: '700', color: Colors.black }, hint: { fontSize: 13, lineHeight: 21, color: Colors.gray600 },
   status: { fontVariant: ['tabular-nums'], fontSize: 14, fontWeight: '600', color: Colors.primary },
   monthRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }, nav: { minHeight: 44, minWidth: 44, alignItems: 'center', justifyContent: 'center' },

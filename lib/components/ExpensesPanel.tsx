@@ -20,6 +20,7 @@ import { validateExpenseDate } from '../utils/expenseDate';
 import { animateListChange } from '../utils/layoutAnimation';
 import { getErrorMessage, UserFacingError } from '../utils/error';
 import { GlassCard } from './GlassCard';
+import { SkeletonRows } from './skeleton';
 import { LedgerHeader } from './LedgerHeader';
 import { LedgerFilters } from './LedgerFilters';
 import { Field } from './ui';
@@ -242,9 +243,7 @@ export function ExpensesPanel({ selectedMonth, onMonthChange, active = true }: {
                   </TouchableOpacity>;
                 }))}
                 {categoryPending ? (
-                  <View style={styles.emptyRow}>
-                    <ActivityIndicator size="small" color={Colors.gray300} />
-                  </View>
+                  <SkeletonRows count={2} avatar={false} card={false} label="비용 항목 불러오는 중" />
                 ) : error ? <View style={styles.emptyRow}><Text style={styles.emptyText}>비용을 불러오지 못했어요. 화면을 내려 다시 불러와 주세요.</Text></View> : catItems.length === 0 && carriedItems.length === 0 ? (cat.key === '고정비' && isAdmin && (recurring.error || recurring.data?.rules.length) ? null : (
                   <View style={styles.emptyRow}>
                     <Text style={styles.emptyText}>등록된 항목이 없어요</Text>

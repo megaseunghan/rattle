@@ -7,6 +7,7 @@ import { HomeAlert, Store } from '../../types';
 import { useHomeAlerts } from '../hooks/useHomeAlerts';
 import { AppIcon } from '../icons/AppIcon';
 import { GlassCard } from './GlassCard';
+import { Skeleton, SkeletonGroup } from './skeleton';
 import { TabPagerContext } from '../contexts/TabPagerContext';
 
 const TITLES: Record<HomeAlert['kind'], string> = {
@@ -100,6 +101,7 @@ function AlertRow({ alert, disabled, saving, onHide }: {
 type AlertData = ReturnType<typeof useHomeAlerts>;
 function AlertsContent({ data, active }: { data: AlertData; active: boolean }) {
   const { alerts, loading, error, refetch, markRead, restoreRead } = data;
+  const firstLoad = data.initialLoading ?? loading;
   const [saving, setSaving] = useState<string | null>(null);
   const [undo, setUndo] = useState<HomeAlert | null>(null);
   const [failure, setFailure] = useState<{ alert: HomeAlert; restoring: boolean } | null>(null);
@@ -141,14 +143,18 @@ function AlertsContent({ data, active }: { data: AlertData; active: boolean }) {
     ], { cancelable: true });
   }
   const done = !!undo && alerts.length === 0 && !loading && !error;
-  if (!error && !loading && alerts.length === 0 && !undo) return null;
+  // 알림 없는 매장의 재조회는 빈 카드를 띄우지 않는다(첫 불러오기만 자리 표시).
+  if (!error && !firstLoad && alerts.length === 0 && !undo) return null;
   return <View style={styles.list}>
     <GlassCard contentStyle={styles.panel}>
       <View style={[styles.rows, loading && styles.loadingList]}>
         {alerts.map(alert => <AlertRow key={alert.key} alert={alert} disabled={saving !== null}
           saving={saving === alert.key} onHide={() => confirmHide(alert)} />)}
       </View>
-      {loading && <ActivityIndicator size="small" color={Colors.action} accessibilityLabel="홈 알림 불러오는 중" style={styles.loading} />}
+      {firstLoad && alerts.length === 0 && <SkeletonGroup label="홈 알림 불러오는 중" style={styles.rows}>
+        {[0, 1].map(i => <Skeleton key={i} height={56} radius={14} />)}
+      </SkeletonGroup>}
+      {loading && alerts.length > 0 && <ActivityIndicator size="small" color={Colors.action} accessibilityLabel="홈 알림 불러오는 중" style={styles.loading} />}
       {done && <View style={styles.done} accessibilityLiveRegion="polite">
         <AppIcon name="checkmark" size={20} color={Colors.action} />
         <Text style={styles.doneText}>모든 알림을 확인했어요</Text>

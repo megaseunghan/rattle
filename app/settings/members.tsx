@@ -1,10 +1,11 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, Alert,
-  ScrollView, ActivityIndicator, Share,
+  ScrollView, Share,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppIcon } from '../../lib/icons/AppIcon';
+import { Skeleton, SkeletonGroup } from '../../lib/components/skeleton';
 import { router, useFocusEffect } from 'expo-router';
 import { Colors } from '../../constants/colors';
 import { useAuth } from '../../lib/contexts/AuthContext';
@@ -149,7 +150,20 @@ export default function MembersScreen() {
       </View>
 
       {loading ? (
-        <ActivityIndicator style={{ marginTop: 40 }} color={Colors.primary} />
+        <SkeletonGroup label="멤버 불러오는 중" style={styles.scroll}>
+          <Skeleton width="92%" height={14} /><Skeleton width="64%" height={14} style={styles.skeletonGap} />
+          <Skeleton height={44} radius={12} style={styles.skeletonBlock} />
+          <Skeleton width={64} height={14} style={styles.skeletonBlock} />
+          <View style={[styles.card, styles.skeletonGap]}>
+            {[0, 1, 2, 3].map(i => <View key={i} style={[styles.row, i > 0 && styles.rowBorder]}>
+              <View style={styles.rowLeft}>
+                <Skeleton width={36} height={36} radius={18} />
+                <View style={styles.rowInfo}><Skeleton width={i % 2 ? '48%' : '62%'} height={14} /><Skeleton width="40%" height={10} radius={6} style={styles.skeletonGap} /></View>
+              </View>
+              <Skeleton width={44} height={20} radius={6} />
+            </View>)}
+          </View>
+        </SkeletonGroup>
       ) : (
         <ScrollView contentContainerStyle={styles.scroll}>
           {error && <ErrorMessage message={error} onRetry={loadMembers} />}
@@ -264,6 +278,8 @@ const styles = StyleSheet.create({
   backBtn: { width: 44, height: 44, justifyContent: 'center' },
   title: { flexShrink: 1, fontSize: 22, fontWeight: '700', color: Colors.black },
   scroll: { padding: 20, paddingBottom: 48 },
+  skeletonGap: { marginTop: 8 },
+  skeletonBlock: { marginTop: 16 },
   sectionTitle: {
     fontSize: 15, fontWeight: '700', color: Colors.black,
     marginBottom: 10, marginTop: 8,

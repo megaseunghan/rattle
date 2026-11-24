@@ -23,6 +23,7 @@ import { usePayroll } from '../../lib/hooks/usePayroll';
 import { Employee, EmploymentType } from '../../types';
 import { isInProbation, isInsuranceApplicable } from '../../lib/services/employees';
 import { PayrollSubmissionReview } from '../../lib/components/PayrollSubmissionReview';
+import { Skeleton, SkeletonGroup } from '../../lib/components/skeleton';
 import { AttendanceWorkIssuesNotice, attendanceWorkFailureReason } from '../../lib/components/AttendanceWorkIssuesNotice';
 import { useAttendanceWorkFailures } from '../../lib/hooks/useAttendanceWorkFailures';
 import { PayrollWorkSubmission } from '../../types';
@@ -609,7 +610,7 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
           <View style={styles.summaryCard}>
             <Text style={styles.summaryLabel}>총 인건비</Text>
             {(payLoading || empLoading || histLoading)
-              ? <ActivityIndicator size="small" color={Colors.gray300} style={styles.summaryLoader} />
+              ? <SkeletonGroup label="총 인건비 불러오는 중" style={styles.summaryLoader}><Skeleton width="78%" height={22} /></SkeletonGroup>
               : <Text style={styles.summaryValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{histError || employeeError || payrollError ? '조회 실패' : invalidWageData ? '직원 정보 확인' : `${totalLaborCost.toLocaleString()}원`}</Text>
             }
             <Text style={styles.summarySub}>오늘까지 세전 누적 · 일할</Text>
@@ -617,7 +618,7 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
           <View style={styles.summaryCard}>
             <Text style={styles.summaryLabel}>작성된 급여 지급액</Text>
             {payLoading
-              ? <ActivityIndicator size="small" color={Colors.gray300} style={styles.summaryLoader} />
+              ? <SkeletonGroup label="급여 지급액 불러오는 중" style={styles.summaryLoader}><Skeleton width="70%" height={22} /></SkeletonGroup>
               : <Text style={styles.summaryValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{employeeError || payrollError ? '조회 실패' : `${totalExpectedPay.toLocaleString()}원`}</Text>
             }
             <Text style={styles.summarySub}>월 급여 · 입력 공제 기준</Text>
@@ -653,7 +654,11 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
         <Text style={styles.sectionLabel}>직원</Text>
 
         {empLoading ? (
-          <ActivityIndicator color={Colors.primary} />
+          <SkeletonGroup label="직원 목록 불러오는 중" style={styles.skeletonList}>
+            {(['32%', '40%', '28%'] as const).map((w, i) => <View key={i} style={[styles.employeeCard, styles.skeletonCard]}>
+              <Skeleton width={w} height={16} /><Skeleton width="54%" height={11} radius={6} /><Skeleton width="46%" height={22} />
+            </View>)}
+          </SkeletonGroup>
         ) : employeeError ? null : employees.length === 0 ? (
           <EmptyState
             icon="people-outline" illustration="staff"
@@ -951,7 +956,8 @@ const styles = StyleSheet.create({
   summaryCard: { flex: 1, minWidth: 140, backgroundColor: Colors.white, borderRadius: 24, borderWidth: 1, borderColor: Colors.homeBorder, padding: 16 },
   summaryLabel: { fontSize: 13, fontWeight: '500', color: Colors.gray600, marginBottom: 10 },
   summaryValue: { fontVariant: ['tabular-nums'], fontSize: 22, fontFamily: Fonts.spaceGroteskBold, fontWeight: '700', color: Colors.black, marginBottom: 6, letterSpacing: -0.5 },
-  summaryLoader: { height: 24, marginBottom: 2 },
+  summaryLoader: { height: 30, justifyContent: 'center' },
+  skeletonList: { gap: 12 }, skeletonCard: { gap: 10 },
   netPayNotice: { fontSize: 12, lineHeight: 18, color: Colors.gray600 },
   summarySub: { fontSize: 11, lineHeight: 17, color: Colors.gray500 },
   sectionLabel: { fontSize: 17, fontWeight: '700', color: Colors.black },

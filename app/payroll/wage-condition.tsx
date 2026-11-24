@@ -10,7 +10,7 @@ import { useConfirmLeave } from '../../lib/hooks/useConfirmLeave';
 import { getWageHistory, addWageChange, todayISO } from '../../lib/services/wageHistory';
 import { getFinancialSummaries } from '../../lib/services/homeFinancialSummary';
 import { ErrorMessage } from '../../lib/components/ErrorMessage';
-import { LoadingSpinner } from '../../lib/components/LoadingSpinner';
+import { Skeleton, SkeletonGroup } from '../../lib/components/skeleton';
 import { AppBar, Button, Field } from '../../lib/components/ui';
 import { isWageDate, wageAmount } from '../../lib/utils/wageCondition';
 import { getErrorMessage } from '../../lib/utils/error';
@@ -155,14 +155,18 @@ export default function WageConditionScreen() {
   function editReview(target: 1 | 2) { setError(null); setEditingReview(true); setStep(target); }
   return <SafeAreaView style={styles.page}>
     <AppBar title="급여 변경" onBack={goBack} />
-    {!allowed ? <ErrorMessage message="매장과 관리자 권한을 확인한 뒤 다시 열어 주세요." /> : loading ? <LoadingSpinner /> : employeeError || !employee ? <ErrorMessage message="직원 정보를 불러오지 못했어요." onRetry={() => refetch(true)} /> :
+    {!allowed ? <ErrorMessage message="매장과 관리자 권한을 확인한 뒤 다시 열어 주세요." /> : loading ? <SkeletonGroup label="직원 정보 불러오는 중" style={styles.content}>
+      <View style={styles.context}><Skeleton width="50%" height={18} /><Skeleton width="40%" height={12} radius={6} /></View>
+      <Skeleton width="36%" height={14} />
+      <WageFieldSkeleton />
+    </SkeletonGroup> : employeeError || !employee ? <ErrorMessage message="직원 정보를 불러오지 못했어요." onRetry={() => refetch(true)} /> :
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView ref={scrollRef} onLayout={revealFocusedField} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
           <View style={styles.context}><Text style={styles.title}>{store?.name} · {employee.name}</Text><Text style={styles.text}>확인 대상 {params.targetMonth} · {partTime ? '파트타임' : '정규직'}</Text></View>
           {!saved && <Text style={styles.progress} accessibilityLabel={`3단계 중 ${step}단계`}>{step} / 3 · {step === 1 ? '적용일 선택' : step === 2 ? '새 급여 입력' : '최종 검토'}</Text>}
           {saved ? <><Text style={styles.title}>급여 조건을 저장했어요</Text><Text style={styles.text}>적용 시작일 {date} · {label} {wageAmount(amount)?.toLocaleString()}원</Text><Text style={styles.text}>{refreshResult}</Text><Button label="손익 다시 확인" variant="secondary" onPress={() => void refreshSaved()} /><Button label="원래 화면으로" onPress={goBack} /></> : <>
             <Text style={styles.text}>변경일부터 새 급여를 적용해요. 이전 급여와 작성된 월 명세는 그대로 보관해요.</Text>
-            {loadError ? <ErrorMessage message="급여 조건 이력을 불러오지 못했어요." onRetry={loadHistory} /> : history === null ? <LoadingSpinner fullScreen={false} /> : <>
+            {loadError ? <ErrorMessage message="급여 조건 이력을 불러오지 못했어요." onRetry={loadHistory} /> : history === null ? <SkeletonGroup label="급여 조건 이력 불러오는 중"><WageFieldSkeleton /></SkeletonGroup> : <>
               {reviewing ? <View style={styles.context}><Text style={styles.title}>저장 전 확인</Text><Text style={styles.text}>적용 시작일 {date}</Text><Text style={styles.text}>{label} {wageAmount(amount)?.toLocaleString()}원 · 비과세 {wageAmount(nonTax)?.toLocaleString()}원</Text><Text style={styles.text}>근거·메모: {memo.trim() || '입력 없음'}</Text><Button label="적용일 수정" variant="text" onPress={() => editReview(1)} disabled={saving || outcomeUnknown} /><Button label="금액·근거 수정" variant="text" onPress={() => editReview(2)} disabled={saving || outcomeUnknown} /><Text style={styles.text}>저장된 월 급여 명세는 이 작업으로 변경되지 않아요. 명세가 없는 기간의 손익은 조건 이력을 기준으로 다시 계산되므로 과거 조회 금액이 달라질 수 있어요.</Text></View> : <>
                 {step === 1 && <><View onLayout={event => recordField('date', event.nativeEvent.layout.y)}><Field onFocus={() => focusField('date')} accessibilityLabel="적용 시작일" label="적용 시작일 *" value={date} onChangeText={setDate} placeholder="YYYY-MM-DD" maxLength={10} keyboardType="numbers-and-punctuation" helpText="최초 급여는 입사일부터, 변경 급여는 선택한 날짜부터 적용해요." /></View>
                 <View style={styles.context}><Text style={styles.text}>현재 {label} {(partTime ? employee.hourly_wage : employee.base_salary)?.toLocaleString() ?? '미확인'}원 · 비과세 {employee.non_taxable.toLocaleString()}원</Text><Button label={showHistory ? '조건 이력 접기' : '조건 이력 보기'} variant="text" onPress={() => setShowHistory(value => !value)} />{showHistory && (history.length ? history.map(row => <Text key={row.id} style={styles.text}>{row.effective_date} · {(partTime ? row.hourly_wage : row.base_salary)?.toLocaleString()}원 · 비과세 {row.non_taxable.toLocaleString()}원</Text>) : <Text style={styles.text}>등록된 이력이 없어요.</Text>)}</View></>}
@@ -178,4 +182,8 @@ export default function WageConditionScreen() {
       </KeyboardAvoidingView>}
   </SafeAreaView>;
 }
-const styles = StyleSheet.create({ progress: { fontVariant: ['tabular-nums'], color: Colors.action, fontWeight: '700', fontSize: 14 }, error: { backgroundColor: Colors.fieldErrorBg, borderRadius: 12 }, footer: { padding: 16, borderTopWidth: 1, borderTopColor: Colors.gray200, backgroundColor: Colors.white }, page: { flex: 1, backgroundColor: Colors.homeCanvas }, flex: { flex: 1 }, content: { padding: 20, paddingBottom: 32, gap: 18 }, context: { backgroundColor: Colors.contextBg, borderRadius: 16, padding: 16, gap: 8 }, title: { fontSize: 17, fontWeight: '700', color: Colors.black }, text: { fontVariant: ['tabular-nums'], fontSize: 14, lineHeight: 22, color: Colors.gray600 } });
+/** 입력칸(이름표 + 칸) 하나 높이의 자리 표시. SkeletonGroup 안에서 쓴다. */
+function WageFieldSkeleton() {
+  return <View style={styles.skeletonField}><Skeleton width="30%" height={12} radius={6} /><Skeleton height={48} radius={12} /></View>;
+}
+const styles = StyleSheet.create({ skeletonField: { gap: 8 }, progress: { fontVariant: ['tabular-nums'], color: Colors.action, fontWeight: '700', fontSize: 14 }, error: { backgroundColor: Colors.fieldErrorBg, borderRadius: 12 }, footer: { padding: 16, borderTopWidth: 1, borderTopColor: Colors.gray200, backgroundColor: Colors.white }, page: { flex: 1, backgroundColor: Colors.homeCanvas }, flex: { flex: 1 }, content: { padding: 20, paddingBottom: 32, gap: 18 }, context: { backgroundColor: Colors.contextBg, borderRadius: 16, padding: 16, gap: 8 }, title: { fontSize: 17, fontWeight: '700', color: Colors.black }, text: { fontVariant: ['tabular-nums'], fontSize: 14, lineHeight: 22, color: Colors.gray600 } });

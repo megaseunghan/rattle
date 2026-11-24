@@ -1,6 +1,6 @@
 import { memo, useEffect, useState } from 'react';
 /* design-system: DESIGN.md — a store day, from opening to closing */
-import { ActivityIndicator, View, Text, Pressable, StyleSheet } from 'react-native';
+import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { AppIcon } from '../icons/AppIcon';
 import { Illustration } from '../icons/Illustration';
 import { homeActionIllustrations } from '../icons/homeActionIllustrations';
@@ -18,6 +18,7 @@ import { HomeActionId, HomePhase } from '../../types';
 import { ErrorMessage } from './ErrorMessage';
 import { HomeWorkflowEditor } from './HomeWorkflowEditor';
 import { ChecklistProgress } from './ChecklistProgress';
+import { SkeletonCardList } from './skeleton';
 
 const PHASES: { id: HomePhase; label: string }[] = [
   { id: 'open', label: '오픈' }, { id: 'business', label: '영업 중' }, { id: 'close', label: '마감' },
@@ -77,7 +78,7 @@ export const DailyOperationsHome = memo(function DailyOperationsHome({ active, r
     </View>
     {workflow.isError && <ErrorMessage message={`${homeWorkflowLoadMessage(workflow.error)} ${workflow.data ? '이전 구성을 유지해요.' : '기본 구성을 보여드려요.'}`} onRetry={() => { void workflow.refetch(); }} />}
     {query.isError && hasChecklist && <ErrorMessage message="체크 현황을 불러오지 못했어요." onRetry={() => { void query.refetch(); }} />}
-    {workflow.isPending && !workflow.data ? <View style={styles.loading} accessibilityRole="progressbar" accessibilityLabel="바로가기 불러오는 중"><ActivityIndicator color={Colors.action} /></View> : shortcuts.length ? <View style={styles.list}>
+    {workflow.isPending && !workflow.data ? <SkeletonCardList count={4} label="바로가기 불러오는 중" /> : shortcuts.length ? <View style={styles.list}>
       {shortcuts.map(action => <GlassCard key={action.id} contentStyle={styles.cardContent} style={styles.card}>
         <Pressable onPress={action.onPress} accessibilityRole="button" accessibilityLabel={`${action.label}${action.status ? `, ${action.status}` : ''}`}
           style={({ pressed }) => [styles.shortcut, pressed && styles.pressed]}>

@@ -4,7 +4,7 @@ import { getErrorMessage } from '../../lib/utils/error';
 import { useState, useEffect, useMemo } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  Alert, ActivityIndicator, RefreshControl,
+  Alert, RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppIcon } from '../../lib/icons/AppIcon';
@@ -18,6 +18,7 @@ import { useExpenses } from '../../lib/hooks/useExpenses';
 import { animateListChange } from '../../lib/utils/layoutAnimation';
 import { ExpensesPanel } from '../../lib/components/ExpensesPanel';
 import { GlassCard } from '../../lib/components/GlassCard';
+import { SkeletonRows } from '../../lib/components/skeleton';
 import { LedgerHeader } from '../../lib/components/LedgerHeader';
 import { LedgerFilters } from '../../lib/components/LedgerFilters';
 import { CategoryManageModal } from '../../lib/components/CategoryManageModal';
@@ -187,7 +188,7 @@ function PurchasesView({ active, ledger }: { active: boolean; ledger: ReturnType
           <>
             <Text style={styles.sectionLabel}>{month + 1}월 {selectedDay === null ? '전체 매입' : `${selectedDay}일 매입`}</Text>
             <GlassCard contentStyle={{ padding: 0 }}>
-              {loading ? <View style={styles.emptyInCard}><ActivityIndicator size="small" color={Colors.gray300} /></View>
+              {loading ? <SkeletonRows count={5} avatar={false} card={false} label="매입 목록 불러오는 중" />
                 : selectedPurchases.length === 0 ? (
                   <View style={styles.emptyInCard}>
                     <Text style={styles.emptyInCardText}>등록된 매입이 없어요</Text>

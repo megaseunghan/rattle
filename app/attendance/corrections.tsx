@@ -12,7 +12,7 @@ import { resolveSelfEmployee } from '../../lib/utils/resolveSelfEmployee';
 import { AppBar } from '../../lib/components/ui';
 import { GlassBackdrop } from '../../lib/components/GlassBackdrop';
 import { ErrorMessage } from '../../lib/components/ErrorMessage';
-import { LoadingSpinner } from '../../lib/components/LoadingSpinner';
+import { Skeleton, SkeletonGroup } from '../../lib/components/skeleton';
 export default function AttendanceCorrectionsScreen() {
   const { user, devPreviewEmployeeId } = useAuth(); const { employees } = useEmployees();
   const employee = resolveSelfEmployee(employees, user?.id, devPreviewEmployeeId);
@@ -20,7 +20,9 @@ export default function AttendanceCorrectionsScreen() {
   const [confirm, setConfirm] = useState<string | null>(null);
   const locked = ['saving', 'unknown'].includes(state.outcome);
   return <SafeAreaView style={s.root}><GlassBackdrop /><AppBar transparent title="정정 요청한 기록" onBack={() => router.back()} />
-    {state.loading ? <LoadingSpinner /> : state.error ? <ErrorMessage message={state.error} onRetry={() => { void state.refetch(); }} /> : <ScrollView contentContainerStyle={s.content}>
+    {state.loading ? <SkeletonGroup label="정정 요청 기록 불러오는 중" style={s.content}>
+      {[0, 1, 2].map(i => <View key={i} style={s.card}><Skeleton width="36%" height={14} /><Skeleton width="56%" height={12} radius={6} /><Skeleton width="72%" height={12} radius={6} /></View>)}
+    </SkeletonGroup> : state.error ? <ErrorMessage message={state.error} onRetry={() => { void state.refetch(); }} /> : <ScrollView contentContainerStyle={s.content}>
       {!state.rows.length && <Text style={s.note}>정정 요청한 기록이 없어요</Text>}
       {state.rows.map(row => <View key={row.id} style={s.card}><Text style={s.title}>{row.kind === 'clock_out' ? '퇴근' : '출근'} · {{ pending: '확인 대기', approved: '승인했어요', rejected: '반려했어요', cancelled: '취소했어요' }[row.status]}</Text>
         <Text style={s.note}>{row.requested_time ? new Date(row.requested_time).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }) : '기록 삭제 요청'}</Text><Text style={s.note}>{row.reason}</Text>{row.review_note && <Text style={s.note}>{row.review_note}</Text>}{row.status === 'pending' && <Pressable disabled={locked} accessibilityRole="button" style={s.action} onPress={() => setConfirm(row.id)}><Text style={s.link}>요청 취소하기</Text></Pressable>}</View>)}

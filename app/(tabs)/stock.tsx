@@ -19,6 +19,7 @@ import type { RecipeWithIngredients } from '../../lib/services/recipes';
 import { RecipeCard } from '../../lib/components/RecipeCard';
 import { CategoryManageButton } from '../../lib/components/CategoryManageButton';
 import { CategoryManageModal } from '../../lib/components/CategoryManageModal';
+import { Skeleton, SkeletonGroup } from '../../lib/components/skeleton';
 import { animateListChange } from '../../lib/utils/layoutAnimation';
 import { EmptyState } from '../../lib/components/ui';
 import { TabPagerContext } from '../../lib/contexts/TabPagerContext';
@@ -234,9 +235,11 @@ export function StockScreen({ active = true }: { active?: boolean }) {
 
       {/* 리스트 */}
       {isLoading ? (
-        <View style={styles.loadingWrap}>
-          <ActivityIndicator size="large" color={Colors.primary} />
-        </View>
+        <SkeletonGroup label="재고 목록 불러오는 중" style={styles.listContent}>
+          {(['42%', '56%', '36%', '50%', '46%'] as const).map((w, i) => <View key={i} style={[styles.ingredientRow, styles.skeletonRow]}>
+            <Skeleton width={w} height={15} /><Skeleton width="38%" height={11} radius={6} /><Skeleton height={4} radius={2} />
+          </View>)}
+        </SkeletonGroup>
       ) : activeTab === '재고현황' ? (
         <FlatList
           initialNumToRender={5}
@@ -373,7 +376,7 @@ const styles = StyleSheet.create({
   progressFill: { height: 4, borderRadius: 2 },
 
   // 기타
-  loadingWrap: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  skeletonRow: { flexDirection: 'column', alignItems: 'stretch', gap: 8 },
 
 });
 

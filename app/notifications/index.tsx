@@ -1,5 +1,5 @@
 import { Fragment, useMemo, useRef } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text } from 'react-native';
+import { Pressable, ScrollView, View, StyleSheet, Text } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { router } from 'expo-router';
@@ -11,6 +11,7 @@ import { useNotifications } from '../../lib/hooks/useNotifications';
 import { ErrorMessage } from '../../lib/components/ErrorMessage';
 import { AppBar, EmptyState } from '../../lib/components/ui';
 import { NotificationSwipeRow } from '../../lib/components/NotificationSwipeRow';
+import { Skeleton, SkeletonGroup } from '../../lib/components/skeleton';
 
 function dayKey(iso: string) { return new Date(new Date(iso).getTime() + 9 * 3600000).toISOString().slice(0, 10); }
 function dayLabel(key: string) {
@@ -35,7 +36,7 @@ export default function NotificationsScreen() {
     <AppBar title="알림" onBack={() => router.back()} rightSlot={unreadCount > 0 ? <Pressable accessibilityRole="button" accessibilityLabel="모두 읽음" disabled={!!deletingId} accessibilityState={{ disabled: !!deletingId }} onPress={() => { void markAllRead(); }} style={styles.allRead}><Text style={styles.allReadText}>모두 읽음</Text></Pressable> : undefined} />
     <GestureDetector gesture={scrollGesture}><ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
       {error && <ErrorMessage message={error} onRetry={() => { void refetch(); }} />}
-      {loading && notifications.length === 0 ? <ActivityIndicator color={Colors.action} style={styles.loading} />
+      {loading && notifications.length === 0 ? <SkeletonGroup label="알림 불러오는 중" style={styles.loading}>{[0, 1, 2, 3, 4, 5].map(i => <View key={i} style={styles.skeletonRow}><Skeleton width={i % 2 ? '78%' : '92%'} height={13} /><Skeleton width="46%" height={13} style={styles.skeletonLine} /><Skeleton width={64} height={10} radius={6} style={styles.skeletonLine} /></View>)}</SkeletonGroup>
         : notifications.length === 0 ? <EmptyState icon="notifications-outline" title="새로운 알림이 없어요" description="새로운 소식이 오면 이곳에 모여요" />
         : notifications.map((n, index) => <Fragment key={`${scope}:${n.id}`}>
           {(index === 0 || dayKeys[index] !== dayKeys[index - 1]) && <Text accessibilityRole="header" style={styles.day}>{dayLabel(dayKeys[index])}</Text>}
@@ -52,5 +53,5 @@ export default function NotificationsScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.homeCanvas }, scroll: { paddingHorizontal: Spacing.screenX, paddingTop: 12, paddingBottom: 40 },
   day: { color: Colors.gray600, fontFamily: Fonts.wantedMedium, fontSize: 11, lineHeight: 18, paddingTop: 12, paddingBottom: 3 },
-  allRead: { minHeight: 44, paddingLeft: 10, justifyContent: 'center' }, allReadText: { color: Colors.action, fontSize: 12, fontFamily: Fonts.wantedMedium }, loading: { marginTop: 32 },
+  allRead: { minHeight: 44, paddingLeft: 10, justifyContent: 'center' }, allReadText: { color: Colors.action, fontSize: 12, fontFamily: Fonts.wantedMedium }, loading: { marginTop: 8 }, skeletonRow: { minHeight: 79, paddingVertical: 13, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: Colors.homeBorder }, skeletonLine: { marginTop: 6 },
 });

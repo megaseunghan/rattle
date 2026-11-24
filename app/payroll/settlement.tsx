@@ -15,6 +15,7 @@ import { formatWorkedMinutes } from '../../lib/utils/workMinutes';
 import { Employee, Payroll } from '../../types';
 import { AppBar, Badge, EmptyState } from '../../lib/components/ui';
 import { ErrorMessage } from '../../lib/components/ErrorMessage';
+import { Skeleton, SkeletonGroup } from '../../lib/components/skeleton';
 
 function fmt(n: number): string {
   return `${n.toLocaleString()}원`;
@@ -95,7 +96,11 @@ export default function PayrollSettlementScreen() {
       <AppBar title={`${monthLabel} 급여 정산`} onBack={() => router.back()} />
 
       {loading || empLoading ? (
-        <ActivityIndicator color={Colors.primary} style={{ marginTop: 40 }} />
+        <SkeletonGroup label="급여 정산 불러오는 중" style={styles.scroll}>
+          <View style={styles.summaryCard}><Skeleton width="40%" height={12} radius={6} /><Skeleton width="58%" height={30} /></View>
+          <View style={styles.listHeader}><Skeleton width={120} height={16} /><Skeleton width={64} height={12} radius={6} /></View>
+          {[0, 1, 2].map(i => <View key={i} style={styles.row}><Skeleton width="32%" height={14} /><Skeleton width="54%" height={12} radius={6} /></View>)}
+        </SkeletonGroup>
       ) : error || empError ? (
         <ErrorMessage message={error || empError!} onRetry={() => { load(); refetchEmployees(); }} />
       ) : (

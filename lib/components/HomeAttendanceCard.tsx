@@ -7,7 +7,7 @@ import type { Employee } from '../../types';
 import { useAuth } from '../contexts/AuthContext';
 import { attendanceTime, useAttendanceToday } from '../hooks/useAttendanceToday';
 import { ErrorMessage } from './ErrorMessage';
-import { LoadingSpinner } from './LoadingSpinner';
+import { Skeleton, SkeletonGroup } from './skeleton';
 
 export function HomeAttendanceCard({ employeeId, employee, active, refreshKey }: { employeeId?: string; employee?: Employee | null; active: boolean; refreshKey: number }) {
   const { user, store, storeRole } = useAuth();
@@ -21,7 +21,7 @@ export function HomeAttendanceCard({ employeeId, employee, active, refreshKey }:
         <Text style={s.divider}>|</Text><Text style={s.affiliation}>{store?.name}</Text>
       </Pressable>
     </ScrollView>
-    {employeeId && <>{record.loading ? <LoadingSpinner fullScreen={false} /> : record.error ? <ErrorMessage message={record.error} onRetry={() => { void record.refetch(); }} /> : <View style={s.times}>
+    {employeeId && <>{record.loading ? <SkeletonGroup label="출퇴근 기록 불러오는 중" style={s.times}>{[0, 1].map(i => <View key={i} style={s.row}><Skeleton width={64} height={14} style={s.skLine} /><Skeleton width={52} height={16} style={s.skLine} /></View>)}</SkeletonGroup> : record.error ? <ErrorMessage message={record.error} onRetry={() => { void record.refetch(); }} /> : <View style={s.times}>
       <View style={s.row}><Text style={s.label}>{record.start ? '출근' : '출근 예정'}</Text><Text style={s.time}>{attendanceTime(record.start?.punched_at) || record.schedule?.start_time?.slice(0, 5) || '미정'}</Text></View>
       <View style={s.row}><Text style={s.label}>{record.end ? '퇴근' : '퇴근 예정'}</Text><Text style={s.time}>{attendanceTime(record.end?.punched_at) || record.schedule?.end_time?.slice(0, 5) || '미정'}</Text></View>
       {record.scheduleError && <Text style={s.label}>예정 시간을 불러오지 못했어요</Text>}
@@ -36,5 +36,6 @@ const s = StyleSheet.create({
   probation: { backgroundColor: Colors.contextBg, color: Colors.gray700 }, affiliation: { fontFamily: Fonts.wantedRegular, fontSize: 12, color: Colors.gray600 },
   times: { borderTopWidth: 1, borderColor: Colors.homeBorder, paddingTop: 12, gap: 12 }, row: { flexDirection: 'row', justifyContent: 'space-between', gap: 16 },
   label: { fontFamily: Fonts.wantedRegular, fontSize: Type.base, lineHeight: 24, color: Colors.gray600 }, time: { fontFamily: Fonts.geistMedium, fontSize: Type.lg, lineHeight: 24, color: Colors.black },
+  skLine: { marginVertical: 4 },
   action: { minHeight: 44, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.tinted, borderRadius: Radius.field }, actionText: { fontFamily: Fonts.wantedMedium, fontSize: Type.base, color: Colors.action },
 });
