@@ -31,6 +31,12 @@ it('홈 첫 표시를 넘긴 idle 차례 전에는 비교 그래프 원본을 �
     unmount();
   } finally { globalThis.requestIdleCallback = oldRequest; globalThis.cancelIdleCallback = oldCancel; }
 });
+it('일별 조회가 권한 거절이면 월 카드도 숨긴다', async () => {
+  mockTimeline.mockRejectedValue({ code: '42501', message: 'denied' });
+  const { result } = renderHook(() => useHomeFinancialCard(true));
+  await waitFor(() => expect(result.current.denied).toBe(true));
+  expect(result.current.data).toBeNull();
+});
 it('인건비 확인 필요는 월 카드와 차트에서 0원으로 바뀌지 않는다', async () => {
   mockBatch.mockImplementation((ids, months) => Promise.resolve([{ storeId: ids[0], yearMonth: months[0], revenue: 1000, purchaseCost: 200, laborCost: null, fixedExpense: 100, variableExpense: 100, operatingProfit: null }]));
   const { result } = renderHook(() => useHomeFinancialCard(true));
