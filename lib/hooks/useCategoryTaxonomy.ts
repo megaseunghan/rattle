@@ -4,7 +4,12 @@ import { useAuth } from '../contexts/AuthContext';
 import { CategoryTaxonomy } from '../services/categoryTaxonomy';
 import { UserFacingError } from '../utils/error';
 
-export function useCategoryTaxonomy(taxonomy: CategoryTaxonomy) {
+export interface CategoryTaxonomyOptions {
+  /** false면 마운트 때 조회하지 않는다. 화면의 focus refetch가 첫 조회를 맡을 때 이중 요청을 막는다. */
+  fetchOnMount?: boolean;
+}
+
+export function useCategoryTaxonomy(taxonomy: CategoryTaxonomy, { fetchOnMount = true }: CategoryTaxonomyOptions = {}) {
   const { assertCanWrite } = usePreviewWriteGuard();
   const { store } = useAuth();
   const storeId = store?.id;
@@ -24,7 +29,7 @@ export function useCategoryTaxonomy(taxonomy: CategoryTaxonomy) {
       if (id === request.current && currentStore.current === storeId) setState(previous => ({ ...previous, loading: false, error: '카테고리를 불러오지 못했어요. 다시 시도해 주세요.' }));
     }
   }, [storeId, taxonomy]);
-  useEffect(() => { void refetch(); }, [refetch]);
+  useEffect(() => { if (fetchOnMount) void refetch(); }, [fetchOnMount, refetch]);
   const categories = state.storeId === storeId ? state.categories : [];
   async function change(action: 'add' | 'rename' | 'remove', name: string, next?: string) {
     assertCanWrite();

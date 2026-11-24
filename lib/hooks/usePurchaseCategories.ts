@@ -1,6 +1,6 @@
-import { useCategoryTaxonomy } from './useCategoryTaxonomy';
+import { useCategoryTaxonomy, type CategoryTaxonomyOptions } from './useCategoryTaxonomy';
 import { purchaseCategoryTaxonomy } from '../services/purchaseCategories';
 
-export function usePurchaseCategories() {
-  return useCategoryTaxonomy(purchaseCategoryTaxonomy);
+export function usePurchaseCategories(options?: CategoryTaxonomyOptions) {
+  return useCategoryTaxonomy(purchaseCategoryTaxonomy, options);
 }

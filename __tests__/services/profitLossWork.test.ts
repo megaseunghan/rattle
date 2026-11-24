@@ -12,14 +12,14 @@ jest.mock('../../lib/services/wageHistory', () => ({ getStoreWageHistory: (...ar
 jest.mock('../../lib/services/payroll', () => ({ probationFactor: () => 1 }));
 beforeEach(() => { mockPurchases.mockReset().mockResolvedValue([]); mockWageHistory.mockReset().mockResolvedValue([]); mockManualTotals.mockReset().mockResolvedValue({ total: 1000000, cardRevenue: 0, cashRevenue: 1000000 }); });
 
-function setup(payrolls: unknown[], payrollError: unknown = null, employees: unknown[] = [], pageLimit = 500) {
+function setup(payrolls: unknown[], payrollError: unknown = null, employees: unknown[] = [], pageLimit = 1000) {
   (supabase.from as jest.Mock).mockImplementation((table: string) => {
     const result = table === 'payroll' ? { data: payrolls, error: payrollError }
       : table === 'employees' ? { data: employees, error: null } : { data: [], error: null };
-    let offset = 0;
-    return { order: jest.fn().mockReturnThis(), range: jest.fn().mockImplementation(function(this: unknown, start: number) { offset=start; return this; }), select: jest.fn().mockReturnThis(), eq: jest.fn().mockReturnThis(),
+    let offset = 0; let end = Infinity;
+    return { order: jest.fn().mockReturnThis(), range: jest.fn().mockImplementation(function(this: unknown, start: number, last: number) { offset=start; end=last; return this; }), select: jest.fn().mockReturnThis(), eq: jest.fn().mockReturnThis(),
       gte: jest.fn().mockReturnThis(), lte: jest.fn().mockReturnThis(),
-      then: (resolve: (value: unknown) => void) => Promise.resolve(result.error ? result : {data: result.data.slice(offset, offset + pageLimit), error:null}).then(resolve) };
+      then: (resolve: (value: unknown) => void) => Promise.resolve(result.error ? result : {data: result.data.slice(offset, Math.min(end + 1, offset + pageLimit)), error:null}).then(resolve) };
   });
 }
 
@@ -95,8 +95,9 @@ it('저장된 0원은 미입력과 구분하고 현재 급여로 재계산하지
   await expect(getProfitLossByMonth('store', '2026-09', '23:00')).resolves.toMatchObject({ regularGross: 0, laborCost: 0, netProfit: 1000000 });
 });
 
-it('서버 페이지 상한을 넘는 저장 급여 전체를 한 번씩 합산한다', async () => {
-  setup(Array.from({length:1203},(_,i)=>({employee_id:`old-${i}`,gross:100,net_pay:100})),null,[],127);
+// 개발 DB PostgREST max rows는 1000(2026-11-24 확인). 1203행은 500·500·203 세 페이지로 나뉜다.
+it('여러 페이지에 걸친 저장 급여 전체를 한 번씩 합산한다', async () => {
+  setup(Array.from({length:1203},(_,i)=>({employee_id:`old-${i}`,gross:100,net_pay:100})));
   await expect(getProfitLossByMonth('store','2026-09','23:00')).resolves.toMatchObject({regularGross:120300,laborCost:120300,netProfit:879700});
 });
 it('저장 명세가 있으면 충분한 이력도 추가 합산하거나 현재 조건으로 대체하지 않는다', async () => {
