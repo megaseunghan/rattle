@@ -110,6 +110,23 @@ describe('탭 전환(enabled: active)', () => {
     expect(view.result.current.loading).toBe(true);
   });
 
+  // 저장 결과를 모를 때(무효화가 실행되지 않음) 확인 창이 5분 캐시의 저장 전 목록을 보여주면 중복 저장으로 이어진다.
+  it('결과 확인용 reloadFresh는 캐시된 저장 전 목록을 버리고 로딩 뒤 최신 목록만 보여준다', async () => {
+    mockPurchases.mockResolvedValueOnce([{ id: 'before-save' }]);
+    renderHook(() => usePurchases('2026-11'));
+    await settle();
+    let resolveLatest: (rows: unknown[]) => void = () => undefined;
+    mockPurchases.mockImplementationOnce(() => new Promise(resolve => { resolveLatest = resolve; }));
+    const check = renderHook(({ open }: { open: boolean }) => usePurchases('2026-11', open), { initialProps: { open: false } });
+    act(() => { check.result.current.reloadFresh(); check.rerender({ open: true }); });
+    await settle();
+    expect(check.result.current.purchases).toEqual([]);
+    expect(check.result.current.loading).toBe(true);
+    await act(async () => { resolveLatest([{ id: 'before-save' }, { id: 'saved' }]); });
+    await settle();
+    expect(check.result.current.purchases).toEqual([{ id: 'before-save' }, { id: 'saved' }]);
+  });
+
   it('신원이 바뀌어 캐시를 비우면 이전 값을 보여주지 않고 다시 요청한다', async () => {
     mockPurchases.mockResolvedValueOnce([{ id: 'old' }]).mockImplementationOnce(() => new Promise(() => {}));
     const view = renderHook(() => usePurchases('2026-11'));

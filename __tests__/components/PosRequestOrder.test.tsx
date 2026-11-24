@@ -63,7 +63,8 @@ describe('매출 화면 요청 순서', () => {
     expect(mockManualEnabled).not.toHaveBeenCalledWith(true);
   });
 
-  it('탭 재진입 때 30분 안이면 연결 확인을 다시 요청하지 않고 수기 매출은 다시 켠다', async () => {
+  // 연결·해제는 서버 웹훅이 기록한다. 미연동 상태는 재사용하지 않고 탭 진입 때 다시 확인한다(연결된 매장만 30분 재사용).
+  it('미연동 매장은 탭 재진입 때 연결만 다시 확인하고 수기 매출은 캐시를 다시 켠다', async () => {
     mockStore = { id: 'store', closing_time: '23:00', toss_merchant_id: null };
     getDetails().mockResolvedValue({ toss_merchant_id: null, closing_time: '23:00' });
     const view = render(<PosScreen active />);
@@ -75,6 +76,6 @@ describe('매출 화면 요청 순서', () => {
     await act(async () => {});
     expect(manualEnabled()).toBe(true);
     expect(mockManualRefetch).not.toHaveBeenCalled();
-    expect(getDetails()).not.toHaveBeenCalled();
+    expect(getDetails()).toHaveBeenCalledTimes(1);
   });
 });

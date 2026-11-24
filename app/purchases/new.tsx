@@ -145,7 +145,7 @@ function NewPurchaseContent() {
   const [retrySignal, setRetrySignal] = useState(0);
   const [toast, setToast] = useState('');
   const [monthCheck, setMonthCheck] = useState(false);
-  // 월 확인 창을 열 때만 이 달 목록을 받는다(openMonthCheck가 최신으로 다시 받는다).
+  // 월 확인 창을 열 때만 이 달 목록을 받는다(openMonthCheck가 캐시를 비우고 최신으로 받는다).
   const ledger = usePurchases(month, monthCheck);
   const writeLock = useRef(false);
   const formLocked = saveState !== 'idle' && saveState !== 'retry';
@@ -233,7 +233,7 @@ function NewPurchaseContent() {
   handleSubmitRef.current = handleSubmit;
 
   function openMonthCheck() {
-    void ledger.refetch();
+    ledger.reloadFresh();
     setMonthCheck(true);
   }
   function askFound() {

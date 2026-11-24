@@ -179,7 +179,7 @@ export function PosScreen({ active = true }: { active?: boolean }) {
     return { from, to };
   }
 
-  const loadStoreStatus = useCallback(async () => {
+  const loadStoreStatus = useCallback(async (recheck = false) => {
     if (!store) return;
     const request = ++statusRequest.current;
     const valid = () => request === statusRequest.current && currentStoreId.current === connectionIdentity;
@@ -189,8 +189,10 @@ export function PosScreen({ active = true }: { active?: boolean }) {
     try {
       const data = await queryClient.fetchQuery({
         queryKey: queryKeys.store(accessScope, store.id, 'pos', 'connection', connectionConfig),
-        // 매장 연결 정보는 30분 재사용한다. 연결 설정 저장은 'pos' 무효화로 바로 다시 확인한다.
-        queryFn: () => getStoreDetails(store.id), staleTime: STALE_TIME.config,
+        // 연결·해제는 서버 웹훅이 기록해 앱 무효화가 없다. 연결된 매장만 30분 재사용하고,
+        // 미연동 상태와 스택 화면(POS 설정 등)에서 돌아온 때는 항상 다시 확인한다.
+        queryFn: () => getStoreDetails(store.id),
+        staleTime: recheck ? 0 : query => (query.state.data?.toss_merchant_id ? STALE_TIME.config : 0),
       });
       if (!valid()) return;
       const newStatus: SyncStatus = data.toss_merchant_id ? 'connected' : 'unregistered';
@@ -222,7 +224,7 @@ export function PosScreen({ active = true }: { active?: boolean }) {
   useEffect(() => { if (active) void loadStoreStatus(); }, [active, loadStoreStatus]);
   // Pager activation is handled above. A stack settings screen can blur/focus
   // this mounted page without changing active; revalidate that return as well.
-  useFocusReturn(() => { if (active) void loadStoreStatus(); });
+  useFocusReturn(() => { if (active) void loadStoreStatus(true); });
   const businessDay = getAutoSyncRange(closingTime).from;
   const shownBusinessDay = useRef(businessDay);
   useEffect(() => {
