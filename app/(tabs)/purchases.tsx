@@ -73,7 +73,8 @@ function PurchasesView({ active, ledger }: { active: boolean; ledger: ReturnType
   function setActiveTab(value: string) { setActiveTabLocal(value); setViewState?.('purchase.supplier', value); }
   const [filterNotice, setFilterNotice] = useState(false);
 
-  const category = usePurchaseCategories();
+  // 첫 조회와 재진입 조회는 아래 focus effect 하나가 맡는다(마운트 effect와 겹치면 첫 진입에 2번 요청).
+  const category = usePurchaseCategories({ fetchOnMount: false });
   const { canManageStore } = useAuth();
   const [categoryModal, setCategoryModal] = useState(false);
   const [activeCategory, setActiveCategory] = useState('전체');
