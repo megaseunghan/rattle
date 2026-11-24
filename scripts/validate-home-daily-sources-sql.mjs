@@ -5,6 +5,7 @@ import { readFile } from 'node:fs/promises';
 const { PGlite } = await import(process.env.RATTLE_PGLITE_MODULE ?? '@electric-sql/pglite');
 const db = new PGlite();
 const owner = '00000000-0000-0000-0000-000000000001', outsider = '00000000-0000-0000-0000-000000000003';
+const manager = '00000000-0000-0000-0000-000000000004', staff = '00000000-0000-0000-0000-000000000005', partTimer = '00000000-0000-0000-0000-000000000006';
 const store = '00000000-0000-0000-0000-000000000010', other = '00000000-0000-0000-0000-000000000011';
 async function as(user, sql, params = []) {
   await db.exec('SET ROLE authenticated');
@@ -44,12 +45,20 @@ try {
       total_amount numeric(12,0) NOT NULL DEFAULT 0, card_amount numeric(12,0) NOT NULL DEFAULT 0, cash_amount numeric(12,0) NOT NULL DEFAULT 0);
     CREATE TABLE manual_sales(id uuid PRIMARY KEY DEFAULT gen_random_uuid(), store_id uuid, date date, card_amount numeric(12,0) NOT NULL DEFAULT 0, cash_amount numeric(12,0) NOT NULL DEFAULT 0);
     CREATE TABLE purchases(id uuid PRIMARY KEY DEFAULT gen_random_uuid(), store_id uuid, date date, amount numeric(12,0) NOT NULL DEFAULT 0);
-    CREATE FUNCTION can_read(s uuid) RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path=public AS $$ SELECT EXISTS(SELECT 1 FROM stores WHERE id=s AND owner_id=auth.uid()) $$;
+    CREATE TABLE store_members(store_id uuid, user_id uuid, role text);
+    -- Mirrors is_store_member: owner or any approved member can read rows through RLS.
+    CREATE FUNCTION can_read(s uuid) RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path=public AS $$
+      SELECT EXISTS(SELECT 1 FROM stores WHERE id=s AND owner_id=auth.uid()) OR EXISTS(SELECT 1 FROM store_members WHERE store_id=s AND user_id=auth.uid()) $$;
+    -- Mirrors is_store_admin: owner or manager only.
+    CREATE FUNCTION is_store_admin(sid uuid) RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path=public AS $$
+      SELECT EXISTS(SELECT 1 FROM stores WHERE id=sid AND owner_id=auth.uid()) OR EXISTS(SELECT 1 FROM store_members WHERE store_id=sid AND user_id=auth.uid() AND role='manager') $$;
+    REVOKE ALL ON FUNCTION is_store_admin(uuid) FROM PUBLIC; GRANT EXECUTE ON FUNCTION is_store_admin(uuid) TO authenticated;
     ALTER TABLE toss_orders ENABLE ROW LEVEL SECURITY; ALTER TABLE manual_sales ENABLE ROW LEVEL SECURITY; ALTER TABLE purchases ENABLE ROW LEVEL SECURITY;
     CREATE POLICY o ON toss_orders FOR SELECT USING (can_read(store_id)); CREATE POLICY m ON manual_sales FOR SELECT USING (can_read(store_id));
     CREATE POLICY p ON purchases FOR SELECT USING (can_read(store_id));
     GRANT SELECT ON toss_orders, manual_sales, purchases TO authenticated;
-    INSERT INTO stores VALUES ('${store}','${owner}'), ('${other}','${outsider}');`);
+    INSERT INTO stores VALUES ('${store}','${owner}'), ('${other}','${outsider}');
+    INSERT INTO store_members VALUES ('${store}','${manager}','manager'), ('${store}','${staff}','staff'), ('${store}','${partTimer}','part_time');`);
   const orders = [], manual = [], purchases = [];
   const base = Date.parse('2026-10-25T00:00:00Z');
   for (let i = 0; i < 400; i++) {
@@ -67,7 +76,13 @@ try {
   for (const p of purchases) await db.query('INSERT INTO purchases(store_id,date,amount) VALUES($1,$2,$3)', [p.store_id, p.date, p.amount]);
 
   const migration = await readFile(new URL('../supabase/migrations/20261118141000_home_daily_sources.sql', import.meta.url), 'utf8');
+  const adminCheck = await readFile(new URL('../supabase/migrations/20261124150000_home_daily_sources_admin_check.sql', import.meta.url), 'utf8');
   await db.exec(migration); await db.exec(migration);
+  // Gap before the admin check: RLS alone lets a staff member read daily totals.
+  const gapRange = range('2026-11', 18, '23:00', true, new Date('2026-11-18T05:30:00Z'));
+  const gap = await as(staff, 'SELECT * FROM get_home_daily_sources($1,$2,$3,$4,$5,$6)', [store, gapRange.start, gapRange.end, gapRange.from, gapRange.to, 1380]);
+  assert.ok(gap.rows.length > 0, 'reduced schema reproduces the staff read gap of the original function');
+  await db.exec(adminCheck); await db.exec(adminCheck);
   const call = (user, r, closing) => as(user, 'SELECT * FROM get_home_daily_sources($1,$2,$3,$4,$5,$6)',
     [store, r.start, r.end, r.from, r.to, Number(closing.slice(0, 2)) * 60 + Number(closing.slice(3, 5))]);
   const asOf = new Date('2026-11-18T05:30:00Z');
@@ -88,9 +103,19 @@ try {
   assert.ok(empty.from >= empty.to);
   const onlyBook = (await call(owner, empty, '23:00')).rows;
   assert.deepEqual(Object.keys(Object.fromEntries(onlyBook.map(x => [iso(x.date), 1]))).length, Object.keys(legacy(orders, manual, purchases, empty, '23:00')).length, 'no POS orders when from >= to');
-  assert.equal((await call(outsider, range('2026-11', 18, '23:00', true, asOf), '23:00')).rows.length, 0, 'RLS hides other store data');
+  const nov = range('2026-11', 18, '23:00', true, asOf);
+  const ownerRows = (await call(owner, nov, '23:00')).rows;
+  assert.deepEqual((await call(manager, nov, '23:00')).rows, ownerRows, 'manager (store admin) gets the same totals as owner');
+  for (const [label, user] of [['staff', staff], ['part-timer', partTimer], ['outsider', outsider]]) {
+    await assert.rejects(() => call(user, nov, '23:00'), e => e.code === '42501' && /HOME_DAILY_SOURCES_FORBIDDEN/.test(e.message), `${label} is rejected`);
+  }
+  await assert.rejects(() => as('', 'SELECT * FROM get_home_daily_sources($1,$2,$3,$4,$5,$6)', [store, nov.start, nov.end, nov.from, nov.to, 1380]),
+    e => e.code === '42501', 'authenticated role without a user id is rejected');
+  const def = (await db.query(`SELECT prosecdef, proconfig FROM pg_proc WHERE proname='get_home_daily_sources'`)).rows;
+  assert.equal(def.length, 1, 'single overload'); assert.equal(def[0].prosecdef, false, 'stays SECURITY INVOKER');
+  assert.deepEqual(def[0].proconfig, ['search_path=public'], 'search_path unchanged');
   await db.exec('SET ROLE anon');
   await assert.rejects(() => db.query('SELECT * FROM get_home_daily_sources($1,$2,$3,$4,$5,$6)', [store, '2026-11-01', '2026-11-18', asOf.toISOString(), asOf.toISOString(), 0]));
   await db.exec('RESET ROLE');
-  console.log(`Home daily sources SQL: ${compared} business dates match legacy client aggregation across 4 closing times; RLS, anon, replay passed`);
+  console.log(`Home daily sources SQL: ${compared} business dates match legacy client aggregation across 4 closing times; admin allow, staff/part-timer/outsider/no-user reject, anon, replay passed`);
 } finally { await db.close(); }
