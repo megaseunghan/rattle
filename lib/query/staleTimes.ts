@@ -20,4 +20,25 @@ export const STALE_TIME = {
   homeStatus: MINUTE,
   /** 인건비·손익 상세(인건비 탭 직원 목록 포함) */
   moneyDetail: MINUTE,
+  /** POS 오늘 매출(홈 카드·매출 탭 상단) */
+  posToday: 5 * MINUTE,
+  /** POS 월 일별 요약·품목 — 이번 달 범위 */
+  posCurrent: 5 * MINUTE,
+  /** POS 월 일별 요약·품목 — 지난 달(마감된 달) 범위 */
+  posPast: 30 * MINUTE,
 } as const;
+
+const KST_OFFSET_MS = 9 * 60 * MINUTE;
+const kstMonth = (time: number): string => new Date(time + KST_OFFSET_MS).toISOString().slice(0, 7);
+
+/**
+ * POS 범위 조회(월 일별 요약·품목)의 재사용 시간(docs/intent/POS매출-재사용시간.md).
+ * 아직 끝나지 않은 범위나 이번 달(KST)에 시작한 범위는 이번 달 기준, 이미 끝난 지난 달 범위는 30분이다.
+ * POS 자료는 앱 동기화로만 들어오고 내 기기의 동기화는 'pos' 무효화로 바로 반영된다.
+ */
+export function posRangeStaleTime(from: Date | string, to: Date | string, now: number = Date.now()): number {
+  const start = new Date(from).getTime();
+  const end = new Date(to).getTime();
+  if (end > now || kstMonth(start) >= kstMonth(now)) return STALE_TIME.posCurrent;
+  return STALE_TIME.posPast;
+}
