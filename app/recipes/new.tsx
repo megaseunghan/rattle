@@ -1,6 +1,7 @@
 import { usePreviewWriteGuard } from '../../lib/hooks/usePreviewWriteGuard';
 import { useStorePermissions } from '../../lib/hooks/useStorePermissions';
 import { AppBar } from '../../lib/components/ui';
+import { Skeleton, SkeletonGroup } from '../../lib/components/skeleton';
 import { ErrorMessage } from '../../lib/components/ErrorMessage';
 import { entityKey } from '../../lib/utils/listKeys';
 import { SheetModal } from '../../lib/components/ui/SheetModal';
@@ -314,9 +315,19 @@ function NewRecipeScreenForm() {
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={Colors.primary} />
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.actionButton} accessibilityRole="button">
+            <Text style={styles.back}>취소</Text>
+          </TouchableOpacity>
+          <Text style={styles.title}>{isEdit ? '레시피 수정' : '새 레시피'}</Text>
+          <View style={styles.actionButton} accessible={false} />
         </View>
+        <SkeletonGroup label="레시피 불러오는 중" style={styles.content}>
+          {[0, 1, 2, 3].map(i => <View key={i}>
+            <Skeleton width={i % 2 ? 56 : 72} height={12} radius={6} style={styles.skeletonLabel} />
+            <Skeleton height={46} radius={12} />
+          </View>)}
+        </SkeletonGroup>
       </SafeAreaView>
     );
   }
@@ -806,7 +817,7 @@ const styles = StyleSheet.create({
     flex: 2, paddingVertical: 10, borderRadius: 14,
     backgroundColor: Colors.primary, alignItems: 'center', minHeight: 44, justifyContent: 'center' },
   newSaveText: { fontSize: 14, fontWeight: '700', color: Colors.white },
-  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  skeletonLabel: { marginTop: 16, marginBottom: 8 },
 
   volOverlay: { flex: 1, backgroundColor: Colors.overlay, justifyContent: 'center', paddingHorizontal: 20},
   volSheet: { backgroundColor: Colors.white, borderRadius: 24, padding: 20, borderWidth: 1, borderColor: Colors.homeBorder },

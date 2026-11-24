@@ -68,5 +68,6 @@ it('저장 중에는 다른 체크도 잠그고 해당 행의 busy를 유지한�
 
 it.each([{ loading: true }, { error: '조회 실패' }, { items: [] }, { itemsReady: false }])('미확정·실패·빈 상태에는 진행률을 표시하지 않는다: %j', state => {
   mockState = { ...mockState, ...state }; render(<CleaningScreen />);
-  expect(screen.queryByRole('progressbar')).toBeNull();
+  // 불러오는 중 자리 표시(progressbar, 값 없음)는 허용하되 체크 진행률(값 있는 progressbar)은 없어야 한다.
+  expect(screen.queryAllByRole('progressbar').filter(node => node.props.accessibilityValue)).toHaveLength(0);
 });

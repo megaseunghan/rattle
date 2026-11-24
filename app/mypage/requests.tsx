@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Colors } from '../../constants/colors';
@@ -8,6 +8,7 @@ import { useRequestApprovals } from '../../lib/hooks/useRequestApprovals';
 import { ScheduleRequest } from '../../types';
 import { ErrorMessage } from '../../lib/components/ErrorMessage';
 import { AppBar, EmptyState } from '../../lib/components/ui';
+import { Skeleton, SkeletonGroup } from '../../lib/components/skeleton';
 
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
 
@@ -44,7 +45,14 @@ export default function RequestApprovalsScreen() {
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         {(error || actionError) && <ErrorMessage message={error || actionError!} onRetry={() => { void refetch(); }} />}
         {loading || refreshing ? (
-          <ActivityIndicator color={Colors.primary} style={{ marginTop: 32 }} />
+          <SkeletonGroup label="요청 불러오는 중" style={styles.section}>
+            <Skeleton width={96} height={12} radius={6} />
+            {[0, 1].map(i => <View key={i} style={styles.card}>
+              <Skeleton width="30%" height={14} />
+              <Skeleton width="52%" height={12} radius={6} /><Skeleton width="44%" height={12} radius={6} />
+              <View style={styles.actionRow}><Skeleton width="48%" height={44} radius={10} style={styles.skeletonButton} /><Skeleton width="48%" height={44} radius={10} style={styles.skeletonButton} /></View>
+            </View>)}
+          </SkeletonGroup>
         ) : !ready && scheduleRequests.length === 0 ? null : totalPending === 0 ? (
           <EmptyState icon="checkmark-done-outline" title="대기 중인 요청이 없어요" description="스케줄 변경 요청이 오면 여기에 표시돼요" />
         ) : (
@@ -96,6 +104,7 @@ const styles = StyleSheet.create({
   reasonText: { fontSize: 12, fontWeight: '400', color: Colors.gray400, lineHeight: 17 },
 
   actionDisabled: { opacity: 0.5 },
+  skeletonButton: { flex: 1 },
   actionRow: { flexDirection: 'row', gap: 8, marginTop: 6 },
   rejectBtn: { flex: 1, minHeight: 44, justifyContent: 'center', alignItems: 'center', paddingVertical: 10, borderRadius: 10, borderWidth: 1, borderColor: Colors.gray200 },
   rejectBtnText: { fontSize: 13, fontWeight: '600', color: Colors.gray500 },

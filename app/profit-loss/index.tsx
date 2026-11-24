@@ -21,6 +21,7 @@ import { useAuth } from '../../lib/contexts/AuthContext';
 import { getYearlyProfitLoss } from '../../lib/services/profitLoss';
 import { ProfitLoss } from '../../types';
 import { ErrorMessage } from '../../lib/components/ErrorMessage';
+import { SkeletonRows, SkeletonSummary } from '../../lib/components/skeleton';
 import { AppBar } from '../../lib/components/ui';
 import { getErrorMessage } from '../../lib/utils/error';
 
@@ -274,7 +275,10 @@ function AdminProfitLossScreen() {
           </TouchableOpacity>
         </View>
 
-        {loading && <ActivityIndicator color={Colors.primary} style={{ marginTop: 32 }} />}
+        {loading && <>
+          <SkeletonSummary label={`${year}년 연간 합계 불러오는 중`} metrics={3} />
+          <SkeletonRows count={6} avatar={false} label="월별 손익 불러오는 중" style={styles.skeletonMonths} />
+        </>}
         {!loading && error && <ErrorMessage message={error} onRetry={() => { void load(year); }} />}
 
         {!loading && !loaded && !error && (
@@ -354,6 +358,7 @@ function AdminProfitLossScreen() {
 }
 
 const styles = StyleSheet.create({
+  skeletonMonths: { marginTop: 12 },
   container: { flex: 1, backgroundColor: Colors.homeCanvas },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',

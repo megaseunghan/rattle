@@ -1,6 +1,6 @@
 import { NumericText } from '../../lib/components/ui/NumericText';
 import { useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppIcon } from '../../lib/icons/AppIcon';
 import { router } from 'expo-router';
@@ -16,6 +16,7 @@ import { getErrorMessage } from '../../lib/utils/error';
 import { formatWorkedMinutes } from '../../lib/utils/workMinutes';
 import { resolveSelfEmployee } from '../../lib/utils/resolveSelfEmployee';
 import { AppBar } from '../../lib/components/ui';
+import { Skeleton, SkeletonGroup } from '../../lib/components/skeleton';
 
 function fmt(v: number): string {
   return `${v.toLocaleString()}원`;
@@ -120,7 +121,13 @@ export default function PayslipScreen() {
         </View>
 
         {loading ? (
-          <ActivityIndicator color={Colors.primary} style={{ marginTop: 32 }} />
+          <SkeletonGroup label="급여명세 불러오는 중" style={styles.skeleton}>
+            <View style={styles.summaryCard}><Skeleton width="55%" height={30} /><Skeleton width="48%" height={12} radius={6} /></View>
+            <View style={styles.group}>
+              <Skeleton width={64} height={12} radius={6} />
+              <View style={styles.groupCard}>{[0, 1, 2, 3].map(i => <View key={i} style={styles.row}><Skeleton width="38%" height={14} /><Skeleton width={72} height={14} /></View>)}</View>
+            </View>
+          </SkeletonGroup>
         ) : employeesError || error ? (
           <ErrorMessage message={employeesError || error!} onRetry={() => { if (employeesError) void refetchEmployees(); else setReload(n => n + 1); }} />
         ) : !employeeId ? (
@@ -187,6 +194,7 @@ const styles = StyleSheet.create({
   netPay: { fontSize: 30, fontFamily: Fonts.spaceGroteskBold, fontWeight: '700', maxWidth: '100%', color: Colors.black, letterSpacing: -0.5 },
   summaryLine: { fontVariant: ['tabular-nums'], textAlign: 'center', fontSize: 12, fontWeight: '500', color: Colors.gray400 },
 
+  skeleton: { gap: 14 },
   group: { gap: 8 },
   groupTitle: { fontSize: 13, fontWeight: '700', color: Colors.gray600 },
   groupCard: {

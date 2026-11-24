@@ -12,7 +12,7 @@ import { useRoleSettings } from '../../lib/hooks/useRoleSettings';
 import { AppBar } from '../../lib/components/ui';
 import { GlassBackdrop } from '../../lib/components/GlassBackdrop';
 import { ErrorMessage } from '../../lib/components/ErrorMessage';
-import { LoadingSpinner } from '../../lib/components/LoadingSpinner';
+import { Skeleton, SkeletonGroup } from '../../lib/components/skeleton';
 export default function StoreManagerScreen() {
   const { user, store, devPreviewMode } = useAuth();
   return <ManagerForm key={`${user?.id}:${store?.id}:${devPreviewMode}`} />;
@@ -29,7 +29,11 @@ function ManagerForm() {
   const selected = candidates.find(candidate => candidate.member.id === selection);
   const locked = ['saving', 'unknown', 'conflict', 'saved', 'savedRefresh'].includes(state.outcome);
   return <SafeAreaView style={s.root}><GlassBackdrop /><AppBar title="점장 지정" transparent onBack={() => router.back()} />
-    {!state.allowed ? <ErrorMessage message="사장님에게 요청해주세요. 점장 지정은 이 매장의 사장님만 바꿀 수 있어요" /> : state.loading || members.loading || employees.loading ? <LoadingSpinner /> : state.error || members.error || employees.error ? <ErrorMessage message={state.error || members.error || '직원 정보를 불러오지 못했어요. 다시 확인해주세요'} onRetry={() => { void state.refetch(true); void members.refetch(); void employees.refetch().catch(() => {}); }} /> : <>
+    {!state.allowed ? <ErrorMessage message="사장님에게 요청해주세요. 점장 지정은 이 매장의 사장님만 바꿀 수 있어요" /> : state.loading || members.loading || employees.loading ? <SkeletonGroup label="점장 정보 불러오는 중" style={s.content}>
+      <Skeleton width="58%" height={24} />
+      <View style={s.card}><Skeleton width="28%" height={16} /><Skeleton width="44%" height={24} /><Skeleton width="72%" height={14} /></View>
+      <View style={s.card}>{[0, 1, 2].map(i => <View key={i} style={s.skeletonCandidate}><Skeleton width={24} height={24} radius={12} /><View style={{ flex: 1 }}><Skeleton width={i % 2 ? '40%' : '52%'} height={14} /></View></View>)}</View>
+    </SkeletonGroup> : state.error || members.error || employees.error ? <ErrorMessage message={state.error || members.error || '직원 정보를 불러오지 못했어요. 다시 확인해주세요'} onRetry={() => { void state.refetch(true); void members.refetch(); void employees.refetch().catch(() => {}); }} /> : <>
       <ScrollView contentContainerStyle={s.content}>
         <Text style={s.heading}>점장을 골라주세요</Text>
         <View style={s.card}><Text style={s.label}>지금 점장</Text><Text style={current ? s.person : s.body}>{current ? `${currentName}님` : '아직 점장을 지정하지 않았어요'}</Text>
@@ -50,7 +54,7 @@ function ManagerForm() {
     </Modal>
   </SafeAreaView>;
 }
-const s = StyleSheet.create({ root: { flex: 1, backgroundColor: Colors.homeCanvas }, flex: { flex: 1 }, content: { padding: Spacing.screenX, gap: 20 }, heading: { fontFamily: Fonts.wantedBold, fontSize: 22, color: Colors.black }, card: { ...CardStyle, padding: Spacing.cardPadding, gap: 12 },
+const s = StyleSheet.create({ skeletonCandidate: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 64, padding: 8 }, root: { flex: 1, backgroundColor: Colors.homeCanvas }, flex: { flex: 1 }, content: { padding: Spacing.screenX, gap: 20 }, heading: { fontFamily: Fonts.wantedBold, fontSize: 22, color: Colors.black }, card: { ...CardStyle, padding: Spacing.cardPadding, gap: 12 },
   label: { fontFamily: Fonts.wantedSemiBold, fontSize: Type.lg, lineHeight: 26, color: Colors.black }, person: { fontFamily: Fonts.wantedBold, fontSize: 24, color: Colors.black }, body: { fontFamily: Fonts.wantedRegular, fontSize: Type.base, lineHeight: 22, color: Colors.gray600 }, candidate: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 64, padding: 8, borderRadius: Radius.field }, selected: { backgroundColor: Colors.tinted },
   action: { minHeight: 44, paddingHorizontal: 12, justifyContent: 'center' }, link: { fontFamily: Fonts.wantedMedium, fontSize: Type.base, color: Colors.action }, footer: { padding: Spacing.screenX }, button: { minHeight: 52, backgroundColor: Colors.action, borderRadius: Radius.field, alignItems: 'center', justifyContent: 'center' }, buttonText: { fontFamily: Fonts.wantedMedium, fontSize: Type.base, color: Colors.white }, disabled: { opacity: 0.5 },
   shade: { flex: 1, backgroundColor: Colors.overlayDetail, justifyContent: 'center', padding: Spacing.screenX }, modal: { backgroundColor: Colors.white, borderRadius: 20, padding: Spacing.screenX, gap: 16 }, actions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 12 }, });

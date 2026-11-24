@@ -1,10 +1,11 @@
 /* design-system: DESIGN.md — 저장 결과를 알 수 없을 때 해당 월 매입 목록을 위에 열어 확인한다(A안, 서버 자동 조회 없음) */
-import { ActivityIndicator, FlatList, Modal, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { FlatList, Modal, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors } from '../../../constants/colors';
 import { Fonts } from '../../../constants/fonts';
 import type { Purchase } from '../../../types';
 import { PurchaseAppBar, won } from './PurchaseUi';
+import { Skeleton, SkeletonGroup } from '../skeleton';
 
 export function PurchaseMonthCheck({ visible, monthLabel, purchases, loading, error, onRetry, onClose, onClosed }: {
   visible: boolean; monthLabel: string; purchases: Purchase[]; loading: boolean; error: string | null;
@@ -17,7 +18,9 @@ export function PurchaseMonthCheck({ visible, monthLabel, purchases, loading, er
     <SafeAreaView style={styles.screen}>
       <PurchaseAppBar title="매입" onBack={onClose} />
       <Text style={styles.month}>{monthLabel}</Text>
-      {loading && !purchases.length ? <ActivityIndicator style={styles.center} color={Colors.primary} />
+      {loading && !purchases.length ? <SkeletonGroup label="매입 내역 불러오는 중" style={styles.list}>{[0, 1, 2, 3, 4, 5].map(i => <View key={i} style={[styles.row, i > 0 && styles.line]}>
+          <Skeleton width={36} height={12} radius={6} /><View style={styles.skName}><Skeleton width={i % 2 ? '54%' : '68%'} height={14} /></View><Skeleton width={72} height={14} />
+        </View>)}</SkeletonGroup>
         : error ? <View style={styles.center}>
           <Text style={styles.empty}>매입 내역을 불러오지 못했어요.</Text>
           <TouchableOpacity accessibilityRole="button" style={styles.retry} onPress={onRetry}><Text style={styles.retryText}>다시 불러오기</Text></TouchableOpacity>
@@ -37,6 +40,7 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: Colors.homeCanvas },
   month: { fontFamily: Fonts.wantedBold, fontSize: 15, color: Colors.black, paddingHorizontal: 20, paddingVertical: 8 },
   list: { marginHorizontal: 16, backgroundColor: Colors.white, borderRadius: 20, borderWidth: 1, borderColor: Colors.homeBorder, paddingHorizontal: 16 },
+  skName: { flex: 1 },
   row: { minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: 12 },
   line: { borderTopWidth: 1, borderTopColor: Colors.hairline },
   date: { width: 44, fontFamily: Fonts.geistSemiBold, fontVariant: ['tabular-nums'], fontSize: 14, color: Colors.gray600 },

@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, Switch, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Switch } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Colors } from '../../constants/colors';
@@ -8,6 +8,7 @@ import { useNotificationSettings } from '../../lib/hooks/useNotificationSettings
 import { NOTIFICATION_SETTING_DEFS, NotificationSettingDef } from '../../lib/services/notifications';
 import { AppBar } from '../../lib/components/ui';
 import { ErrorMessage } from '../../lib/components/ErrorMessage';
+import { Skeleton, SkeletonGroup } from '../../lib/components/skeleton';
 
 const GROUPS: NotificationSettingDef['group'][] = ['재고', '매출·손익'];
 
@@ -21,7 +22,17 @@ export default function NotificationSettingsScreen() {
       <AppBar title="알림 설정" onBack={() => router.back()} />
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         {loading ? (
-          <ActivityIndicator color={Colors.primary} style={{ marginTop: 24 }} />
+          <SkeletonGroup label="알림 설정 불러오는 중" style={styles.skeleton}>
+            {GROUPS.map(group => <View key={group} style={styles.group}>
+              <Skeleton width={56} height={12} radius={6} />
+              <View style={styles.card}>
+                {NOTIFICATION_SETTING_DEFS.filter(d => d.group === group).map((def, i) => <View key={def.key} style={[styles.row, i > 0 && styles.rowBorder]}>
+                  <View style={styles.rowText}><Skeleton width="52%" height={14} /><Skeleton width="78%" height={10} radius={6} style={styles.skeletonLine} /></View>
+                  <Skeleton width={51} height={31} radius={16} />
+                </View>)}
+              </View>
+            </View>)}
+          </SkeletonGroup>
         ) : error ? (
           <ErrorMessage message={error} onRetry={() => { void refetch(); }} />
         ) : !ready ? (
@@ -71,6 +82,8 @@ const styles = StyleSheet.create({
   scroll: { padding: Spacing.screenX, paddingBottom: 40, gap: 20 },
 
   group: { gap: 8 },
+  skeleton: { gap: 20 },
+  skeletonLine: { marginTop: 6 },
   groupTitle: { fontSize: 13, fontWeight: '700', color: Colors.gray600 },
   card: { backgroundColor: Colors.white, borderRadius: 20, borderWidth: 1, borderColor: Colors.homeBorder, overflow: 'hidden' },
   row: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 13, gap: 12 },

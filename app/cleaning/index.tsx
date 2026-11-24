@@ -14,6 +14,7 @@ import { useCleaningChecklist } from '../../lib/hooks/useCleaningChecklist';
 import { getErrorMessage } from '../../lib/utils/error';
 import { ErrorMessage } from '../../lib/components/ErrorMessage';
 import { AppBar, EmptyState } from '../../lib/components/ui';
+import { Skeleton, SkeletonGroup } from '../../lib/components/skeleton';
 import { CleaningItem, CleaningSegment } from '../../types';
 
 const SEGMENTS: { key: CleaningSegment; label: string }[] = [
@@ -81,7 +82,14 @@ export default function CleaningScreen() {
         ) : error ? (
           <ErrorMessage message={error} onRetry={() => { void refetch(); }} />
         ) : loading || !itemsReady ? (
-          <ActivityIndicator color={Colors.primary} style={{ marginTop: 32 }} />
+          <SkeletonGroup label="체크리스트 불러오는 중" style={styles.list}>
+            <View style={styles.progress}><Skeleton height={10} radius={5} /></View>
+            {[0, 1, 2, 3, 4].map(i => <View key={i} style={styles.row}>
+              <Skeleton width={22} height={22} radius={7} />
+              <View style={styles.rowTextWrap}><Skeleton width={i % 2 ? '44%' : '58%'} height={13} /><Skeleton width="30%" height={10} radius={6} /></View>
+              <Skeleton width={64} height={10} radius={6} />
+            </View>)}
+          </SkeletonGroup>
         ) : segmentItems.length === 0 ? (
           <EmptyState
             icon="checkmark-done-outline"

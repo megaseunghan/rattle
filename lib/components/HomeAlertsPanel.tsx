@@ -7,6 +7,7 @@ import { HomeAlert, Store } from '../../types';
 import { useHomeAlerts } from '../hooks/useHomeAlerts';
 import { AppIcon } from '../icons/AppIcon';
 import { GlassCard } from './GlassCard';
+import { Skeleton, SkeletonGroup } from './skeleton';
 import { TabPagerContext } from '../contexts/TabPagerContext';
 
 const TITLES: Record<HomeAlert['kind'], string> = {
@@ -148,7 +149,10 @@ function AlertsContent({ data, active }: { data: AlertData; active: boolean }) {
         {alerts.map(alert => <AlertRow key={alert.key} alert={alert} disabled={saving !== null}
           saving={saving === alert.key} onHide={() => confirmHide(alert)} />)}
       </View>
-      {loading && <ActivityIndicator size="small" color={Colors.action} accessibilityLabel="홈 알림 불러오는 중" style={styles.loading} />}
+      {loading && alerts.length === 0 && <SkeletonGroup label="홈 알림 불러오는 중" style={styles.rows}>
+        {[0, 1].map(i => <Skeleton key={i} height={56} radius={14} />)}
+      </SkeletonGroup>}
+      {loading && alerts.length > 0 && <ActivityIndicator size="small" color={Colors.action} accessibilityLabel="홈 알림 불러오는 중" style={styles.loading} />}
       {done && <View style={styles.done} accessibilityLiveRegion="polite">
         <AppIcon name="checkmark" size={20} color={Colors.action} />
         <Text style={styles.doneText}>모든 알림을 확인했어요</Text>

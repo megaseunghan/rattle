@@ -12,7 +12,7 @@ import { useRecipes } from '../../lib/hooks/useRecipes';
 import { useAuth } from '../../lib/contexts/AuthContext';
 import { useStorePermissions } from '../../lib/hooks/useStorePermissions';
 import { useTossSync } from '../../lib/hooks/useTossSync';
-import { LoadingSpinner } from '../../lib/components/LoadingSpinner';
+import { SkeletonCardList } from '../../lib/components/skeleton';
 import { ErrorMessage } from '../../lib/components/ErrorMessage';
 import { CatalogImportModal } from '../../lib/components/CatalogImportModal';
 import { BulkCategoryModal } from '../../lib/components/BulkCategoryModal';
@@ -181,7 +181,10 @@ export default function RecipesScreen() {
   ), [remove, canManageRecipes]);
 
   if (!canReadRecipes) return <ErrorMessage message="매장을 선택한 뒤 레시피를 열어 주세요." />;
-  if (loading) return <LoadingSpinner />;
+  if (loading) return <SafeAreaView style={styles.container}><GlassBackdrop />
+    <View style={styles.header}><Text style={styles.title}>레시피</Text></View>
+    <SkeletonCardList count={6} label="레시피 불러오는 중" style={styles.listContent} />
+  </SafeAreaView>;
   if (error) return <ErrorMessage message={error} onRetry={refetch} />;
 
   return (

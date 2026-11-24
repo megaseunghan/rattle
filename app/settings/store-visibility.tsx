@@ -11,7 +11,7 @@ import { useConfirmLeave } from '../../lib/hooks/useConfirmLeave';
 import { AppBar } from '../../lib/components/ui';
 import { GlassBackdrop } from '../../lib/components/GlassBackdrop';
 import { ErrorMessage } from '../../lib/components/ErrorMessage';
-import { LoadingSpinner } from '../../lib/components/LoadingSpinner';
+import { Skeleton, SkeletonGroup } from '../../lib/components/skeleton';
 import { AppIcon } from '../../lib/icons/AppIcon';
 import { GlassCard } from '../../lib/components/GlassCard';
 import { Illustration } from '../../lib/icons/Illustration';
@@ -26,7 +26,13 @@ export default function VisibilitySettingsScreen() {
   const locked = ['saving', 'unknown', 'saved', 'savedRefresh', 'conflict'].includes(state.outcome);
   useConfirmLeave(dirty && !['saved', 'savedRefresh'].includes(state.outcome) || state.outcome === 'saving', { blockLeave: state.outcome === 'saving' });
   return <SafeAreaView style={s.root}><GlassBackdrop /><AppBar title="열람 설정" transparent onBack={() => router.back()} />
-    {!state.allowed ? <ErrorMessage message="사장님에게 요청해주세요. 점장 지정과 열람 설정은 이 매장의 사장님만 바꿀 수 있어요" /> : state.loading ? <LoadingSpinner /> : state.error ? <ErrorMessage message={state.error} onRetry={() => { void state.refetch(true); }} /> : <ScrollView contentContainerStyle={s.content}>
+    {!state.allowed ? <ErrorMessage message="사장님에게 요청해주세요. 점장 지정과 열람 설정은 이 매장의 사장님만 바꿀 수 있어요" /> : state.loading ? <SkeletonGroup label="열람 설정 불러오는 중" style={s.content}>
+      <Skeleton width="78%" height={24} />
+      <View style={s.settingsList}>{fields.map(([key]) => <View key={key} style={[s.row, s.skeletonCard]}>
+        <Skeleton width={48} height={48} radius={14} /><View style={{ flex: 1 }}><Skeleton width="44%" height={14} /></View><Skeleton width={72} height={26} radius={Radius.sm} />
+      </View>)}</View>
+      <Skeleton width="70%" height={12} radius={6} />
+    </SkeletonGroup> : state.error ? <ErrorMessage message={state.error} onRetry={() => { void state.refetch(true); }} /> : <ScrollView contentContainerStyle={s.content}>
       <Text style={s.heading}>자료를 누구에게 보여줄까요?</Text>
       <View style={s.settingsList}>{fields.map(([key, label]) => <GlassCard key={key} contentStyle={s.cardContent}>
         <Pressable accessibilityRole="button" accessibilityState={{ expanded: expanded === key, disabled: locked }} disabled={locked} onPress={() => setExpanded(expanded === key ? null : key)} style={s.row}>
@@ -42,5 +48,5 @@ export default function VisibilitySettingsScreen() {
 }
 const s = StyleSheet.create({ root: { flex: 1, backgroundColor: Colors.homeCanvas }, content: { padding: Spacing.screenX, gap: 20, paddingBottom: 40 }, heading: { fontFamily: Fonts.wantedBold, fontSize: 22, color: Colors.black, lineHeight: 30 },
   cardContent: { padding: 0 }, row: { flexDirection: 'row', gap: 8, paddingHorizontal: 12, alignItems: 'center', minHeight: 58 }, label: { fontFamily: Fonts.wantedMedium, fontSize: Type.base, lineHeight: 22, color: Colors.gray800 },
-  badge: { fontFamily: Fonts.wantedMedium, fontSize: 14, color: Colors.action, backgroundColor: Colors.tinted, paddingHorizontal: 8, paddingVertical: 4, borderRadius: Radius.sm }, settingsList: { gap: 8 }, choice: { minHeight: 44, padding: 10, flexDirection: 'row', gap: 8, alignItems: 'center' }, options: { paddingHorizontal: 12, paddingBottom: 12 }, body: { fontFamily: Fonts.wantedRegular, fontSize: Type.base, color: Colors.gray600, lineHeight: 22 },
+  badge: { fontFamily: Fonts.wantedMedium, fontSize: 14, color: Colors.action, backgroundColor: Colors.tinted, paddingHorizontal: 8, paddingVertical: 4, borderRadius: Radius.sm }, settingsList: { gap: 8 }, skeletonCard: { backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.homeBorder, borderRadius: 20 }, choice: { minHeight: 44, padding: 10, flexDirection: 'row', gap: 8, alignItems: 'center' }, options: { paddingHorizontal: 12, paddingBottom: 12 }, body: { fontFamily: Fonts.wantedRegular, fontSize: Type.base, color: Colors.gray600, lineHeight: 22 },
   button: { minHeight: 52, backgroundColor: Colors.action, borderRadius: Radius.field, alignItems: 'center', justifyContent: 'center' }, buttonText: { fontFamily: Fonts.wantedMedium, fontSize: Type.base, color: Colors.white }, disabled: { opacity: 0.5 }, });

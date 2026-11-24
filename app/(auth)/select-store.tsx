@@ -8,7 +8,6 @@ import {
   Alert,
   ScrollView,
   SafeAreaView,
-  ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from 'expo-router';
@@ -16,9 +15,10 @@ import { AppIcon } from '../../lib/icons/AppIcon';
 import { StoreSetupWizard } from '../../lib/components/StoreSetupWizard';
 import { useAuth } from '../../lib/contexts/AuthContext';
 import { Colors } from '../../constants/colors';
-import { Spacing } from '../../constants/designTokens';
+import { ListCardStyle, Spacing } from '../../constants/designTokens';
 import { getErrorMessage } from '../../lib/utils/error';
 import { ErrorMessage } from '../../lib/components/ErrorMessage';
+import { Skeleton, SkeletonGroup } from '../../lib/components/skeleton';
 import { Button, ListCard } from '../../lib/components/ui';
 import { listMyDeletedStores, restoreDeletedStore, type DeletedStore } from '../../lib/services/stores';
 import { formatRestoreDeadline } from '../../lib/utils/storeDeletion';
@@ -132,7 +132,9 @@ export default function SelectStoreScreen() {
       </View>
 
       {isRefreshing ? (
-        <ActivityIndicator style={{ marginTop: 60 }} color={Colors.primary} />
+        <SkeletonGroup label="매장 목록 불러오는 중" style={[styles.scrollContent, styles.storeList]}>
+          {[0, 1, 2].map(i => <View key={i} style={[ListCardStyle, styles.storeCardRow]}><Skeleton width={i % 2 ? '42%' : '56%'} height={16} /></View>)}
+        </SkeletonGroup>
       ) : (
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {loadError && <ErrorMessage message={loadError} onRetry={() => { void reload(); }} />}

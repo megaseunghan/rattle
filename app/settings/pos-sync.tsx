@@ -11,6 +11,7 @@ import { router } from 'expo-router';
 import { Colors } from '../../constants/colors';
 import { useAuth } from '../../lib/contexts/AuthContext';
 import { Button } from '../../lib/components/ui';
+import { Skeleton, SkeletonGroup } from '../../lib/components/skeleton';
 import { Fonts } from '../../constants/fonts';
 import { getStoreDetails } from '../../lib/services/stores';
 
@@ -91,7 +92,7 @@ export default function PosSyncScreen() {
       <ScrollView contentContainerStyle={styles.scroll}>
         <View style={styles.storeContext}><Text style={styles.storeLabel}>연결할 매장</Text><Text style={styles.storeName}>{store?.name ?? '매장 확인 필요'}</Text></View>
         {loadError && <Text style={{ color: Colors.gray600, paddingBottom: 16 }}>연결 상태를 확인하지 못했어요. 잠시 후 다시 확인할게요.</Text>}
-        {checking ? <View style={styles.card}><Text style={styles.sectionTitle}>{loadError ? '연결 상태 확인 필요' : '연결 상태를 확인하고 있어요'}</Text>{loadError ? <Button label="다시 확인" variant="secondary" onPress={() => { void load(); }} /> : <ActivityIndicator color={Colors.action} />}</View> : status === 'connected' ? (
+        {checking ? <View style={styles.card}><Text style={styles.sectionTitle}>{loadError ? '연결 상태 확인 필요' : '연결 상태를 확인하고 있어요'}</Text>{loadError ? <Button label="다시 확인" variant="secondary" onPress={() => { void load(); }} /> : <SkeletonGroup label="연결 상태 불러오는 중" style={styles.skeleton}><Skeleton width="72%" height={14} /><Skeleton width="48%" height={14} /><Skeleton height={48} radius={12} /></SkeletonGroup>}</View> : status === 'connected' ? (
           /* ── 연동완료 ── */
           <View style={styles.connectedCard}>
             <View style={styles.connectedStatus}>
@@ -168,6 +169,7 @@ const styles = StyleSheet.create({
 
   // 서비스코드
   sectionTitle: { fontSize: 20, fontWeight: '700', color: Colors.black, marginBottom: 6 },
+  skeleton: { gap: 10, marginTop: 6 },
   sectionDesc: { fontSize: 14, color: Colors.gray600, lineHeight: 21, marginBottom: 20 },
   card: {
     backgroundColor: Colors.white, borderRadius: 20,

@@ -27,6 +27,9 @@ export const Colors = {
   chipBg: '#F4F7FB',
   fieldTint: '#F7FAFE',
   scrimStrong: 'rgba(25,31,40,0.6)',
+  // 불러오는 중 자리 표시(확정 시안 B · 빛 흐름 2026-11-24): 연한 파랑 바탕 + 지나가는 빛
+  skeleton: '#EAF2FF',
+  skeletonHighlight: '#FFFFFF',
 
   gray50: '#F9FAFB',
   gray100: '#F3F4F6',

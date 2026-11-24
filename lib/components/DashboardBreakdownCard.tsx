@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { View, Text, Pressable, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { useDashboardBreakdown } from '../hooks/useDashboardBreakdown';
 import { METRIC_LABELS, DashboardMetric } from '../services/dashboardBreakdown';
 import { NumericText } from './ui/NumericText';
+import { Skeleton, SkeletonGroup } from './skeleton';
 import { Colors } from '../../constants/colors';
 import type { Store } from '../../types';
 export function DashboardBreakdownCard({ stores, period, yearMonth, metric, expectedTotal, onClose, onRefresh }: {
@@ -24,7 +25,7 @@ export function DashboardBreakdownCard({ stores, period, yearMonth, metric, expe
     <View style={styles.heading}><Text style={styles.title}>{METRIC_LABELS[metric]} 세부 구성</Text><Pressable accessibilityRole="button" accessibilityLabel="세부 구성 닫기" onPress={onClose} style={styles.action}><Text style={styles.actionText}>닫기</Text></Pressable></View>
     {refreshError && <Text accessibilityRole="alert" style={styles.hint}>새로고침하지 못했어요. 다시 시도해주세요.</Text>}
     {metric === 'purchase' && <View style={styles.tabs}>{([['category', '분류별'], ['supplier', '거래처별']] as const).map(([key, label]) => <Pressable key={key} accessibilityRole="button" accessibilityState={{ selected: grouping === key }} onPress={() => { setGrouping(key); setPage(0); }} style={[styles.tab, grouping === key && styles.selectedTab]}><Text style={{ color: grouping === key ? Colors.action : Colors.gray500, fontWeight: '600' }}>{label}</Text></Pressable>)}</View>}
-    {query.isPending ? <View style={styles.loading}><ActivityIndicator color={Colors.primary} /><Text style={styles.hint}>세부 내역을 불러오고 있어요</Text></View> : query.isError ? <><Text style={styles.hint}>세부 내역을 불러오지 못했어요</Text><Pressable accessibilityRole="button" onPress={() => void refresh()} style={styles.action}><Text style={styles.actionText}>다시 불러오기</Text></Pressable></> : <>
+    {query.isPending ? <SkeletonGroup label="세부 내역 불러오는 중">{(['52%', '40%', '58%', '34%', '28%'] as const).map((w, i) => <View key={i} style={styles.row}><Skeleton width={w} height={12} radius={6} /><Skeleton width={84} height={14} /></View>)}</SkeletonGroup> : query.isError ? <><Text style={styles.hint}>세부 내역을 불러오지 못했어요</Text><Pressable accessibilityRole="button" onPress={() => void refresh()} style={styles.action}><Text style={styles.actionText}>다시 불러오기</Text></Pressable></> : <>
       {rows.length === 0 ? <Text style={styles.hint}>등록된 내역이 없어요</Text> : rows.slice(currentPage * 4, currentPage * 4 + 4).map(row => <View key={row.label} style={styles.row}><Text style={styles.label}>{row.label}</Text><NumericText style={styles.amount}>{row.amount == null ? '확인 필요' : `${Math.round(row.amount).toLocaleString('ko-KR')}원`}</NumericText></View>)}
       <View style={styles.row}><Text style={styles.label}>합계</Text><NumericText style={styles.amount}>{query.data?.total == null ? '확인 필요' : `${Math.round(query.data.total).toLocaleString('ko-KR')}원`}</NumericText></View>
       {mismatch && <View><Text style={styles.hint}>상세 합계 {Math.round(query.data!.total!).toLocaleString('ko-KR')}원 · 요약과 차이가 있어요</Text><Pressable accessibilityRole="button" onPress={() => void refresh()} style={styles.action}><Text style={styles.actionText}>자료 새로고침</Text></Pressable></View>}

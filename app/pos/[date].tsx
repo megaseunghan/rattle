@@ -2,7 +2,7 @@ import { NumericText } from '../../lib/components/ui/NumericText';
 import { dailyItemKey, stringKey } from '../../lib/utils/listKeys';
 import { useCallback, memo, useMemo } from 'react';
 import {
-  View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator,
+  View, Text, StyleSheet, FlatList, TouchableOpacity,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router, useFocusEffect } from 'expo-router';
@@ -10,6 +10,7 @@ import { AppIcon } from '../../lib/icons/AppIcon';
 import { Colors } from '../../constants/colors';
 import { usePosAnalytics } from '../../lib/hooks/usePosAnalytics';
 import { ErrorMessage } from '../../lib/components/ErrorMessage';
+import { SkeletonRows } from '../../lib/components/skeleton';
 import { DailyItem } from '../../types';
 
 const ItemRow = memo(function ItemRow({ item }: { item: DailyItem }) {
@@ -95,7 +96,7 @@ export default function PosDateScreen() {
       )}
 
       {loadingItems
-        ? <ActivityIndicator size="large" color={Colors.primary} style={{ flex: 1 }} />
+        ? <View style={styles.list}><SkeletonRows count={7} avatar={false} label="판매 품목 불러오는 중" /></View>
         : (
           <FlatList
             initialNumToRender={5}

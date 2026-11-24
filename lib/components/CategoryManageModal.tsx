@@ -2,6 +2,7 @@ import { SheetModal } from './ui/SheetModal';
 import { useRef, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Modal, TextInput, Alert, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
 import { AppIcon } from '../icons/AppIcon';
+import { Skeleton, SkeletonGroup } from './skeleton';
 import { Colors } from '../../constants/colors';
 import { animateListChange } from '../utils/layoutAnimation';
 import { getErrorMessage } from '../utils/error';
@@ -103,7 +104,9 @@ export function CategoryManageModal({
           </View>
 
           {loading ? (
-            <ActivityIndicator color={Colors.primary} style={{ marginVertical: 20 }} />
+            <SkeletonGroup label="카테고리 불러오는 중" style={styles.categoryListCard}>
+              {[0, 1, 2, 3].map(i => <View key={i} style={[styles.categoryRow, styles.skeletonRow, i > 0 && styles.categoryRowBorder]}><Skeleton width={i % 2 ? '36%' : '48%'} height={14} /><Skeleton width={64} height={14} /></View>)}
+            </SkeletonGroup>
           ) : (
             <ScrollView style={styles.categoryListCard} keyboardShouldPersistTaps="handled">
               {categories.map((c, i) => (
@@ -164,6 +167,7 @@ const styles = StyleSheet.create({
   categoryListCard: { maxHeight: 300, backgroundColor: Colors.white, borderRadius: 20, borderWidth: 1, borderColor: Colors.homeBorder, overflow: 'hidden' },
   categoryRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 14, paddingVertical: 12 },
   categoryRowBorder: { borderTopWidth: 0.5, borderTopColor: Colors.gray100 },
+  skeletonRow: { minHeight: 68 },
   categoryRowText: { fontSize: 15, color: Colors.black, flex: 1 },
   categoryRenameInput: { fontSize: 15, color: Colors.black, flex: 1, padding: 0, minHeight: 44 },
   categoryRowActions: { flexDirection: 'row', gap: 4},

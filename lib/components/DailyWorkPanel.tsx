@@ -11,7 +11,7 @@ import { getErrorMessage } from '../utils/error';
 import { formatWorkedMinutes } from '../utils/workMinutes';
 import { Button, Field } from './ui';
 import { ErrorMessage } from './ErrorMessage';
-import { LoadingSpinner } from './LoadingSpinner';
+import { Skeleton, SkeletonGroup } from './skeleton';
 import { useConfirmLeave } from '../hooks/useConfirmLeave';
 
 const labels = { pending: '관리자 확인 대기', approved: '확인 완료', rejected: '수정 필요' };
@@ -111,10 +111,11 @@ export function DailyWorkPanel({ employee, yearMonth, payroll, isAdmin, readOnly
       <Text style={styles.hint}>휴게시간을 뺀 실근무 분을 입력해요. 그날의 시급으로 계산한 금액을 기록하고 월별로 합산해요.</Text>
       {readOnly && <Text style={styles.hint}>미리보기에서는 입력하거나 제출할 수 없어요.</Text>}
       {error && <ErrorMessage message={error} onRetry={refetch} />}
-      {loading && <LoadingSpinner fullScreen={false} />}
       <View style={styles.card}>
-        <Text style={styles.title}>확인된 근무 {loading ? '불러오는 중' : error ? '조회 실패' : formatWorkedMinutes(totals.minutes)}</Text>
-        <Text style={styles.amount}>{loading ? '불러오는 중' : error ? '조회 실패' : `세전 ${totals.gross.toLocaleString()}원`}</Text>
+        {loading ? <SkeletonGroup label="확인된 근무 불러오는 중" style={styles.skeleton}><Skeleton width="56%" height={16} /><Skeleton width="44%" height={22} /><Skeleton width="70%" height={10} radius={6} /></SkeletonGroup> : <>
+        <Text style={styles.title}>확인된 근무 {error ? '조회 실패' : formatWorkedMinutes(totals.minutes)}</Text>
+        <Text style={styles.amount}>{error ? '조회 실패' : `세전 ${totals.gross.toLocaleString()}원`}</Text>
+        </>}
         {!loading && !error && <Text style={styles.hint}>확인 대기·수정 필요 {totals.pending}일 · 월 급여에 반영하기 전 합계예요.</Text>}
       </View>
       {isAdmin && !payrollLoaded && <Button label="월 급여 다시 불러오기" variant="text" onPress={() => void refreshPayroll()} disabled={busy} />}
@@ -129,6 +130,7 @@ export function DailyWorkPanel({ employee, yearMonth, payroll, isAdmin, readOnly
       </View>
       {message && <Text accessibilityRole="alert" style={styles.message}>{message}</Text>}
       <View style={styles.sectionHeader}><Text style={styles.title}>날짜별 기록</Text><Button label="기록 다시 불러오기" variant="text" onPress={() => void refetch()} disabled={busy || loading} /></View>
+      {loading && rows.length === 0 && <SkeletonGroup label="날짜별 기록 불러오는 중" style={styles.skeletonList}>{[0, 1, 2].map(i => <View key={i} style={[styles.card, styles.skeleton]}><Skeleton width="40%" height={14} /><Skeleton width="30%" height={18} /><Skeleton width="62%" height={10} radius={6} /></View>)}</SkeletonGroup>}
       {!loading && !error && rows.length === 0 && <Text style={styles.hint}>아직 기록이 없어요. 근무한 날짜부터 입력해 주세요.</Text>}
       {rows.map(row => <View style={styles.card} key={row.id}>
         <Text style={styles.rowTitle}>{row.work_date.slice(5).replace('-', '/')} · {formatWorkedMinutes(row.worked_minutes)}</Text>
@@ -153,4 +155,4 @@ export function DailyWorkPanel({ employee, yearMonth, payroll, isAdmin, readOnly
     </View>
   </KeyboardAvoidingView>;
 }
-const styles = StyleSheet.create({ sectionHeader: { gap: 4 }, flex: { flex: 1 }, content: { padding: 20, paddingBottom: 32, gap: 16 }, footer: { padding: 16, gap: 4, backgroundColor: Colors.white, borderTopWidth: 1, borderTopColor: Colors.homeBorder }, title: { fontSize: 18, fontWeight: '700', color: Colors.black }, rowTitle: { fontSize: 15, fontWeight: '600', color: Colors.black }, amount: { fontSize: 22, fontWeight: '700', color: Colors.primary }, hint: { fontSize: 13, lineHeight: 21, color: Colors.gray600 }, card: { padding: 18, borderRadius: 20, borderWidth: 1, borderColor: Colors.homeBorder, backgroundColor: Colors.white, gap: 10 }, message: { padding: 14, color: Colors.deeper, backgroundColor: Colors.contextBg, borderRadius: 12, lineHeight: 21 } });
+const styles = StyleSheet.create({ skeleton: { gap: 10 }, skeletonList: { gap: 16 }, sectionHeader: { gap: 4 }, flex: { flex: 1 }, content: { padding: 20, paddingBottom: 32, gap: 16 }, footer: { padding: 16, gap: 4, backgroundColor: Colors.white, borderTopWidth: 1, borderTopColor: Colors.homeBorder }, title: { fontSize: 18, fontWeight: '700', color: Colors.black }, rowTitle: { fontSize: 15, fontWeight: '600', color: Colors.black }, amount: { fontSize: 22, fontWeight: '700', color: Colors.primary }, hint: { fontSize: 13, lineHeight: 21, color: Colors.gray600 }, card: { padding: 18, borderRadius: 20, borderWidth: 1, borderColor: Colors.homeBorder, backgroundColor: Colors.white, gap: 10 }, message: { padding: 14, color: Colors.deeper, backgroundColor: Colors.contextBg, borderRadius: 12, lineHeight: 21 } });
