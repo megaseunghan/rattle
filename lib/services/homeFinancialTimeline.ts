@@ -4,10 +4,14 @@ import { getDailyLaborSeries } from './dailyLaborSeries';
 import { getDailyExpenseSeries } from './dailyExpenseSeries';
 import { getBusinessDayRange } from './posAnalytics';
 import { financialPeriod, type DailyAmount } from '../utils/homeFinancialCard';
-/** Admin-only detail reads. Shared members keep the existing aggregate RPC contract. */
+/**
+ * Admin-only detail reads. Shared members keep the existing aggregate RPC contract.
+ * 재무 접근 확인과 일별 조회를 동시에 보내 순차 대기를 줄인다. 확인이 거절되면 함께 받은 자료는 버리고
+ * 거절 오류를 먼저 알린다(`get_home_daily_sources`는 자체 관리자 검사가 없어 이 확인이 화면 차단을 맡는다).
+ */
 export async function getHomeFinancialTimeline(storeId: string, closingTime: string, asOf = new Date()) {
-  const { error: denied } = await supabase.rpc('assert_store_finance_access', { p_store_id: storeId });
-  if (denied) throw denied;
+  const access = Promise.resolve(supabase.rpc('assert_store_finance_access', { p_store_id: storeId }))
+    .then(({ error }) => { if (error) throw error; });
   const period = financialPeriod(asOf);
   async function read(month: string, through: number, current: boolean) {
     const start = `${month}-01`, end = `${month}-${String(through).padStart(2, '0')}`;
@@ -65,6 +69,12 @@ export async function getHomeFinancialTimeline(storeId: string, closingTime: str
         values: { revenue, purchase, labor: laborCost, expense: cost, profit } };
     });
   }
-  const [current, previous] = await Promise.all([read(period.month, period.day, true), read(period.previousMonth, period.previousDay, false)]);
+  const [accessResult, currentResult, previousResult] = await Promise.allSettled([
+    access, read(period.month, period.day, true), read(period.previousMonth, period.previousDay, false),
+  ]);
+  if (accessResult.status === 'rejected') throw accessResult.reason;
+  if (currentResult.status === 'rejected') throw currentResult.reason;
+  if (previousResult.status === 'rejected') throw previousResult.reason;
+  const current = currentResult.value, previous = previousResult.value;
   return { current, previous: previous.some(day => day.hasRecords) ? previous : [] };
 }

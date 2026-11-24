@@ -188,11 +188,26 @@ describe('현재 적용 급여 View', () => {
     mockEmployeeWages([{ employee_id: 'employee', wage_history_id: null, effective_date: null, base_salary: null, hourly_wage: null, non_taxable: null }]);
     await expect(getEmployees('store')).resolves.toEqual([{ ...employee, wage_history_missing: true }]);
   });
-  it('실제 적용 이력의 금액을 사용하고 매장과 직원 범위를 함께 제한한다', async () => {
+  it('실제 적용 이력의 금액을 사용하고 매장 범위로 제한한다', async () => {
     const wageRead = mockEmployeeWages([{ employee_id: 'employee', wage_history_id: 'history', effective_date: '2026-10-01', base_salary: '3200000', hourly_wage: null, non_taxable: '100000' }]);
     await expect(getEmployees('store')).resolves.toEqual([{ ...employee, base_salary: 3200000, hourly_wage: null, non_taxable: 100000, wage_history_missing: false }]);
     expect(wageRead.eq).toHaveBeenCalledWith('store_id', 'store');
-    expect(wageRead.in).toHaveBeenCalledWith('employee_id', ['employee']);
+  });
+  it('직원 목록을 기다리지 않고 급여 View를 동시에 조회한다', async () => {
+    let release!: () => void;
+    const employeeRead = query({ data: [employee], error: null });
+    employeeRead.then = jest.fn((resolve: (value: unknown) => unknown) => new Promise(done => { release = () => done(resolve({ data: [employee], error: null })); }));
+    const wageRead = query({ data: [], error: null });
+    mockFrom.mockImplementation(table => table === 'employees' ? employeeRead : wageRead);
+    const pending = getEmployees('store');
+    await Promise.resolve();
+    expect(mockFrom).toHaveBeenCalledWith('current_employee_wages');
+    release();
+    await expect(pending).resolves.toEqual([{ ...employee, wage_history_missing: true }]);
+  });
+  it('다른 직원의 급여 행은 결과에 섞지 않는다', async () => {
+    mockEmployeeWages([{ employee_id: 'retired', wage_history_id: 'h', effective_date: '2026-10-01', base_salary: '1', hourly_wage: null, non_taxable: '0' }]);
+    await expect(getEmployees('store')).resolves.toEqual([{ ...employee, wage_history_missing: true }]);
   });
   it('View 권한·조회 오류를 기존 직원 조건으로 숨기지 않는다', async () => {
     const error = { message: 'wages view failed' };

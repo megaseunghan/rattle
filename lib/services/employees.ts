@@ -12,13 +12,16 @@ export async function getEmployees(storeId: string, includeInactive = false): Pr
 
   if (!includeInactive) query = query.eq('is_active', true);
 
-  const { data, error } = await query;
+  // 직원 목록과 현재 급여를 동시에 읽는다(직원 → 급여 순차 대기 제거). 급여는 매장 범위로 읽고 아래에서 직원별로 맞춘다.
+  const [{ data, error }, { data: wages, error: wageError }] = await Promise.all([
+    query,
+    supabase.from('current_employee_wages')
+      .select('employee_id,wage_history_id,effective_date,base_salary,hourly_wage,non_taxable')
+      .eq('store_id', storeId),
+  ]);
   if (error) throw new Error(error.message);
   const employees = (data ?? []) as Employee[];
   if (!employees.length) return employees;
-  const { data: wages, error: wageError } = await supabase.from('current_employee_wages')
-    .select('employee_id,wage_history_id,effective_date,base_salary,hourly_wage,non_taxable')
-    .eq('store_id', storeId).in('employee_id', employees.map(row => row.id));
   if (wageError) throw wageError;
   const byEmployee = new Map((wages ?? []).map(row => [row.employee_id, row]));
   return employees.map(employee => {

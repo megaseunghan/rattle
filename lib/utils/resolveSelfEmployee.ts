@@ -13,3 +13,17 @@ export function resolveSelfEmployee(
   if (previewEmployeeId) return employees.find(e => e.id === previewEmployeeId);
   return employees.find(e => e.user_id === userId);
 }
+
+/**
+ * "나"의 직원 ID만 바로 정한다(홈 출퇴근 조회를 직원 목록·시급보다 먼저 시작하기 위함).
+ * 평소에는 권한 응답(`get_my_store_access`)의 본인 활성 직원 ID를 쓴다.
+ * 관리자 미리보기 중에는 목록에 실제로 있는 직원만 쓴다(연결 안 된 미리보기 표시값으로 조회하지 않는다).
+ */
+export function resolveSelfEmployeeId(
+  accessEmployeeId: string | null | undefined,
+  previewEmployeeId: string | null,
+  employees: Employee[],
+): string | undefined {
+  if (previewEmployeeId) return employees.find(e => e.id === previewEmployeeId)?.id;
+  return accessEmployeeId ?? undefined;
+}

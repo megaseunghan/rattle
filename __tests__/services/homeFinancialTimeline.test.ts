@@ -10,11 +10,31 @@ jest.mock('../../lib/services/readAllRows', () => ({ readAllRows: jest.fn() }));
 beforeEach(() => { jest.clearAllMocks(); (getDailyExpenseSeries as jest.Mock).mockImplementation(async (_store, month) => ({ monthlyTotal: 600, days: Array.from({ length: 31 }, (_, i) => ({ date: `${month}-${String(i+1).padStart(2,'0')}`, cumulativeAmount: (i+1)*20 })) })); (getDailyLaborSeries as jest.Mock).mockImplementation(async (_store, month, through) => ({ savedMonthlyGross: 100, days: Array.from({ length: through }, (_, i) => ({ date: `${month}-${String(i+1).padStart(2,'0')}`, cumulative: (i+1)*10 })) })); (supabase.rpc as jest.Mock).mockImplementation(async (name: string) => name === 'get_home_daily_sources'
   // 기존 테스트는 집계 RPC 미배포 상태(기존 원본 조회 경로)를 검사한다.
   ? { data: null, error: { code: 'PGRST202', message: 'missing' } } : { error: null }); });
-it('권한 거절 후 원천 자료를 읽지 않는다', async () => {
+it('재무 접근 확인과 일별 조회를 동시에 시작한다', async () => {
+  let release!: () => void;
+  (supabase.rpc as jest.Mock).mockImplementation((name: string) => name === 'assert_store_finance_access'
+    ? new Promise<{ error: null }>(resolve => { release = () => resolve({ error: null }); })
+    : Promise.resolve({ data: [], error: null }));
+  const pending = getHomeFinancialTimeline('store', '23:00', new Date('2026-11-05T15:30:00Z'));
+  await new Promise<void>(resolve => setImmediate(() => resolve()));
+  expect(supabase.rpc).toHaveBeenCalledWith('get_home_daily_sources', expect.anything());
+  expect(getDailyLaborSeries).toHaveBeenCalled();
+  expect(getDailyExpenseSeries).toHaveBeenCalled();
+  release();
+  await expect(pending).resolves.toHaveProperty('current');
+});
+it('재무 접근 거절이면 동시에 받은 자료를 버리고 권한 오류를 낸다', async () => {
   const denied = { code: '42501', message: 'denied' };
-  (supabase.rpc as jest.Mock).mockResolvedValue({ error: denied });
+  (supabase.rpc as jest.Mock).mockImplementation(async (name: string) => name === 'assert_store_finance_access'
+    ? { error: denied } : { data: [{ date: '2026-11-01', revenue: '120', card_revenue: '100', purchase: '0' }], error: null });
   await expect(getHomeFinancialTimeline('store', '23:00', new Date('2026-11-05T15:30:00Z'))).rejects.toEqual(denied);
-  expect(readAllRows).not.toHaveBeenCalled();
+});
+it('재무 접근 거절은 다른 조회 오류보다 먼저 알린다', async () => {
+  const denied = { code: '42501', message: 'denied' };
+  (supabase.rpc as jest.Mock).mockImplementation((name: string) => name === 'assert_store_finance_access'
+    ? new Promise(resolve => setTimeout(() => resolve({ error: denied }), 5)) : Promise.resolve({ data: [], error: null }));
+  (getDailyLaborSeries as jest.Mock).mockRejectedValue(new Error('DAILY_LABOR_FORBIDDEN'));
+  await expect(getHomeFinancialTimeline('store', '23:00', new Date('2026-11-05T15:30:00Z'))).rejects.toEqual(denied);
 });
 it('영업일별 카드+현금 및 수기 매출을 누적하고 전월 미존재를 구분한다', async () => {
   (readAllRows as jest.Mock).mockResolvedValueOnce([{ order_at: '2026-11-01T15:00:00Z', card_amount: 100, cash_amount: 20, total_amount: 999 }]).mockResolvedValueOnce([{ date: '2026-11-02', card_amount: 10, cash_amount: 5 }]).mockResolvedValueOnce([{ date: '2026-11-03', amount: 40 }]).mockResolvedValueOnce([]).mockResolvedValueOnce([]).mockResolvedValueOnce([]);
