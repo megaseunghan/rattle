@@ -100,6 +100,8 @@ export function useHomeAlerts(todaySales?: number, selectedStore?: Store, financ
     }).filter(alert => !read.has(alert.key) && (alert.kind !== 'tossNotSynced' || todaySales === 0));
   }, [source, now, financial, tossLinked, todaySales]);
   const hasTarget = !!storeId && !!userId;
-  return { scope, alerts: hasTarget ? alerts : [], loading: !!storeId && (!hasTarget || query.isPending && !query.isError || query.isFetching),
+  const initialLoading = !!storeId && (!hasTarget || query.isPending && !query.isError);
+  // initialLoading: 아직 한 번도 받은 적 없는 첫 불러오기(스켈레톤용). loading은 재조회까지 포함한다.
+  return { scope, alerts: hasTarget ? alerts : [], initialLoading, loading: initialLoading || !!storeId && query.isFetching,
     error: hasTarget && query.isError ? READ_ERROR : null, refetch, markRead, restoreRead };
 }

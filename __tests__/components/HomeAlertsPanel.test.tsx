@@ -153,3 +153,12 @@ it('화면 밖 다른 손가락이 이미 닿아 있으면 이전 시작점으�
   act(() => config.onPanResponderRelease!({ nativeEvent: { pageX: 140, pageY: 200 } } as any, { dx: -10, dy: 0 } as any));
   expect(Alert.alert).not.toHaveBeenCalled();
 });
+it('처음 불러올 때만 스켈레톤을 보이고, 알림 없는 매장의 재조회는 빈 카드를 띄우지 않는다', () => {
+  mockData = { ...mockData, alerts: [], loading: true, initialLoading: true };
+  const view = render(<HomeAlertsPanel />);
+  expect(screen.getByLabelText('홈 알림 불러오는 중')).toBeTruthy();
+  mockData = { ...mockData, alerts: [], loading: true, initialLoading: false };
+  view.rerender(<HomeAlertsPanel />);
+  expect(screen.queryByLabelText('홈 알림 불러오는 중')).toBeNull();
+  expect(view.toJSON()).toBeNull();
+});
