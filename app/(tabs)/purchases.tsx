@@ -4,7 +4,7 @@ import { getErrorMessage } from '../../lib/utils/error';
 import { useState, useEffect, useMemo } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  Alert, ActivityIndicator, RefreshControl,
+  Alert, RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppIcon } from '../../lib/icons/AppIcon';

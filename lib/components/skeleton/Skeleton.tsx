@@ -1,11 +1,12 @@
 /* 확정 시안 B · 빛 흐름(2026-11-24): 연한 파랑 자리 위로 화면 전체에 이어지는 빛 한 줄기가 지나간다. */
-import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { AccessibilityInfo, Animated, Easing, StyleSheet, View, useWindowDimensions, type DimensionValue, type StyleProp, type ViewStyle } from 'react-native';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import { Colors } from '../../../constants/colors';
 
 const SWEEP_MS = 1500;
 const BEAM_WIDTH_RATIO = 0.5;
+const SETTLE_MS = 400;
 
 interface BeamContextValue { beam: Animated.Value; animated: boolean; screenWidth: number; }
 const BeamContext = createContext<BeamContextValue | null>(null);
@@ -50,20 +51,29 @@ export function Skeleton({ width = '100%', height, radius = 8, style, testID }: 
   const ctx = useContext(BeamContext);
   const ref = useRef<View>(null);
   const [offsetX, setOffsetX] = useState<number | null>(null);
-  // 가로 페이저의 다른 탭에 있으면 x가 화면 폭만큼 밀려 있으므로 한 화면 폭 안으로 접는다.
-  const measure = () => ref.current?.measureInWindow((x) => {
-    const w = ctx?.screenWidth || 1;
-    setOffsetX(((x % w) + w) % w);
-  });
+  const animated = !!ctx?.animated;
   const screenWidth = ctx?.screenWidth ?? 0;
+  // 가로 페이저의 다른 탭에 있으면 x가 화면 폭만큼 밀려 있으므로 한 화면 폭 안으로 접는다.
+  const measure = useCallback(() => ref.current?.measureInWindow((x) => {
+    const w = screenWidth || 1;
+    setOffsetX(((x % w) + w) % w);
+  }), [screenWidth]);
+  // 동작 줄이기 확인이 레이아웃보다 늦게 끝나도 빛이 시작되도록, 움직임이 켜질 때 다시 잰다.
+  // 스택 화면이 밀려 들어오는 중에 잰 위치는 어긋나므로 전환이 끝날 즈음 한 번 더 잰다.
+  useEffect(() => {
+    if (!animated) return;
+    measure();
+    const timer = setTimeout(measure, SETTLE_MS);
+    return () => clearTimeout(timer);
+  }, [animated, measure]);
   const beamWidth = screenWidth * BEAM_WIDTH_RATIO;
   const translateX = ctx && offsetX != null
     ? ctx.beam.interpolate({ inputRange: [0, 1], outputRange: [-beamWidth - offsetX, screenWidth - offsetX] })
     : null;
-  return <View ref={ref} testID={testID} onLayout={ctx?.animated ? measure : undefined}
+  return <View ref={ref} testID={testID} onLayout={animated ? measure : undefined}
     importantForAccessibility="no-hide-descendants" accessibilityElementsHidden
     style={[styles.block, { width, height, borderRadius: radius }, style]}>
-    {ctx?.animated && translateX && <Animated.View pointerEvents="none" style={[styles.beam, { width: beamWidth, transform: [{ translateX }] }]}>
+    {animated && translateX && <Animated.View pointerEvents="none" style={[styles.beam, { width: beamWidth, transform: [{ translateX }] }]}>
       <Svg width="100%" height="100%">
         <Defs>
           <LinearGradient id="skeleton-beam" x1="0" y1="0" x2="1" y2="0">

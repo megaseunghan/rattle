@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { Skeleton, SkeletonGroup } from './skeleton';
 import { AccessibilityInfo, ActivityIndicator, Alert, AppState, Pressable, StyleSheet, Text, View } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 import DraggableFlatList, { type RenderItemParams } from 'react-native-draggable-flatlist';
@@ -196,7 +197,7 @@ export function HomeWorkflowEditor({ visible, initialPhase, onClose, onStateChan
             renderItem={renderOrderItem} activationDistance={0} autoscrollThreshold={60}
             animationConfig={{ reduceMotion: ReduceMotion.System }}
             onDragEnd={({ data }) => finishDrag(data)}
-            ListHeaderComponent={query.isError ? <View style={styles.message}><Text accessibilityRole="alert" style={styles.help}>{homeWorkflowLoadMessage(query.error)}</Text><Pressable accessibilityRole="button" accessibilityLabel="바로가기 설정 다시 불러오기" disabled={locked} onPress={() => { void query.refetch(); }} style={styles.retry}><Text style={styles.link}>다시 불러오기</Text></Pressable></View> : !current ? <View style={styles.loading}><ActivityIndicator color={Colors.action} accessibilityLabel="바로가기 설정 불러오는 중" /></View> : null}
+            ListHeaderComponent={query.isError ? <View style={styles.message}><Text accessibilityRole="alert" style={styles.help}>{homeWorkflowLoadMessage(query.error)}</Text><Pressable accessibilityRole="button" accessibilityLabel="바로가기 설정 다시 불러오기" disabled={locked} onPress={() => { void query.refetch(); }} style={styles.retry}><Text style={styles.link}>다시 불러오기</Text></Pressable></View> : !current ? <SkeletonGroup label="바로가기 설정 불러오는 중">{(["44%", "56%", "38%", "50%"] as const).map((w, i) => <View key={i} style={styles.orderRow}><Skeleton width={40} height={40} radius={12} /><View style={styles.skeletonText}><Skeleton width={w} height={14} /></View><Skeleton width={28} height={28} radius={8} /></View>)}</SkeletonGroup> : null}
             ListEmptyComponent={current && <Text style={styles.help}>아래에서 표시할 기능을 선택해주세요.</Text>}
             ListFooterComponent={catalog}
           />
@@ -220,6 +221,7 @@ const styles = StyleSheet.create({
   phase: { minHeight: 44, flex: 1, alignItems: 'center', justifyContent: 'center', borderRadius: 11 },
   phaseSelected: { backgroundColor: Colors.white }, phaseText: { color: Colors.gray600, fontSize: 14 }, selectedText: { color: Colors.action, fontFamily: Fonts.wantedSemiBold },
   list: { flex: 1 }, content: { paddingHorizontal: 20, paddingBottom: 20 }, loading: { padding: 30 }, message: { padding: 20 },
+  skeletonText: { flex: 1 },
   orderRow: { flexDirection: 'row', gap: 8, alignItems: 'center', minHeight: 66, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: Colors.homeBorder },
   lifted: { backgroundColor: Colors.white, borderRadius: 14, paddingLeft: 12, shadowColor: Colors.black, shadowOpacity: 0.07, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 3 },
   actionName: { flex: 1, minWidth: 0, fontSize: 14, lineHeight: 21, color: Colors.black },

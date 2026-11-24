@@ -6,7 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import { queryClient, queryKeys, useQueryScope, isAccessDenied } from '../../lib/query';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, Pressable,
-  Modal, ActivityIndicator,
+  Modal,
   useWindowDimensions, type StyleProp, type ViewStyle, type ViewProps,
 } from 'react-native';
 import Animated, { cancelAnimation, Easing, ReduceMotion, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
