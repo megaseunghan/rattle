@@ -47,6 +47,19 @@ describe('매출 화면 요청 순서', () => {
     expect(mockManualRefetch).toHaveBeenCalledTimes(1);
   });
 
+  it('연결 확인이 거절된 적이 있으면 매장 정보의 미연동 값으로 수기 매출을 먼저 조회하지 않는다', async () => {
+    getDetails().mockRejectedValue({ code: '42501', message: 'denied' });
+    const first = render(<PosScreen />);
+    await act(async () => {});
+    first.unmount();
+    mockManualRefetch.mockClear();
+    mockStore = { id: 'store', closing_time: '23:00', toss_merchant_id: null };
+    getDetails().mockImplementation(() => new Promise(() => {}));
+    render(<PosScreen />);
+    await act(async () => {});
+    expect(mockManualRefetch).not.toHaveBeenCalled();
+  });
+
   it('탭 재진입 때 수기 매출과 연결 확인을 한 번씩만 요청한다', async () => {
     mockStore = { id: 'store', closing_time: '23:00', toss_merchant_id: null };
     getDetails().mockResolvedValue({ toss_merchant_id: null, closing_time: '23:00' });

@@ -80,7 +80,8 @@ export function PosScreen({ active = true }: { active?: boolean }) {
   const cachedConnection = connectionDenied ? undefined : queryClient.getQueryData<Awaited<ReturnType<typeof getStoreDetails>>>(connectionKey);
   // 앱 시작 때 받은 매장 정보(부트스트랩)에 POS 연결 여부가 있으면 첫 화면을 그 값으로 바로 연다.
   // 서버 연결 확인(getStoreDetails)은 아래에서 그대로 다시 하며, 결과가 다르면 그 값으로 바뀐다.
-  const initialConnection = cachedConnection ?? connectionFromStore(store);
+  // 연결 확인이 거절된 적이 있으면 부트스트랩 값으로 화면을 먼저 열지 않는다(거절 안내 전 "미연동" 화면 깜빡임 방지).
+  const initialConnection = connectionDenied ? undefined : cachedConnection ?? connectionFromStore(store);
   const [status, setStatus] = useState<SyncStatus>(() => initialConnection?.toss_merchant_id ? 'connected' : 'unregistered');
   const [loadingStatus, setLoadingStatus] = useState(!initialConnection);
 

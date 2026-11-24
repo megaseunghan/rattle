@@ -7,7 +7,8 @@ import { financialPeriod, type DailyAmount } from '../utils/homeFinancialCard';
 /**
  * Admin-only detail reads. Shared members keep the existing aggregate RPC contract.
  * 재무 접근 확인과 일별 조회를 동시에 보내 순차 대기를 줄인다. 확인이 거절되면 함께 받은 자료는 버리고
- * 거절 오류를 먼저 알린다(`get_home_daily_sources`는 자체 관리자 검사가 없어 이 확인이 화면 차단을 맡는다).
+ * 거절 오류를 먼저 알린다. `20261124150000_home_daily_sources_admin_check.sql` 적용 전 서버에서는
+ * `get_home_daily_sources`에 자체 관리자 검사가 없어 이 확인이 화면 차단을 맡는다.
  */
 export async function getHomeFinancialTimeline(storeId: string, closingTime: string, asOf = new Date()) {
   const access = Promise.resolve(supabase.rpc('assert_store_finance_access', { p_store_id: storeId }))
