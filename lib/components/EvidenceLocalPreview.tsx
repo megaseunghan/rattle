@@ -1,7 +1,7 @@
-import { EvidencePhoto } from './EvidencePhoto';
+import { EvidenceViewerPhoto } from './EvidencePhoto';
 import { useState } from 'react';
 import { Alert, Modal, StyleSheet, Text, TouchableOpacity, type StyleProp, type ViewStyle } from 'react-native';
-import { initialWindowMetrics, SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import { initialWindowMetrics, SafeAreaProvider } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { Colors } from '../../constants/colors';
 import { EvidenceSelection } from '../types/evidence';
@@ -15,17 +15,16 @@ export function EvidenceLocalPreview({ selection, style, fit = 'contain' }: { se
     }}>
       {selection.mimeType === 'application/pdf' ? <Text>PDF</Text> : <Image source={{ uri: selection.uri }} style={styles.image} contentFit={fit} cachePolicy="none" recyclingKey={selection.id} />}
     </TouchableOpacity>
-    <Modal visible={open} onRequestClose={() => setOpen(false)}>
-      {/* 모달은 별도 창이라 안에서 안전영역을 다시 재야 닫기가 상태 표시줄 아래로 내려온다. */}
-      <SafeAreaProvider initialMetrics={initialWindowMetrics}><SafeAreaView style={styles.viewer} onAccessibilityEscape={() => setOpen(false)}>
-        <TouchableOpacity accessibilityRole="button" accessibilityLabel="증빙 미리보기 닫기" style={styles.close} onPress={() => setOpen(false)}><Text>닫기</Text></TouchableOpacity>
-        {open && <EvidencePhoto onClose={() => setOpen(false)} source={{ uri: selection.uri }} style={styles.original} contentFit="contain" cachePolicy="none" />}
-      </SafeAreaView></SafeAreaProvider>
+    {/* 크게 보기는 닫기 버튼 없이 밀기·바깥 누르기·뒤로가기·VoiceOver 문지르기로 닫는다(EvidencePanel과 같음). */}
+    <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
+      <SafeAreaProvider initialMetrics={initialWindowMetrics}>
+        {open && <EvidenceViewerPhoto onClose={() => setOpen(false)} source={{ uri: selection.uri }} style={styles.original} contentFit="contain" cachePolicy="none" />}
+      </SafeAreaProvider>
     </Modal>
   </>;
 }
 const styles = StyleSheet.create({
   thumbnail: { width: 112, height: 88, minHeight: 44, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.gray50 },
-  image: { width: '100%', height: '100%' }, viewer: { flex: 1, backgroundColor: Colors.white },
-  original: { flex: 1 }, close: { minHeight: 44, padding: 12 },
+  image: { width: '100%', height: '100%' },
+  original: { flex: 1 },
 });
