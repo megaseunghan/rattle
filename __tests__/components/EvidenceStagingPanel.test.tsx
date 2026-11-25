@@ -56,7 +56,8 @@ test('붙인 사진은 크게 보고 ✕로 뺄 수 있다', async () => {
   await choose('앨범에서 선택');
   await waitFor(() => expect(screen.getByLabelText('receipt.jpg 미리보기')).toBeTruthy());
   fireEvent.press(screen.getByLabelText('receipt.jpg 미리보기'));
-  fireEvent.press(screen.getByLabelText('증빙 미리보기 닫기'));
+  fireEvent(screen.getByTestId('evidence-photo'), 'accessibilityEscape');
+  expect(screen.queryByTestId('evidence-photo')).toBeNull();
   fireEvent.press(screen.getByLabelText('receipt.jpg 빼기'));
   expect(screen.queryByLabelText('receipt.jpg 미리보기')).toBeNull();
 });

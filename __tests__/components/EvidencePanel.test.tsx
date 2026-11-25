@@ -69,10 +69,10 @@ test('reopening a cached signed URL does not extend its original expiry',async()
   await waitFor(()=>expect(mockSign).toHaveBeenCalledTimes(1));
   await act(async()=>{fireEvent.press(screen.getByLabelText('receipt.jpg 열기'));});
   await waitFor(()=>expect(mockSign).toHaveBeenCalledTimes(2));
-  fireEvent.press(screen.getByText('닫기'));now+=120000;
+  fireEvent(screen.getByTestId('evidence-photo'),'accessibilityEscape');now+=120000;
   await act(async()=>{fireEvent.press(screen.getByLabelText('receipt.jpg 열기'));});
   expect(mockSign).toHaveBeenCalledTimes(2);
-  fireEvent.press(screen.getByText('닫기'));now+=130000;
+  fireEvent(screen.getByTestId('evidence-photo'),'accessibilityEscape');now+=130000;
   await act(async()=>{fireEvent.press(screen.getByLabelText('receipt.jpg 열기'));});
   expect(mockSign).toHaveBeenCalledTimes(3);
  } finally {clock.mockRestore();}

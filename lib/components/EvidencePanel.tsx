@@ -1,4 +1,4 @@
-import { EvidencePhoto } from './EvidencePhoto';
+import { EvidenceViewerPhoto } from './EvidencePhoto';
 import { memo, useEffect, useRef, useState } from 'react';
 import { Alert, FlatList, Modal, StyleSheet, Text, TouchableOpacity, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Image } from 'expo-image';
@@ -6,7 +6,7 @@ import { EvidenceSourceButtons } from './EvidenceSourceButtons';
 import * as WebBrowser from 'expo-web-browser';
 import { disposeEvidenceCache, pickEvidenceSelections, type EvidenceSource } from '../media/evidencePicker';
 import { EvidenceLocalPreview } from './EvidenceLocalPreview';
-import { initialWindowMetrics, SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import { initialWindowMetrics, SafeAreaProvider } from 'react-native-safe-area-context';
 import { Colors } from '../../constants/colors';
 import { Fonts } from '../../constants/fonts';
 import { useAuth } from '../contexts/AuthContext';
@@ -282,12 +282,12 @@ function EvidencePanelContent({ target, disabled = false, initiallyExpanded = fa
     }
   }
   const jobIds = new Set(jobs.map(job => job.selection.id));
-  const viewerModal = <Modal visible={!!viewer} animationType="fade" onRequestClose={() => setViewer(null)}>
-      {/* 모달은 별도 창이라 바깥 SafeAreaProvider 값을 받지 못한다. 안에서 다시 재야 닫기가 상태 표시줄 아래로 내려온다. */}
-      <SafeAreaProvider initialMetrics={initialWindowMetrics}><SafeAreaView style={styles.viewer} onAccessibilityEscape={() => setViewer(null)}>
-        <TouchableOpacity accessibilityRole="button" style={styles.button} onPress={() => setViewer(null)}><Text style={styles.link}>닫기</Text></TouchableOpacity>
-        {viewer && <EvidencePhoto key={viewer.file.id} onClose={() => setViewer(null)} style={styles.original} source={{ uri: viewer.url, cacheKey: `${account}:${viewer.file.id}:full` }} placeholder={viewer.thumb ? { uri: viewer.thumb, cacheKey: `${account}:${viewer.file.id}:thumb` } : undefined} cachePolicy="memory" contentFit="contain" placeholderContentFit="contain" transition={150} onError={() => { setViewer(null); setError('이미지를 불러오지 못했어요. 다시 열어주세요.'); }} />}
-      </SafeAreaView></SafeAreaProvider>
+  // 닫기 버튼 없이 밀기·바깥 누르기·뒤로가기·VoiceOver 문지르기로 닫는다. 투명 모달이라 밀 때 아래 화면이 비친다.
+  const viewerModal = <Modal visible={!!viewer} transparent animationType="fade" onRequestClose={() => setViewer(null)}>
+      {/* 모달은 별도 창이라 바깥 SafeAreaProvider 값을 받지 못한다. 안에서 다시 재야 사진이 상태 표시줄을 피한다. */}
+      <SafeAreaProvider initialMetrics={initialWindowMetrics}>
+        {viewer && <EvidenceViewerPhoto key={viewer.file.id} onClose={() => setViewer(null)} style={styles.original} source={{ uri: viewer.url, cacheKey: `${account}:${viewer.file.id}:full` }} placeholder={viewer.thumb ? { uri: viewer.thumb, cacheKey: `${account}:${viewer.file.id}:thumb` } : undefined} cachePolicy="memory" contentFit="contain" placeholderContentFit="contain" transition={150} onError={() => { setViewer(null); setError('이미지를 불러오지 못했어요. 다시 열어주세요.'); }} />}
+      </SafeAreaProvider>
     </Modal>;
   if (purchaseCard) {
     const canRemove = (file: EvidenceFile) => canWrite && (file.created_by === account || canManageStore);
@@ -373,6 +373,6 @@ const styles = StyleSheet.create({
   image: { width: '100%', height: '100%' },
   name: { fontFamily: Fonts.wantedRegular, fontSize: 13, color: Colors.black },
   job: { gap: 4, paddingVertical: 8 },
-  viewer: { flex: 1, backgroundColor: Colors.homeCanvas }, original: { flex: 1, width: '100%' },
+  original: { flex: 1, width: '100%' },
   center: { alignItems: 'center', justifyContent: 'center' },
 });
