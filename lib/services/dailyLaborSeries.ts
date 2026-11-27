@@ -1,3 +1,4 @@
+import { probationFactorOn } from '../payroll';
 import type { DailyWorkRecord, DailyWorkSnapshot, Employee, Payroll, WageHistory } from '../../types';
 import type { RegularWageSnapshot } from '../utils/regularWages';
 import { koreanDate, sortWages } from '../utils/regularWages';
@@ -5,11 +6,13 @@ import { supabase } from '../supabase';
 
 export type LaborGap = 'legacy_monthly' | 'missing_wage' | 'employment_history' | 'missing_work' | 'invalid_snapshot' | 'attendance_work_failed';
 export interface LaborSources {
-  employees: Pick<Employee, 'id' | 'store_id' | 'joined_at' | 'is_active' | 'employment_type' | 'is_resigned_during_probation'>[];
+  employees: (Pick<Employee, 'id' | 'store_id' | 'joined_at' | 'is_active' | 'employment_type'> & Partial<Pick<Employee, 'is_probation' | 'probation_started_at' | 'probation_ends_on'>>)[];
   payrolls: (Payroll & { source_kind?: 'saved_payroll' | 'approved_daily_projection' })[];
   dailyWork: (Pick<DailyWorkRecord, 'id' | 'store_id' | 'employee_id' | 'work_date' | 'revision' | 'status'> & Partial<Pick<DailyWorkRecord, 'gross' | 'worked_minutes' | 'applied_hourly_wage'>> & { record_source?: 'manual' | 'qr_auto'; auto_applied_at?: string | null })[];
   wages: WageHistory[];
   monthlyLaborCost?: number | null;
+  /** 계정 없는 일용근로자 하루 기록(세전). 서버가 아직 보내지 않으면 undefined. */
+  dailyLaborEntries?: { store_id: string; work_date: string; gross: number }[];
   attendanceWorkFailures?: { store_id: string; employee_id: string; work_date: string; state: string; error_code: string | null; updated_at: string }[];
 }
 export interface DailyLaborDay {
@@ -42,9 +45,11 @@ export function buildDailyLaborSeries(storeId: string, month: string, through: n
   if (!Number.isInteger(through) || through < 1 || through > calendar.length || !Number.isFinite(asOf.getTime())) throw new Error('INVALID_LABOR_PERIOD');
   const failures = sources.attendanceWorkFailures === undefined ? [] : sources.attendanceWorkFailures;
   if (!Array.isArray(failures)) throw new Error('INVALID_LABOR_SOURCE');
-  const scopeRows = [...sources.employees, ...sources.payrolls, ...sources.dailyWork, ...sources.wages, ...failures];
+  const laborerEntries = sources.dailyLaborEntries === undefined ? [] : sources.dailyLaborEntries;
+  if (!Array.isArray(laborerEntries) || laborerEntries.some(e => !validAmount(e.gross))) throw new Error('INVALID_LABOR_SOURCE');
+  const scopeRows = [...sources.employees, ...sources.payrolls, ...sources.dailyWork, ...sources.wages, ...failures, ...laborerEntries];
   if (scopeRows.some(row => row.store_id !== storeId) || sources.payrolls.some(p => p.year_month !== month)
-    || [...sources.dailyWork, ...failures].some(d => !calendar.includes(d.work_date))) throw new Error('LABOR_SCOPE_MISMATCH');
+    || [...sources.dailyWork, ...failures, ...laborerEntries].some(d => !calendar.includes(d.work_date))) throw new Error('LABOR_SCOPE_MISMATCH');
   const unique = (keys: string[]) => new Set(keys).size === keys.length;
   if (!unique(sources.payrolls.map(p => p.employee_id)) || !unique(sources.employees.map(e => e.id))
     || !unique(sources.dailyWork.map(d => `${d.employee_id}:${d.work_date}`))) throw new Error('DUPLICATE_LABOR_SOURCE');
@@ -66,13 +71,14 @@ export function buildDailyLaborSeries(storeId: string, month: string, through: n
       // Inactive status has no effective termination date. Never invent a past end date.
       if (!employee?.joined_at || !employee.is_active) { gap(all, 'employment_history'); continue; }
       const history = sortWages(sources.wages.filter(w => w.employee_id === id));
-      const factor = employee.is_resigned_during_probation ? 0.8 : asOf.getTime() < Date.parse(`${employee.joined_at}T00:00:00Z`) + 61 * 86400000 ? 0.9 : 1;
+      // 수습은 표시한 직원만, 날짜별로 판단한다(2026-v2).
+      const probation = { is_probation: employee.is_probation ?? false, probation_started_at: employee.probation_started_at ?? null, joined_at: employee.joined_at, probation_ends_on: employee.probation_ends_on ?? null };
       regular = { version: 1, year_month: month, employment_start: employee.joined_at, days: [] };
       for (const date of calendar) {
         if (date < employee.joined_at || date > koreanDate(asOf)) continue;
         const rate = history.filter(w => w.effective_date <= date).at(-1);
         if (!rate || !validAmount(rate.base_salary)) { gap([calendar.indexOf(date)], 'missing_wage'); continue; }
-        regular.days.push({ date, base_salary: Number(rate.base_salary), non_taxable: Number(rate.non_taxable), factor });
+        regular.days.push({ date, base_salary: Number(rate.base_salary), non_taxable: Number(rate.non_taxable), factor: probationFactorOn(probation, date) });
       }
     }
     if (regular) {
@@ -115,6 +121,7 @@ export function buildDailyLaborSeries(storeId: string, month: string, through: n
       }
     });
   }
+  for (const entry of laborerEntries) add(calendar.indexOf(entry.work_date), Number(entry.gross));
   let cumulative: number | null = 0;
   for (const day of days) { cumulative = cumulative === null || day.amount === null ? null : cumulative + day.amount; day.cumulative = cumulative; }
   const selected = days.slice(0, through);

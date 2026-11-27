@@ -17,7 +17,7 @@ import {
 import { Employee, Payroll } from '../../types';
 import { getWageHistory } from '../services/wageHistory';
 import { buildRegularWageSnapshot, regularSnapshotGross, regularSnapshotNonTaxable } from '../utils/regularWages';
-import { probationFactor } from '../services/payroll';
+import { probationDayFactor } from '../services/payroll';
 
 type PayrollKey = readonly unknown[];
 
@@ -64,7 +64,7 @@ export function usePayroll(yearMonth: string, active = false) {
       // Recalculation is explicit; the stored timeline never follows later employee edits.
       const history = await getWageHistory(employee.id);
       if (currentKey.current !== key) throw new UserFacingError('선택한 매장과 권한을 다시 확인해주세요.');
-      const snapshot = buildRegularWageSnapshot(employee, history, yearMonth, probationFactor(employee));
+      const snapshot = buildRegularWageSnapshot(employee, history, yearMonth, probationDayFactor(employee));
       const result = { ...await calculatePayroll({ ...employee, non_taxable: regularSnapshotNonTaxable(snapshot) }, undefined, yearMonth, regularSnapshotGross(snapshot)), regular_wage_snapshot: snapshot };
       if (currentKey.current !== key) throw new UserFacingError('선택한 매장과 권한을 다시 확인해주세요.');
       const saved = await upsertPayroll(store.id, employee.id, yearMonth, result);

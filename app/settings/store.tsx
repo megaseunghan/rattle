@@ -13,6 +13,7 @@ import { Spacing } from '../../constants/designTokens';
 import { useAuth } from '../../lib/contexts/AuthContext';
 import { getErrorMessage } from '../../lib/utils/error';
 import { deleteOwnedStore, updateStoreInfo } from '../../lib/services/stores';
+import { sharePayrollCsv } from '../../lib/services/payrollExport';
 import { formatRestoreDeadline } from '../../lib/utils/storeDeletion';
 import { GlassBackdrop } from '../../lib/components/GlassBackdrop';
 import { AppBar, Button, Field } from '../../lib/components/ui';
@@ -31,6 +32,14 @@ export default function StoreInfoScreen() {
   useEffect(() => { currentScope.current = scope; return () => { currentScope.current = null; }; }, [scope]);
   const [savedNeedsRefresh, setSavedNeedsRefresh] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  async function exportRecords() {
+    if (!store || exporting) return;
+    setExporting(true);
+    try { await sharePayrollCsv(store.id, store.name); }
+    catch (e) { Alert.alert('내려받지 못했어요', getErrorMessage(e)); }
+    finally { setExporting(false); }
+  }
   const deletionLock = useRef(false);
   const screenActive = useRef(true);
   const currentUserId = useRef(user?.id);
@@ -158,6 +167,9 @@ export default function StoreInfoScreen() {
         {isOwner && <TouchableOpacity style={styles.settingRow} accessibilityRole="button" disabled={saving || deleting} onPress={() => router.push('/settings/store-visibility')} activeOpacity={0.7}>
           <Illustration name="profit-loss" size={28} /><Text style={styles.rowLabel}>열람 설정</Text><Text style={styles.rowValue}>공유 대상 설정</Text><AppIcon name="chevron-forward" size={16} color={Colors.gray400} />
         </TouchableOpacity>}
+        {isOwner && <TouchableOpacity style={styles.settingRow} accessibilityRole="button" accessibilityLabel="급여·근무 기록 내려받기" disabled={exporting} onPress={() => void exportRecords()} activeOpacity={0.7}>
+          <Illustration name="profit-loss" size={28} /><Text style={styles.rowLabel}>급여·근무 기록 내려받기</Text><Text style={styles.rowValue}>{exporting ? '만드는 중…' : 'CSV · 세무사 전달용'}</Text><AppIcon name="chevron-forward" size={16} color={Colors.gray400} />
+        </TouchableOpacity>}
         {isOwner && <TouchableOpacity style={styles.settingRow} accessibilityRole="button" accessibilityLabel="매장 삭제" disabled={saving || deleting || savedNeedsRefresh} accessibilityState={{ disabled: saving || deleting || savedNeedsRefresh }} onPress={handleDeleteStore} activeOpacity={0.7}>
           <Image source={require('../../assets/icons/runtime/business/store-delete.png')} style={styles.deleteIcon} resizeMode="contain" accessible={false} />
           <Text style={[styles.rowLabel, styles.danger]}>매장 삭제</Text><AppIcon name="chevron-forward" size={16} color={Colors.gray400} />
@@ -173,6 +185,8 @@ export default function StoreInfoScreen() {
             <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.dialogContent}>
               <Text accessibilityRole="header" style={styles.dialogTitle}>매장 삭제</Text>
               <Text style={styles.help}>‘{deleteTarget?.name}’ 매장을 삭제할까요? 모든 구성원이 바로 이 매장을 볼 수 없게 돼요. 7일 동안은 매장 선택 화면에서 복구할 수 있고, 그 뒤에는 직원·급여·매출 등 모든 기록이 완전히 삭제돼요. POS가 연결된 매장은 연결을 먼저 해제해야 해요.</Text>
+              <Text style={styles.help}>삭제 전에 급여·근무 기록을 내려받아 두세요. 임금대장은 3년 동안 보관해야 해요.</Text>
+              <Button label={exporting ? '기록 만드는 중…' : '급여·근무 기록 내려받기(CSV)'} variant="secondary" onPress={() => void exportRecords()} loading={exporting} disabled={deleting} />
               <Field label={`“${expectedPhrase}”를 입력해주세요.`} accessibilityLabel="삭제 확인 문구" value={deletePhrase} onChangeText={setDeletePhrase} editable={!deleting} autoCapitalize="none" autoCorrect={false} />
               <View style={styles.dialogActions}>
                 <View style={styles.action}><Button label="취소" variant="text" onPress={closeDelete} disabled={deleting} /></View>

@@ -23,7 +23,7 @@ export function LegacyWorkMinutesForm({ storeId, employee, payroll: initialPayro
   const [payroll] = useState(initialPayroll);
   const isPart = employee.employment_type === 'part_time';
   const [minutes, setMinutes] = useState(submission ? String(submission.worked_minutes) : payroll?.worked_minutes == null ? '' : String(payroll.worked_minutes));
-  const [rate, setRate] = useState(String(payroll?.applied_hourly_wage ?? Number(((employee.hourly_wage ?? 0) * probationFactor(employee)).toFixed(4))));
+  const [rate, setRate] = useState(String(payroll?.applied_hourly_wage ?? Number(((employee.hourly_wage ?? 0) * probationFactor(employee, yearMonth)).toFixed(4))));
   const [note, setNote] = useState(submission?.note ?? '');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);

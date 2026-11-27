@@ -21,7 +21,7 @@ import { TabPagerContext } from '../../lib/contexts/TabPagerContext';
 import { useEmployees } from '../../lib/hooks/useEmployees';
 import { usePayroll } from '../../lib/hooks/usePayroll';
 import { Employee, EmploymentType } from '../../types';
-import { isInProbation, isInsuranceApplicable } from '../../lib/services/employees';
+import { deductionMode, hasProbationInMonth, monthWeeklyRest } from '../../lib/payroll';
 import { PayrollSubmissionReview } from '../../lib/components/PayrollSubmissionReview';
 import { Skeleton, SkeletonGroup } from '../../lib/components/skeleton';
 import { AttendanceWorkIssuesNotice, attendanceWorkFailureReason } from '../../lib/components/AttendanceWorkIssuesNotice';
@@ -30,12 +30,15 @@ import { PayrollWorkSubmission } from '../../types';
 import { WorkMinutesForm } from '../../lib/components/WorkMinutesForm';
 import { ErrorMessage } from '../../lib/components/ErrorMessage';
 import { formatWorkedMinutes } from '../../lib/utils/workMinutes';
-import { getPayrollSettlementGaps, PayrollDeductions, probationFactor } from '../../lib/services/payroll';
+import { getPayrollSettlementGaps, PayrollDeductions, probationDayFactor } from '../../lib/services/payroll';
 import { useStoreWageHistory } from '../../lib/hooks/useStoreWageHistory';
 import { isWageDate } from '../../lib/utils/wageCondition';
 import { accruedRegularPayroll, regularEmployeesForAccrual } from '../../lib/utils/regularWages';
 import { animateListChange } from '../../lib/utils/layoutAnimation';
 import { Badge, EmptyState, Field } from '../../lib/components/ui';
+import { PayrollConditionFields } from '../../lib/components/PayrollConditionFields';
+import { maskedAccount } from '../../lib/services/accountNumbers';
+import { buildPayrollFieldsPayload, EMPTY_PAYROLL_FIELDS, minimumWageNotice, payrollFieldsFrom } from '../../lib/utils/employeePayrollFields';
 
 
 /** 경과일 기준 일할 계수 (라벨 표기용): 지난 달 1, 다음 달 0, 진행 중인 달은 경과일/총일수 */
@@ -96,6 +99,7 @@ function DeductionInputLine({
 
 export function EmployeeCard({
   employee,
+  yearMonth,
   payroll,
   accruedGross,
   accrualLabel,
@@ -118,6 +122,7 @@ export function EmployeeCard({
   draftKey?: string;
   onDirtyChange?: (id: string, dirty: boolean) => void;
   employee: Employee;
+  yearMonth: string;
   payroll: ReturnType<typeof usePayroll>['payrolls'][0] | undefined;
   accruedGross: number | null;
   accrualLabel: string;
@@ -133,8 +138,12 @@ export function EmployeeCard({
   onWorkMinutes?: () => void;
   onRemovePayroll?: () => void;
 }) {
-  const probation = isInProbation(employee);
-  const insurance = isInsuranceApplicable(employee);
+  const probation = hasProbationInMonth(employee, yearMonth);
+  const mode = deductionMode(employee);
+  // 주휴수당을 시급과 따로 주는 파트타이머: 일별 기록 기준 주 15시간 이상인 주의 예상 주휴수당(세전 급여에 넣지 않음).
+  const weeklyRest = employee.employment_type === 'part_time' && employee.weekly_rest_included === false && payroll?.daily_work_snapshot?.length
+    ? monthWeeklyRest(payroll.daily_work_snapshot.map(d => ({ date: d.work_date, minutes: Number(d.worked_minutes), hourlyWage: Number(d.applied_hourly_wage) })), yearMonth)
+    : null;
   const isPart = employee.employment_type === 'part_time';
   const [expanded, setExpanded] = useState(false);
   const draft = usePayrollDeductionDraft(payroll, draftCache, draftKey);
@@ -154,7 +163,7 @@ export function EmployeeCard({
     ? (employee.hourly_wage != null ? `${Number(employee.hourly_wage).toLocaleString()}원` : '—')
     : `${employee.base_salary.toLocaleString()}원`;
   const summaryNetPay = payroll ? payroll.net_pay : null;
-  const summaryNetLabel = payroll?.is_settled ? '저장된 확정 실수령액' : '저장된 실수령액';
+  const summaryNetLabel = payroll?.is_settled ? '정산한 예상 실수령액' : '예상 실수령액';
   const deductions = draft.values;
   const deductionDraft = Object.fromEntries(Object.entries(deductions).map(([key, value]) => [key, moneyInput(value)])) as Record<keyof PayrollDeductions, string>;
   const deductionTotal = Object.values(deductions).reduce((sum, value) => sum + value, 0);
@@ -183,10 +192,11 @@ export function EmployeeCard({
           />
           {probation && (
             <View style={styles.probationBadge}>
-              <Text style={styles.probationBadgeText}>수습 · {Math.round(probationFactor(employee) * 100)}%</Text>
+              <Text style={styles.probationBadgeText}>수습 · 90%</Text>
             </View>
           )}
-          {!insurance && <Badge label="3.3%" variant="neutral" />}
+          {mode === 'freelancer' && <Badge label="3.3%" variant="neutral" />}
+          {mode === 'needs_hours' && <Badge label="주 근무시간 입력 필요" variant="neutral" />}
           {payroll?.work_source === 'legacy_attendance' && <Badge label="이전 내역 · 공제 확인" variant="neutral" />}
         </View>
         <View style={styles.headerActions}>
@@ -226,6 +236,11 @@ export function EmployeeCard({
         <Text style={styles.payrollLabel}>급여 작성 근무</Text>
         <Text style={styles.payrollDeduct}>{formatWorkedMinutes(payroll?.worked_minutes)}</Text>
       </View>}
+      {weeklyRest != null && <View style={styles.payrollRow}>
+        <Text style={styles.payrollLabel}>예상 주휴수당 · 별도 지급</Text>
+        <Text style={styles.payrollDeduct}>{weeklyRest.amount.toLocaleString()}원</Text>
+      </View>}
+      {weeklyRest != null && weeklyRest.partialWeeks > 0 && <Text style={styles.deductionHint}>달을 넘는 주 {weeklyRest.partialWeeks}개는 앞뒤 달 근무와 합쳐서 따로 확인해 주세요.</Text>}
       {isPart && onWorkMinutes && <TouchableOpacity style={styles.recalcBtn} onPress={onWorkMinutes} disabled={isCalculating}>
         <Text style={[styles.recalcBtnText, payroll?.worked_minutes == null && styles.recalcBtnNeeded]}>
           {payroll?.worked_minutes == null ? '근무시간 입력 →' : '근무시간 수정 · 이력'}
@@ -255,12 +270,15 @@ export function EmployeeCard({
             <Text style={styles.payrollDeduct}>{payroll.gross.toLocaleString()}원</Text>
           </View>
           <Text style={styles.deductionHint}>저장된 공제액이에요. 수정한 내용은 저장 후 반영돼요.</Text>
-          {insurance ? (
+          {!(payroll.withholding_tax > 0 || (mode === 'freelancer' && payroll.national_pension + payroll.income_tax === 0)) ? (
             <>
+              {/* 4대보험 대상이 아니면(주 15시간 미만·근무시간 미입력) 저장된 보험료가 있을 때만 보인다. */}
+              {(mode === 'insured' || payroll.national_pension + payroll.health_insurance + payroll.long_term_care + payroll.employment_insurance > 0) && <>
               <DeductionInputLine label="국민연금" value={deductionDraft.national_pension} editable={canEditDeductions && !isSavingDeductions} onChange={value => updateDeduction('national_pension', value)} />
               <DeductionInputLine label="건강보험" value={deductionDraft.health_insurance} editable={canEditDeductions && !isSavingDeductions} onChange={value => updateDeduction('health_insurance', value)} />
               <DeductionInputLine label="장기요양" value={deductionDraft.long_term_care} editable={canEditDeductions && !isSavingDeductions} onChange={value => updateDeduction('long_term_care', value)} />
               <DeductionInputLine label="고용보험" value={deductionDraft.employment_insurance} editable={canEditDeductions && !isSavingDeductions} onChange={value => updateDeduction('employment_insurance', value)} />
+              </>}
               <DeductionInputLine label="소득세" value={deductionDraft.income_tax} editable={canEditDeductions && !isSavingDeductions} onChange={value => updateDeduction('income_tax', value)} />
               <DeductionInputLine label="지방소득세" value={deductionDraft.local_income_tax} editable={canEditDeductions && !isSavingDeductions} onChange={value => updateDeduction('local_income_tax', value)} />
             </>
@@ -270,7 +288,7 @@ export function EmployeeCard({
           {deductionsInvalid && <Text style={styles.deductionError}>공제 합계가 세전 급여보다 큽니다.</Text>}
           <View style={styles.receiptTotalLine} />
           <View style={styles.receiptNetRow}>
-            <Text style={styles.receiptNetLabel}>{payroll.is_settled ? '저장된 확정 실수령액' : '저장된 실수령액'}</Text>
+            <Text style={styles.receiptNetLabel}>{payroll.is_settled ? '정산한 예상 실수령액' : '예상 실수령액'}</Text>
             <Text style={styles.receiptNetValue}>{payroll.net_pay.toLocaleString()}원</Text>
           </View>
           {draft.dirty && <>
@@ -341,9 +359,9 @@ const EMPTY_FORM = {
   phone: '',
   bank_name: '',
   account_number: '',
-  weekly_hours: '',
   dependents: '1',
   user_id: null as string | null,
+  payroll: EMPTY_PAYROLL_FIELDS,
 };
 
 const PAYROLL_SCREEN_DOMAINS = ['employees', 'payroll', 'wage-history', 'payroll-submissions', 'attendance-work-issues'] as const;
@@ -458,10 +476,10 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
       joined_at: employee.joined_at ?? '',
       phone: employee.phone ?? '',
       bank_name: employee.bank_name ?? '',
-      account_number: employee.account_number ?? '',
-      weekly_hours: employee.weekly_hours != null ? String(employee.weekly_hours) : '',
+      account_number: '',  // 저장된 번호는 암호화돼 있어 비워 두고, 바꿀 때만 입력한다
       dependents: String(employee.dependents),
       user_id: employee.user_id,
+      payroll: payrollFieldsFrom(employee),
     });
     setModalVisible(true);
   }
@@ -470,9 +488,11 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
     if (!isAdmin || workScopeRef.current !== workScope) return;
     const name = form.name.trim();
     const isPart = form.employment_type === 'part_time';
-    const wh = form.weekly_hours ? Number(form.weekly_hours) : null;
+    let payrollFields;
+    try { payrollFields = buildPayrollFieldsPayload(form.payroll, isPart, form.joined_at.trim() || null); }
+    catch (e) { Alert.alert('입력 확인', getErrorMessage(e)); return; }
     // 비과세·부양가족은 정규직 또는 주15h 이상 파트타이머에만 적용
-    const useInsuranceFields = !isPart || (wh != null && wh >= 15);
+    const useInsuranceFields = !isPart || (payrollFields.weekly_minutes != null && payrollFields.weekly_minutes >= 900);
 
     const salary = Number(form.base_salary.replace(/,/g, '') || '0');
     const hourly = Number(form.hourly_wage.replace(/,/g, '') || '0');
@@ -498,10 +518,14 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
       joined_at: form.joined_at.trim() || null,
       phone: form.phone.trim() || null,
       bank_name: form.bank_name.trim() || null,
-      account_number: form.account_number.trim() || null,
-      weekly_hours: isPart ? wh : null,
+      // 비워 두면 기존 계좌번호를 유지한다(암호화 보관, 끝 4자리만 표시).
+      ...(form.account_number.trim() ? { account_number: form.account_number.trim() } : {}),
       dependents: dep,
+      ...payrollFields,
     };
+    const notice = minimumWageNotice({ isPart, hourly: isPart ? (editTarget?.hourly_wage ?? hourly) : null,
+      monthly: isPart ? null : (editTarget?.base_salary ?? salary), weeklyMinutes: payrollFields.weekly_minutes,
+      weeklyRestIncluded: payrollFields.weekly_rest_included });
 
     setSaving(true);
     try {
@@ -509,9 +533,19 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
         await update(editTarget.id, basePayload);
         setModalVisible(false);
       } else {
-        await add({ ...basePayload, base_salary: newBase, hourly_wage: newHourly, non_taxable: nonTaxable });
+        const { income_type, weekly_minutes, weekly_rest_included, probation_ends_on, ...createPayload } = basePayload;
+        const created = await add({ ...createPayload, base_salary: newBase, hourly_wage: newHourly, non_taxable: nonTaxable });
+        // 최초 생성 RPC가 아직 새 필드를 받지 않아 생성 직후 같은 값으로 맞춘다.
+        try { await update(created.id, { income_type, weekly_minutes, weekly_rest_included, probation_ends_on }); }
+        catch {
+          // 직원은 이미 만들어졌다. 다시 저장하면 중복되므로 창을 닫고 수정에서 조건을 저장하게 한다.
+          setModalVisible(false);
+          Alert.alert('조건 저장 필요', `${name} 님은 등록됐지만 소득 구분·주 근무시간·수습 조건은 저장하지 못했어요. 직원 목록에서 ‘수정’을 눌러 다시 저장해 주세요.`);
+          return;
+        }
         setModalVisible(false);
       }
+      if (notice) Alert.alert('최저임금 확인', notice);
     } catch (e: any) {
       Alert.alert('저장 실패', getErrorMessage(e));
     } finally {
@@ -530,7 +564,7 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
     const payroll = monthPayrolls.find(row => row.employee_id === employee.id);
     if (employee.employment_type === 'part_time' || partTimePayrolls.some(p => p.employee_id === employee.id)) return payroll ? Number(payroll.gross) : null;
     if (histLoading || histError) return null;
-    try { return accruedRegularPayroll(employee, histMap[employee.id] ?? [], payroll, yearMonth, accrualNow, probationFactor(employee)); }
+    try { return accruedRegularPayroll(employee, histMap[employee.id] ?? [], payroll, yearMonth, accrualNow, probationDayFactor(employee)); }
     catch { return null; }
   }
   const savedRegularPayrolls = monthPayrolls.filter(row => !partTimePayrolls.includes(row));
@@ -538,7 +572,7 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
     ...regularEmps.map(accruedForEmployee),
     ...savedRegularPayrolls.filter(row => !regularEmps.some(employee => employee.id === row.employee_id)).map(row => {
       const employee = allEmployees.find(value => value.id === row.employee_id);
-      try { return accruedRegularPayroll(employee, employee ? histMap[employee.id] ?? [] : [], row, yearMonth, accrualNow, employee ? probationFactor(employee) : 1); }
+      try { return accruedRegularPayroll(employee, employee ? histMap[employee.id] ?? [] : [], row, yearMonth, accrualNow, employee ? probationDayFactor(employee) : 1); }
       catch { return null; }
     }),
   ];
@@ -568,6 +602,16 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
             >
               <AppIcon name="document-text-outline" size={14} color={Colors.primary} />
               <Text style={styles.settlementBtnText}>정산 리포트</Text>
+            </TouchableOpacity>
+          )}
+          {isAdmin && (
+            <TouchableOpacity
+              style={styles.settlementBtn}
+              onPress={() => router.push({ pathname: '/payroll/daily-laborers', params: { yearMonth } })}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+            >
+              <Text style={styles.settlementBtnText}>일용근로자</Text>
             </TouchableOpacity>
           )}
           <Text style={styles.monthPill}>{monthLabel}</Text>
@@ -677,6 +721,7 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
               draftCache={deductionDraftCache.current}
               draftKey={`${workScope}:${emp.id}`}
               employee={emp}
+              yearMonth={yearMonth}
               payroll={monthPayrolls.find(p => p.employee_id === emp.id)}
               accruedGross={accruedForEmployee(emp)}
               accrualLabel={`${month}월 ${elapsed}/${daysInMonth}일 · ${monthPayrolls.find(p => p.employee_id === emp.id) ? '일할 누적' : '급여 이력 기준'}`}
@@ -773,15 +818,8 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
 
             {editTarget && <Text style={styles.fieldHint}>기존 직원의 고용 형태는 이 화면에서 변경하지 않아요. 전환이 필요하면 관리자에게 급여 조건 변경을 요청해 주세요.</Text>}
             <View style={styles.modalFieldGroup}>
-              {form.employment_type === 'part_time' && (
-                <Field
-                  label="주 근무 시간 (15h 미만이면 3.3% 원천징수)"
-                  value={form.weekly_hours}
-                  onChangeText={v => setForm(f => ({ ...f, weekly_hours: v }))}
-                  placeholder="예: 20"
-                  keyboardType="numeric"
-                />
-              )}
+              <PayrollConditionFields value={form.payroll} onChange={payroll => setForm(f => ({ ...f, payroll }))}
+                isPart={form.employment_type === 'part_time'} joinedAt={form.joined_at} />
 
               {!editTarget && (form.employment_type === 'part_time' ? (
                 <Field
@@ -804,7 +842,7 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
               {editTarget && <Text style={styles.summarySub}>금액·비과세·적용일은 직원 목록의 ‘급여 변경’에서 변경해 주세요.</Text>}
 
               {/* 비과세·부양가족: 정규직 또는 주15h 이상 파트타이머만 */}
-              {(form.employment_type === 'regular' || Number(form.weekly_hours || '0') >= 15) && (
+              {(form.employment_type === 'regular' || Number(form.payroll.weekly_hours || '0') >= 15) && (
                 <>
                   {!editTarget && <Field
                     label="비과세 (식대 등)"
@@ -849,9 +887,10 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
                 label="계좌번호"
                 value={form.account_number}
                 onChangeText={v => setForm(f => ({ ...f, account_number: v }))}
-                placeholder="000-0000-0000-00"
+                placeholder={editTarget?.account_last4 ? `${maskedAccount(editTarget.account_last4)} · 바꿀 때만 입력` : '000-0000-0000-00'}
                 keyboardType="numeric"
               />
+              <Text style={styles.fieldHint}>계좌번호는 암호화해서 보관하고, 목록에는 끝 4자리만 보여요.</Text>
             </View>
 
             {canManageStore && (

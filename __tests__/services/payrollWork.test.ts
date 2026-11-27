@@ -4,10 +4,10 @@ import { calculatePayroll, getPayrollSettlementGaps, saveWorkedMinutes } from '.
 import { calculateHourlyGross, formatWorkedMinutes, parseWorkedMinutes } from '../../lib/utils/workMinutes';
 
 jest.mock('../../lib/supabase', () => ({ supabase: { from: jest.fn() } }));
-jest.mock('../../lib/services/employees', () => ({ isInProbation: () => false, isInsuranceApplicable: () => false }));
 
+// 3.3%는 사장님이 프리랜서로 정한 경우에만 뗀다(2026-v2).
 const employee = { id: 'emp', store_id: 'store', employment_type: 'part_time', hourly_wage: 12000,
-  base_salary: 0, dependents: 1, non_taxable: 0 } as Employee;
+  base_salary: 0, dependents: 1, non_taxable: 0, income_type: 'freelancer' } as Employee;
 const previous = { id: 'pay', store_id: 'store', employee_id: 'emp', year_month: '2026-10', revision: 4,
   gross: 100000, net_pay: 97000, taxable_base: 0, national_pension: 0, health_insurance: 0,
   long_term_care: 0, employment_insurance: 0, income_tax: 0, local_income_tax: 0, withholding_tax: 3000,
@@ -51,7 +51,7 @@ describe('월별 근무 분 입력', () => {
     await expect(calculatePayroll(employee)).rejects.toThrow('총 근무 분');
   });
   it('정규직은 근무 분 없이 월급을 계산할 수 있다', async () => {
-    const result = await calculatePayroll(regularEmployee);
+    const result = await calculatePayroll(regularEmployee, undefined, '2026-10');
     expect(result.gross).toBe(3_000_000);
   });
   it('정산 점검에서 정규직의 null 근무 분은 허용하고 파트타이머만 요구한다', () => {

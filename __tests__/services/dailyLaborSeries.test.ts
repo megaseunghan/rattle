@@ -95,3 +95,14 @@ test('일별 행이 없는 실패 날짜와 명세 보존 날짜도 0원/확정�
  expect(run(s,1).total).toBeNull(); expect(run(s,1).days[0].gaps).toContain('attendance_work_failed');
  expect(()=>run({...s,attendanceWorkFailures:[{...s.attendanceWorkFailures![0],store_id:'other'}]})).toThrow('SCOPE');
 });
+
+describe('일용근로자 하루 기록', () => {
+  it('근무일 금액에 더하고 다른 매장·다른 달 기록은 거절한다', () => {
+    const base = { employees: [], payrolls: [], dailyWork: [], wages: [], monthlyLaborCost: 200000 };
+    const series = buildDailyLaborSeries('s', '2026-10', 31, { ...base, dailyLaborEntries: [{ store_id: 's', work_date: '2026-10-03', gross: 200000 }] }, new Date('2026-11-01T00:00:00Z'));
+    expect(series.days[2].amount).toBe(200000);
+    expect(series.total).toBe(200000);
+    expect(() => buildDailyLaborSeries('s', '2026-10', 31, { ...base, dailyLaborEntries: [{ store_id: 'x', work_date: '2026-10-03', gross: 1 }] })).toThrow('LABOR_SCOPE_MISMATCH');
+    expect(() => buildDailyLaborSeries('s', '2026-10', 31, { ...base, dailyLaborEntries: [{ store_id: 's', work_date: '2026-11-01', gross: 1 }] })).toThrow('LABOR_SCOPE_MISMATCH');
+  });
+});

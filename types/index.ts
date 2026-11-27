@@ -20,6 +20,11 @@ export interface Store {
   longitude?: number | null;
   labor_ratio_target?: number;
   cogs_ratio_target?: number;
+  /** 매장 기본 수습 기간. 둘 다 null이면 '없음'. 직원별 기간은 합류 승인 때 정한다. */
+  default_probation_months?: 1 | 2 | 3 | null;
+  default_probation_days?: number | null;
+  /** 산재보험 사업종류(업종 요율 표 코드). 마저 채우기 4대보험 묶음에서 고른다. null이면 손익에 '산재보험 미포함'. */
+  industrial_accident_industry?: string | null;
 }
 
 /** 매장별 관리 항목의 ID는 이름 변경 후에도 유지한다. */
@@ -259,6 +264,9 @@ export interface MemberApprovalResult {
 // 직원
 export type EmploymentType = 'regular' | 'part_time';
 
+/** 소득 구분. 일용근로자는 계정 없는 일용근로자 명단(DailyLaborer)으로 따로 관리한다. */
+export type IncomeType = 'employee' | 'freelancer';
+
 export interface Employee {
   wage_history_missing?: boolean;
   id: string;
@@ -269,14 +277,23 @@ export interface Employee {
   base_salary: number;
   hourly_wage: number | null;          // 파트타이머 시급 (분 단위 급여 계산용)
   non_taxable: number;
-  joined_at: string | null;            // 'YYYY-MM-DD' 입사일 (61일 수습 자동 적용)
+  joined_at: string | null;            // 'YYYY-MM-DD' 입사일
   phone: string | null;
   bank_name: string | null;
+  /** 암호화 토큰(enc:v1:…). 화면에 그대로 보이지 않는다. 전체 번호는 revealAccountNumber('employee', id). */
   account_number: string | null;
-  is_probation: boolean;
-  probation_started_at: string | null;
+  /** 계좌번호 끝 4자리(서버 생성 열) */
+  account_last4?: string | null;
+  is_probation: boolean;               // 사장님이 수습으로 표시한 직원만 수습 감액
+  probation_started_at: string | null; // 수습 시작일(없으면 입사일)
+  probation_ends_on: string | null;    // 수습 마지막 날(포함). is_probation이어도 없으면 감액하지 않는다
+  /** @deprecated 2026-v2부터 계산에 쓰지 않는다(수습 중 퇴사 80% 규칙 제거). */
   is_resigned_during_probation: boolean;
+  /** @deprecated weekly_minutes를 쓴다. 기존 정수 시간 컬럼은 보존만 한다. */
   weekly_hours: number | null;
+  weekly_minutes: number | null;       // 주 소정 근무시간(분, 10분 단위). 비면 공제하지 않고 입력 안내
+  weekly_rest_included: boolean | null; // 시급에 주휴수당 포함 여부(파트타이머). null=정하지 않음
+  income_type: IncomeType;             // 근로자 / 프리랜서(3.3%)
   dependents: number;
   is_active: boolean;
   created_at: string;
@@ -458,8 +475,14 @@ export interface ProfitLoss {
   regularGross: number | null;       // 직원 인건비 (세전)
   regularWithholding: number; // 직원 원천징수 (4대보험+소득세)
   partTimeGross: number;      // 파트타이머 인건비
-  partTimeWithholding: number;// 파트타이머 3.3% 원천징수
+  partTimeWithholding: number;// 파트타이머 공제(3.3%·4대보험·소득세)
+  dailyLaborGross?: number;        // 일용근로자 세전 합계(계정 없는 일용근로자 명단)
   laborCost: number | null;          // 합계
+  /** 사업주 부담 4대보험(예상). 작성한 급여 명세·일용 기록 기준. 영업이익에는 빼지 않는다. 기준이 없으면 null. */
+  employerInsurance?: number | null;
+  employerInsuranceIncludesAccident?: boolean;
+  /** 사업주 부담 추정에서 빠진(이 달 명세 미작성) 재직 직원 수 */
+  employerInsuranceMissingSlips?: number; // false면 '산재보험 미포함'
   // 4. 비용 (카테고리별)
   fixedExpense: number;
   marketingExpense: number;
@@ -822,4 +845,61 @@ export interface AttendanceWorkFailure {
   error_code: string;
   updated_at: string;
   retry_punch_id: string | null;
+}
+
+/** 일용근로자 명단(계정 없음, 사장·점장 입력). 주민번호 등 고유식별정보는 저장하지 않는다. */
+export interface DailyLaborer {
+  id: string;
+  store_id: string;
+  name: string;
+  phone: string | null;
+  bank_name: string | null;
+  /** 암호화 토큰(enc:v1:…). 화면에 그대로 보이지 않는다. 전체 번호는 revealAccountNumber로 받는다. */
+  account_number: string | null;
+  account_last4?: string | null;
+  weekday_wage: number | null;
+  weekend_wage: number | null;
+  memo: string | null;
+  is_active: boolean;
+  revision: number;
+  created_at: string;
+  updated_at: string;
+}
+
+/** 일용근로자 하루 근무 기록. 소득세는 지급 묶음(DailyLaborPayment)에서 정한다. */
+export interface DailyLaborEntry {
+  id: string;
+  store_id: string;
+  laborer_id: string;
+  work_date: string;
+  is_weekend: boolean;
+  daily_wage: number;
+  extra_pay: number;
+  gross: number;
+  /** 하루치 산출세액(미징수 판단 전) */
+  day_income_tax: number;
+  employment_insurance: number;
+  calculation_version: string;
+  memo: string | null;
+  /** 지급 묶음 ID. null = 미지급 */
+  payment_id: string | null;
+  revision: number;
+  created_at: string;
+  updated_at: string;
+}
+
+/** 일용근로자 지급 묶음. 소득세 1,000원 미만 미징수는 묶음 합계 기준. */
+export interface DailyLaborPayment {
+  id: string;
+  store_id: string;
+  laborer_id: string;
+  paid_on: string;
+  gross: number;
+  income_tax: number;
+  local_income_tax: number;
+  employment_insurance: number;
+  net_pay: number;
+  calculation_version: string;
+  canceled_at: string | null;
+  created_at: string;
 }

@@ -1,3 +1,5 @@
+import { deductionMode, isProbationOn, type IncomeEmployee, type ProbationEmployee } from '../payroll';
+import { koreanDate } from '../utils/regularWages';
 import { UserFacingError } from '../utils/error';
 import { supabase } from '../supabase';
 import { Employee, EmploymentType } from '../../types';
@@ -119,17 +121,12 @@ export async function getMyEmployee(storeId: string, userId: string): Promise<Em
 }
 
 /** 수습 기간 중인지 여부 — 입사일 기준 61일 자동 적용 */
-export function isInProbation(employee: Employee): boolean {
-  if (!employee.joined_at) return false;
-  const joined = new Date(employee.joined_at);
-  const probationEnd = new Date(joined);
-  probationEnd.setDate(probationEnd.getDate() + 61);
-  return new Date() < probationEnd;
+/** 대상 날짜(기본: 오늘, 한국 날짜) 기준 수습 여부. 사장님이 수습으로 표시한 직원만 해당한다. */
+export function isInProbation(employee: ProbationEmployee, date = koreanDate()): boolean {
+  return isProbationOn(employee, date);
 }
 
-/** 4대보험 적용 여부 */
-export function isInsuranceApplicable(employee: Employee): boolean {
-  if (employee.employment_type === 'regular') return true;
-  // 파트타임: 주 15시간 이상이면 4대보험 적용
-  return (employee.weekly_hours ?? 0) >= 15;
+/** 4대보험 적용 여부. 주 근무시간이 비어 있으면 적용 대상으로 보지 않는다(입력 안내). */
+export function isInsuranceApplicable(employee: IncomeEmployee): boolean {
+  return deductionMode(employee) === 'insured';
 }

@@ -1,4 +1,6 @@
-import { fireEvent, render } from '@testing-library/react-native';
+import { fireEvent, render, waitFor } from '@testing-library/react-native';
+const mockReveal = jest.fn();
+jest.mock('../../lib/services/accountNumbers', () => ({ revealAccountNumber: (...args: unknown[]) => mockReveal(...args) }));
 import { MemberApprovalModal } from '../../lib/components/MemberApprovalModal';
 import type { JoinOnboardingProfile, MemberApprovalCandidate, StoreMember } from '../../types';
 const member = { applicant_name: '신청자', phone: '01012345678' } as StoreMember;
@@ -95,4 +97,16 @@ it('후보 이력이 바뀌면 이전 보존 선택을 새 이력에 자동 적�
   fireEvent.press(screen.getByLabelText('퇴사 직원님의 기존 급여 그대로'));
   screen.rerender(<MemberApprovalModal profile={null} member={member} candidates={[{ ...prior, wage_history_id: '22222222-2222-4222-8222-222222222222' }]} busy={false} onChoose={choose} onClose={jest.fn()} />);
   fireEvent.press(screen.getByText('이 직원으로 최종 합류')); expect(choose).not.toHaveBeenCalled();
+});
+
+it('암호화된 계좌번호는 화면에 보이지 않고 전체 번호를 받아 채운다', async () => {
+  mockReveal.mockResolvedValueOnce('123456123456');
+  const choose = jest.fn();
+  const encrypted = { ...profile, account_number: 'enc:v1:3456:abc' } as JoinOnboardingProfile;
+  const screen = render(<MemberApprovalModal profile={encrypted} member={{ ...member, id: 'm1' } as StoreMember} candidates={[]} busy={false} onChoose={choose} onClose={jest.fn()} />);
+  expect(screen.queryByDisplayValue('enc:v1:3456:abc')).toBeNull();
+  await waitFor(() => expect(screen.getByDisplayValue('123456123456')).toBeTruthy());
+  expect(mockReveal).toHaveBeenCalledWith('join_profile', 'm1');
+  fireEvent.press(screen.getByText('최종 합류'));
+  expect(choose).toHaveBeenCalledWith({ kind: 'auto' }, expect.objectContaining({ account_number: '123456123456' }));
 });

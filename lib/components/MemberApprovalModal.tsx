@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Modal, Alert, View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
 import { Colors } from '../../constants/colors';
 import { JoinOnboardingFields, getAdminJoinWageError } from './JoinOnboardingFields';
 import { buildJoinOnboarding, OnboardingDraft } from '../utils/joinOnboarding';
 import { getErrorMessage } from '../utils/error';
+import { revealAccountNumber } from '../services/accountNumbers';
 import type { JoinOnboardingReview, JoinOnboardingProfile, MemberApprovalCandidate, MemberApprovalChoice, StoreMember } from '../../types';
 
 interface Props {
@@ -25,7 +26,22 @@ export function MemberApprovalModal({ member, candidates, busy, onChoose, onClos
   const [draft, setDraft] = useState<OnboardingDraft>({ employmentType: profile?.employment_type ?? 'regular',
     hourlyWage: profile?.hourly_wage?.toString() ?? '', weeklyHours: profile?.weekly_hours?.toString() ?? '',
     baseSalary: profile?.base_salary?.toString() ?? '', nonTaxable: profile?.non_taxable?.toString() ?? '0',
-    joinedAt: profile?.joined_at ?? '', bankName: profile?.bank_name ?? '', accountNumber: profile?.account_number ?? '' });
+    joinedAt: profile?.joined_at ?? '', bankName: profile?.bank_name ?? '',
+    // 계좌번호는 암호화 토큰으로 오므로 화면에 넣지 않고, 아래에서 전체 번호를 받아 채운다.
+    accountNumber: profile?.account_number?.startsWith('enc:') ? '' : profile?.account_number ?? '' });
+  const [accountNote, setAccountNote] = useState<string | null>(null);
+  useEffect(() => {
+    if (!profile?.account_number?.startsWith('enc:')) return;
+    let alive = true;
+    revealAccountNumber('join_profile', member.id)
+      .then(number => {
+        if (!alive) return;
+        if (number) setDraft(d => (d.accountNumber ? d : { ...d, accountNumber: number }));
+        else setAccountNote('제출한 계좌번호를 확인하지 못했어요. 직원에게 확인해 다시 입력해 주세요.');
+      })
+      .catch(e => { if (alive) setAccountNote(getErrorMessage(e)); });
+    return () => { alive = false; };
+  }, [member.id, profile?.account_number]);
   const cannotApprove = busy || !!preserved || !!getAdminJoinWageError(draft);
   function choose(choice: MemberApprovalChoice) {
     if (busy) return;
@@ -46,6 +62,7 @@ export function MemberApprovalModal({ member, candidates, busy, onChoose, onClos
           <ScrollView style={styles.list} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
               {!preserved && <Text style={styles.body}>{profile ? '직원이 제출한 내용을 확인하고 필요한 항목을 수정해주세요.' : '근무 정보가 아직 없어요. 직원에게 확인한 내용을 입력해주세요.'}</Text>}
               {!preserved && <JoinOnboardingFields admin disabled={busy} value={draft} onChange={setDraft} />}
+              {!preserved && !!accountNote && <Text style={styles.body}>{accountNote}</Text>}
               {!!preserved && <Text style={styles.body}>기존 직원 정보와 급여 조건을 유지하고 계정만 연결해요. 새 내용을 적용하려면 기존 급여 선택을 해제해주세요.</Text>}
               {candidates.length > 0 && !preserved && <Text style={styles.body}>기존 직원에 연결하면 현재 조건은 위 내용으로 바뀌고, 급여 조건 이력은 오늘부터 추가돼요. 이미 작성된 급여 내역은 유지돼요.</Text>}
             {!retiredOnly && <TouchableOpacity accessibilityRole="button" accessibilityState={{ disabled: cannotApprove }} disabled={cannotApprove} style={[styles.button, cannotApprove && styles.disabled]} onPress={() => choose({ kind: 'auto' })}><Text style={styles.buttonText}>최종 합류</Text></TouchableOpacity>}
