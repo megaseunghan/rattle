@@ -127,6 +127,17 @@ describe('S54 화면 계약', () => {
     expect(supabase.rpc).toHaveBeenNthCalledWith(1, 'record_daily_labor_payment', expect.objectContaining({ p_laborer_id: 'l', p_payment_method: 'cash' }));
     expect(supabase.rpc).toHaveBeenNthCalledWith(2, 'record_daily_labor_payment', expect.objectContaining({ p_laborer_id: 'm' }));
   });
+  it('서버 코드가 없는 실패(연결 끊김·응답 유실)는 저장 실패로 단정하지 않고 확인을 안내한다', async () => {
+    (supabase.rpc as jest.Mock)
+      .mockResolvedValueOnce({ data: null, error: { code: '', message: 'TypeError: Network request failed' } })
+      .mockResolvedValueOnce({ data: null, error: { code: '22023', message: 'DAILY_LABOR_PAYMENT_INVALID' } });
+    const other = (id: string) => ({ ...entry(id), laborer_id: 'm' }) as DailyLaborEntry;
+    const result = await recordDailyLaborPayments('s', [{ laborerId: 'l', entries: [entry('a')] }, { laborerId: 'm', entries: [other('b')] }], '2026-11-20', 'cash');
+    expect(result.failed).toEqual([
+      { laborerId: 'l', message: expect.stringContaining('저장됐는지 확인하지 못했어요') },
+      { laborerId: 'm', message: expect.stringContaining('저장하지 못했어요') },
+    ]);
+  });
 });
 
 describe('쓰기 뒤 새로고침 실패', () => {

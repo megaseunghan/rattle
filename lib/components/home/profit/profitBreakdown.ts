@@ -76,7 +76,8 @@ export function sharePercents(amounts: readonly (number | null)[]): (number | nu
 function profitLines(sources: readonly BreakdownSource[]): BreakdownLine[] {
   const sum = (pick: (row: ProfitLoss) => number | null) => sumKnown(sources.map(source => pick(source.profitLoss)));
   const revenue = sum(row => row.revenue);
-  const employer = sum(row => row.employerInsurance ?? 0);
+  // 열이 없는 옛 응답(undefined)만 0으로 보고, 기준이 없는 달(null)은 합계를 '확인 필요'로 남긴다.
+  const employer = sum(row => row.employerInsurance === undefined ? 0 : row.employerInsurance);
   const negative = (value: number | null) => value == null ? null : -value;
   const lines: Entry[] = [
     { label: '매출', amount: revenue },

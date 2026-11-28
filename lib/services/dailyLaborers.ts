@@ -27,12 +27,15 @@ export interface DailyLaborEntryInput {
 }
 
 const CHANGED = '다른 곳에서 내용이 바뀌었어요. 다시 불러온 뒤 확인해 주세요.';
+const UNKNOWN_RESULT = '저장됐는지 확인하지 못했어요. 다시 불러온 뒤 확인해 주세요.';
 
 function fail(error: { code?: string; message?: string }): never {
   if (error.code === '23505') throw new UserFacingError('그날 근무 기록이 이미 있어요. 기존 기록을 고쳐 주세요.');
   if (error.code === '42501') throw new UserFacingError('사장님이나 점장님만 일용근로자 기록을 관리할 수 있어요.');
   if (error.message?.includes('DAILY_LABOR_PAID_LOCKED')) throw new UserFacingError('지급 완료한 기록은 고치거나 지울 수 없어요. 먼저 지급 대기로 되돌려 주세요.');
   if (error.code === '40001' || error.message?.includes('DAILY_LABOR_PAYMENT_CHANGED')) throw new UserFacingError(CHANGED);
+  // 서버가 코드를 주지 않은 실패(연결 끊김·응답 유실·JSON 아닌 5xx)는 저장됐는지 알 수 없다. 실패로 단정하지 않는다.
+  if (!error.code) throw new UserFacingError(UNKNOWN_RESULT);
   throw new UserFacingError('저장하지 못했어요. 입력값과 연결 상태를 확인하고 다시 시도해 주세요.');
 }
 
@@ -234,8 +237,6 @@ async function sendPayment(storeId: string, laborerId: string, entries: DailyLab
   await refreshAfterWrite(storeId);
   return data;
 }
-
-const UNKNOWN_RESULT = '저장됐는지 확인하지 못했어요. 다시 불러온 뒤 확인해 주세요.';
 
 export interface DailyLaborPaymentGroup { laborerId: string; entries: DailyLaborEntry[]; deductions?: DailyLaborDeductions }
 export interface DailyLaborBatchResult { recorded: string[]; failed: { laborerId: string; message: string }[] }

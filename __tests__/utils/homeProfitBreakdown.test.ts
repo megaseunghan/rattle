@@ -49,6 +49,15 @@ it('영업이익은 매출 대비 계산 행이며 사업주 부담(예상)을 �
   expect(lines.every(line => !line.top)).toBe(true);
 });
 
+it('사업주 부담 기준이 없는 달이 섞이면 합계를 0원 대신 확인 필요로 둔다', () => {
+  const mixed = buildBreakdown([source(), source({ employerInsurance: null })], 'profit').lines;
+  expect(mixed.find(line => line.label === '사업주 부담(예상)')).toMatchObject({ amount: null, percent: null });
+  const allUnknown = buildBreakdown([source({ employerInsurance: null })], 'profit').lines;
+  expect(allUnknown.find(line => line.label === '사업주 부담(예상)')).toMatchObject({ amount: null });
+  const legacy = buildBreakdown([source({ employerInsurance: undefined })], 'profit').lines;
+  expect(legacy.some(line => line.label === '사업주 부담(예상)')).toBe(false);
+});
+
 it('비율 반올림 합은 100이고 4행 이하는 그대로 둔다', () => {
   expect(sharePercents([1, 1, 1])).toEqual([34, 33, 33]);
   expect(sharePercents([0, 0])).toEqual([null, null]);
