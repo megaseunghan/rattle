@@ -149,3 +149,20 @@ describe('쓰기 뒤 새로고침 실패', () => {
     await expect(cancelDailyLaborPayment('s', 'pay-1')).resolves.toBeUndefined();
   });
 });
+
+describe('지급일은 근무일 이후', () => {
+  const worked = (id: string, workDate: string) => ({ ...entry(id), work_date: workDate }) as DailyLaborEntry;
+  it('고른 근무일 중 마지막 날보다 앞이면 보내지 않는다', async () => {
+    await expect(recordDailyLaborPayment('s', 'l', [worked('a', '2026-10-24'), worked('b', '2026-10-26')], '2026-10-25', 'cash'))
+      .rejects.toThrow('마지막 날 이후로');
+    expect(supabase.rpc).not.toHaveBeenCalled();
+  });
+  it('마지막 근무일 당일 지급은 보낸다', async () => {
+    (supabase.rpc as jest.Mock).mockResolvedValue({ data: 'pay-1', error: null });
+    await expect(recordDailyLaborPayment('s', 'l', [worked('a', '2026-10-24'), worked('b', '2026-10-26')], '2026-10-26', 'cash')).resolves.toBe('pay-1');
+  });
+  it('서버가 근무일 전 지급으로 거절하면 같은 안내를 보여 준다', async () => {
+    (supabase.rpc as jest.Mock).mockResolvedValue({ data: null, error: { code: '22023', message: 'DAILY_LABOR_PAID_BEFORE_WORK' } });
+    await expect(recordDailyLaborPayment('s', 'l', [worked('a', '2026-10-24')], '2026-10-24', 'cash')).rejects.toThrow('마지막 날 이후로');
+  });
+});

@@ -28,12 +28,14 @@ export interface DailyLaborEntryInput {
 
 const CHANGED = '다른 곳에서 내용이 바뀌었어요. 다시 불러온 뒤 확인해 주세요.';
 const UNKNOWN_RESULT = '저장됐는지 확인하지 못했어요. 다시 불러온 뒤 확인해 주세요.';
+const PAID_BEFORE_WORK = '지급일은 고른 근무일 중 마지막 날 이후로 골라 주세요.';
 
 function fail(error: { code?: string; message?: string }): never {
   if (error.code === '23505') throw new UserFacingError('그날 근무 기록이 이미 있어요. 기존 기록을 고쳐 주세요.');
   if (error.code === '42501') throw new UserFacingError('사장님이나 점장님만 일용근로자 기록을 관리할 수 있어요.');
   if (error.message?.includes('DAILY_LABOR_PAID_LOCKED')) throw new UserFacingError('지급 완료한 기록은 고치거나 지울 수 없어요. 먼저 지급 대기로 되돌려 주세요.');
   if (error.code === '40001' || error.message?.includes('DAILY_LABOR_PAYMENT_CHANGED')) throw new UserFacingError(CHANGED);
+  if (error.message?.includes('DAILY_LABOR_PAID_BEFORE_WORK')) throw new UserFacingError(PAID_BEFORE_WORK);
   // 서버가 코드를 주지 않은 실패(연결 끊김·응답 유실·JSON 아닌 5xx)는 저장됐는지 알 수 없다. 실패로 단정하지 않는다.
   if (!error.code) throw new UserFacingError(UNKNOWN_RESULT);
   throw new UserFacingError('저장하지 못했어요. 입력값과 연결 상태를 확인하고 다시 시도해 주세요.');
@@ -111,6 +113,11 @@ export function laborersAtInsuranceDays(entries: Pick<DailyLaborEntry, 'laborer_
 /** 지급일로 고를 수 있는 날: 올바른 날짜이고 오늘(한국 날짜) 이후가 아니다. */
 export function isPayableDate(paidOn: string, today: string = koreanDate()): boolean {
   return isIsoDate(paidOn) && paidOn <= today;
+}
+
+/** 고른 근무일 중 마지막 날. 지급일은 이날 이후여야 한다(일한 뒤에 준다). */
+export function lastWorkDate(entries: readonly Pick<DailyLaborEntry, 'work_date'>[]): string | null {
+  return entries.reduce<string | null>((last, e) => (last == null || e.work_date > last ? e.work_date : last), null);
 }
 
 /** 공제 입력 검사. 0원 이상 정수여야 하고 합계가 세전을 넘으면 안 된다. 문제가 없으면 null. */
@@ -205,6 +212,7 @@ function preparePayment(laborerId: string, entries: DailyLaborEntry[], paidOn: s
   if (!isPayableDate(paidOn)) throw new UserFacingError('오늘 이후 날짜는 지급일로 고를 수 없어요.');
   if (method !== 'transfer' && method !== 'cash') throw new UserFacingError('지급 방법을 골라 주세요.');
   if (!entries.length || entries.some(e => e.laborer_id !== laborerId || e.payment_id)) throw new UserFacingError('지급 대기 기록을 골라 주세요.');
+  if (paidOn < (lastWorkDate(entries) as string)) throw new UserFacingError(PAID_BEFORE_WORK);
   const pay = dailyPaymentPay(entries);
   const actual = edited ?? pay;
   const problem = deductionError(pay.gross, actual);

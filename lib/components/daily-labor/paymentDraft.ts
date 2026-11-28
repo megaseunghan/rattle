@@ -1,6 +1,6 @@
 /** '지급 완료로 바꾸기' 시트의 입력 상태. 예상 공제는 서비스(previewDailyLaborPayment)가 정하고, 여기서는 고친 값과 검사만 다룬다. */
 import { addDays } from '../../payroll';
-import { deductionError, isPayableDate, previewDailyLaborPayment, type DailyLaborDeductions, type DailyLaborPaymentGroup } from '../../services/dailyLaborers';
+import { deductionError, isPayableDate, lastWorkDate, previewDailyLaborPayment, type DailyLaborDeductions, type DailyLaborPaymentGroup } from '../../services/dailyLaborers';
 import type { DailyLaborEntry } from '../../../types';
 
 export type DeductionKey = keyof DailyLaborDeductions;
@@ -74,6 +74,11 @@ export function resolvePaidOn(choice: PayDayChoice, picked: string | null, today
   if (choice === 'today') return today;
   if (choice === 'yesterday') return addDays(today, -1);
   return picked && isPayableDate(picked, today) ? picked : null;
+}
+
+/** 지급일로 고를 수 있는 가장 이른 날: 고른 기록 전체의 마지막 근무일. */
+export function earliestPaidOn(groups: readonly PaymentDraftGroup[]): string | null {
+  return lastWorkDate(groups.flatMap(g => g.entries));
 }
 
 /** 서비스로 보낼 묶음. 고치지 않은 사람은 예상값과 같은 값을 그대로 보낸다. */

@@ -261,6 +261,20 @@ await rejects(db.query('UPDATE public.store_join_profiles SET weekly_minutes=0 W
 await db.exec(minutesMigration);
 check((await db.query("SELECT count(*)::int AS n FROM pg_constraint WHERE conname LIKE '%weekly_minutes_positive_check'")).rows, [{ n: 2 }], 'rerun keeps one constraint each');
 
+// 9d) 20261128140000: 일용 지급일은 고른 기록의 마지막 근무일 이후(같은 날 포함)여야 한다.
+const afterWorkMigration = await migration('20261128140000_daily_labor_paid_after_work.sql');
+await db.exec(afterWorkMigration);  // md5 가드 통과 = 로컬 120000 적용 결과가 원격 적용본과 같다.
+const [workA] = await as(owner, entrySql, [store, laborer.id, '2026-10-24', 100000, 0, 0, 0]);
+const [workB] = await as(owner, entrySql, [store, laborer.id, '2026-10-26', 100000, 0, 0, 0]);
+await rejects(as(owner, paySql, [store, laborer.id, [workA.id, workB.id], '2026-10-25', 'transfer', 0, 0, 0, 0, 0, 0, '2026-v2']), 'DAILY_LABOR_PAID_BEFORE_WORK', 'paid_on before last work date rejected');
+check((await db.query('SELECT count(*)::int AS n FROM public.daily_labor_entries WHERE id = ANY($1::uuid[]) AND payment_id IS NULL', [[workA.id, workB.id]])).rows, [{ n: 2 }], 'rejected payment leaves entries pending');
+const [{ id: sameDayPayment }] = await as(owner, paySql, [store, laborer.id, [workA.id, workB.id], '2026-10-26', 'cash', 0, 0, 0, 0, 0, 0, '2026-v2']);
+check(typeof sameDayPayment, 'string', 'paid_on on last work date allowed');
+check((await db.query("SELECT prosecdef, proconfig::text AS cfg FROM pg_proc WHERE proname='record_daily_labor_payment'")).rows,
+  [{ prosecdef: true, cfg: '{"search_path=pg_catalog, public, pg_temp"}' }], 'payment function keeps definer and search_path after work-date check');
+await rejects(db.exec(afterWorkMigration), 'DAILY_LABOR_PAID_AFTER_WORK_BASE_CHANGED', 'work-date check guard on rerun');
+await db.exec('ROLLBACK');  // 가드가 멈춘 재실행 트랜잭션을 닫는다.
+
 // 10) 매장 삭제 연쇄: 지급된 일용 기록이 있어도 매장을 지우면 함께 지워진다.
 await db.query('DELETE FROM public.payroll WHERE store_id=$1', [store]);
 await db.query('DELETE FROM public.store_join_profiles WHERE store_id=$1', [store]);

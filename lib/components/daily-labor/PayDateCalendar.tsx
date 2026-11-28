@@ -1,4 +1,4 @@
-/* design-system: DESIGN.md — S54 지급일 '다른 날' 시트 안 달력. 오늘 이후 날짜는 고를 수 없다. */
+/* design-system: DESIGN.md — S54 지급일 '다른 날' 시트 안 달력. 오늘 이후와 마지막 근무일 전 날짜는 고를 수 없다. */
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Colors } from '../../../constants/colors';
@@ -9,10 +9,12 @@ import { calendarCells, monthLabel, shiftMonth, WEEKDAYS } from './format';
 interface PayDateCalendarProps {
   today: string;
   selected: string | null;
+  /** 이날보다 앞은 고를 수 없다(마지막 근무일). */
+  minDate?: string | null;
   onSelect: (date: string) => void;
 }
 
-export function PayDateCalendar({ today, selected, onSelect }: PayDateCalendarProps) {
+export function PayDateCalendar({ today, selected, minDate, onSelect }: PayDateCalendarProps) {
   const [month, setMonth] = useState((selected ?? today).slice(0, 7));
   const canNext = month < today.slice(0, 7);
   return (
@@ -32,13 +34,15 @@ export function PayDateCalendar({ today, selected, onSelect }: PayDateCalendarPr
         {calendarCells(month).map((date, index) => {
           if (!date) return <View key={`blank-${index}`} style={styles.cell} />;
           const future = date > today;
+          const beforeWork = !!minDate && date < minDate;
+          const off = future || beforeWork;
           const isSelected = date === selected;
           return (
-            <Pressable key={date} disabled={future} onPress={() => onSelect(date)} style={styles.cell}
-              accessibilityRole="button" accessibilityState={{ disabled: future, selected: isSelected }}
-              accessibilityLabel={`${Number(date.slice(5, 7))}월 ${Number(date.slice(8))}일${future ? ', 아직 오지 않은 날' : ''}`}>
+            <Pressable key={date} disabled={off} onPress={() => onSelect(date)} style={styles.cell}
+              accessibilityRole="button" accessibilityState={{ disabled: off, selected: isSelected }}
+              accessibilityLabel={`${Number(date.slice(5, 7))}월 ${Number(date.slice(8))}일${future ? ', 아직 오지 않은 날' : beforeWork ? ', 근무일 전이라 고를 수 없어요' : ''}`}>
               <View style={[styles.day, isSelected && styles.daySelected]}>
-                <NumericText style={[styles.dayText, future && styles.dayFuture, isSelected && styles.dayTextSelected]}>{Number(date.slice(8))}</NumericText>
+                <NumericText style={[styles.dayText, off && styles.dayFuture, isSelected && styles.dayTextSelected]}>{Number(date.slice(8))}</NumericText>
               </View>
             </Pressable>
           );

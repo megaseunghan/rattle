@@ -11,7 +11,7 @@ import { PayDateCalendar } from './PayDateCalendar';
 import { dayLabel, won } from './format';
 import { GrayNote, SectionLabel, Segment } from './parts';
 import {
-  draftErrors, hasEdits, resetDeduction, resolvePaidOn, setDeduction, totalNet, type PayDayChoice, type PaymentDraftGroup,
+  draftErrors, earliestPaidOn, hasEdits, resetDeduction, resolvePaidOn, setDeduction, totalNet, type PayDayChoice, type PaymentDraftGroup,
 } from './paymentDraft';
 import type { DailyLaborPaymentMethod } from '../../../types';
 
@@ -29,8 +29,9 @@ interface PaymentSheetProps {
 
 const METHOD_OPTIONS: { value: DailyLaborPaymentMethod; label: string }[] = [{ value: 'transfer', label: '계좌이체' }, { value: 'cash', label: '현금' }];
 
-function ctaLabel(paidOn: string | null, method: DailyLaborPaymentMethod | null, hasError: boolean): string {
+function ctaLabel(paidOn: string | null, beforeWork: boolean, method: DailyLaborPaymentMethod | null, hasError: boolean): string {
   if (!paidOn) return '지급일을 골라 주세요';
+  if (beforeWork) return '근무일 이후로 지급일을 골라 주세요';
   if (!method) return '지급 방법을 골라 주세요';
   if (hasError) return '공제 금액을 확인해 주세요';
   return '지급 완료로 바꾸기';
@@ -45,8 +46,11 @@ export function PaymentSheet({ visible, initialGroups, nameOf, today, saving, on
   const [method, setMethod] = useState<DailyLaborPaymentMethod | null>(null);
   const errors = useMemo(() => draftErrors(groups), [groups]);
   const paidOn = resolvePaidOn(choice, picked, today);
+  // 지급일은 고른 근무일 중 마지막 날 이후(일한 뒤에 준다). 서버도 같은 기준으로 거절한다.
+  const minDate = useMemo(() => earliestPaidOn(groups), [groups]);
+  const beforeWork = !!paidOn && !!minDate && paidOn < minDate;
   const hasError = Object.keys(errors).length > 0;
-  const ready = !!paidOn && !!method && !hasError;
+  const ready = !!paidOn && !beforeWork && !!method && !hasError;
   const dirty = !!method || choice !== 'today' || hasEdits(groups);
   const count = groups.reduce((sum, g) => sum + g.entries.length, 0);
 
@@ -64,30 +68,32 @@ export function PaymentSheet({ visible, initialGroups, nameOf, today, saving, on
     setCalendarOpen(next === 'pick');
   }
 
-  const dayOptions: { value: PayDayChoice; label: string }[] = [
+  const yesterday = resolvePaidOn('yesterday', null, today) as string;
+  const dayOptions: { value: PayDayChoice; label: string; disabled?: boolean }[] = [
     { value: 'today', label: `오늘(${dayLabel(today).replace(/\(.\)$/, '')})` },
-    { value: 'yesterday', label: '어제' },
+    { value: 'yesterday', label: '어제', disabled: !!minDate && yesterday < minDate },
     { value: 'pick', label: choice === 'pick' && picked ? dayLabel(picked) : '다른 날' },
   ];
 
   return (
     <LaborSheet visible={visible} onClose={close} title={`${count}건 지급 완료로 바꾸기`}
-      footer={<Button label={ctaLabel(paidOn, method, hasError)} disabled={!ready} loading={saving}
+      footer={<Button label={ctaLabel(paidOn, beforeWork, method, hasError)} disabled={!ready} loading={saving}
         onPress={() => paidOn && method && onSubmit({ paidOn, method, groups })} />}>
       <SectionLabel text="지급일" />
       <View style={styles.chips}>
         {dayOptions.map(option => {
           const selected = option.value === choice;
           return (
-            <Pressable key={option.value} accessibilityRole="radio" accessibilityState={{ checked: selected }} onPress={() => chooseDay(option.value)}
-              style={({ pressed }) => [styles.chip, selected && styles.chipOn, pressed && styles.pressed]}>
+            <Pressable key={option.value} accessibilityRole="radio" accessibilityState={{ checked: selected, disabled: !!option.disabled }}
+              disabled={option.disabled} onPress={() => chooseDay(option.value)}
+              style={({ pressed }) => [styles.chip, selected && styles.chipOn, option.disabled && styles.chipOff, pressed && styles.pressed]}>
               <Text style={[styles.chipText, selected && styles.chipTextOn]}>{option.label}</Text>
             </Pressable>
           );
         })}
       </View>
       {choice === 'pick' && calendarOpen && (
-        <PayDateCalendar today={today} selected={picked} onSelect={date => { setPicked(date); setCalendarOpen(false); }} />
+        <PayDateCalendar today={today} selected={picked} minDate={minDate} onSelect={date => { setPicked(date); setCalendarOpen(false); }} />
       )}
       {choice === 'pick' && !calendarOpen && picked && (
         <Pressable accessibilityRole="button" onPress={() => setCalendarOpen(true)} style={styles.link}>
@@ -118,6 +124,7 @@ const styles = StyleSheet.create({
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: { minHeight: 44, paddingHorizontal: 14, borderRadius: Radius.pill, backgroundColor: Colors.chipBg, justifyContent: 'center' },
   chipOn: { backgroundColor: Colors.bg },
+  chipOff: { opacity: 0.4 },
   chipText: { fontSize: Type.base, fontWeight: '600', color: Colors.gray600 },
   chipTextOn: { color: Colors.action, fontWeight: '700' },
   pressed: { opacity: 0.7 },

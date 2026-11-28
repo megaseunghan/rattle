@@ -1,5 +1,5 @@
 import {
-  createPaymentDraft, draftErrors, hasEdits, isEdited, netOf, resetDeduction, resolvePaidOn, setDeduction, toPaymentGroups, totalNet,
+  createPaymentDraft, draftErrors, earliestPaidOn, hasEdits, isEdited, netOf, resetDeduction, resolvePaidOn, setDeduction, toPaymentGroups, totalNet,
 } from '../../lib/components/daily-labor/paymentDraft';
 import { amountText, calendarCells, dayLabel, monthLabel, parseAmount, shiftMonth } from '../../lib/components/daily-labor/format';
 import type { DailyLaborEntry } from '../../types';
@@ -79,5 +79,14 @@ describe('급여대장 표시 변환', () => {
     expect(cells[0]).toBe('2026-11-01');
     expect(cells).toHaveLength(30);
     expect(calendarCells('2026-12')[0]).toBeNull();
+  });
+});
+
+describe('지급일 하한', () => {
+  it('고른 기록 전체의 마지막 근무일부터 지급일로 고를 수 있다', () => {
+    const dated = [entry('a1', 'a', 150_000, { work_date: '2026-10-24' }), entry('b1', 'b', 200_000, { work_date: '2026-10-27' }), entry('a2', 'a', 170_000, { work_date: '2026-10-25' })];
+    expect(earliestPaidOn(createPaymentDraft(dated, new Set(['a1', 'a2', 'b1'])))).toBe('2026-10-27');
+    expect(earliestPaidOn(createPaymentDraft(dated, new Set(['a1'])))).toBe('2026-10-24');
+    expect(earliestPaidOn([])).toBeNull();
   });
 });
