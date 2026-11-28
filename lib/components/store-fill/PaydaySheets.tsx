@@ -1,12 +1,10 @@
-import { useEffect, useState } from 'react';
 import type { StoreFillPatch } from '../../../types';
 import type { StoreFillValues } from '../../utils/storeFill';
-import { isSameMonthPayAllowed, normalizeMonthOffset } from '../../utils/payday';
+import { isSameMonthPayAllowed } from '../../utils/payday';
 import { FillSheet } from './FillSheet';
-import { ChoiceList, DayGrid, Segment, SheetNote } from './FillParts';
-import { HOLIDAY_OPTIONS, type FillOption } from './storeFillCopy';
+import { ChoiceList, DayGrid, SheetNote } from './FillParts';
+import { HOLIDAY_OPTIONS } from './storeFillCopy';
 
-const OFFSET_OPTIONS: FillOption<0 | 1>[] = [{ value: 0, title: '같은 달' }, { value: 1, title: '다음 달' }];
 const DAY_NOTE = "30·31일이 없는 달이 있어서 그 무렵이면 '말일'을 골라 주세요.";
 
 export interface PaydaySheetProps {
@@ -18,21 +16,27 @@ export interface PaydaySheetProps {
   onSave: (patch: StoreFillPatch) => void;
 }
 
-/** 마감일. 이미 '같은 달' 지급인데 새 마감일로 안 맞으면 다음 달로 같이 고친다. */
+/**
+ * 같은 달·다음 달은 고르지 않고 정한다(시안 fill-v5): 지급일이 마감일보다 뒤면 같은 달, 아니면(같거나 앞, 말일 마감) 다음 달.
+ * 마감일을 아직 안 정했으면 다음 달로 두고, 마감일을 정할 때 다시 맞춘다.
+ */
+export function autoMonthOffset(closeDay: number | null, payDay: number): 0 | 1 {
+  return closeDay != null && isSameMonthPayAllowed(closeDay, payDay) ? 0 : 1;
+}
+
+/** 마감일. 지급일이 이미 있으면 새 마감일 기준으로 같은 달·다음 달을 다시 맞춘다. */
 export function closeDayPatch(values: StoreFillValues, day: number): StoreFillPatch {
   const { payday_day: payDay, payday_month_offset: offset } = values;
-  if (payDay != null && offset === 0 && !isSameMonthPayAllowed(day, payDay)) {
-    return { payroll_close_day: day, payday_month_offset: 1 };
-  }
-  return { payroll_close_day: day };
+  if (payDay == null) return { payroll_close_day: day };
+  const next = autoMonthOffset(day, payDay);
+  return next === offset ? { payroll_close_day: day } : { payroll_close_day: day, payday_month_offset: next };
 }
 
 /** 지급일. 쉬는 날 규칙을 아직 안 정했으면 기본 '앞당겨서'로 함께 저장한다. */
-export function payDayPatch(values: StoreFillValues, day: number, offset: 0 | 1): StoreFillPatch {
-  const close = values.payroll_close_day;
+export function payDayPatch(values: StoreFillValues, day: number): StoreFillPatch {
   return {
     payday_day: day,
-    payday_month_offset: close == null ? offset : normalizeMonthOffset(close, day, offset),
+    payday_month_offset: autoMonthOffset(values.payroll_close_day, day),
     ...(values.payday_holiday_rule == null ? { payday_holiday_rule: 'before' as const } : {}),
   };
 }
@@ -47,24 +51,11 @@ export function CloseDaySheet({ visible, values, saving, error, onClose, onSave 
   );
 }
 
-function defaultOffset(values: StoreFillValues): 0 | 1 {
-  if (values.payday_month_offset != null) return values.payday_month_offset;
-  return 1;
-}
-
 export function PayDaySheet({ visible, values, saving, error, onClose, onSave }: PaydaySheetProps) {
-  const close = values.payroll_close_day;
-  const [offset, setOffset] = useState<0 | 1>(defaultOffset(values));
-  useEffect(() => { if (visible) setOffset(defaultOffset(values)); }, [visible, values]);
-  const sameMonthPossible = close == null || isSameMonthPayAllowed(close, null);
-  const dayDisabled = (day: number) => saving || (offset === 0 && close != null && !isSameMonthPayAllowed(close, day));
   return (
-    <FillSheet visible={visible} onClose={onClose} title="며칠에 주나요?"
-      description={sameMonthPossible ? '마감한 달에 주는지, 그다음 달에 주는지 골라 주세요.' : '말일에 마감하면 다음 달에 줘요.'}>
-      <Segment options={OFFSET_OPTIONS} selected={offset} onSelect={setOffset} isDisabled={value => value === 0 && !sameMonthPossible} />
-      <DayGrid selected={values.payday_month_offset === offset ? values.payday_day : null} isDisabled={dayDisabled}
-        onSelect={day => onSave(payDayPatch(values, day, offset))} />
-      <SheetNote>{offset === 0 && close != null ? '같은 달이면 마감일보다 뒤 날짜만 고를 수 있어요.' : DAY_NOTE}</SheetNote>
+    <FillSheet visible={visible} onClose={onClose} title="며칠에 주나요?" description="마감일보다 앞 날짜면 다음 달로 봐요.">
+      <DayGrid selected={values.payday_day} isDisabled={() => saving} onSelect={day => onSave(payDayPatch(values, day))} />
+      <SheetNote>{DAY_NOTE}</SheetNote>
       {error ? <SheetNote>{error}</SheetNote> : null}
     </FillSheet>
   );

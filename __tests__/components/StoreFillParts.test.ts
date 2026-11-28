@@ -14,18 +14,23 @@ describe('급여 날짜 저장값', () => {
   test('마감일만 고르면 마감일만 저장한다', () => {
     expect(closeDayPatch(EMPTY, 15)).toEqual({ payroll_close_day: 15 });
   });
-  test('같은 달 지급인데 새 마감일로 안 맞으면 다음 달로 함께 고친다', () => {
+  test('지급일이 있으면 새 마감일 기준으로 같은 달·다음 달을 다시 맞춘다', () => {
     const values = { ...EMPTY, payroll_close_day: 10, payday_day: 25, payday_month_offset: 0 as const };
     expect(closeDayPatch(values, 25)).toEqual({ payroll_close_day: 25, payday_month_offset: 1 });
     expect(closeDayPatch(values, 20)).toEqual({ payroll_close_day: 20 });
+    expect(closeDayPatch({ ...values, payday_month_offset: 1 }, 20)).toEqual({ payroll_close_day: 20, payday_month_offset: 0 });
+  });
+  test('같은 달·다음 달은 시안 기준으로 정한다: 마감일보다 뒤면 같은 달, 같거나 앞·말일 마감·마감 미정이면 다음 달', () => {
+    const at = (close: number | null) => ({ ...EMPTY, payroll_close_day: close, payday_holiday_rule: 'after' as const });
+    expect(payDayPatch(at(10), 25)).toEqual({ payday_day: 25, payday_month_offset: 0 });
+    expect(payDayPatch(at(10), 0)).toEqual({ payday_day: 0, payday_month_offset: 0 });
+    expect(payDayPatch(at(10), 10)).toEqual({ payday_day: 10, payday_month_offset: 1 });
+    expect(payDayPatch(at(25), 10)).toEqual({ payday_day: 10, payday_month_offset: 1 });
+    expect(payDayPatch(at(0), 10)).toEqual({ payday_day: 10, payday_month_offset: 1 });
+    expect(payDayPatch(at(null), 25)).toEqual({ payday_day: 25, payday_month_offset: 1 });
   });
   test('지급일 첫 저장 때 쉬는 날 규칙을 앞당겨서로 채운다', () => {
-    const values = { ...EMPTY, payroll_close_day: 0 };
-    expect(payDayPatch(values, 10, 0)).toEqual({ payday_day: 10, payday_month_offset: 1, payday_holiday_rule: 'before' });
-  });
-  test('이미 정한 쉬는 날 규칙은 건드리지 않는다', () => {
-    const values = { ...EMPTY, payroll_close_day: 15, payday_holiday_rule: 'after' as const };
-    expect(payDayPatch(values, 25, 0)).toEqual({ payday_day: 25, payday_month_offset: 0 });
+    expect(payDayPatch({ ...EMPTY, payroll_close_day: 0 }, 10)).toEqual({ payday_day: 10, payday_month_offset: 1, payday_holiday_rule: 'before' });
   });
 });
 
