@@ -9,7 +9,6 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { AppIcon } from '../../lib/icons/AppIcon';
 import PagerView from 'react-native-pager-view';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { GlassCard } from '../../lib/components/GlassCard';
 import { GlassBackdrop } from '../../lib/components/GlassBackdrop';
 import { Colors } from '../../constants/colors';
 import { useAuth } from '../../lib/contexts/AuthContext';
@@ -216,13 +215,14 @@ export default function TabsLayout() {
         </PagerView>
 
         <View onLayout={event => setTabBarHeight(event.nativeEvent.layout.height)}>
-        <GlassCard style={{ marginHorizontal: 12, marginBottom: Math.max(insets.bottom, 8), marginTop: 4 }} contentStyle={styles.tabBar}>
+        {/* 하단 탭: S04 확정 시안처럼 화면 끝까지 닿는 흰 줄 + 위 얇은 선(떠 있는 글래스 없음). */}
+        <View style={[styles.tabBar, { paddingBottom: Math.max(insets.bottom, 8) }]}>
           {tabs.map((tab) => (
             <Pressable key={tab} style={styles.tabBarItem} accessibilityRole="tab" accessibilityLabel={TAB_CONFIG[tab].label} accessibilityState={{ selected: activeTab === tab }} onPress={() => goToTab(tab)}>
               <TabIcon tab={tab} focused={activeTab === tab} />
             </Pressable>
           ))}
-        </GlassCard>
+        </View>
         </View>
 
         <StoreScopePicker key={pickerVisible ? 'open' : 'closed'} visible={pickerVisible} stores={stores} selectedId={store?.id} allSelected={effectiveHomeMode === 'dashboard'} allowAll={isOwnerAdminSelf} required={!!pendingTab} busy={switching} error={switchError}
@@ -254,7 +254,7 @@ function TabPage({ tab, active }: { tab: TabName; active: boolean }) {
 const styles = StyleSheet.create({
   shell: { flex: 1, backgroundColor: Colors.homeCanvas },
   flex: { flex: 1 },
-  tabBar: { flexDirection: 'row', height: 60, padding: 0, paddingTop: 6 },
+  tabBar: { flexDirection: 'row', paddingTop: 6, minHeight: 66, backgroundColor: Colors.white, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: Colors.gray200 },
   tabBarItem: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   iconWrap: { alignItems: 'center' },
   indicator: {

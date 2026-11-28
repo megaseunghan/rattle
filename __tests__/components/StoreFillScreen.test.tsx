@@ -52,7 +52,8 @@ test('사장님: 안 정한 줄을 눌러 고르면 바로 저장하고 진행�
   fireEvent.press(screen.getByText('5인 미만'));
   await waitFor(() => expect(mockUpdate).toHaveBeenCalledWith('store', { headcount_class: 'under_five' }));
   expect(await screen.findByText('4개 중 1개')).toBeTruthy();
-  expect(screen.getByText('저장했어요')).toBeTruthy();
+  // 토스트는 다음 틱(setTimeout 0)에 나타나므로 기다려서 찾는다(CI에서 가끔 실패하던 원인).
+  expect(await screen.findByText('저장했어요')).toBeTruthy();
   expect(mockRefreshStore).not.toHaveBeenCalled();
 });
 

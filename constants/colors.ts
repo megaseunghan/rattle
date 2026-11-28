@@ -12,9 +12,10 @@ export const Colors = {
   black: '#191F28',   // TDS foreground
   white: '#FFFFFF',
 
-  // 로고 블루를 따른 차가운 바탕. 입력·읽기 전용·확인 필요 상태를 구분한다.
-  homeCanvas: '#F3F8FF',
-  homeBorder: '#DDE8F5',
+  // 앱 바탕(S04 확정 2026-11-27, 적용 2026-11-28): 회색 바탕 + 흰 카드, 글래스 없음. 예전 값 '#F3F8FF'(연파랑).
+  homeCanvas: '#F9FAFB',
+  // 바탕이 회색이 되며 파란 경계 '#DDE8F5' 대신 중립 회색 경계.
+  homeBorder: '#E5E7EB',
   taskBg: '#EAF2FF',
   taskBorder: '#BDD3F2',
   contextBg: '#F1F5FA',
@@ -65,10 +66,10 @@ export const Colors = {
     text: '#191919',
   },
 
-  // Glassmorphism 토큰 (RN: expo-blur BlurView + 반투명 오버레이로 구현)
+  // 예전 글래스 토큰. 2026-11-28부터 글래스를 쓰지 않아 불투명 흰 표면으로 둔다(이름은 기존 화면 호환용).
   glass: {
-    background: 'rgba(255,255,255,0.55)', // frosted 오버레이 채움색
-    border: 'rgba(255,255,255,0.65)',     // 밝은 테두리로 유리 가장자리 표현
+    background: '#FFFFFF',
+    border: '#FFFFFF',
     shadow: 'rgba(49,130,246,0.18)',      // 브랜드 블루 기반 그림자
     tint: 'rgba(49,130,246,0.10)',        // 매장 컬러 미적용 시 기본 틴트
   },
