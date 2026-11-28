@@ -1,7 +1,8 @@
-import type { DailyLaborEntry, DailyLaborer, DailyLaborPayment } from '../../types';
+import type { DailyLaborEntry, DailyLaborer, DailyLaborPayment, DailyLaborPaymentMethod } from '../../types';
 import { supabase } from '../supabase';
 import { UserFacingError } from '../utils/error';
 import { invalidateCachedStore } from './cacheInvalidation';
+import { koreanDate } from '../utils/regularWages';
 import { dailyAssessedTax, dailyPaymentPay, employmentRateFor, premium, isIsoDate, isWeekend, isYearMonth, missingStandardMessage, PayrollStandardMissingError } from '../payroll';
 
 const MAX_WAGE = 10_000_000;
@@ -30,7 +31,7 @@ const CHANGED = '다른 곳에서 내용이 바뀌었어요. 다시 불러온 �
 function fail(error: { code?: string; message?: string }): never {
   if (error.code === '23505') throw new UserFacingError('그날 근무 기록이 이미 있어요. 기존 기록을 고쳐 주세요.');
   if (error.code === '42501') throw new UserFacingError('사장님이나 점장님만 일용근로자 기록을 관리할 수 있어요.');
-  if (error.message?.includes('DAILY_LABOR_PAID_LOCKED')) throw new UserFacingError('지급한 기록은 고치거나 지울 수 없어요. 지급을 취소한 뒤 다시 시도해 주세요.');
+  if (error.message?.includes('DAILY_LABOR_PAID_LOCKED')) throw new UserFacingError('지급 완료한 기록은 고치거나 지울 수 없어요. 먼저 지급 대기로 되돌려 주세요.');
   if (error.code === '40001' || error.message?.includes('DAILY_LABOR_PAYMENT_CHANGED')) throw new UserFacingError(CHANGED);
   throw new UserFacingError('저장하지 못했어요. 입력값과 연결 상태를 확인하고 다시 시도해 주세요.');
 }
@@ -84,9 +85,42 @@ export function previewDailyLaborPayment(entries: Pick<DailyLaborEntry, 'gross' 
   return dailyPaymentPay(entries);
 }
 
+/** 평일/주말 구분에 맞는 명단 기본 일당. 주말 일당이 없으면 평일 일당을 쓴다. */
+export function kindDailyWage(laborer: Pick<DailyLaborer, 'weekday_wage' | 'weekend_wage'>, weekend: boolean): number | null {
+  return weekend ? laborer.weekend_wage ?? laborer.weekday_wage : laborer.weekday_wage;
+}
+
 /** 명단의 기본 일당: 주말(토·일)이면 주말 일당, 없으면 평일 일당. 공휴일은 판단하지 않는다. */
 export function defaultDailyWage(laborer: Pick<DailyLaborer, 'weekday_wage' | 'weekend_wage'>, date: string): number | null {
-  return isWeekend(date) ? laborer.weekend_wage ?? laborer.weekday_wage : laborer.weekday_wage;
+  return kindDailyWage(laborer, isWeekend(date));
+}
+
+/** 한 달 근무일이 이 날수 이상이면 국민연금·건강보험 가입 대상일 수 있다고 안내한다(판정은 하지 않는다). */
+export const INSURANCE_NOTICE_DAYS = 8;
+
+/** 같은 달 기록에서 근무일(같은 날 중복은 하루)이 기준 이상인 일용근로자 ID. */
+export function laborersAtInsuranceDays(entries: Pick<DailyLaborEntry, 'laborer_id' | 'work_date'>[], days = INSURANCE_NOTICE_DAYS): Set<string> {
+  const dates = new Map<string, Set<string>>();
+  for (const entry of entries) dates.set(entry.laborer_id, new Set([...(dates.get(entry.laborer_id) ?? []), entry.work_date]));
+  return new Set([...dates].filter(([, set]) => set.size >= days).map(([id]) => id));
+}
+
+/** 지급일로 고를 수 있는 날: 올바른 날짜이고 오늘(한국 날짜) 이후가 아니다. */
+export function isPayableDate(paidOn: string, today: string = koreanDate()): boolean {
+  return isIsoDate(paidOn) && paidOn <= today;
+}
+
+/** 공제 입력 검사. 0원 이상 정수여야 하고 합계가 세전을 넘으면 안 된다. 문제가 없으면 null. */
+export function deductionError(gross: number, deductions: DailyLaborDeductions): string | null {
+  const amounts = [deductions.income_tax, deductions.local_income_tax, deductions.employment_insurance];
+  if (amounts.some(v => !Number.isSafeInteger(v) || v < 0)) return '공제 금액을 0원 이상 정수로 입력해 주세요.';
+  if (amounts.reduce((a, b) => a + b, 0) > gross) return '공제 합계가 세전 금액보다 커요. 금액을 확인해 주세요.';
+  return null;
+}
+
+/** 쓰기가 끝난 뒤의 캐시 새로고침. 실패해도 이미 저장된 쓰기를 실패로 바꾸지 않는다. */
+async function refreshAfterWrite(storeId: string): Promise<void> {
+  try { await invalidateCachedStore(storeId); } catch { /* 화면이 다시 불러올 때 맞춰진다. */ }
 }
 
 export async function getDailyLaborers(storeId: string): Promise<DailyLaborer[]> {
@@ -106,7 +140,7 @@ export async function saveDailyLaborer(storeId: string, input: DailyLaborerInput
   const { data, error } = await query.select().maybeSingle();
   if (error) fail(error);
   if (!data) throw new UserFacingError('다른 곳에서 내용이 바뀌었어요. 다시 불러온 뒤 확인해 주세요.');
-  await invalidateCachedStore(storeId);
+  await refreshAfterWrite(storeId);
   return data as DailyLaborer;
 }
 
@@ -115,7 +149,7 @@ export async function setDailyLaborerActive(storeId: string, laborer: Pick<Daily
     .eq('id', laborer.id).eq('store_id', storeId).eq('revision', laborer.revision).select('id').maybeSingle();
   if (error) fail(error);
   if (!data) throw new UserFacingError('다른 곳에서 내용이 바뀌었어요. 다시 불러온 뒤 확인해 주세요.');
-  await invalidateCachedStore(storeId);
+  await refreshAfterWrite(storeId);
 }
 
 function monthRange(yearMonth: string) {
@@ -156,31 +190,82 @@ export async function saveDailyLaborEntry(storeId: string, input: DailyLaborEntr
   const { data, error } = await query.select().maybeSingle();
   if (error) fail(error);
   if (!data) throw new UserFacingError(CHANGED);
-  await invalidateCachedStore(storeId);
+  await refreshAfterWrite(storeId);
   return data as DailyLaborEntry;
 }
 
-/** 같은 일용근로자의 미지급 기록을 한 번에 지급 처리한다. 소득세는 묶음 합계로 정한다. */
-export async function recordDailyLaborPayment(storeId: string, laborerId: string, entries: DailyLaborEntry[], paidOn: string): Promise<string> {
+export interface DailyLaborDeductions { income_tax: number; local_income_tax: number; employment_insurance: number }
+
+/** 지급 완료 기록 전 검사. 문제가 있으면 UserFacingError를 던지고, 예상 공제와 실제 공제를 돌려준다. */
+function preparePayment(laborerId: string, entries: DailyLaborEntry[], paidOn: string, method: DailyLaborPaymentMethod, edited?: DailyLaborDeductions) {
   if (!isIsoDate(paidOn)) throw new UserFacingError('지급일을 확인해 주세요.');
-  if (!entries.length || entries.some(e => e.laborer_id !== laborerId || e.payment_id)) throw new UserFacingError('지급할 미지급 기록을 골라 주세요.');
+  if (!isPayableDate(paidOn)) throw new UserFacingError('오늘 이후 날짜는 지급일로 고를 수 없어요.');
+  if (method !== 'transfer' && method !== 'cash') throw new UserFacingError('지급 방법을 골라 주세요.');
+  if (!entries.length || entries.some(e => e.laborer_id !== laborerId || e.payment_id)) throw new UserFacingError('지급 대기 기록을 골라 주세요.');
   const pay = dailyPaymentPay(entries);
+  const actual = edited ?? pay;
+  const problem = deductionError(pay.gross, actual);
+  if (problem) throw new UserFacingError(problem);
+  return { pay, actual };
+}
+
+/**
+ * 같은 일용근로자의 지급 대기 기록을 골라 '지급 완료'로 기록한다(앱은 송금하지 않는다).
+ * 공제는 예상값(묶음 합계 기준 소득세)을 기본으로 하고, 사용자가 고친 값이 있으면 그 값을 그대로 저장한다.
+ * 예상값은 따로 남긴다.
+ */
+export async function recordDailyLaborPayment(storeId: string, laborerId: string, entries: DailyLaborEntry[], paidOn: string,
+  method: DailyLaborPaymentMethod, edited?: DailyLaborDeductions): Promise<string> {
+  const { pay, actual } = preparePayment(laborerId, entries, paidOn, method, edited);
+  return sendPayment(storeId, laborerId, entries, paidOn, method, pay, actual);
+}
+
+async function sendPayment(storeId: string, laborerId: string, entries: DailyLaborEntry[], paidOn: string, method: DailyLaborPaymentMethod,
+  pay: DailyLaborDeductions, actual: DailyLaborDeductions): Promise<string> {
   const version = [...new Set(entries.map(e => e.calculation_version))].sort().join('+');
   const { data, error } = await supabase.rpc('record_daily_labor_payment', {
-    p_store_id: storeId, p_laborer_id: laborerId, p_entry_ids: entries.map(e => e.id), p_paid_on: paidOn,
-    p_income_tax: pay.income_tax, p_local_income_tax: pay.local_income_tax, p_employment_insurance: pay.employment_insurance,
+    p_store_id: storeId, p_laborer_id: laborerId, p_entry_ids: entries.map(e => e.id), p_paid_on: paidOn, p_payment_method: method,
+    p_income_tax: actual.income_tax, p_local_income_tax: actual.local_income_tax, p_employment_insurance: actual.employment_insurance,
+    p_estimated_income_tax: pay.income_tax, p_estimated_local_income_tax: pay.local_income_tax, p_estimated_employment_insurance: pay.employment_insurance,
     p_calculation_version: version,
   });
   if (error) fail(error);
   if (typeof data !== 'string') throw new UserFacingError(CHANGED);
-  await invalidateCachedStore(storeId);
+  await refreshAfterWrite(storeId);
   return data;
 }
 
+const UNKNOWN_RESULT = '저장됐는지 확인하지 못했어요. 다시 불러온 뒤 확인해 주세요.';
+
+export interface DailyLaborPaymentGroup { laborerId: string; entries: DailyLaborEntry[]; deductions?: DailyLaborDeductions }
+export interface DailyLaborBatchResult { recorded: string[]; failed: { laborerId: string; message: string }[] }
+
+/**
+ * 여러 사람의 지급 대기 기록을 한 번에 '지급 완료'로 기록한다. 서버 함수는 한 사람씩 받으므로 사람마다 한 번씩 보낸다.
+ * 입력 검사는 모두 먼저 끝낸 뒤 보낸다(검사 실패면 아무것도 저장하지 않는다). 보내다 실패한 사람은 failed로 돌려준다.
+ */
+export async function recordDailyLaborPayments(storeId: string, groups: DailyLaborPaymentGroup[], paidOn: string,
+  method: DailyLaborPaymentMethod): Promise<DailyLaborBatchResult> {
+  if (!groups.length) throw new UserFacingError('지급 대기 기록을 골라 주세요.');
+  const prepared = groups.map(g => ({ ...g, ...preparePayment(g.laborerId, g.entries, paidOn, method, g.deductions) }));
+  const result: DailyLaborBatchResult = { recorded: [], failed: [] };
+  for (const g of prepared) {
+    try {
+      await sendPayment(storeId, g.laborerId, g.entries, paidOn, method, g.pay, g.actual);
+      result.recorded.push(g.laborerId);
+    } catch (e) {
+      // 사용자용 오류가 아니면(연결 끊김 등) 저장됐는지 모른다. 바뀌었다고 단정하지 않고 다시 불러와 확인하게 한다.
+      result.failed.push({ laborerId: g.laborerId, message: e instanceof UserFacingError ? e.message : UNKNOWN_RESULT });
+    }
+  }
+  return result;
+}
+
+/** 지급 완료를 '지급 대기'로 되돌린다(기록은 canceled_at으로 남는다). */
 export async function cancelDailyLaborPayment(storeId: string, paymentId: string): Promise<void> {
   const { error } = await supabase.rpc('cancel_daily_labor_payment', { p_store_id: storeId, p_payment_id: paymentId });
   if (error) fail(error);
-  await invalidateCachedStore(storeId);
+  await refreshAfterWrite(storeId);
 }
 
 export async function deleteDailyLaborEntry(storeId: string, entry: Pick<DailyLaborEntry, 'id' | 'revision'>): Promise<void> {
@@ -188,7 +273,7 @@ export async function deleteDailyLaborEntry(storeId: string, entry: Pick<DailyLa
     .eq('id', entry.id).eq('store_id', storeId).eq('revision', entry.revision).select('id').maybeSingle();
   if (error) fail(error);
   if (!data) throw new UserFacingError('다른 곳에서 내용이 바뀌었어요. 다시 불러온 뒤 확인해 주세요.');
-  await invalidateCachedStore(storeId);
+  await refreshAfterWrite(storeId);
 }
 
 /** 월 합계: 세전, 지급 완료(묶음 실지급), 미지급 세전. */

@@ -6,7 +6,7 @@ import { supabase } from '../supabase';
 
 export type LaborGap = 'legacy_monthly' | 'missing_wage' | 'employment_history' | 'missing_work' | 'invalid_snapshot' | 'attendance_work_failed';
 export interface LaborSources {
-  employees: (Pick<Employee, 'id' | 'store_id' | 'joined_at' | 'is_active' | 'employment_type'> & Partial<Pick<Employee, 'is_probation' | 'probation_started_at' | 'probation_ends_on'>>)[];
+  employees: (Pick<Employee, 'id' | 'store_id' | 'joined_at' | 'is_active' | 'employment_type'> & Partial<Pick<Employee, 'is_probation' | 'probation_started_at' | 'probation_ends_on' | 'probation_rate'>>)[];
   payrolls: (Payroll & { source_kind?: 'saved_payroll' | 'approved_daily_projection' })[];
   dailyWork: (Pick<DailyWorkRecord, 'id' | 'store_id' | 'employee_id' | 'work_date' | 'revision' | 'status'> & Partial<Pick<DailyWorkRecord, 'gross' | 'worked_minutes' | 'applied_hourly_wage'>> & { record_source?: 'manual' | 'qr_auto'; auto_applied_at?: string | null })[];
   wages: WageHistory[];
@@ -72,7 +72,7 @@ export function buildDailyLaborSeries(storeId: string, month: string, through: n
       if (!employee?.joined_at || !employee.is_active) { gap(all, 'employment_history'); continue; }
       const history = sortWages(sources.wages.filter(w => w.employee_id === id));
       // 수습은 표시한 직원만, 날짜별로 판단한다(2026-v2).
-      const probation = { is_probation: employee.is_probation ?? false, probation_started_at: employee.probation_started_at ?? null, joined_at: employee.joined_at, probation_ends_on: employee.probation_ends_on ?? null };
+      const probation = { is_probation: employee.is_probation ?? false, probation_started_at: employee.probation_started_at ?? null, joined_at: employee.joined_at, probation_ends_on: employee.probation_ends_on ?? null, probation_rate: employee.probation_rate ?? null };
       regular = { version: 1, year_month: month, employment_start: employee.joined_at, days: [] };
       for (const date of calendar) {
         if (date < employee.joined_at || date > koreanDate(asOf)) continue;
