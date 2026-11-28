@@ -18,7 +18,8 @@ const EMPTY = {
   headcount_class: null, business_entity_type: null, vat_type: null, business_number: null,
   social_insurance_enrolled: null, industrial_accident_industry: null,
 };
-let mockAuth: { user: { id: string }; store: { id: string; owner_id: string }; currentRole: 'admin' | 'member' };
+const mockRefreshStore = jest.fn(async () => {});
+let mockAuth: { user: { id: string }; store: { id: string; owner_id: string }; currentRole: 'admin' | 'member'; refreshStore: typeof mockRefreshStore };
 let mockFill: Record<string, unknown> = EMPTY;
 const mockUpdate = jest.fn();
 jest.mock('../../lib/contexts/AuthContext', () => ({ useAuth: () => mockAuth }));
@@ -35,7 +36,8 @@ jest.mock('../../lib/services/attendance', () => ({
 
 beforeEach(() => {
   mockSharedQueryClient.clear();
-  mockAuth = { user: { id: 'owner' }, store: { id: 'store', owner_id: 'owner' }, currentRole: 'admin' };
+  mockRefreshStore.mockClear();
+  mockAuth = { user: { id: 'owner' }, store: { id: 'store', owner_id: 'owner' }, currentRole: 'admin', refreshStore: mockRefreshStore };
   mockFill = EMPTY;
   mockUpdate.mockReset().mockImplementation(async (_id: string, patch: Record<string, unknown>) => {
     mockFill = { ...mockFill, ...patch };
@@ -51,6 +53,15 @@ test('사장님: 안 정한 줄을 눌러 고르면 바로 저장하고 진행�
   await waitFor(() => expect(mockUpdate).toHaveBeenCalledWith('store', { headcount_class: 'under_five' }));
   expect(await screen.findByText('4개 중 1개')).toBeTruthy();
   expect(screen.getByText('저장했어요')).toBeTruthy();
+  expect(mockRefreshStore).not.toHaveBeenCalled();
+});
+
+test('마감일을 바꾸면 직원 급여 적용일이 새 마감일을 쓰도록 매장 정보를 다시 받는다', async () => {
+  render(<StoreFillScreen />);
+  fireEvent.press(await screen.findByLabelText('매월 마감일, 아직 안 정했어요'));
+  fireEvent.press(screen.getByText('15'));
+  await waitFor(() => expect(mockUpdate).toHaveBeenCalledWith('store', { payroll_close_day: 15 }));
+  await waitFor(() => expect(mockRefreshStore).toHaveBeenCalledWith('store'));
 });
 
 test('4대보험 가입했어요를 고르면 업종 시트가 이어지고, 업종까지 골라야 완료다', async () => {

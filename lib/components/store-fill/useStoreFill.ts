@@ -22,6 +22,7 @@ export function useStoreFillRole(storeId: string | null): { isManager: boolean; 
 /** 홈 유도와 마저 채우기 화면이 같은 캐시를 쓴다. 저장 응답으로 바로 갱신한다. */
 export function useStoreFill(storeId: string | null, enabled: boolean) {
   const scope = useQueryScope();
+  const { refreshStore } = useAuth();
   const queryKey = useMemo(() => queryKeys.store(scope, storeId ?? '', STORE_FILL_DOMAIN), [scope, storeId]);
   const query = useQuery({
     queryKey,
@@ -38,8 +39,10 @@ export function useStoreFill(storeId: string | null, enabled: boolean) {
     const touchesInsurance = 'social_insurance_enrolled' in patch || 'industrial_accident_industry' in patch;
     // 저장은 이미 끝났다. 다른 화면 갱신 실패로 저장 실패처럼 보이지 않게 한다.
     if (touchesInsurance) void invalidateStoreData(storeId, INSURANCE_DOMAINS).catch(() => {});
+    // 직원 정보의 '다음 급여 기간부터' 적용일은 로그인 정보의 매장 마감일로 계산한다. 마감일을 바꾸면 매장 정보를 다시 받는다.
+    if ('payroll_close_day' in patch) void refreshStore(storeId).catch(() => {});
     return next;
-  }, [storeId, queryKey]);
+  }, [storeId, queryKey, refreshStore]);
 
   return { query, save };
 }
