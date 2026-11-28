@@ -8,7 +8,7 @@ import { router } from 'expo-router';
 import { useRefreshOnReturn } from '../../lib/query/useRefreshOnReturn';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, Pressable,
-  Modal, TextInput, Alert, KeyboardAvoidingView, Platform,
+  TextInput, Alert,
   ActivityIndicator, RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -20,7 +20,7 @@ import { useAuth } from '../../lib/contexts/AuthContext';
 import { TabPagerContext } from '../../lib/contexts/TabPagerContext';
 import { useEmployees } from '../../lib/hooks/useEmployees';
 import { usePayroll } from '../../lib/hooks/usePayroll';
-import { Employee, EmploymentType } from '../../types';
+import { Employee } from '../../types';
 import { deductionMode, hasProbationInMonth, monthWeeklyRest } from '../../lib/payroll';
 import { PayrollSubmissionReview } from '../../lib/components/PayrollSubmissionReview';
 import { Skeleton, SkeletonGroup } from '../../lib/components/skeleton';
@@ -32,13 +32,10 @@ import { ErrorMessage } from '../../lib/components/ErrorMessage';
 import { formatWorkedMinutes } from '../../lib/utils/workMinutes';
 import { getPayrollSettlementGaps, PayrollDeductions, probationDayFactor } from '../../lib/services/payroll';
 import { useStoreWageHistory } from '../../lib/hooks/useStoreWageHistory';
-import { isWageDate } from '../../lib/utils/wageCondition';
 import { accruedRegularPayroll, regularEmployeesForAccrual } from '../../lib/utils/regularWages';
 import { animateListChange } from '../../lib/utils/layoutAnimation';
-import { Badge, EmptyState, Field } from '../../lib/components/ui';
-import { PayrollConditionFields } from '../../lib/components/PayrollConditionFields';
-import { maskedAccount } from '../../lib/services/accountNumbers';
-import { buildPayrollFieldsPayload, EMPTY_PAYROLL_FIELDS, minimumWageNotice, payrollFieldsFrom } from '../../lib/utils/employeePayrollFields';
+import { Badge, EmptyState } from '../../lib/components/ui';
+import { EmployeeInfoContainer } from '../../lib/components/employee/EmployeeInfoContainer';
 
 
 /** 경과일 기준 일할 계수 (라벨 표기용): 지난 달 1, 다음 달 0, 진행 중인 달은 경과일/총일수 */
@@ -349,21 +346,6 @@ export function EmployeeCard({
   );
 }
 
-const EMPTY_FORM = {
-  name: '',
-  employment_type: 'regular' as EmploymentType,
-  base_salary: '',
-  hourly_wage: '',
-  non_taxable: '',
-  joined_at: '',
-  phone: '',
-  bank_name: '',
-  account_number: '',
-  dependents: '1',
-  user_id: null as string | null,
-  payroll: EMPTY_PAYROLL_FIELDS,
-};
-
 const PAYROLL_SCREEN_DOMAINS = ['employees', 'payroll', 'wage-history', 'payroll-submissions', 'attendance-work-issues'] as const;
 
 export function PayrollScreen({ active = true }: { active?: boolean }) {
@@ -406,10 +388,9 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
   const workScopeRef = useRef(workScope);
   workScopeRef.current = workScope;
   useEffect(() => () => { workScopeRef.current = ''; }, []);
-  const [modalVisible, setModalVisible] = useState(false);
-  const [editTarget, setEditTarget] = useState<Employee | null>(null);
-  const [form, setForm] = useState(EMPTY_FORM);
-  const [saving, setSaving] = useState(false);
+  // 직원 정보(S05) — 목록이 다시 받아지면 최신 직원 값으로 보여 준다.
+  const [infoTargetId, setInfoTargetId] = useState<string | null>(null);
+  const infoEmployee = infoTargetId ? allEmployees.find(employee => employee.id === infoTargetId) ?? null : null;
   const [workTarget, setWorkTarget] = useState<Employee | null>(null);
   const [workSubmission, setWorkSubmission] = useState<PayrollWorkSubmission | undefined>();
   useEffect(() => { setWorkTarget(null); setWorkSubmission(undefined); }, [workScope]);
@@ -417,7 +398,7 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
 
   // 급여 이력 보기 모달
   const [histTarget, setHistTarget] = useState<Employee | null>(null);
-  useEffect(() => { setHistTarget(null); setModalVisible(false); }, [store?.id, permissionRevision]);
+  useEffect(() => { setHistTarget(null); setInfoTargetId(null); }, [store?.id, permissionRevision]);
 
 
   // 탭 진입은 enabled: active와 재사용 시간(1분)이, 스택 화면에서 돌아올 때는 오래된 것만 다시 받는다.
@@ -446,18 +427,9 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
   function prevMonth() { changeMonth(-1); }
   function nextMonth() { changeMonth(1); }
 
-  function openAdd() {
-    if (!isAdmin) return;
-    setEditTarget(null);
-    setForm(EMPTY_FORM);
-    setModalVisible(true);
-  }
-
+  // 직원은 합류 신청으로만 들어온다(2026-11-27 결정). 예전 '직원 추가' 요청은 열지 않고 지운다.
   useEffect(() => {
     if (!active || !isAdmin || !pager?.employeeRegistration || pager.employeeRegistration.storeId !== store?.id) return;
-    setEditTarget(null);
-    setForm(EMPTY_FORM);
-    setModalVisible(true);
     pager.consumeEmployeeRegistration?.();
   }, [active, isAdmin, store?.id, pager?.employeeRegistration, pager?.consumeEmployeeRegistration]);
 
@@ -466,91 +438,7 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
       Alert.alert('수정 권한 없음', '직원 정보는 관리자만 수정할 수 있어요.');
       return;
     }
-    setEditTarget(employee);
-    setForm({
-      name: employee.name,
-      employment_type: employee.employment_type,
-      base_salary: String(employee.base_salary),
-      hourly_wage: employee.hourly_wage != null ? String(employee.hourly_wage) : '',
-      non_taxable: String(employee.non_taxable),
-      joined_at: employee.joined_at ?? '',
-      phone: employee.phone ?? '',
-      bank_name: employee.bank_name ?? '',
-      account_number: '',  // 저장된 번호는 암호화돼 있어 비워 두고, 바꿀 때만 입력한다
-      dependents: String(employee.dependents),
-      user_id: employee.user_id,
-      payroll: payrollFieldsFrom(employee),
-    });
-    setModalVisible(true);
-  }
-
-  async function handleSave() {
-    if (!isAdmin || workScopeRef.current !== workScope) return;
-    const name = form.name.trim();
-    const isPart = form.employment_type === 'part_time';
-    let payrollFields;
-    try { payrollFields = buildPayrollFieldsPayload(form.payroll, isPart, form.joined_at.trim() || null); }
-    catch (e) { Alert.alert('입력 확인', getErrorMessage(e)); return; }
-    // 비과세·부양가족은 정규직 또는 주15h 이상 파트타이머에만 적용
-    const useInsuranceFields = !isPart || (payrollFields.weekly_minutes != null && payrollFields.weekly_minutes >= 900);
-
-    const salary = Number(form.base_salary.replace(/,/g, '') || '0');
-    const hourly = Number(form.hourly_wage.replace(/,/g, '') || '0');
-    const nonTaxable = useInsuranceFields ? Number(form.non_taxable.replace(/,/g, '') || '0') : 0;
-    const dep = useInsuranceFields ? Number(form.dependents || '1') : 1;
-
-    if (editTarget && form.employment_type !== editTarget.employment_type) { Alert.alert('고용 형태 확인', '이 화면에서는 고용 형태를 변경할 수 없어요. 기존 정보를 유지한 뒤 관리자에게 급여 조건 전환을 요청해 주세요.'); return; }
-    if (!name) { Alert.alert('입력 오류', '이름을 입력해주세요.'); return; }
-    if ((!editTarget || form.joined_at.trim()) && !isWageDate(form.joined_at.trim())) { Alert.alert('입사일 확인', '최초 급여를 적용할 입사일을 YYYY-MM-DD 형식으로 입력해 주세요.'); return; }
-    if (!editTarget && isPart) {
-      if (!hourly || hourly <= 0) { Alert.alert('입력 오류', '시급을 입력해주세요.'); return; }
-    } else if (!editTarget) {
-      if (!salary || salary <= 0) { Alert.alert('입력 오류', '기본급을 입력해주세요.'); return; }
-    }
-
-    const newBase = isPart ? 0 : salary;
-    const newHourly = isPart ? hourly : null;
-
-    // 급여 외 정보 (이력과 무관 — 즉시 반영)
-    const basePayload = {
-      name,
-      employment_type: form.employment_type,
-      joined_at: form.joined_at.trim() || null,
-      phone: form.phone.trim() || null,
-      bank_name: form.bank_name.trim() || null,
-      // 비워 두면 기존 계좌번호를 유지한다(암호화 보관, 끝 4자리만 표시).
-      ...(form.account_number.trim() ? { account_number: form.account_number.trim() } : {}),
-      dependents: dep,
-      ...payrollFields,
-    };
-    const notice = minimumWageNotice({ isPart, hourly: isPart ? (editTarget?.hourly_wage ?? hourly) : null,
-      monthly: isPart ? null : (editTarget?.base_salary ?? salary), weeklyMinutes: payrollFields.weekly_minutes,
-      weeklyRestIncluded: payrollFields.weekly_rest_included });
-
-    setSaving(true);
-    try {
-      if (editTarget) {
-        await update(editTarget.id, basePayload);
-        setModalVisible(false);
-      } else {
-        const { income_type, weekly_minutes, weekly_rest_included, probation_ends_on, ...createPayload } = basePayload;
-        const created = await add({ ...createPayload, base_salary: newBase, hourly_wage: newHourly, non_taxable: nonTaxable });
-        // 최초 생성 RPC가 아직 새 필드를 받지 않아 생성 직후 같은 값으로 맞춘다.
-        try { await update(created.id, { income_type, weekly_minutes, weekly_rest_included, probation_ends_on }); }
-        catch {
-          // 직원은 이미 만들어졌다. 다시 저장하면 중복되므로 창을 닫고 수정에서 조건을 저장하게 한다.
-          setModalVisible(false);
-          Alert.alert('조건 저장 필요', `${name} 님은 등록됐지만 소득 구분·주 근무시간·수습 조건은 저장하지 못했어요. 직원 목록에서 ‘수정’을 눌러 다시 저장해 주세요.`);
-          return;
-        }
-        setModalVisible(false);
-      }
-      if (notice) Alert.alert('최저임금 확인', notice);
-    } catch (e: any) {
-      Alert.alert('저장 실패', getErrorMessage(e));
-    } finally {
-      setSaving(false);
-    }
+    setInfoTargetId(employee.id);
   }
 
   // 정규직은 기존 일할 계산, 파트타이머는 월별 작성 급여 기준
@@ -582,12 +470,6 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
   const totalLaborCost = regularAccruedGross + partTimeWageTotal;
   const totalExpectedPay = regularExpectedNet + partTimePayrolls.reduce((s, p) => s + Number(p.net_pay), 0);
   const monthLabel = `${year}년 ${month}월`;
-
-  const canSaveEmployee = form.name.trim().length > 0 && (!!editTarget || (
-    form.employment_type === 'part_time'
-      ? Number(form.hourly_wage.replace(/,/g, '') || '0') > 0
-      : Number(form.base_salary.replace(/,/g, '') || '0') > 0
-  ));
 
   return (
     <SafeAreaView style={styles.container} edges={['left', 'right']}>
@@ -707,7 +589,7 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
           <EmptyState
             icon="people-outline" illustration="staff"
             title="아직 직원이 없어요"
-            description="직원을 추가하면 4대보험과 실수령액이 자동으로 계산됩니다"
+            description="직원이 참여코드로 합류 신청하면 매장 설정의 멤버에서 최종 합류를 승인할 수 있어요."
           />
         ) : (
           employees.map(emp => {
@@ -757,179 +639,13 @@ export function PayrollScreen({ active = true }: { active?: boolean }) {
           })
         )}
 
-        {isAdmin && (
-          <TouchableOpacity style={styles.addBtn} onPress={openAdd} activeOpacity={0.7}>
-            <Text style={styles.addBtnText}>+ 직원 추가</Text>
-          </TouchableOpacity>
-        )}
 
       </ScrollView>
 
-      {/* 직원 추가/수정 모달 */}
-      <SheetModal visible={modalVisible} onRequestClose={() => setModalVisible(false)}>
-        <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-          <ScrollView style={styles.modalSheet} showsVerticalScrollIndicator={false}>
-            <View style={styles.modalHandle} />
-            <View style={styles.sheetHeader}>
-              <Pressable
-                onPress={() => setModalVisible(false)}
-                hitSlop={8}
-                style={({ pressed }) => [styles.sheetHeaderBtn, pressed && styles.sheetHeaderBtnPressed]}
-              >
-                <Text style={styles.sheetCancelText}>취소</Text>
-              </Pressable>
-              <Text style={styles.sheetHeaderTitle}>{editTarget ? '직원 수정' : '직원 추가'}</Text>
-              <Pressable
-                onPress={handleSave}
-                disabled={saving || !canSaveEmployee}
-                hitSlop={8}
-                style={({ pressed }) => [styles.sheetHeaderBtn, pressed && !saving && canSaveEmployee && styles.sheetHeaderBtnPressed]}
-              >
-                {saving
-                  ? <ActivityIndicator size="small" color={Colors.primary} />
-                  : <Text style={[styles.sheetSaveText, !canSaveEmployee && styles.sheetSaveTextDisabled]}>저장</Text>}
-              </Pressable>
-            </View>
-
-            <View style={styles.modalFieldGroup}>
-              <Field
-                label="이름"
-                value={form.name}
-                onChangeText={v => setForm(f => ({ ...f, name: v }))}
-                placeholder="홍길동"
-              />
-            </View>
-
-            <Text style={styles.fieldLabel}>고용 형태</Text>
-            <View style={styles.chipRow}>
-              {(['regular', 'part_time'] as EmploymentType[]).map(t => (
-                <TouchableOpacity
-                  key={t}
-                  style={[styles.chip, form.employment_type === t && styles.chipActive]}
-                  disabled={!!editTarget}
-                  onPress={() => setForm(f => ({ ...f, employment_type: t }))}
-                >
-                  <Text style={[styles.chipText, form.employment_type === t && styles.chipTextActive]}>
-                    {t === 'regular' ? '정규직' : '파트타임'}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            {editTarget && <Text style={styles.fieldHint}>기존 직원의 고용 형태는 이 화면에서 변경하지 않아요. 전환이 필요하면 관리자에게 급여 조건 변경을 요청해 주세요.</Text>}
-            <View style={styles.modalFieldGroup}>
-              <PayrollConditionFields value={form.payroll} onChange={payroll => setForm(f => ({ ...f, payroll }))}
-                isPart={form.employment_type === 'part_time'} joinedAt={form.joined_at} />
-
-              {!editTarget && (form.employment_type === 'part_time' ? (
-                <Field
-                  label="시급"
-                  value={form.hourly_wage}
-                  onChangeText={v => setForm(f => ({ ...f, hourly_wage: v }))}
-                  placeholder="13,000"
-                  keyboardType="numeric"
-                  helpText="제출·확인한 월별 실근무 시간(분)으로 급여를 계산합니다."
-                />
-              ) : (
-                <Field
-                  label="기본급"
-                  value={form.base_salary}
-                  onChangeText={v => setForm(f => ({ ...f, base_salary: v }))}
-                  placeholder="2,000,000"
-                  keyboardType="numeric"
-                />
-              ))}
-              {editTarget && <Text style={styles.summarySub}>금액·비과세·적용일은 직원 목록의 ‘급여 변경’에서 변경해 주세요.</Text>}
-
-              {/* 비과세·부양가족: 정규직 또는 주15h 이상 파트타이머만 */}
-              {(form.employment_type === 'regular' || Number(form.payroll.weekly_hours || '0') >= 15) && (
-                <>
-                  {!editTarget && <Field
-                    label="비과세 (식대 등)"
-                    value={form.non_taxable}
-                    onChangeText={v => setForm(f => ({ ...f, non_taxable: v }))}
-                    placeholder="200,000"
-                    keyboardType="numeric"
-                  />}
-                  <Field
-                    label="부양가족 수 (본인 포함)"
-                    value={form.dependents}
-                    onChangeText={v => setForm(f => ({ ...f, dependents: v }))}
-                    placeholder="1"
-                    keyboardType="numeric"
-                  />
-                </>
-              )}
-
-              <Field
-                label="입사일 (YYYY-MM-DD) *"
-                value={form.joined_at}
-                onChangeText={v => setForm(f => ({ ...f, joined_at: v }))}
-                placeholder="2026-06-01"
-              />
-
-              <Field
-                label="연락처"
-                value={form.phone}
-                onChangeText={v => setForm(f => ({ ...f, phone: v }))}
-                placeholder="010-0000-0000"
-                keyboardType="phone-pad"
-              />
-
-              <Field
-                label="은행"
-                value={form.bank_name}
-                onChangeText={v => setForm(f => ({ ...f, bank_name: v }))}
-                placeholder="국민은행"
-              />
-
-              <Field
-                label="계좌번호"
-                value={form.account_number}
-                onChangeText={v => setForm(f => ({ ...f, account_number: v }))}
-                placeholder={editTarget?.account_last4 ? `${maskedAccount(editTarget.account_last4)} · 바꿀 때만 입력` : '000-0000-0000-00'}
-                keyboardType="numeric"
-              />
-              <Text style={styles.fieldHint}>계좌번호는 암호화해서 보관하고, 목록에는 끝 4자리만 보여요.</Text>
-            </View>
-
-            {canManageStore && (
-              <>
-                <Text style={styles.fieldLabel}>직원 계정</Text>
-                <Text style={styles.fieldHint}>
-                  {form.user_id ? '참여 계정이 연결되어 있어요.' : '직원이 참여코드로 참여 신청하면 승인 시 이름·연락처로 연결돼요.'}
-                  {'\n'}신청 정보와 같은 이름·휴대폰 번호를 저장해주세요.
-                </Text>
-              </>
-            )}
-
-            {editTarget && canChangeAttendance(editTarget) && (
-              <TouchableOpacity
-                style={styles.deleteBtn}
-                onPress={() => {
-                  Alert.alert('직원 삭제', `${editTarget.name}을(를) 삭제할까요?`, [
-                    { text: '취소', style: 'cancel' },
-                    {
-                      text: '삭제', style: 'destructive',
-                      onPress: async () => {
-                        try {
-                          await deactivate(editTarget.id);
-                          setModalVisible(false);
-                        } catch (e: any) {
-                          Alert.alert('삭제 실패', getErrorMessage(e));
-                        }
-                      },
-                    },
-                  ]);
-                }}
-              >
-                <Text style={styles.deleteBtnText}>직원 삭제</Text>
-              </TouchableOpacity>
-            )}
-            <View style={{ height: 40 }} />
-          </ScrollView>
-        </KeyboardAvoidingView>
-      </SheetModal>
+      {/* 직원 정보(S05) */}
+      {isAdmin && infoEmployee && <EmployeeInfoContainer key={infoEmployee.id} employee={infoEmployee} store={store}
+        canDeactivate={canChangeAttendance(infoEmployee)} update={update} deactivate={deactivate}
+        refresh={() => Promise.all([refetchEmp(true), refetchHist()])} onClose={() => setInfoTargetId(null)} />}
 
       {/* 급여 변경 적용일 확인 모달 */}
 
@@ -1082,28 +798,12 @@ const styles = StyleSheet.create({
   removePayrollRow: { flexDirection: 'row', justifyContent: 'flex-end' },
   removePayrollBtn: { paddingVertical: 8, paddingHorizontal: 4 },
   removePayrollBtnText: { fontSize: 12, color: '#D94040' },
-  addBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: Colors.white, borderRadius: 20, borderWidth: 1, borderColor: Colors.homeBorder, paddingVertical: 14 },
-  addBtnText: { fontSize: 14, fontWeight: '600', color: Colors.action },
   modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: Colors.overlay },
   modalSheet: { backgroundColor: Colors.homeCanvas, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, maxHeight: '90%' },
   modalHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: Colors.gray200, alignSelf: 'center', marginBottom: 20 },
   modalTitle: { fontSize: 18, fontWeight: '700', color: Colors.black, marginBottom: 4 },
-  sheetHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: Colors.homeCanvas, marginBottom: 12, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: Colors.homeBorder },
-  sheetHeaderTitle: { fontSize: 18, fontWeight: '700', color: Colors.black },
-  sheetHeaderBtn: { minWidth: 44, minHeight: 44, justifyContent: 'center', alignItems: 'center', paddingVertical: 6, paddingHorizontal: 4, borderRadius: 12 },
-  sheetHeaderBtnPressed: { backgroundColor: Colors.gray100 },
-  sheetCancelText: { fontSize: 15, fontWeight: '500', color: Colors.gray500 },
-  sheetSaveText: { fontSize: 15, fontWeight: '700', color: Colors.action },
-  sheetSaveTextDisabled: { color: Colors.gray300 },
-  fieldLabel: { fontSize: 13, fontWeight: '600', color: Colors.gray600, marginBottom: 6, marginTop: 14 },
   fieldHint: { fontSize: 13, color: Colors.gray500, marginBottom: 8, lineHeight: 19 },
   input: { minHeight: 44, borderWidth: 1, borderColor: Colors.homeBorder, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, color: Colors.black, backgroundColor: Colors.white },
-  modalFieldGroup: { gap: 14, marginTop: 14 },
-  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chip: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 14, paddingVertical: 9, borderRadius: 14, borderWidth: 1, borderColor: Colors.homeBorder, backgroundColor: Colors.white },
-  chipActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
-  chipText: { fontSize: 13, color: Colors.gray500 },
-  chipTextActive: { color: Colors.white, fontWeight: '500' },
   switchRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 16 },
   switchLabel: { fontSize: 14, fontWeight: '600', color: Colors.black },
   modalBtns: { flexDirection: 'row', gap: 10, marginTop: 24 },
@@ -1111,8 +811,6 @@ const styles = StyleSheet.create({
   cancelBtnText: { fontSize: 14, fontWeight: '600', color: Colors.gray600 },
   saveBtn: { flex: 1, minHeight: 44, paddingVertical: 13, borderRadius: 14, backgroundColor: Colors.primary, alignItems: 'center', justifyContent: 'center' },
   saveBtnText: { fontSize: 14, fontWeight: '600', color: Colors.white },
-  deleteBtn: { minHeight: 44, marginTop: 12, paddingVertical: 13, alignItems: 'center', justifyContent: 'center' },
-  deleteBtnText: { fontSize: 14, color: '#D94040' },
 });
 
 export default PayrollScreen;

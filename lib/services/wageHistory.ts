@@ -45,7 +45,8 @@ export async function addWageChange(input: WageChangeInput): Promise<WageHistory
     p_non_taxable: input.nonTaxable,
     p_memo: input.memo ?? null,
   }).single();
-  if (error) throw new Error(error.message);
+  // 서버가 응답한 거절은 code를 남긴다(전송 실패와 구분해 결과불명 처리를 정확히 하려고).
+  if (error) throw Object.assign(new Error(error.message), { code: error.code });
   // The transaction is committed. A cache refresh failure must not turn it into a failed write.
   try { await invalidateCachedStore(input.storeId); }
   catch { return { ...(data as WageHistory), cacheRefreshFailed: true }; }
