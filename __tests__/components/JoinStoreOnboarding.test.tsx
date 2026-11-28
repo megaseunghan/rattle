@@ -76,14 +76,20 @@ it('질문이 아래로 하나씩 쌓이고 제출 전에는 서버에 보내지
   expect(screen.getByText('신청했어요')).toBeTruthy();
   expect(screen.getByText(/관리자 확인을 기다려 주세요/)).toBeTruthy();
 });
-it('답이 잘못되면 그 질문에서 멈추고 바로 고칠 수 있다', async () => {
+it('답이 비면 다음을 꺼 두고, 형식이 틀리면 그 질문에서 멈추고 바로 고칠 수 있다', async () => {
   await renderJoin();
-  next();
-  expect(screen.getByRole('alert').props.children).toBe('이름을 입력해주세요.');
+  const nextButton = () => screen.getByRole('button', { name: '다음' });
+  expect(nextButton().props.accessibilityState.disabled).toBe(true);
   fireEvent.changeText(screen.getByLabelText('이름'), '신입');
+  expect(nextButton().props.accessibilityState.disabled).toBe(false);
+  next();
+  fireEvent.changeText(screen.getByLabelText('휴대폰 번호'), '0101234');
+  next();
+  expect(screen.getByRole('alert').props.children).toBe('휴대폰 번호를 확인해주세요.');
+  fireEvent.changeText(screen.getByLabelText('휴대폰 번호'), '01012345678');
   expect(screen.queryByRole('alert')).toBeNull();
   next();
-  expect(screen.getByLabelText('휴대폰 번호')).toBeTruthy();
+  expect(screen.getByText('어떤 형태로 일하나요?')).toBeTruthy();
   expect(mockSubmit).not.toHaveBeenCalled();
 });
 it('뒤로 가도 이전 답변을 유지한다', async () => {

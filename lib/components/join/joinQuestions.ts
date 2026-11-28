@@ -64,3 +64,23 @@ export function joinAnswerText(step: JoinQuestion, identity: JoinIdentity, draft
     default: return '';
   }
 }
+
+/**
+ * 시안 join-v9 canNext: 답이 비어 있으면 하단 '다음'을 꺼 둔다. 형식 검사(번호 자릿수 등)는 누른 뒤 그 자리에서 안내한다.
+ * 휠(주 근무시간·입사일)은 기본값이 보이므로 답한 것으로 보고, 주 근무시간 0분만 막는다. 비과세는 0원이 기본이다.
+ */
+export function isJoinQuestionAnswered(step: JoinQuestion, identity: JoinIdentity, draft: OnboardingDraft, employment: EmploymentType | null): boolean {
+  switch (step) {
+    case 'name': return !!identity.name.trim();
+    case 'phone': return !!identity.phone.replace(/[^0-9]/g, '');
+    case 'employmentType': return !!employment;
+    case 'incomeType': return draft.incomeType != null;
+    case 'weeklyRest': return draft.weeklyRest != null;
+    case 'weeklyMinutes': return draft.weeklyMinutes !== 0;
+    case 'hourlyWage': return !!draft.hourlyWage.trim();
+    case 'baseSalary': return !!draft.baseSalary.trim();
+    case 'bankName': return !!draft.bankName.trim();
+    case 'accountNumber': return !!draft.accountNumber.trim();
+    default: return true;
+  }
+}

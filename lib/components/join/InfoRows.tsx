@@ -20,6 +20,8 @@ export interface InfoRowProps {
   value: string;
   /** 직원이 고른 값 표시('직원이 고름', '직원이 잘 모르겠대요') */
   tag?: string;
+  /** 시안 join-v9: 직원이 고른 값은 연파랑, 잘 모르겠다고 한 값은 회색 꼬리표 */
+  tagTone?: 'chosen' | 'unsure';
   /** ask: 정해야 하는 값(행동 색), none: 아직 안 정한 값(회색) */
   tone?: RowTone;
   numeric?: boolean;
@@ -27,14 +29,14 @@ export interface InfoRowProps {
   disabled?: boolean;
 }
 
-export function InfoRow({ label, value, tag, tone = 'normal', numeric = false, onPress, disabled }: InfoRowProps) {
+export function InfoRow({ label, value, tag, tagTone = 'unsure', tone = 'normal', numeric = false, onPress, disabled }: InfoRowProps) {
   const pressable = !!onPress && !disabled;
   return <Pressable accessibilityRole={pressable ? 'button' : undefined} disabled={!pressable} onPress={onPress}
     accessibilityLabel={`${label}${tag ? `, ${tag}` : ''}, ${value}`} accessibilityHint={pressable ? '눌러서 바꿀 수 있어요' : undefined}
     style={({ pressed }) => [styles.row, pressed && styles.pressed]}>
     <View style={styles.labelWrap}>
       <Text style={styles.label}>{label}</Text>
-      {!!tag && <Text style={[styles.tag, tone === 'ask' && styles.tagAsk]}>{tag}</Text>}
+      {!!tag && <Text style={[styles.tag, tagTone === 'chosen' && styles.tagChosen]}>{tag}</Text>}
     </View>
     <View style={styles.valueWrap}>
       <Text style={[styles.value, numeric && styles.numeric, tone === 'ask' && styles.ask, tone === 'none' && styles.none, !pressable && styles.fixed]}
@@ -53,7 +55,7 @@ const styles = StyleSheet.create({
   labelWrap: { flexShrink: 1, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6 },
   label: { fontFamily: Fonts.wantedRegular, fontSize: Type.md, color: Colors.gray700 },
   tag: { fontFamily: Fonts.wantedMedium, fontSize: Type.xs, color: Colors.gray600, backgroundColor: Colors.chipBg, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2, overflow: 'hidden' },
-  tagAsk: { color: Colors.action, backgroundColor: Colors.tinted },
+  tagChosen: { color: Colors.action, backgroundColor: Colors.tinted },
   valueWrap: { flexShrink: 1, flexDirection: 'row', alignItems: 'center', gap: 4 },
   value: { flexShrink: 1, textAlign: 'right', fontFamily: Fonts.wantedSemiBold, fontSize: Type.md, color: Colors.black },
   numeric: { fontFamily: Fonts.geistSemiBold, fontVariant: ['tabular-nums'] },

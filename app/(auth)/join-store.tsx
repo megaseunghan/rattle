@@ -20,7 +20,7 @@ import {
   stepsReducer, type QuestionStepsAction, type QuestionStepsState,
 } from '../../lib/components/question-flow';
 import { JoinQuestionInput } from '../../lib/components/join/JoinQuestionInput';
-import { JOIN_QUESTIONS, joinAnswerText } from '../../lib/components/join/joinQuestions';
+import { isJoinQuestionAnswered, JOIN_QUESTIONS, joinAnswerText } from '../../lib/components/join/joinQuestions';
 import { koreanDate } from '../../lib/utils/regularWages';
 import type { EmploymentType } from '../../types';
 
@@ -149,7 +149,7 @@ export default function JoinStoreScreen() {
   const footer = <>
     {isLast && <Text style={styles.submitNote}>{SUBMIT_NOTE}</Text>}
     <FlowNextButton label={isLast ? '관리자에게 제출' : flow.editing != null ? '확인' : '다음'} onPress={next} loading={loading}
-      disabled={activeStep === 'employmentType' && !employment} />
+      disabled={!isJoinQuestionAnswered(activeStep, identity, draft, employment)} />
   </>;
   return <SafeAreaView style={styles.container} edges={['top', 'bottom', 'left', 'right']}>
     <QuestionFlowLayout onBack={back} backLabel="뒤로가기" backDisabled={loading} footer={footer}

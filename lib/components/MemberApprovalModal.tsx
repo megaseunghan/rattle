@@ -157,6 +157,8 @@ function Applicant({ member }: { member: StoreMember }) {
 }
 
 const KEEP_EXISTING = '지금 조건 그대로';
+const CHOSEN_TAG = '직원이 고름';
+const UNSURE_TAG = '직원이 잘 모르겠대요';
 
 function ApprovalRows({ draft, touched, hasProfile, incomeAsked, keepProbation, keepIncome, wageError, probation, storeRate, disabled, onOpen }: {
   /** 재직 직원에 연결되고 관리자가 아직 고르지 않아 기존 값을 그대로 두는 항목 */
@@ -174,10 +176,10 @@ function ApprovalRows({ draft, touched, hasProfile, incomeAsked, keepProbation, 
   [part, draft.hourlyWage, draft.baseSalary, draft.weeklyMinutes, restIncluded, draft.joinedAt]);
   const incomeUnknown = !draft.incomeType || draft.incomeType === 'unknown';
   // 이전 앱 신청은 계약을 묻지 않았으니 '직원이 고름'으로 보이지 않는다.
-  const incomeTag = touched.incomeType || !hasProfile || !incomeAsked ? undefined : draft.incomeType === 'unknown' ? '직원이 잘 모르겠대요' : '직원이 고름';
-  const restTag = touched.weeklyRest || !hasProfile || !draft.weeklyRest ? undefined : draft.weeklyRest === 'unknown' ? '직원이 잘 모르겠대요' : '직원이 고름';
+  const incomeTag = touched.incomeType || !hasProfile || !incomeAsked ? undefined : draft.incomeType === 'unknown' ? UNSURE_TAG : CHOSEN_TAG;
+  const restTag = touched.weeklyRest || !hasProfile || !draft.weeklyRest ? undefined : draft.weeklyRest === 'unknown' ? UNSURE_TAG : CHOSEN_TAG;
   const row = (label: string, value: string, sheet: ApprovalSheetKey, extra: { tag?: string; numeric?: boolean; ask?: boolean } = {}) =>
-    <InfoRow label={label} value={value || notSet} tone={extra.ask ? 'ask' : value ? 'normal' : 'none'} tag={extra.tag}
+    <InfoRow label={label} value={value || notSet} tone={extra.ask ? 'ask' : value ? 'normal' : 'none'} tag={extra.tag} tagTone={extra.tag === CHOSEN_TAG ? 'chosen' : 'unsure'}
       numeric={extra.numeric && !!value} disabled={disabled} onPress={() => onOpen(sheet)} />;
   return <>
     <RowGroup title="급여">
