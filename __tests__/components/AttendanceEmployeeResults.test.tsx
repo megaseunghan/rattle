@@ -30,14 +30,16 @@ it('S43은 퇴근 결과를 오늘 기록에만 반영하고 자동기록 조회
   expect(view.getByText('오늘 내 기록')).toBeTruthy(); expect(view.getByText(/(오후|PM) 12:00/)).toBeTruthy();
   expectNoProcessingUi(view);
 });
-it('홈은 최신 퇴근 시각과 기존 출퇴근 행동만 표시한다', () => {
+it('홈은 근무 중이면 퇴근하기를, 퇴근 후에는 최신 근무 시간대만 표시한다(S04 2026-11-27)', () => {
   const view = render(<HomeAttendanceCard employeeId={employee.id} employee={employee} active refreshKey={0} />);
+  expect(view.getByText('출근 09:00 · 근무 중')).toBeTruthy(); expect(view.getByText('퇴근하기')).toBeTruthy();
   mockToday.end = end; view.rerender(<HomeAttendanceCard employeeId={employee.id} employee={employee} active refreshKey={1} />);
-  expect(view.getByText('12:00')).toBeTruthy(); expect(view.getAllByText('출근')).toHaveLength(2); expectNoProcessingUi(view);
+  expect(view.getByText('오늘 근무 끝')).toBeTruthy(); expect(view.getByText('09:00 ~ 12:00')).toBeTruthy();
+  expect(view.queryByText('퇴근하기')).toBeNull(); expectNoProcessingUi(view);
 });
 it('직원 행이 없으면 이름·역할은 유지하고 출퇴근 시각과 행동을 숨긴다', () => {
   const view = render(<HomeAttendanceCard employee={null} active refreshKey={0} />);
   expect(view.getByLabelText('내 정보 보기')).toBeTruthy();
-  expect(view.queryByText('출근 예정')).toBeNull(); expect(view.queryByText('퇴근 예정')).toBeNull();
+  expect(view.queryByText('오늘 근무')).toBeNull(); expect(view.queryByText('출근하기')).toBeNull();
   expect(view.queryByHintText('내 출퇴근 QR을 열어요')).toBeNull();
 });
