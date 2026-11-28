@@ -103,18 +103,69 @@ export async function restoreDeletedStore(storeId: string): Promise<void> {
   });
 }
 
-/** Idempotent owner setup; no business number or payroll changes. */
-export async function createStoreWithSetup(input: {
-  name: string; posChoice: import('../../types').PosSetupChoice;
-  shareScope: import('../../types').FinancialShareScope; requestId: string;
-}): Promise<import('../../types').Store> {
-  const { data, error } = await supabase.rpc('create_store_with_setup', {
-    p_name: input.name.trim(), p_pos_choice: input.posChoice,
-    p_share_scope: input.shareScope, p_request_id: input.requestId,
+export interface CreateStoreInput {
+  name: string;
+  shareScope: import('../../types').FinancialShareScope;
+  /** 같은 시도의 재요청이 매장을 두 번 만들지 않게 하는 ID */
+  requestId: string;
+  /** 비우면 null(건너뛰기) */
+  address: string | null;
+  /** 'HH:00'. 24시간 영업이면 하루 매출을 나누는 시각(기본 06:00) */
+  closingTime: string;
+  isOpen24h: boolean;
+  /** 0 = 수습 없음 */
+  probationMonths: 0 | 1 | 2 | 3;
+  /** 0 초과 1 이하(수습 없음이면 무시하고 기본 0.9로 둔다) */
+  probationRate: number;
+}
+
+/** 서버가 매장을 넣기 전에 거절했다(입력 검사·로그인). 매장이 만들어지지 않았으니 고쳐서 새 요청으로 다시 시도해도 된다. */
+export class StoreSetupNotCreatedError extends UserFacingError {
+  constructor(message: string) { super(message); this.name = 'StoreSetupNotCreatedError'; }
+}
+
+/**
+ * 매장 만들기(s02-v16). POS 연결은 매장 설정에서 시작하므로 'later'로 고정한다(20261127133000).
+ * 같은 requestId 재요청은 처음 만든 매장을 그대로 돌려준다.
+ */
+export async function createStoreWithSetup(input: CreateStoreInput): Promise<Store> {
+  const { data, error } = await supabase.rpc('create_store_with_setup_v2', {
+    p_name: input.name.trim(), p_share_scope: input.shareScope, p_request_id: input.requestId,
+    p_address: input.address?.trim() ? input.address.trim() : null,
+    p_closing_time: input.closingTime, p_is_open_24h: input.isOpen24h,
+    p_probation_months: input.probationMonths === 0 ? null : input.probationMonths,
+    p_probation_rate: input.probationMonths === 0 ? null : input.probationRate,
   });
-  if (error) throw new Error(error.message);
+  if (error) {
+    if (error.message.includes('INVALID_STORE_SETUP')) throw new StoreSetupNotCreatedError('입력한 내용을 다시 확인해 주세요.');
+    if (error.message.includes('AUTH_REQUIRED')) throw new StoreSetupNotCreatedError('다시 로그인한 뒤 시도해 주세요.');
+    throw new Error(error.message);
+  }
   if (!data?.id) throw new Error('Store creation returned no store');
-  return data;
+  return data as Store;
+}
+
+/** 마저 채우기 칸. 홈 유도·마저 채우기 화면이 같은 기준으로 센다. */
+export const STORE_FILL_COLUMNS = 'id, payroll_close_day, payday_month_offset, payday_day, payday_holiday_rule, headcount_class, '
+  + 'business_entity_type, vat_type, business_number, social_insurance_enrolled, industrial_accident_industry';
+
+export type StoreFillState = Pick<Store, 'id'> & Required<import('../../types').StoreFillPatch>;
+
+export async function getStoreFill(storeId: string): Promise<StoreFillState> {
+  const { data, error } = await supabase.from('stores').select(STORE_FILL_COLUMNS).eq('id', storeId).single();
+  if (error) throw new Error(error.message);
+  return data as unknown as StoreFillState;
+}
+
+/** 사장님만 바꿀 수 있다(서버 트리거 STORE_FILL_OWNER_REQUIRED). 고른 칸만 바로 저장한다. */
+export async function updateStoreFill(storeId: string, patch: import('../../types').StoreFillPatch): Promise<StoreFillState> {
+  if (Object.keys(patch).length === 0) throw new Error('Empty store fill patch');
+  const { data, error } = await supabase.from('stores').update(patch).eq('id', storeId).select(STORE_FILL_COLUMNS).single();
+  if (error?.code === '23514') throw new UserFacingError('고른 값을 다시 확인해 주세요.');
+  if (error) throw toUserFacing(error, {
+    STORE_FILL_OWNER_REQUIRED: '사장님만 바꿀 수 있어요.',
+  });
+  return data as unknown as StoreFillState;
 }
 
 export interface MyStores {
