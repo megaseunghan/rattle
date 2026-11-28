@@ -55,6 +55,11 @@ export function MemberApprovalModal({ member, candidates, busy, onChoose, onReje
   const storeRate = storeDefaults?.default_probation_rate ?? null;
   // 관리자가 수습을 정하기 전에는 매장 기본 기간·비율을 따른다(입사일이 바뀌면 다시 계산).
   const probation = probationChoice ?? defaultProbation(draft.joinedAt, storeMonths, storeRate);
+  // 같은 이름·연락처의 재직 직원에 연결되면 그 직원의 수습·계약을 매장 기본값으로 덮지 않는다.
+  // 관리자가 직접 고르지 않은 항목은 리뷰에서 빼서 보내고(서버는 키가 없으면 기존 값을 유지), 화면에는 '지금 조건 그대로'로 보인다.
+  const linksExisting = candidates.some(e => e.is_active);
+  const keepProbation = linksExisting && probationChoice == null;
+  const keepIncome = linksExisting && !touched.incomeType && profile?.income_type == null;
 
   useEffect(() => {
     if (!profile?.account_number?.startsWith('enc:')) return;
@@ -87,7 +92,12 @@ export function MemberApprovalModal({ member, candidates, busy, onChoose, onReje
       onChoose(choice, { preserve_existing_wage: true, wage_history_id: preserved.wage_history_id! }); return;
     }
     if (cannotApprove) return;
-    try { onChoose(choice, buildApprovalReview(draft, probation)); }
+    try {
+      const { is_probation, probation_ends_on, probation_rate, income_type, ...rest } = buildApprovalReview(draft, probation);
+      onChoose(choice, { ...rest,
+        ...(keepProbation ? {} : { is_probation, probation_ends_on, probation_rate }),
+        ...(keepIncome ? {} : { income_type }) });
+    }
     catch (e) { Alert.alert('입력 확인', getErrorMessage(e, '입력한 내용을 다시 확인해 주세요.')); }
   }
 
@@ -105,7 +115,7 @@ export function MemberApprovalModal({ member, candidates, busy, onChoose, onReje
         <Applicant member={member} />
         {!profile && !preserved && <Text style={styles.body}>근무 정보가 아직 없어요. 직원에게 확인한 내용을 입력해주세요.</Text>}
         {preserved ? <Text style={styles.body}>기존 직원 정보와 급여 조건을 유지하고 계정만 연결해요. 새 내용을 적용하려면 기존 급여 선택을 해제해주세요.</Text>
-          : <ApprovalRows incomeAsked={profile?.income_type != null} draft={draft} touched={touched} hasProfile={!!profile} wageError={wageError} probation={probation} storeRate={storeRate}
+          : <ApprovalRows keepProbation={keepProbation} keepIncome={keepIncome} incomeAsked={profile?.income_type != null} draft={draft} touched={touched} hasProfile={!!profile} wageError={wageError} probation={probation} storeRate={storeRate}
             disabled={busy} onOpen={setSheet} />}
         {!preserved && !!accountNote && <GrayNotice message={accountNote} />}
         {candidates.length > 0 && !preserved && !retiredOnly && <Text style={styles.body}>기존 직원에 연결하면 현재 조건은 위 내용으로 바뀌고, 급여 조건 이력은 오늘부터 추가돼요. 이미 작성된 급여 내역은 유지돼요.</Text>}
@@ -146,7 +156,11 @@ function Applicant({ member }: { member: StoreMember }) {
   </View>;
 }
 
-function ApprovalRows({ draft, touched, hasProfile, incomeAsked, wageError, probation, storeRate, disabled, onOpen }: {
+const KEEP_EXISTING = '지금 조건 그대로';
+
+function ApprovalRows({ draft, touched, hasProfile, incomeAsked, keepProbation, keepIncome, wageError, probation, storeRate, disabled, onOpen }: {
+  /** 재직 직원에 연결되고 관리자가 아직 고르지 않아 기존 값을 그대로 두는 항목 */
+  keepProbation: boolean; keepIncome: boolean;
   draft: OnboardingDraft; touched: { incomeType: boolean; weeklyRest: boolean }; hasProfile: boolean;
   /** 신청에서 계약을 물었는지(이전 앱 신청은 묻지 않았다) */
   incomeAsked: boolean; wageError: string;
@@ -183,9 +197,9 @@ function ApprovalRows({ draft, touched, hasProfile, incomeAsked, wageError, prob
       {row('입사일', draft.joinedAt ? formatKoreanDate(draft.joinedAt) : '', 'joined')}
     </RowGroup>
     <RowGroup title="세금">
-      {row('계약', incomeUnknown ? '정해 주세요' : choiceTitle(INCOME_CHOICES, draft.incomeType), 'inc', { tag: incomeTag, ask: incomeUnknown })}
+      {row('계약', keepIncome ? KEEP_EXISTING : incomeUnknown ? '정해 주세요' : choiceTitle(INCOME_CHOICES, draft.incomeType), 'inc', { tag: keepIncome ? undefined : incomeTag, ask: !keepIncome && incomeUnknown })}
     </RowGroup>
-    <RowGroup title="수습">{row('수습 적용', probationText(probation, storeRate), 'prob')}</RowGroup>
+    <RowGroup title="수습">{row('수습 적용', keepProbation ? KEEP_EXISTING : probationText(probation, storeRate), 'prob')}</RowGroup>
     <RowGroup title="계좌">{row('급여 계좌', accountText(draft.bankName, draft.accountNumber), 'acct', { numeric: false })}</RowGroup>
   </>;
 }

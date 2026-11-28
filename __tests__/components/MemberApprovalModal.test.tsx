@@ -142,6 +142,29 @@ it('계좌번호를 푸는 동안에는 확인 요청 대신 불러오는 중으
   expect(screen.queryByText('계좌번호를 불러오는 중이에요.')).toBeNull();
 });
 
+it('재직 직원에 연결되면 고르지 않은 수습·계약은 매장 기본값으로 덮지 않고 그대로 둔다', () => {
+  const choose = jest.fn();
+  const active = { ...candidate, id: 'cur', name: '재직 직원', is_active: true };
+  const screen = render(<MemberApprovalModal profile={profile} member={member} candidates={[active]} busy={false} onChoose={choose} onClose={jest.fn()}
+    storeDefaults={{ default_probation_months: 3, default_probation_rate: 0.9 }} />);
+  expect(row(screen, /^수습 적용/).props.accessibilityLabel).toContain('지금 조건 그대로');
+  expect(row(screen, /^계약/).props.accessibilityLabel).toContain('지금 조건 그대로');
+  fireEvent.press(finalButton(screen));
+  const review = choose.mock.calls[0][1];
+  expect(review).not.toHaveProperty('is_probation');
+  expect(review).not.toHaveProperty('probation_rate');
+  expect(review).not.toHaveProperty('income_type');
+  expect(review).toMatchObject({ base_salary: 3000000 });
+});
+
+it('새 직원이면 매장 기본 수습과 계약을 함께 보낸다', () => {
+  const choose = jest.fn();
+  const screen = render(<MemberApprovalModal profile={profile} member={member} candidates={[]} busy={false} onChoose={choose} onClose={jest.fn()}
+    storeDefaults={{ default_probation_months: 3, default_probation_rate: 0.9 }} />);
+  fireEvent.press(finalButton(screen));
+  expect(choose.mock.calls[0][1]).toMatchObject({ is_probation: true, probation_rate: 0.9, income_type: 'employee' });
+});
+
 it('계약이 잘 모르겠어요면 관리자가 정해야 최종 합류가 켜진다', () => {
   const choose = jest.fn();
   const screen = render(<MemberApprovalModal profile={{ ...profile, income_type: 'unknown' }} member={member} candidates={[]} busy={false} onChoose={choose} onClose={jest.fn()} />);
