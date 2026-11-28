@@ -49,6 +49,8 @@ export function MemberApprovalModal({ member, candidates, busy, onChoose, onReje
   const [probationChoice, setProbationChoice] = useState<JoinProbationReview | null>(null);
   const [sheet, setSheet] = useState<ApprovalSheetKey | null>(null);
   const [accountNote, setAccountNote] = useState<string | null>(null);
+  // 암호화된 계좌번호를 푸는 동안에는 '계좌번호를 확인해주세요'로 잘못 안내하지 않고 기다린다.
+  const [accountLoading, setAccountLoading] = useState(() => !!profile?.account_number?.startsWith('enc:'));
   const storeMonths = storeDefaults?.default_probation_months ?? null;
   const storeRate = storeDefaults?.default_probation_rate ?? null;
   // 관리자가 수습을 정하기 전에는 매장 기본 기간·비율을 따른다(입사일이 바뀌면 다시 계산).
@@ -57,19 +59,21 @@ export function MemberApprovalModal({ member, candidates, busy, onChoose, onReje
   useEffect(() => {
     if (!profile?.account_number?.startsWith('enc:')) return;
     let alive = true;
+    setAccountLoading(true);
     revealAccountNumber('join_profile', member.id)
       .then(number => {
         if (!alive) return;
         if (number) setDraft(d => (d.accountNumber ? d : { ...d, accountNumber: number }));
         else setAccountNote('제출한 계좌번호를 확인하지 못했어요. 직원에게 확인해 다시 입력해 주세요.');
       })
-      .catch(e => { if (alive) setAccountNote(getErrorMessage(e, '계좌번호를 불러오지 못했어요. 다시 열어 주세요.')); });
+      .catch(e => { if (alive) setAccountNote(getErrorMessage(e, '계좌번호를 불러오지 못했어요. 다시 열어 주세요.')); })
+      .finally(() => { if (alive) setAccountLoading(false); });
     return () => { alive = false; };
   }, [member.id, profile?.account_number]);
 
   const wageError = adminWageError(draft);
   const draftError = adminDraftError(draft);
-  const cannotApprove = busy || !!preserved || !!draftError;
+  const cannotApprove = busy || !!preserved || !!draftError || accountLoading;
 
   function updateDraft(patch: Partial<OnboardingDraft>, field?: 'incomeType' | 'weeklyRest') {
     setDraft(current => ({ ...current, ...patch }));
@@ -111,7 +115,8 @@ export function MemberApprovalModal({ member, candidates, busy, onChoose, onReje
           onRehire={employeeId => choose({ kind: 'rehire', employeeId })} onNew={() => choose({ kind: 'new' })} />}
       </ScrollView>
       <View style={styles.bottom}>
-        {!preserved && !!draftError && !wageError && <Text style={styles.hint}>{draftError}</Text>}
+        {!preserved && accountLoading ? <Text style={styles.hint}>계좌번호를 불러오는 중이에요.</Text>
+          : !preserved && !!draftError && !wageError && <Text style={styles.hint}>{draftError}</Text>}
         <View style={styles.buttons}>
           {onReject && <Pressable accessibilityRole="button" disabled={busy} onPress={onReject} style={({ pressed }) => [styles.cta, styles.secondary, pressed && styles.pressed]}>
             <Text style={styles.secondaryText}>거절</Text>

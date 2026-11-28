@@ -129,6 +129,19 @@ it('암호화된 계좌번호는 화면에 보이지 않고 전체 번호를 받
   expect(choose).toHaveBeenCalledWith({ kind: 'auto' }, expect.objectContaining({ account_number: '123456123456' }));
 });
 
+it('계좌번호를 푸는 동안에는 확인 요청 대신 불러오는 중으로 안내하고 최종 합류를 막는다', async () => {
+  let resolve: (value: string) => void = () => {};
+  mockReveal.mockReturnValueOnce(new Promise<string>(r => { resolve = r; }));
+  const encrypted = { ...profile, account_number: 'enc:v1:3456:abc' } as JoinOnboardingProfile;
+  const screen = render(<MemberApprovalModal profile={encrypted} member={{ ...member, id: 'm2' } as StoreMember} candidates={[]} busy={false} onChoose={jest.fn()} onClose={jest.fn()} />);
+  expect(screen.getByText('계좌번호를 불러오는 중이에요.')).toBeTruthy();
+  expect(screen.queryByText('계좌번호를 확인해주세요.')).toBeNull();
+  expect(finalButton(screen).props.accessibilityState.disabled).toBe(true);
+  resolve('123456123456');
+  await waitFor(() => expect(finalButton(screen).props.accessibilityState.disabled).toBe(false));
+  expect(screen.queryByText('계좌번호를 불러오는 중이에요.')).toBeNull();
+});
+
 it('계약이 잘 모르겠어요면 관리자가 정해야 최종 합류가 켜진다', () => {
   const choose = jest.fn();
   const screen = render(<MemberApprovalModal profile={{ ...profile, income_type: 'unknown' }} member={member} candidates={[]} busy={false} onChoose={choose} onClose={jest.fn()} />);
