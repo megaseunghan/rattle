@@ -8,7 +8,7 @@ import type { StoreFillValues } from '../../utils/storeFill';
 import type { IndustrialAccidentIndustry } from '../../services/industrialAccident';
 import { FillSheet } from './FillSheet';
 import { ChoiceList, SheetNote } from './FillParts';
-import { HEADCOUNT_OPTIONS, INDUSTRY_HINTS, INDUSTRY_OTHER, INSURANCE_OPTIONS, type FillOption } from './storeFillCopy';
+import { HEADCOUNT_OPTIONS, INDUSTRY_HINTS, INDUSTRY_UNLISTED, INSURANCE_OPTIONS, type FillOption } from './storeFillCopy';
 
 interface BaseProps {
   visible: boolean;
@@ -51,7 +51,7 @@ export interface IndustrySheetProps extends BaseProps {
   industriesLoading: boolean;
   industriesFailed: boolean;
   onRetryIndustries: () => void;
-  /** INDUSTRY_OTHER면 '목록에 없어요' */
+  /** INDUSTRY_UNLISTED면 '목록에 없어요' */
   selected: string | null;
   onPick: (code: string) => void;
 }
@@ -60,8 +60,9 @@ export interface IndustrySheetProps extends BaseProps {
 export function IndustrySheet(props: IndustrySheetProps) {
   const { visible, saving, error, onClose, industries, industriesLoading, industriesFailed, onRetryIndustries, selected, onPick } = props;
   const options: FillOption<string>[] = [
-    ...(industries ?? []).map(item => ({ value: item.code, title: item.name, description: INDUSTRY_HINTS[item.code] })),
-    { value: INDUSTRY_OTHER, title: '목록에 없어요' },
+    ...(industries ?? []).filter(item => item.code !== INDUSTRY_UNLISTED)
+      .map(item => ({ value: item.code, title: item.name, description: INDUSTRY_HINTS[item.code] })),
+    { value: INDUSTRY_UNLISTED, title: '목록에 없어요' },
   ];
   return (
     <FillSheet visible={visible} onClose={onClose} title="어떤 업종인가요?">

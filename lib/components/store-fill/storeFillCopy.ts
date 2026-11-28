@@ -24,8 +24,8 @@ export const INSURANCE_OPTIONS: FillOption<boolean>[] = [
   { value: false, title: '아직이에요', description: '가입 전이면 보험료를 떼지 않아요' },
 ];
 
-/** 서버 업종 표에 없는 업종. 저장할 코드가 없어 매장 값은 비워 둔다. */
-export const INDUSTRY_OTHER = '__other__';
+/** 산재 업종 '목록에 없어요'(서버 업종 표 code, 20261128120000). 요율이 없어 손익에 산재보험을 넣지 않는다. */
+export const INDUSTRY_UNLISTED = 'unlisted';
 export const INDUSTRY_HINTS: Record<string, string> = { retail_food_lodging: '음식점·카페·편의점·숙박' };
 
 export const ENTITY_OPTIONS: FillOption<BusinessEntityType>[] = [

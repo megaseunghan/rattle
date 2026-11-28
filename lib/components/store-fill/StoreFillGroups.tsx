@@ -6,7 +6,7 @@ import { isStoreFillGroupDone, type StoreFillValues } from '../../utils/storeFil
 import { dayLabel, describePaySchedule, paydayRowLabel } from '../../utils/payday';
 import { FillRow } from './FillParts';
 import {
-  ENTITY_OPTIONS, HEADCOUNT_OPTIONS, HOLIDAY_OPTIONS, INSURANCE_OPTIONS, VAT_OPTIONS, optionTitle,
+  ENTITY_OPTIONS, HEADCOUNT_OPTIONS, HOLIDAY_OPTIONS, INDUSTRY_UNLISTED, INSURANCE_OPTIONS, VAT_OPTIONS, optionTitle,
 } from './storeFillCopy';
 
 export type FillSheetKind = 'close' | 'pay' | 'holiday' | 'headcount' | 'business' | 'bizNumber' | 'insurance' | 'industry';
@@ -16,7 +16,6 @@ export interface StoreFillGroupsProps {
   readOnly: boolean;
   /** 산재 업종 이름. '목록에 없어요'를 고른 경우도 여기서 받는다. */
   industryLabel: string | null;
-  industryOther: boolean;
   onOpen: (sheet: FillSheetKind) => void;
 }
 
@@ -30,7 +29,7 @@ function Group({ title, children }: { title: string; children: ReactNode }) {
 }
 
 /** 마저 채우기 4묶음(급여 날짜·직원 수·사업자·4대보험). */
-export function StoreFillGroups({ values, readOnly, industryLabel, industryOther, onOpen }: StoreFillGroupsProps) {
+export function StoreFillGroups({ values, readOnly, industryLabel, onOpen }: StoreFillGroupsProps) {
   const paydayDone = isStoreFillGroupDone('payday', values);
   const close = values.payroll_close_day;
   const payDay = values.payday_day;
@@ -60,7 +59,7 @@ export function StoreFillGroups({ values, readOnly, industryLabel, industryOther
         <FillRow label="4대보험 가입" value={optionTitle(INSURANCE_OPTIONS, values.social_insurance_enrolled)} readOnly={readOnly} onPress={row('insurance')} />
         {values.social_insurance_enrolled === true
           ? <FillRow label="산재보험 업종" value={industryLabel} readOnly={readOnly} onPress={row('industry')} /> : null}
-        {values.social_insurance_enrolled === true && industryOther && !values.industrial_accident_industry
+        {values.social_insurance_enrolled === true && values.industrial_accident_industry === INDUSTRY_UNLISTED
           ? <Text style={styles.note}>목록에 없는 업종이면 손익에 산재보험을 넣지 않아요.</Text> : null}
       </Group>
     </>

@@ -222,6 +222,32 @@ check((await db.query("SELECT count(*)::int AS n FROM public.employees WHERE acc
 await rejects(db.exec(await migration('20261127122000_payroll_v2_labor_read_models.sql')), 'LABOR_READ_MODEL_CHANGED_SINCE_REVIEW', 'guard on rerun');
 await db.exec('ROLLBACK');  // 실패한 마이그레이션의 BEGIN을 닫는다.
 
+// 9b) 20261128120000 서버 검사: 업종 '목록에 없어요', 같은 달 지급일 조합, 일용 지급일 오늘 이후 불가.
+//     이 축약 스키마에는 133000의 지급일 열이 없어 같은 정의로 먼저 더한다(원격에는 133000이 이미 적용됨).
+await db.exec(`ALTER TABLE public.stores ADD COLUMN payroll_close_day smallint, ADD COLUMN payday_month_offset smallint, ADD COLUMN payday_day smallint`);
+const checksMigration = await migration('20261128120000_store_fill_server_checks.sql');
+await db.exec(checksMigration);  // 지급 함수 md5 가드 통과 = 로컬 131000 정의가 원격 적용본과 같다.
+check((await db.query("SELECT name, (SELECT count(*)::int FROM public.industrial_accident_rates WHERE industry_code='unlisted') AS rates FROM public.industrial_accident_industries WHERE code='unlisted'")).rows,
+  [{ name: '목록에 없어요', rates: 0 }], 'unlisted industry stored without rates');
+await db.query("UPDATE public.stores SET industrial_accident_industry='unlisted' WHERE id=$1", [store]);
+check((await db.query('SELECT industrial_accident_industry FROM public.stores WHERE id=$1', [store])).rows[0].industrial_accident_industry, 'unlisted', 'store keeps unlisted industry');
+const payday = (close, offset, day) => db.query('UPDATE public.stores SET payroll_close_day=$2, payday_month_offset=$3, payday_day=$4 WHERE id=$1', [store, close, offset, day]);
+await payday(10, 0, 25); await payday(10, 0, 0); await payday(0, 1, 10); await payday(25, 1, 5); await payday(null, 0, null);
+checks++;  // 같은 달 지급일이 마감일보다 뒤·말일 지급·다음 달 지급·일부만 정한 상태는 통과
+await rejects(payday(25, 0, 10), 'stores_payday_same_month_check', 'same-month payday before close day rejected');
+await rejects(payday(10, 0, 10), 'stores_payday_same_month_check', 'same-month payday equal to close day rejected');
+await rejects(payday(0, 0, 0), 'stores_payday_same_month_check', 'month-end close cannot pay same month');
+const kstToday = (await db.query("SELECT (now() AT TIME ZONE 'Asia/Seoul')::date::text AS d")).rows[0].d;
+const kstTomorrow = (await db.query("SELECT ((now() AT TIME ZONE 'Asia/Seoul')::date + 1)::text AS d")).rows[0].d;
+const [futureEntry] = await as(owner, entrySql, [store, laborer.id, '2026-10-20', 100000, 0, 0, 0]);
+await rejects(as(owner, paySql, [store, laborer.id, [futureEntry.id], kstTomorrow, 'transfer', 0, 0, 0, 0, 0, 0, '2026-v2']), 'DAILY_LABOR_PAYMENT_INVALID', 'paid_on after today (KST) rejected');
+const [{ id: todayPayment }] = await as(owner, paySql, [store, laborer.id, [futureEntry.id], kstToday, 'transfer', 0, 0, 0, 0, 0, 0, '2026-v2']);
+check(typeof todayPayment, 'string', 'paid_on today (KST) allowed');
+const payMeta = (await db.query("SELECT prosecdef, proconfig::text AS cfg FROM pg_proc WHERE proname='record_daily_labor_payment'")).rows;
+check(payMeta, [{ prosecdef: true, cfg: '{"search_path=pg_catalog, public, pg_temp"}' }], 'payment function keeps definer and search_path');
+await rejects(db.exec(checksMigration), 'STORE_FILL_CHECKS_BASE_CHANGED', 'server checks guard on rerun');
+await db.exec('ROLLBACK');
+
 // 10) 매장 삭제 연쇄: 지급된 일용 기록이 있어도 매장을 지우면 함께 지워진다.
 await db.query('DELETE FROM public.payroll WHERE store_id=$1', [store]);
 await db.query('DELETE FROM public.store_join_profiles WHERE store_id=$1', [store]);

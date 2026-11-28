@@ -27,7 +27,7 @@ jest.mock('../../lib/services/stores', () => ({
   updateStoreFill: (...args: unknown[]) => mockUpdate(...args),
 }));
 jest.mock('../../lib/services/industrialAccident', () => ({
-  getIndustrialAccidentIndustries: async () => [{ code: 'retail_food_lodging', name: '도소매·음식·숙박업', sort_order: 1 }],
+  getIndustrialAccidentIndustries: async () => [{ code: 'retail_food_lodging', name: '도소매·음식·숙박업', sort_order: 1 }, { code: 'unlisted', name: '목록에 없어요', sort_order: 999 }],
 }));
 jest.mock('../../lib/services/attendance', () => ({
   getAttendancePunches: async () => ({ status: 'success', data: { rows: [], nextOffset: null } }),
@@ -67,14 +67,17 @@ test('4대보험 가입했어요를 고르면 업종 시트가 이어지고, 업
   jest.useRealTimers();
 });
 
-test('목록에 없어요는 저장할 업종이 없어 묶음을 미완료로 둔다', async () => {
+test('목록에 없어요는 서버 업종 코드로 저장하고 4대보험 묶음을 채운 것으로 센다', async () => {
   mockFill = { ...EMPTY, social_insurance_enrolled: true };
+  mockUpdate.mockImplementation(async (_id: string, patch: Record<string, unknown>) => ({ ...mockFill, ...patch }));
   render(<StoreFillScreen />);
   fireEvent.press(await screen.findByLabelText('산재보험 업종, 아직 안 정했어요'));
-  fireEvent.press(await screen.findByText('목록에 없어요'));
-  expect(mockUpdate).not.toHaveBeenCalled();
-  expect(screen.getByLabelText('산재보험 업종, 목록에 없어요')).toBeTruthy();
-  expect(screen.getByText('4개 중 0개')).toBeTruthy();
+  expect(await screen.findAllByText('목록에 없어요')).toHaveLength(1);  // 서버 목록의 같은 항목과 겹치지 않는다
+  fireEvent.press(screen.getByText('목록에 없어요'));
+  await waitFor(() => expect(mockUpdate).toHaveBeenCalledWith('store', { industrial_accident_industry: 'unlisted' }));
+  expect(await screen.findByLabelText('산재보험 업종, 목록에 없어요')).toBeTruthy();
+  expect(screen.getByText('4개 중 1개')).toBeTruthy();
+  expect(screen.getByText('목록에 없는 업종이면 손익에 산재보험을 넣지 않아요.')).toBeTruthy();
 });
 
 test('저장 실패는 시트 안에 안내하고 진행을 올리지 않는다', async () => {

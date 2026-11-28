@@ -17,7 +17,7 @@ import { useIndustrialAccidentIndustries, useStoreFill, useStoreFillRole } from 
 import { useHeadcountReference } from './headcountReference';
 import { StoreFillGroups, type FillSheetKind } from './StoreFillGroups';
 import { StoreFillSheetHost } from './StoreFillSheetHost';
-import { DONE_TIP, GROUP_TIPS, READ_ONLY_TIP, pickTip } from './storeFillCopy';
+import { DONE_TIP, GROUP_TIPS, INDUSTRY_UNLISTED, READ_ONLY_TIP, pickTip } from './storeFillCopy';
 
 const TOAST_MS = 1600;
 /** 이어지는 시트는 앞 시트가 다 내려간 뒤 연다(iOS 모달 겹침 방지). */
@@ -53,7 +53,6 @@ export function StoreFillScreen() {
   const [sheet, setSheet] = useState<FillSheetKind | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [industryOther, setIndustryOther] = useState(false);
   const [tipGroup, setTipGroup] = useState<StoreFillGroup | null | undefined>(undefined);
   const toast = useToast();
   const alive = useRef(true);
@@ -85,17 +84,12 @@ export function StoreFillScreen() {
     }
   }, [saving, canEdit, save, toast]);
 
-  const onIndustryOther = useCallback(() => {
-    setIndustryOther(true);
-    if (values?.industrial_accident_industry) void onSave({ industrial_accident_industry: null });
-    else setSheet(null);
-  }, [values?.industrial_accident_industry, onSave]);
-
   const industryLabel = useMemo(() => {
     const code = values?.industrial_accident_industry;
-    if (code) return industriesQuery.data?.find(item => item.code === code)?.name ?? null;
-    return industryOther ? '목록에 없어요' : null;
-  }, [values?.industrial_accident_industry, industriesQuery.data, industryOther]);
+    if (!code) return null;
+    if (code === INDUSTRY_UNLISTED) return '목록에 없어요';
+    return industriesQuery.data?.find(item => item.code === code)?.name ?? null;
+  }, [values?.industrial_accident_industry, industriesQuery.data]);
 
   if (!isManager) return null;
   if (query.isLoading) return <LoadingSpinner />;
@@ -120,14 +114,14 @@ export function StoreFillScreen() {
           <View style={styles.bar}><View style={[styles.barFill, { width: `${(filled / TOTAL) * 100}%` }]} /></View>
           <Text style={styles.progressText}>4개 중 {filled}개</Text>
         </View>
-        <StoreFillGroups values={values} readOnly={!canEdit} industryLabel={industryLabel} industryOther={industryOther} onOpen={openSheet} />
+        <StoreFillGroups values={values} readOnly={!canEdit} industryLabel={industryLabel} onOpen={openSheet} />
       </ScrollView>
       {canEdit ? (
         <StoreFillSheetHost sheet={sheet} values={values} saving={saving} error={error} headcountReference={headcountReference}
           industries={{ data: industriesQuery.data, loading: industriesQuery.isLoading, failed: industriesQuery.isError,
             retry: () => { void industriesQuery.refetch(); } }}
-          industryOther={industryOther} onClose={closeSheet} onSave={(patch, next) => { void onSave(patch, next); }}
-          onIndustryOther={onIndustryOther} />
+          onClose={closeSheet} onSave={(patch, next) => { void onSave(patch, next); }}
+          />
       ) : null}
       <InlineToast message={toast.message} bottom={48} />
     </SafeAreaView>

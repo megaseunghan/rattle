@@ -5,7 +5,6 @@ import type { FillSheetKind } from './StoreFillGroups';
 import { CloseDaySheet, HolidaySheet, PayDaySheet } from './PaydaySheets';
 import { BusinessNumberSheet, BusinessTypeSheet } from './BusinessSheets';
 import { HeadcountSheet, IndustrySheet, InsuranceSheet } from './InsuranceSheets';
-import { INDUSTRY_OTHER } from './storeFillCopy';
 
 export interface StoreFillSheetHostProps {
   sheet: FillSheetKind | null;
@@ -14,16 +13,14 @@ export interface StoreFillSheetHostProps {
   error: string | null;
   headcountReference: number | null;
   industries: { data: IndustrialAccidentIndustry[] | undefined; loading: boolean; failed: boolean; retry: () => void };
-  industryOther: boolean;
   onClose: () => void;
   /** 저장 후 이어서 열 시트(없으면 닫고 '저장했어요') */
   onSave: (patch: StoreFillPatch, next?: FillSheetKind) => void;
-  onIndustryOther: () => void;
 }
 
 /** 열린 시트 하나만 보인다. 모든 시트를 늘 그려 두어 닫힘 움직임이 끊기지 않게 한다. */
 export function StoreFillSheetHost(props: StoreFillSheetHostProps) {
-  const { sheet, values, saving, error, onClose, onSave, headcountReference, industries, industryOther, onIndustryOther } = props;
+  const { sheet, values, saving, error, onClose, onSave, headcountReference, industries } = props;
   const base = { values, saving, onClose };
   const err = (kind: FillSheetKind) => (sheet === kind ? error : null);
   return (
@@ -42,8 +39,8 @@ export function StoreFillSheetHost(props: StoreFillSheetHostProps) {
       <IndustrySheet {...base} visible={sheet === 'industry'} error={err('industry')}
         industries={industries.data} industriesLoading={industries.loading} industriesFailed={industries.failed}
         onRetryIndustries={industries.retry}
-        selected={values.industrial_accident_industry ?? (industryOther ? INDUSTRY_OTHER : null)}
-        onPick={code => (code === INDUSTRY_OTHER ? onIndustryOther() : onSave({ industrial_accident_industry: code }))} />
+        selected={values.industrial_accident_industry}
+        onPick={code => onSave({ industrial_accident_industry: code })} />
     </>
   );
 }
