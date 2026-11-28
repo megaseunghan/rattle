@@ -49,7 +49,7 @@ function RootNavigator() {
 
   useEffect(() => {
     if (!loading && !permissionsPending && user && store && ((!canReadFinancials && isFinancialRoute(pathname)) ||
-      (currentRole !== 'admin' && (pathname.startsWith('/admin') || pathname.startsWith('/profit-loss') || pathname.startsWith('/settings/pos-sync') || pathname.startsWith('/payroll/daily-laborers'))))) router.replace('/(tabs)');
+      (currentRole !== 'admin' && (pathname.startsWith('/admin') || pathname.startsWith('/profit-loss') || pathname.startsWith('/settings/pos-sync') || pathname.startsWith('/payroll/daily-laborers') || pathname.startsWith('/store-fill'))))) router.replace('/(tabs)');
   }, [loading, user?.id, store?.id, canReadFinancials, currentRole, pathname, permissionsPending]);
 
   // 브라우저 OAuth 콜백 딥링크 처리 (카카오·Google)
@@ -70,7 +70,7 @@ function RootNavigator() {
   }, []);
 
   if (!loading && user && store && ((!canReadFinancials && isFinancialRoute(pathname)) ||
-    (currentRole !== 'admin' && (pathname.startsWith('/admin') || pathname.startsWith('/profit-loss') || pathname.startsWith('/settings/pos-sync') || pathname.startsWith('/payroll/daily-laborers'))))) return null;
+    (currentRole !== 'admin' && (pathname.startsWith('/admin') || pathname.startsWith('/profit-loss') || pathname.startsWith('/settings/pos-sync') || pathname.startsWith('/payroll/daily-laborers') || pathname.startsWith('/store-fill'))))) return null;
 
   return (
     <>
