@@ -43,11 +43,10 @@ export const DetailSheetMotion = {
 } as const;
 
 /** 앱 전반에서 가장 널리 쓰이는 '흰 카드' 패턴 (list/summary/employee/empty 카드 등의 기준값) */
+/** 기본 카드(S04 확정): 회색 바탕 위 흰 카드, 모서리 20, 테두리·그림자·글래스 없음. */
 export const CardStyle: ViewStyle = {
   backgroundColor: Colors.white,
   borderRadius: 20,
-  borderWidth: 1,
-  borderColor: Colors.homeBorder,
 };
 
 /** 화면 제목 기준값. 따뜻한 홈 테마를 전체 작업 화면에서 공유한다. */

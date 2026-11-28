@@ -2,10 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react-native';
 import { StoreAppBar } from '../../lib/components/StoreAppBar';
 import { Colors } from '../../constants/colors';
 
-let mockReduced = false;
-jest.mock('../../lib/hooks/useReducedTransparency', () => ({ useReducedTransparency: () => mockReduced }));
 jest.mock('expo-blur', () => ({ BlurView: (props: any) => require('react').createElement(require('react-native').View, { ...props, testID: 'toolbar-blur' }) }));
-beforeEach(() => { mockReduced = false; });
 
 it('더보기와 알림을 각각 한 번 실행하고 로고·매장명을 하나로 읽는다', () => {
   const onMenu = jest.fn(), onNotifications = jest.fn();
@@ -40,12 +37,9 @@ it('44pt 버튼을 유지하며 키보드 포커스만으로 메뉴를 열지 �
   expect(screen.getByRole('button', { name: '더보기' })).toHaveStyle({ borderColor: 'transparent' });
 });
 
-it('투명도 줄이기에서는 기존 글래스 불투명 대체를 사용한다', () => {
-  const props = { name: '매장', unreadCount: 0, onMenu: jest.fn(), onNotifications: jest.fn() };
-  const view = render(<StoreAppBar {...props} />);
-  expect(screen.getByTestId('toolbar-blur')).toBeTruthy();
-  mockReduced = true;
-  view.rerender(<StoreAppBar {...props} />);
+it('글래스 블러 없이 바탕과 같은 회색의 평평한 56pt 줄이다(2026-11-28 S04 확정 시안)', () => {
+  const view = render(<StoreAppBar name="매장" unreadCount={0} onMenu={jest.fn()} onNotifications={jest.fn()} />);
   expect(screen.queryByTestId('toolbar-blur')).toBeNull();
-  expect(screen.getByRole('button', { name: '더보기' })).toBeTruthy();
+  expect(view.toJSON()).toHaveStyle({ height: 56, backgroundColor: Colors.homeCanvas });
+  expect(screen.queryByText('|')).toBeNull();
 });
