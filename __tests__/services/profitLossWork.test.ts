@@ -3,22 +3,25 @@ import { getProfitLossByMonth, getYearlyProfitLoss } from '../../lib/services/pr
 const mockManualTotals = jest.fn();
 const mockPurchases = jest.fn();
 const mockWageHistory = jest.fn();
+let mockDailyLabor: unknown[] = [];
 
 jest.mock('../../lib/supabase', () => ({ supabase: { from: jest.fn(), rpc: jest.fn().mockResolvedValue({ error: null }) } }));
 jest.mock('../../lib/services/purchases', () => ({ getPurchasesByMonth: (...args: unknown[]) => mockPurchases(...args), getPurchaseItemsForPurchases: async () => [] }));
 jest.mock('../../lib/services/expenses', () => ({ getExpensesByMonth: async () => [], getEffectiveFixedExpenses: async () => [] }));
 jest.mock('../../lib/services/manualSales', () => ({ getManualSalesTotals: (...args: unknown[]) => mockManualTotals(...args) }));
 jest.mock('../../lib/services/wageHistory', () => ({ getStoreWageHistory: (...args: unknown[]) => mockWageHistory(...args), regularGrossForMonth: () => 999 }));
-jest.mock('../../lib/services/payroll', () => ({ probationFactor: () => 1 }));
-beforeEach(() => { mockPurchases.mockReset().mockResolvedValue([]); mockWageHistory.mockReset().mockResolvedValue([]); mockManualTotals.mockReset().mockResolvedValue({ total: 1000000, cardRevenue: 0, cashRevenue: 1000000 }); });
+jest.mock('../../lib/services/payroll', () => ({ probationDayFactor: () => () => 1 }));
+beforeEach(() => { mockDailyLabor = []; mockPurchases.mockReset().mockResolvedValue([]); mockWageHistory.mockReset().mockResolvedValue([]); mockManualTotals.mockReset().mockResolvedValue({ total: 1000000, cardRevenue: 0, cashRevenue: 1000000 }); });
 
 function setup(payrolls: unknown[], payrollError: unknown = null, employees: unknown[] = [], pageLimit = 1000) {
   (supabase.from as jest.Mock).mockImplementation((table: string) => {
     const result = table === 'payroll' ? { data: payrolls, error: payrollError }
-      : table === 'employees' ? { data: employees, error: null } : { data: [], error: null };
+      : table === 'employees' ? { data: employees, error: null }
+      : table === 'daily_labor_entries' ? { data: mockDailyLabor, error: null } : { data: [], error: null };
     let offset = 0; let end = Infinity;
     return { order: jest.fn().mockReturnThis(), range: jest.fn().mockImplementation(function(this: unknown, start: number, last: number) { offset=start; end=last; return this; }), select: jest.fn().mockReturnThis(), eq: jest.fn().mockReturnThis(),
-      gte: jest.fn().mockReturnThis(), lte: jest.fn().mockReturnThis(),
+      gte: jest.fn().mockReturnThis(), lte: jest.fn().mockReturnThis(), lt: jest.fn().mockReturnThis(),
+      maybeSingle: jest.fn().mockResolvedValue({ data: null, error: null }),
       then: (resolve: (value: unknown) => void) => Promise.resolve(result.error ? result : {data: result.data.slice(offset, Math.min(end + 1, offset + pageLimit)), error:null}).then(resolve) };
   });
 }
@@ -169,4 +172,16 @@ it('한 매입의 카테고리별 금액을 나누고 손익 합계에는 한 �
   await expect(getProfitLossByMonth('store', '2026-09', '23:00')).resolves.toMatchObject({
     purchaseCost: 3500, purchaseByCategory: { 식자재: 2000, 비품: 1500 },
   });
+});
+
+it('일용근로자 하루 기록 세전 합계를 인건비에 넣고, 사업주 부담 예상도 영업이익에서 뺀다', async () => {
+  setup([{ employee_id: 'p', gross: 1_000_000, net_pay: 900_000, taxable_base: 1_000_000, national_pension: 47_500,
+    health_insurance: 35_950, long_term_care: 4_720, employment_insurance: 9_000, applied_hourly_wage: 12000, work_source: 'manual' }],
+    null, [{ id: 'p', employment_type: 'part_time', is_active: true, joined_at: '2026-09-01' }]);
+  mockDailyLabor = [{ id: 'd1', gross: 200_000, employment_insurance: 1_800 }];
+  const result = await getProfitLossByMonth('store', '2026-09', '23:00');
+  expect(result).toMatchObject({ dailyLaborGross: 200_000, laborCost: 1_200_000, netProfit: -200_000 - (97_170 + 2_500 + 1_800 + 500), employerInsuranceMissingSlips: 0 });
+  // 근로자분과 같은 4대보험 97,170 + 고용안정 0.25%(2,500) + 일용 고용보험 1,800 + 고용안정 500
+  expect(result.employerInsurance).toBe(97_170 + 2_500 + 1_800 + 500);
+  expect(result.employerInsuranceIncludesAccident).toBe(false);
 });

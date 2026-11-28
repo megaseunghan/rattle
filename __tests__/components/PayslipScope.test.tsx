@@ -141,7 +141,7 @@ it('과세 기준액이 누락된 과거 명세는 0원이나 현재 조건으�
   mockRead.mockResolvedValue({ ...payroll(967000), gross: 1000000, taxable_base: null });
   render(<PayslipScreen />); await waitFor(() => expect(screen.getByText('확인 필요')).toBeTruthy());
   expect(screen.getAllByText('967,000원').length).toBeGreaterThan(0);
-  expect(screen.getByText('저장된 명세 금액이에요. 당시 기본급·비과세 세부 조건은 관리자에게 확인해주세요.')).toBeTruthy();
+  expect(screen.getByText('앱이 계산한 예상 금액이에요. 실제 지급·공제액은 다를 수 있어요. 당시 기본급·비과세 세부 조건은 관리자에게 확인해주세요.')).toBeTruthy();
 });
 it('저장된 과세 기준액 0원은 누락으로 취급하지 않고 공제 0원에 음수 기호를 붙이지 않는다', async () => {
   mockRead.mockResolvedValue({ ...payroll(0), taxable_base: 0 }); render(<PayslipScreen />);

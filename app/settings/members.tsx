@@ -263,7 +263,7 @@ export default function MembersScreen() {
           )}
         </ScrollView>
       )}
-      {approval.selection && <MemberApprovalModal key={`${approval.selection.member.id}:${approval.selection.profile?.revision ?? 0}`} profile={approval.selection.profile} member={approval.selection.member} candidates={approval.selection.candidates} busy={busy} onChoose={handleChoice} onClose={approval.dismiss} />}
+      {approval.selection && <MemberApprovalModal key={`${approval.selection.member.id}:${approval.selection.profile?.revision ?? 0}`} profile={approval.selection.profile} member={approval.selection.member} candidates={approval.selection.candidates} busy={busy} storeDefaults={store} onChoose={handleChoice} onReject={() => { const target = approval.selection!.member; approval.dismiss(); handleReject(target); }} onClose={approval.dismiss} />}
     </SafeAreaView>
   );
 }

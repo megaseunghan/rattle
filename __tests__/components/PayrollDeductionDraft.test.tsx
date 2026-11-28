@@ -8,7 +8,7 @@ jest.mock('../../lib/hooks/useEmployees', () => ({ useEmployees: jest.fn() }));
 jest.mock('../../lib/hooks/usePayroll', () => ({ usePayroll: jest.fn() }));
 jest.mock('../../lib/hooks/useConfirmLeave', () => ({ useConfirmLeave: jest.fn() }));
 jest.mock('../../lib/services/employees', () => ({ isInProbation: () => false, isInsuranceApplicable: () => true }));
-jest.mock('../../lib/services/payroll', () => ({ probationFactor: () => 1, getPayrollSettlementGaps: () => ({ missingPayroll: [], missingPartTimeMinutes: [] }) }));
+jest.mock('../../lib/services/payroll', () => ({ probationDayFactor: () => () => 1, getPayrollSettlementGaps: () => ({ missingPayroll: [], missingPartTimeMinutes: [] }) }));
 jest.mock('../../lib/services/wageHistory', () => ({}));
 jest.mock('../../lib/components/PayrollSubmissionReview', () => ({ PayrollSubmissionReview: () => null }));
 jest.mock('../../lib/components/WorkMinutesForm', () => ({ WorkMinutesForm: () => null }));
@@ -23,7 +23,7 @@ const saved = { id: 'p', store_id: 's', employee_id: 'e', year_month: '2026-10',
  local_income_tax: 0, withholding_tax: 0, is_settled: true, revision: 1 } as Payroll;
 const save = jest.fn();
 function card(payroll: Payroll | undefined = saved) {
- return <EmployeeCard employee={employee} payroll={payroll} accruedGross={1000} accrualLabel="10월" onShowHistory={jest.fn()} isCalculating={false} onCalculate={jest.fn()} canCalculate canEditDeductions isSavingDeductions={false} onSaveDeductions={save} />;
+ return <EmployeeCard employee={employee} yearMonth="2026-10" payroll={payroll} accruedGross={1000} accrualLabel="10월" onShowHistory={jest.fn()} isCalculating={false} onCalculate={jest.fn()} canCalculate canEditDeductions isSavingDeductions={false} onSaveDeductions={save} />;
 }
 function expand() { fireEvent.press(screen.getByLabelText('QA 직원 급여 상세')); }
 beforeEach(() => { save.mockReset().mockResolvedValue(undefined); });
@@ -62,7 +62,7 @@ it('저장 성공 후에는 서버에서 받은 금액을 표시하고 편집 �
  fireEvent.press(screen.getByText('공제 내역 저장')); await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
  view.rerender(card({ ...saved, national_pension: 200, net_pay: 800, is_settled: false, revision: 2 }));
  await waitFor(() => expect(screen.queryByText('편집 중 예상 실수령액 · 미저장')).toBeNull());
- expect(screen.getAllByText('800원')).toHaveLength(2); expect(screen.getAllByText('저장된 실수령액')).toHaveLength(2);
+ expect(screen.getAllByText('800원')).toHaveLength(2); expect(screen.getAllByText('예상 실수령액')).toHaveLength(2);
 });
 it('공제 초과를 0원 예상액으로 감추지 않는다', () => {
  render(card()); expand(); fireEvent.changeText(screen.getByLabelText('국민연금 공제액, 원'), '2000');

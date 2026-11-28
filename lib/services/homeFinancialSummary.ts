@@ -50,7 +50,8 @@ export async function getFinancialSummaries(storeIds: string[], yearMonths: stri
       if (['labor_cost', 'operating_profit'].includes(k) && row[k] === null) return false;
       return !['number', 'string'].includes(typeof row[k]) || row[k] === '' || !Number.isFinite(Number(row[k]));
     });
-    const inconsistentCoverage = (row.labor_cost === null) !== (row.operating_profit === null);
+    // 인건비를 모르면 영업이익도 몰라야 한다. 인건비는 알지만 사업주 부담 요율을 확인하지 못한 달은 영업이익만 비어 있을 수 있다.
+    const inconsistentCoverage = row.labor_cost === null && row.operating_profit !== null;
     if (!ids.includes(id) || !months.includes(month) || seen.has(key) || invalidAmount || inconsistentCoverage) {
       throw new UserFacingError('매장 요약을 확인하지 못했어요. 다시 시도해주세요.');
     }

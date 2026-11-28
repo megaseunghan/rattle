@@ -10,6 +10,9 @@ export const MEMBER_APPROVAL_MESSAGES = {
  EMPLOYEE_FORBIDDEN:'관리 권한과 선택한 매장을 다시 확인해주세요',
  JOIN_PROFILE_INVALID:'근무 조건·입사일·계좌 정보를 다시 확인해주세요',
  INVALID_EMPLOYEE_CONDITIONS:'근무 형태와 급여 조건을 다시 확인해주세요',
+ JOIN_INCOME_TYPE_REQUIRED:'계약을 골라 주세요',
+ PROBATION_END_OUT_OF_RANGE:'수습 마지막 날은 입사일부터 3개월 안에서 골라 주세요.',
+ JOIN_PROBATION_INVALID:'수습 마지막 날과 수습 중 급여를 다시 확인해 주세요.',
 } as const;
 export type MemberApprovalErrorCode=keyof typeof MEMBER_APPROVAL_MESSAGES;
 export class MemberApprovalServiceError extends UserFacingError {

@@ -12,6 +12,8 @@ import { useAuth } from '../../lib/contexts/AuthContext';
 import { useEmployees } from '../../lib/hooks/useEmployees';
 import { getPayrollByMonth, getPayrollSettlementGaps, settlePayrolls } from '../../lib/services/payroll';
 import { formatWorkedMinutes } from '../../lib/utils/workMinutes';
+import { deductionMode } from '../../lib/payroll/incomeType';
+import { maskedAccount, revealAccountNumber } from '../../lib/services/accountNumbers';
 import { Employee, Payroll } from '../../types';
 import { AppBar, Badge, EmptyState } from '../../lib/components/ui';
 import { ErrorMessage } from '../../lib/components/ErrorMessage';
@@ -60,6 +62,21 @@ export default function PayrollSettlementScreen() {
   const settledCount = rows.filter(r => r.payroll.is_settled).length;
   const { missingPayroll, missingPartTimeMinutes } = getPayrollSettlementGaps(employees, payrolls);
   const hasGaps = missingPayroll.length > 0 || missingPartTimeMinutes.length > 0;
+  // 주 근무시간이 비어 공제 없이 계산된 명세(4대보험 대상인지 판단 못 함). 정산은 막지 않고 확인을 요청한다.
+  const needsHoursCount = rows.filter(r => !r.payroll.is_settled && deductionMode(r.employee) === 'needs_hours').length;
+  const [revealing, setRevealing] = useState<string | null>(null);
+  const showAccount = async (employee: Employee) => {
+    if (revealing) return;
+    setRevealing(employee.id);
+    try {
+      const number = await revealAccountNumber('employee', employee.id);
+      Alert.alert(`${employee.name} 님 계좌`, number ? `${employee.bank_name ?? ''} ${number}`.trim() : '저장된 계좌번호를 확인하지 못했어요. 직원 정보에서 다시 입력해 주세요.');
+    } catch (e) {
+      Alert.alert('계좌 보기 실패', getErrorMessage(e));
+    } finally {
+      setRevealing(null);
+    }
+  };
 
   const handleSettleAll = () => {
     if (hasGaps) {
@@ -71,7 +88,8 @@ export default function PayrollSettlementScreen() {
       Alert.alert('안내', '이미 모든 정산이 완료되었습니다');
       return;
     }
-    Alert.alert('전체 정산 확정', `${monthLabel} 급여 ${unsettledIds.length}건을 정산 완료로 확정할까요?`, [
+    const needsHoursNote = needsHoursCount > 0 ? `\n\n주 근무시간이 비어 공제 없이 계산된 직원이 ${needsHoursCount}명 있어요. 4대보험 대상이면 직원 정보에 주 근무시간을 넣고 다시 작성해 주세요.` : '';
+    Alert.alert('전체 정산 확정', `${monthLabel} 급여 ${unsettledIds.length}건을 정산 완료로 확정할까요?${needsHoursNote}`, [
       { text: '취소', style: 'cancel' },
       {
         text: '확정',
@@ -113,7 +131,7 @@ export default function PayrollSettlementScreen() {
             </View>
           )}
           <View style={styles.summaryCard}>
-            <Text style={styles.summaryLabel}>총 지급 예정액 · {rows.length}명</Text>
+            <Text style={styles.summaryLabel}>예상 지급액 합계 · {rows.length}명</Text>
             <NumericText style={styles.summaryValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{fmt(totalAmount)}</NumericText>
           </View>
 
@@ -143,8 +161,16 @@ export default function PayrollSettlementScreen() {
                       ? `근무 ${formatWorkedMinutes(payroll.worked_minutes)} · 적용 시급 ${payroll.applied_hourly_wage == null ? '미기록' : fmt(payroll.applied_hourly_wage)}`
                       : `기본급 ${fmt(employee.base_salary)}`}
                   </Text>
-                  {employee.bank_name && employee.account_number && (
-                    <Text style={styles.meta}>{employee.bank_name} {employee.account_number}</Text>
+                  {!payroll.is_settled && deductionMode(employee) === 'needs_hours' && (
+                    <Text style={styles.meta}>주 근무시간이 비어 공제 없이 계산했어요.</Text>
+                  )}
+                  {!!employee.account_last4 && (
+                    <TouchableOpacity accessibilityRole="button" accessibilityLabel={`${employee.name} 님 계좌번호 보기`}
+                      disabled={!!revealing} onPress={() => showAccount(employee)} style={styles.accountRow}
+                      hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}>
+                      <Text style={styles.meta}>{employee.bank_name ?? '계좌'} {maskedAccount(employee.account_last4)}</Text>
+                      <Text style={styles.accountLink}>{revealing === employee.id ? '불러오는 중' : '계좌 보기'}</Text>
+                    </TouchableOpacity>
                   )}
                   <View style={styles.rowBottom}>
                     {deduction > 0 && (
@@ -209,6 +235,8 @@ const styles = StyleSheet.create({
   rowTop: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'space-between', alignItems: 'center' },
   name: { flexShrink: 1, fontSize: 16, fontWeight: '700', color: Colors.black },
   meta: { fontVariant: ['tabular-nums'], fontSize: 12, color: Colors.gray500 },
+  accountRow: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 24 },
+  accountLink: { fontSize: 12, color: Colors.primary, fontFamily: Fonts.wantedSemiBold },
   rowBottom: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', alignItems: 'center', gap: 10, marginTop: 6 },
   deduction: { fontVariant: ['tabular-nums'], fontSize: 12, color: Colors.negative },
   netPay: { fontSize: 16, fontWeight: '800', color: Colors.black },

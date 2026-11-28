@@ -21,6 +21,7 @@ let mockLoading = false;
 let mockError: string | null = null;
 let mockMissing = false;
 let mockProfit = 4_820_000;
+let mockEmployeeId: string | null = 'employee-row';
 const current = new Date();
 const currentYear = current.getFullYear();
 const currentMonth = current.getMonth() + 1;
@@ -43,7 +44,7 @@ jest.mock('../../lib/components/GlassBackdrop', () => ({ GlassBackdrop: () => nu
 jest.mock('expo-router', () => ({ router: { push: jest.fn() } }));
 jest.mock('../../lib/contexts/AuthContext', () => {
   const store = { id: 'store', name: '소속 매장' }; const user = { id: 'employee' };
-  return { useAuth: () => ({ store, user, stores: [store], currentRole: mockRole, canManageStore: mockRole === 'admin', storeRole: mockRole === 'admin' ? 'owner' : mockEmployment === 'part_time' ? 'part_timer' : 'employee', canReadFinancials: mockCanRead, realRole: mockRole, devPreviewMode: 'self', switchStore: mockSwitchStore }) };
+  return { useAuth: () => ({ store, user, stores: [store], access: { employee_id: mockEmployeeId }, currentRole: mockRole, canManageStore: mockRole === 'admin', storeRole: mockRole === 'admin' ? 'owner' : mockEmployment === 'part_time' ? 'part_timer' : 'employee', canReadFinancials: mockCanRead, realRole: mockRole, devPreviewMode: 'self', switchStore: mockSwitchStore }) };
 });
 jest.mock('../../lib/contexts/TabPagerContext', () => ({ useTabPager: () => {
   const React = require('react');
@@ -55,20 +56,25 @@ jest.mock('../../lib/hooks/useEmployees', () => ({ useEmployees: () => ({ employ
 jest.mock('../../lib/hooks/useNotifications', () => ({ useNotifications: () => ({ unreadCount: 0, refetch: mockRefetch }) }));
 jest.mock('../../lib/hooks/useTossSync', () => ({ useTossSync: () => ({ todaySales: null, loadTodaySales: mockRefetch, autoSyncOnForeground: mockRefetch }) }));
 jest.mock('../../lib/hooks/useHomeFinancialCard', () => ({ useHomeFinancialCard: () => ({ data: null, loading: false, refreshing: false, error: false, refetch: mockFetchTrend }) }));
-jest.mock('../../lib/components/HomeFinancialCard', () => ({ HomeFinancialCard: () => require('react').createElement(require('react-native').View, { testID: 'home-financial-card' }) }));
-jest.mock('../../lib/components/HomeAlertsPanel', () => ({ HomeAlertsPanel: () => null }));
+// S04(2026-11-27): 홈 칸은 각자 테스트가 있다. 여기서는 홈 화면의 배치·권한 분기만 본다.
+jest.mock('../../lib/components/home/profit/HomeProfitSection', () => ({ HomeProfitSection: () => require('react').createElement(require('react-native').View, { testID: 'home-profit-card' }) }));
+jest.mock('../../lib/components/home/alerts/HomeAlertStack', () => ({ HomeAlertStack: () => null }));
+jest.mock('../../lib/components/home/schedule/HomeWeekSchedule', () => ({ HomeWeekSchedule: () => null }));
+jest.mock('../../lib/components/home/HomeMyWork', () => ({ HomeMyWork: () => require('react').createElement(require('react-native').Text, null, '내 근무 칸') }));
+jest.mock('../../lib/components/home/HomeFillPrompt', () => ({ HomeFillPromptSheet: () => null, fillAlertCards: () => [] }));
+jest.mock('../../lib/hooks/useStoreFillPrompt', () => ({ useStoreFillPrompt: () => ({}) }));
 
 beforeEach(() => {
   jest.clearAllMocks();
   mockInnerGestureActive = false;
   mockEmployment = 'regular'; mockRole = 'member'; mockLoading = false;
-  mockCanRead = true; mockError = null; mockMissing = false; mockProfit = 4_820_000;
+  mockCanRead = true; mockError = null; mockMissing = false; mockProfit = 4_820_000; mockEmployeeId = 'employee-row';
 });
 
 it.each(['regular', 'part_time'])('%s 직원의 공유 요약은 선택한 금액을 표시하고 상세 손익을 숨긴다', async employment => {
   mockEmployment = employment;
   render(<HomeScreen />);
-  expect(screen.getByTestId('home-financial-card')).toBeTruthy();
+  expect(screen.getByTestId('home-profit-card')).toBeTruthy();
   expect(screen.queryByText('손익 정산')).toBeNull();
   expect(screen.getByText('오늘 업무 화면')).toBeTruthy();
   await waitFor(() => expect(mockRefetch).toHaveBeenCalled());
@@ -77,13 +83,13 @@ it('비공유 직원에게 재무 카드와 열기 버튼을 숨긴다', () => {
   mockCanRead = false;
   render(<HomeScreen />);
   expect(screen.queryByRole('button', { name: '월별 손익 요약' })).toBeNull();
-  expect(screen.queryByTestId('home-financial-card')).toBeNull();
+  expect(screen.queryByTestId('home-profit-card')).toBeNull();
 });
 it('관리자 홈에서도 하단 손익 정산 버튼을 표시하지 않는다', () => {
   mockRole = 'admin';
   render(<HomeScreen />);
   expect(screen.queryByText('손익 정산')).toBeNull();
-  expect(screen.getByTestId('home-financial-card')).toBeTruthy();
+  expect(screen.getByTestId('home-profit-card')).toBeTruthy();
 });
 
 it("차트 조작 중 홈 세로 스크롤을 잠그고 종료 후 복원한다", () => {
@@ -93,4 +99,12 @@ it("차트 조작 중 홈 세로 스크롤을 잠그고 종료 후 복원한다"
  expect(view.UNSAFE_getByType(ScrollView).props.scrollEnabled).toBe(false);
  mockInnerGestureActive = false; view.rerender(<HomeScreen />);
  expect(view.UNSAFE_getByType(ScrollView).props.scrollEnabled).toBe(true);
+});
+
+it('매장 근무가 없는 사장님에게는 내 근무 칸을 숨기고 근무하는 사람에게는 보인다', () => {
+  mockRole = 'admin';
+  const view = render(<HomeScreen />);
+  expect(screen.getByText('내 근무 칸')).toBeTruthy();
+  mockEmployeeId = null; view.rerender(<HomeScreen />);
+  expect(screen.queryByText('내 근무 칸')).toBeNull();
 });

@@ -35,8 +35,15 @@ export function normalizeWageHistory(employee: WageEmployee, history: WageHistor
     non_taxable: first ? first.non_taxable : employee.non_taxable,
     memo: '입사일 기준 최초 급여', created_at: employee.created_at }, ...sorted];
 }
-export function buildRegularWageSnapshot(employee: WageEmployee, history: WageHistory[], yearMonth: string, factor = 1): RegularWageSnapshot {
-  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(yearMonth) || !Number.isFinite(factor) || factor < 0) throw new Error('INVALID_WAGE_PERIOD');
+/** 날짜별 지급 계수(수습 90% 등). 숫자면 모든 날짜에 같은 값을 쓴다. */
+export type DayFactor = number | ((date: string) => number);
+function factorAt(factor: DayFactor, date: string): number {
+  const value = typeof factor === 'function' ? factor(date) : factor;
+  if (!Number.isFinite(value) || value < 0) throw new Error('INVALID_WAGE_PERIOD');
+  return value;
+}
+export function buildRegularWageSnapshot(employee: WageEmployee, history: WageHistory[], yearMonth: string, factor: DayFactor = 1): RegularWageSnapshot {
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(yearMonth) || (typeof factor === 'number' && (!Number.isFinite(factor) || factor < 0))) throw new Error('INVALID_WAGE_PERIOD');
   const [year, month] = yearMonth.split('-').map(Number);
   const count = new Date(Date.UTC(year, month, 0)).getUTCDate();
   const start = initialWageDate(employee);
@@ -47,7 +54,7 @@ export function buildRegularWageSnapshot(employee: WageEmployee, history: WageHi
     if (date < start) continue;
     const rate = rates.filter(row => row.effective_date <= date).at(-1);
     if (!rate || rate.base_salary == null || rate.non_taxable == null || !Number.isFinite(Number(rate.base_salary)) || !Number.isFinite(Number(rate.non_taxable)) || Number(rate.base_salary) < 0 || Number(rate.non_taxable) < 0) throw new Error('INVALID_WAGE_RATE');
-    days.push({ date, base_salary: Number(rate.base_salary), non_taxable: Number(rate.non_taxable), factor });
+    days.push({ date, base_salary: Number(rate.base_salary), non_taxable: Number(rate.non_taxable), factor: factorAt(factor, date) });
   }
   return { version: 1, year_month: yearMonth, employment_start: start, days };
 }
@@ -58,7 +65,7 @@ export function regularSnapshotGross(snapshot: RegularWageSnapshot, through?: st
 }
 /** Existing monthly slips are preserved. Legacy current-month slips use a clearly labelled day estimate. */
 export function accruedRegularPayroll(employee: WageEmployee | undefined, history: WageHistory[], payroll: (Payroll & { regular_wage_snapshot?: RegularWageSnapshot | null }) | undefined,
-  yearMonth: string, asOf: Date, factor = 1): number {
+  yearMonth: string, asOf: Date, factor: DayFactor = 1): number {
   const through = koreanDate(asOf);
   if (through.slice(0, 7) < yearMonth) return 0;
   if (payroll && through.slice(0, 7) > yearMonth) return Number(payroll.gross);

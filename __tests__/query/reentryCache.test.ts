@@ -36,7 +36,7 @@ jest.mock('../../lib/services/cleaning', () => ({
   listCleaningItems: (...args: unknown[]) => mockItems(...args), listCleaningLogsByDate: (...args: unknown[]) => mockLogs(...args),
 }));
 const mockSaveDeductions = jest.fn();
-jest.mock('../../lib/services/payroll', () => ({ getPayrollByMonth: (...args: unknown[]) => mockPayroll(...args), updatePayrollDeductions: (...args: unknown[]) => mockSaveDeductions(...args), probationFactor: () => 1 }));
+jest.mock('../../lib/services/payroll', () => ({ getPayrollByMonth: (...args: unknown[]) => mockPayroll(...args), updatePayrollDeductions: (...args: unknown[]) => mockSaveDeductions(...args), probationDayFactor: () => () => 1 }));
 // 포커스 효과는 등록 때 한 번(첫 포커스) 실행하고, focusAgain()이 스택 복귀를 흉내 낸다.
 jest.mock('expo-router', () => ({ useFocusEffect: (callback: () => void) => {
   const React = require('react');

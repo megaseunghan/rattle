@@ -25,8 +25,12 @@ jest.mock('../../lib/hooks/useNotifications', () => ({ useNotifications: () => (
 jest.mock('../../lib/hooks/useHomeFinancialCard', () => ({ useHomeFinancialCard: () => ({ data: null, refetch: mockRefetch }) }));
 jest.mock('../../lib/contexts/TabPagerContext', () => ({ useTabPager: () => ({ goToTab: jest.fn(), innerGestureActive: false }) }));
 jest.mock('../../lib/components/DailyOperationsHome', () => ({ DailyOperationsHome: () => null }));
-jest.mock('../../lib/components/HomeFinancialCard', () => ({ HomeFinancialCard: () => null }));
-jest.mock('../../lib/components/HomeAlertsPanel', () => ({ HomeAlertsPanel: ({ todaySales }: { todaySales: number }) => {
+jest.mock('../../lib/components/home/profit/HomeProfitSection', () => ({ HomeProfitSection: () => null }));
+jest.mock('../../lib/components/home/schedule/HomeWeekSchedule', () => ({ HomeWeekSchedule: () => null }));
+jest.mock('../../lib/components/home/HomeMyWork', () => ({ HomeMyWork: () => null }));
+jest.mock('../../lib/components/home/HomeFillPrompt', () => ({ HomeFillPromptSheet: () => null, fillAlertCards: () => [] }));
+jest.mock('../../lib/hooks/useStoreFillPrompt', () => ({ useStoreFillPrompt: () => ({}) }));
+jest.mock('../../lib/components/home/alerts/HomeAlertStack', () => ({ HomeAlertStack: ({ todaySales }: { todaySales: number }) => {
   const React = require('react'); const { Text } = require('react-native');
   return React.createElement(Text, null, `매출 ${todaySales}`);
 } }));

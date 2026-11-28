@@ -140,6 +140,7 @@ export default function PayslipScreen() {
         ) : (
           <>
             <View style={styles.summaryCard}>
+              <Text style={styles.summaryLine}>{payroll.is_settled ? '정산한 예상 실수령액' : '정산 전 예상 실수령액'}</Text>
               <NumericText style={styles.netPay} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{fmt(payroll.net_pay)}</NumericText>
               <Text style={styles.summaryLine}>지급 {fmt(payroll.gross)} − 공제 {fmt(totalDeduction)}</Text>
               {(payroll.worked_minutes != null) && (
@@ -151,7 +152,7 @@ export default function PayslipScreen() {
               <Row label="세전 지급 총액" value={payroll.gross} />
               <Row label="명세에 저장된 과세 기준액" value={taxableBase} />
             </Group>
-            <Text style={styles.footnote}>저장된 명세 금액이에요. 당시 기본급·비과세 세부 조건은 관리자에게 확인해주세요.</Text>
+            <Text style={styles.footnote}>앱이 계산한 예상 금액이에요. 실제 지급·공제액은 다를 수 있어요. 당시 기본급·비과세 세부 조건은 관리자에게 확인해주세요.</Text>
 
             <Group title="공제 항목">
               <Row label="국민연금" value={payroll.national_pension} isDeduction />

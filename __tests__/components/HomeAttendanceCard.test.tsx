@@ -14,12 +14,12 @@ beforeEach(() => mockAttendance.mockReset().mockReturnValue({ loading: false, er
 it('직원 목록을 받기 전에도 권한 응답의 본인 직원 ID로 출퇴근 조회를 시작한다', () => {
   const screen = render(<HomeAttendanceCard employeeId="self" employee={undefined} active refreshKey={0} />);
   expect(mockAttendance).toHaveBeenCalledWith('self', true, 0);
-  expect(screen.getByText('출근 예정')).toBeTruthy();
+  expect(screen.getByText('오늘 근무')).toBeTruthy(); expect(screen.getByText('출근하기')).toBeTruthy();
 });
 it('본인 직원 ID가 없으면 출퇴근 조회를 하지 않는다', () => {
   const screen = render(<HomeAttendanceCard employeeId={undefined} employee={undefined} active refreshKey={0} />);
   expect(mockAttendance).toHaveBeenCalledWith(undefined, true, 0);
-  expect(screen.queryByText('출근 예정')).toBeNull();
+  expect(screen.queryByText('오늘 근무')).toBeNull(); expect(screen.queryByText('출근하기')).toBeNull();
 });
 describe('resolveSelfEmployeeId', () => {
   const list = [{ id: 'preview' }] as never[];

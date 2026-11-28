@@ -74,13 +74,22 @@ function PnLDetailSheet({ pnl, month, onClose, motionStyle, onLayout }: {
         <Group label="3. 인건비" value={fmt(pnl.laborCost)} ratio={ratioOfRevenue(pnl.laborCost, rev)}>
           {(pnl.regularGross ?? 0) > 0 && <>
             <Sub label="직원 인건비" value={fmt(pnl.regularGross)} ratio={ratioOfRevenue(pnl.regularGross, rev)} />
-            <Sub label="직원 원천징수" value={fmt(pnl.regularWithholding)} ratio={ratioOfRevenue(pnl.regularWithholding, rev)} />
+            <Sub label="직원 공제(예상)" value={fmt(pnl.regularWithholding)} ratio={ratioOfRevenue(pnl.regularWithholding, rev)} />
           </>}
           {pnl.partTimeGross > 0 && <>
             <Sub label="파트타이머 인건비" value={fmt(pnl.partTimeGross)} ratio={ratioOfRevenue(pnl.partTimeGross, rev)} />
-            <Sub label="파트타이머 원천징수" value={fmt(pnl.partTimeWithholding)} ratio={ratioOfRevenue(pnl.partTimeWithholding, rev)} />
+            <Sub label="파트타이머 공제(예상)" value={fmt(pnl.partTimeWithholding)} ratio={ratioOfRevenue(pnl.partTimeWithholding, rev)} />
+          </>}
+          {(pnl.dailyLaborGross ?? 0) > 0 && <>
+            <Sub label="일용근로자 인건비" value={fmt(pnl.dailyLaborGross ?? 0)} ratio={ratioOfRevenue(pnl.dailyLaborGross ?? 0, rev)} />
           </>}
         </Group>
+        {pnl.employerInsurance !== undefined && <>
+          <Sub label="사업주 부담 4대보험(예상)" value={fmt(pnl.employerInsurance ?? null)} ratio={ratioOfRevenue(pnl.employerInsurance ?? null, rev)} />
+          <Text style={{ color: Colors.gray600, fontSize: 12, lineHeight: 18, marginBottom: 12 }}>
+            {pnl.employerInsurance == null ? '이 달의 사업주 부담 요율을 아직 확인하지 못해 영업이익을 계산하지 않았어요.' : `작성한 급여 명세와 일용 기록 기준이고, 영업이익에서 뺐어요.${pnl.employerInsuranceMissingSlips ? ` 급여 명세를 아직 작성하지 않은 직원 ${pnl.employerInsuranceMissingSlips}명은 빠졌어요.` : ''}${pnl.employerInsuranceIncludesAccident ? '' : ' 산재보험은 포함하지 않았어요(매장 업종을 고르면 포함돼요).'}`}
+          </Text>
+        </>}
 
         <Sep />
 

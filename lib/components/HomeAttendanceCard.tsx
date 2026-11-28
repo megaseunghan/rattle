@@ -1,41 +1,75 @@
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+/* S04 홈 출퇴근 칸(2026-11-27 확정 시안): 이름·직책, 출근 시각·근무 시간, 출근/퇴근 버튼(QR 화면으로 이동). */
+import { useEffect, useState } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { Colors } from '../../constants/colors';
 import { Fonts } from '../../constants/fonts';
 import { CardStyle, Radius, Spacing, Type } from '../../constants/designTokens';
 import type { Employee } from '../../types';
 import { useAuth } from '../contexts/AuthContext';
-import { attendanceTime, useAttendanceToday } from '../hooks/useAttendanceToday';
+import { useAttendanceToday } from '../hooks/useAttendanceToday';
 import { ErrorMessage } from './ErrorMessage';
 import { Skeleton, SkeletonGroup } from './skeleton';
+import { NumericText } from './ui/NumericText';
+import { attendanceDisplay } from './home/attendance/attendanceDisplay';
+
+const ROLE_LABELS = { owner: '사장님', manager: '점장', employee: '직원', part_timer: '파트타이머' } as const;
+
+/** 근무 중일 때만 1분마다 다시 그린다(근무 시간 표시). */
+function useMinuteClock(running: boolean): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!running) return;
+    setNow(Date.now());
+    const timer = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(timer);
+  }, [running]);
+  return now;
+}
 
 export function HomeAttendanceCard({ employeeId, employee, active, refreshKey }: { employeeId?: string; employee?: Employee | null; active: boolean; refreshKey: number }) {
-  const { user, store, storeRole } = useAuth();
+  const { user, storeRole } = useAuth();
   const record = useAttendanceToday(employeeId, active, refreshKey);
-  const role = storeRole ? { owner: '사장', manager: '점장', employee: '직원', part_timer: '파트타이머' }[storeRole] : '역할 확인 중';
+  const working = !!record.start && !record.end;
+  const now = useMinuteClock(active && working);
+  const role = storeRole ? ROLE_LABELS[storeRole] : '역할 확인 중';
+  const display = attendanceDisplay(record, now);
+  const name: string | null = employee?.name || user?.user_metadata?.full_name || null;
   return <View style={s.card}>
-    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-      <Pressable accessibilityRole="button" accessibilityLabel="내 정보 보기" onPress={() => router.push('/mypage')} style={s.identity}>
-        <Text style={s.name}>{employee?.name || user?.user_metadata?.full_name || '내 정보'}님</Text><Text style={s.divider}>|</Text>
-        <Text style={s.badge}>{role}</Text>{employee?.is_probation && <Text style={[s.badge, s.probation]}>수습중</Text>}
-        <Text style={s.divider}>|</Text><Text style={s.affiliation}>{store?.name}</Text>
-      </Pressable>
-    </ScrollView>
-    {employeeId && <>{record.loading ? <SkeletonGroup label="출퇴근 기록 불러오는 중" style={s.times}>{[0, 1].map(i => <View key={i} style={s.row}><Skeleton width={64} height={14} style={s.skLine} /><Skeleton width={52} height={16} style={s.skLine} /></View>)}</SkeletonGroup> : record.error ? <ErrorMessage message={record.error} onRetry={() => { void record.refetch(); }} /> : <View style={s.times}>
-      <View style={s.row}><Text style={s.label}>{record.start ? '출근' : '출근 예정'}</Text><Text style={s.time}>{attendanceTime(record.start?.punched_at) || record.schedule?.start_time?.slice(0, 5) || '미정'}</Text></View>
-      <View style={s.row}><Text style={s.label}>{record.end ? '퇴근' : '퇴근 예정'}</Text><Text style={s.time}>{attendanceTime(record.end?.punched_at) || record.schedule?.end_time?.slice(0, 5) || '미정'}</Text></View>
-      {record.scheduleError && <Text style={s.label}>예정 시간을 불러오지 못했어요</Text>}
-    </View>}
-    <Pressable accessibilityRole="button" accessibilityHint="내 출퇴근 QR을 열어요" onPress={() => router.push('/attendance/my-qr')} style={s.action}><Text style={s.actionText}>{record.start && !record.end ? '퇴근' : '출근'}</Text></Pressable></>}
+    <Pressable accessibilityRole="button" accessibilityLabel="내 정보 보기" onPress={() => router.push('/mypage')} style={s.identity}>
+      {!!name && <Text style={s.name} numberOfLines={1}>{name}님</Text>}
+      <Text style={s.pill}>{role}</Text>
+      {employee?.is_probation && <Text style={[s.pill, s.probation]}>수습중</Text>}
+    </Pressable>
+    {employeeId && (record.loading ? <SkeletonGroup label="출퇴근 기록 불러오는 중" style={s.row}>
+      <View style={s.info}><Skeleton width={110} height={13} /><Skeleton width={120} height={22} style={s.gap} /></View>
+      <Skeleton width={88} height={44} radius={Radius.field} />
+    </SkeletonGroup> : record.error ? <ErrorMessage message={record.error} onRetry={() => { void record.refetch(); }} /> : <View style={s.row}>
+      <View style={s.info}>
+        <NumericText style={s.label}>{display.label}</NumericText>
+        <NumericText style={s.value}>{display.value}</NumericText>
+        {record.scheduleError && <Text style={s.label}>예정 시간을 불러오지 못했어요</Text>}
+      </View>
+      {display.action && <Pressable accessibilityRole="button" accessibilityHint="내 출퇴근 QR을 열어요" onPress={() => router.push('/attendance/my-qr')}
+        style={({ pressed }) => [s.action, pressed && s.pressed]}>
+        <Text style={s.actionText}>{display.action === 'out' ? '퇴근하기' : '출근하기'}</Text>
+      </Pressable>}
+    </View>)}
   </View>;
 }
+
 const s = StyleSheet.create({
-  card: { ...CardStyle, padding: Spacing.cardPadding, gap: 12 }, identity: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 44 },
-  name: { fontFamily: Fonts.wantedSemiBold, fontSize: Type.lg, lineHeight: 24, color: Colors.black }, divider: { color: Colors.gray300 },
-  badge: { fontFamily: Fonts.wantedMedium, fontSize: 12, lineHeight: 18, color: Colors.action, backgroundColor: Colors.tinted, paddingHorizontal: 8, paddingVertical: 4, borderRadius: Radius.sm },
-  probation: { backgroundColor: Colors.contextBg, color: Colors.gray700 }, affiliation: { fontFamily: Fonts.wantedRegular, fontSize: 12, color: Colors.gray600 },
-  times: { borderTopWidth: 1, borderColor: Colors.homeBorder, paddingTop: 12, gap: 12 }, row: { flexDirection: 'row', justifyContent: 'space-between', gap: 16 },
-  label: { fontFamily: Fonts.wantedRegular, fontSize: Type.base, lineHeight: 24, color: Colors.gray600 }, time: { fontFamily: Fonts.geistMedium, fontSize: Type.lg, lineHeight: 24, color: Colors.black },
-  skLine: { marginVertical: 4 },
-  action: { minHeight: 44, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.tinted, borderRadius: Radius.field }, actionText: { fontFamily: Fonts.wantedMedium, fontSize: Type.base, color: Colors.action },
+  card: { ...CardStyle, padding: Spacing.cardPadding + 2, gap: 6 },
+  identity: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 44, alignSelf: 'flex-start', maxWidth: '100%' },
+  name: { flexShrink: 1, fontFamily: Fonts.wantedBold, fontSize: Type.md, lineHeight: 22, color: Colors.black },
+  pill: { fontFamily: Fonts.wantedMedium, fontSize: 12, lineHeight: 16, color: Colors.action, backgroundColor: Colors.tinted, paddingHorizontal: 8, paddingVertical: 3, borderRadius: Radius.pill, overflow: 'hidden' },
+  probation: { backgroundColor: Colors.contextBg, color: Colors.gray700 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  info: { flex: 1, minWidth: 0 },
+  gap: { marginTop: 8 },
+  label: { fontSize: Type.sm, fontWeight: '500', lineHeight: 19, color: Colors.gray500 },
+  value: { fontSize: Type.xl, fontWeight: '700', lineHeight: 28, color: Colors.black, marginTop: 2 },
+  action: { minHeight: 44, paddingHorizontal: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.action, borderRadius: Radius.field },
+  actionText: { fontFamily: Fonts.wantedSemiBold, fontSize: Type.md, color: Colors.white },
+  pressed: { opacity: 0.85 },
 });

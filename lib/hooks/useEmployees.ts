@@ -75,5 +75,7 @@ export function useEmployees(includeInactive = false, active = true) {
     await deleteEmployee(id);
   }, [scope, canManageStore, access]);
 
-  return { employees, loading, error, refetch, add, update, deactivate, remove };
+  /** 권한 거절은 빈 목록과 같다(오류로 보이지 않는다). */
+  const denied = isAccessDenied(query.error);
+  return { employees, loading, error, denied, refetch, add, update, deactivate, remove };
 }

@@ -109,7 +109,7 @@ export default function SelectStoreScreen() {
 
   const hasStores = stores.length > 0;
 
-  if (showForm && user && canWrite()) return <SafeAreaView style={[styles.container, { backgroundColor: Colors.homeCanvas }]}>
+  if (showForm && user && canWrite()) return <SafeAreaView style={[styles.container, { backgroundColor: Colors.white }]}>
     <StoreSetupWizard knownRequestIds={stores.flatMap(s => s.setup_request_id ? [s.setup_request_id] : [])} userId={user.id} onCancel={() => setShowForm(false)} onCreated={async (id, choice) => {
       await refreshStore(id);
       router.replace(choice === 'now' ? '/settings/pos-sync?setup=1' : '/(tabs)');
