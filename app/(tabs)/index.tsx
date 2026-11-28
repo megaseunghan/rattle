@@ -19,6 +19,7 @@ import { HomeAlertStack } from '../../lib/components/home/alerts/HomeAlertStack'
 import { HomeWeekSchedule } from '../../lib/components/home/schedule/HomeWeekSchedule';
 import { HomeProfitSection } from '../../lib/components/home/profit/HomeProfitSection';
 import { HomeMyWork } from '../../lib/components/home/HomeMyWork';
+import { HomeGreeting } from '../../lib/components/home/HomeGreeting';
 import { HomeFillPromptSheet, fillAlertCards } from '../../lib/components/home/HomeFillPrompt';
 import { useRefreshOnReturn } from '../../lib/query/useRefreshOnReturn';
 
@@ -114,9 +115,11 @@ export function HomeScreen({ active = true }: { active?: boolean }) {
         scrollEventThrottle={32}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />}
       >
+        {/* 매장 근무가 없으면(연결된 직원 기록 없음) 출퇴근 칸 대신 알림 위 인사말(S04 확정 시안). */}
+        {!myEmployeeId && <HomeGreeting />}
         <HomeAlertStack active={active} refreshKey={refreshKey} todaySales={todaySales} financial={canManageStore}
           expanded={fold.expanded} onExpandedChange={fold.setExpanded} leadingCards={fillAlertCards(fillPrompt)} onLayout={fold.onAlertLayout} />
-        <HomeAttendanceCard employeeId={myEmployeeId} employee={myEmployee} active={active} refreshKey={refreshKey} />
+        {!!myEmployeeId && <HomeAttendanceCard employeeId={myEmployeeId} employee={myEmployee} active={active} refreshKey={refreshKey} />}
         <HomeWeekSchedule active={active} refreshKey={refreshKey} employees={employees}
           employeesState={employeesLoading ? 'loading' : employeesError && !employeesDenied && !employees.length ? 'error' : 'ready'}
           onRetryEmployees={() => { void refetchEmp(true); }} />

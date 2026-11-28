@@ -82,7 +82,7 @@ export function probationRateNote(rateText: string, exampleHourly: number | null
   if (isBelowProbationFloor({ hourlyWage: wage }, exampleHourly, PROBATION_MINIMUM_WAGE_FLOOR)) {
     return {
       text: `예: 시급 ${won(exampleHourly)}이면 ${won(wage)}이에요. `,
-      strong: `최저임금의 90%(${won(exampleHourly * PROBATION_MINIMUM_WAGE_FLOOR)})보다 적게 줄 수는 없어요.`,
+      strong: `최저임금의 90%(${won(exampleHourly * PROBATION_MINIMUM_WAGE_FLOOR)})보다 적게 주면 위험해요.`,
       tail: ' 합류 승인 때 다시 알려 드릴게요.',
     };
   }

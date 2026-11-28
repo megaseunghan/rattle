@@ -12,11 +12,12 @@ import { Fonts } from '../../constants/fonts';
 import { Spacing, Type } from '../../constants/designTokens';
 import { getErrorMessage } from '../../lib/utils/error';
 import { useConfirmLeave } from '../../lib/hooks/useConfirmLeave';
-import { AppBar, Button, Field } from '../../lib/components/ui';
+import { Button } from '../../lib/components/ui';
+import { formatInviteCode } from '../../lib/components/store-setup/format';
 import { buildJoinOnboarding, EMPTY_ONBOARDING_DRAFT, type OnboardingDraft } from '../../lib/utils/joinOnboarding';
 import { type JoinIdentity, joinSteps, validateJoinQuestion } from '../../lib/utils/joinFlow';
 import {
-  activeIndexOf, blockStateOf, FlowError, FlowNextButton, FlowNote, initialSteps, QuestionBlock, QuestionFlowLayout,
+  activeIndexOf, blockStateOf, FlowError, FlowNextButton, FlowNote, initialSteps, QuestionBlock, QuestionFlowLayout, UnderlineInput,
   stepsReducer, type QuestionStepsAction, type QuestionStepsState,
 } from '../../lib/components/question-flow';
 import { JoinQuestionInput } from '../../lib/components/join/JoinQuestionInput';
@@ -26,6 +27,9 @@ import type { EmploymentType } from '../../types';
 
 /** 근무 형태를 바꾸면 다시 거쳐야 하는 첫 급여 질문 위치(이름·휴대폰·근무 형태·계약 다음). joinSteps 순서와 맞춘다. */
 const FIRST_PAY_INDEX = 4;
+const INVITE_LENGTH = 16;
+/** 입력에서 코드 글자만 남긴다(하이픈·공백 제외, 대문자, 16자까지). */
+function inviteChars(text: string): string { return text.replace(/[^0-9A-Za-z]/g, '').toUpperCase().slice(0, INVITE_LENGTH); }
 const SUBMIT_NOTE = '제출해도 바로 인건비에 반영되지 않아요. 관리자가 확인하고 최종 합류를 승인해요.';
 
 export default function JoinStoreScreen() {
@@ -135,15 +139,19 @@ export default function JoinStoreScreen() {
     <View style={styles.footer}><Button label="확인" onPress={() => router.back()} /></View>
   </SafeAreaView>;
 
-  if (!inviteCode) return <SafeAreaView style={styles.container}>
-    <AppBar title="매장 참여" onBack={() => router.back()} />
-    <View style={styles.content}>
-      <Text accessibilityRole="header" style={styles.title}>초대받은 매장에 참여하기</Text>
-      <Text style={styles.description}>관리자에게 받은 참여코드를 입력해주세요. 신청 후 관리자가 확인하면 매장에 참여할 수 있어요.</Text>
-      <Field label="참여코드" accessibilityLabel="참여코드" value={inviteInput} onChangeText={value => setInviteInput(value.toUpperCase())} autoCorrect={false} autoCapitalize="characters" editable={!loading} placeholder="예: 1234-ABCD-5678-EF90" maxLength={19} />
-      {error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
-    </View>
-    <View style={styles.footer}><Button label="매장 확인" onPress={() => void checkInvite(inviteInput)} loading={loading} /></View>
+  // 참여코드 입력도 합류 질문과 같은 모양(2026-11-28 사용자 결정, 시안에는 이 단계가 없어 합류 질문 방식을 따른다).
+  if (!inviteCode) return <SafeAreaView style={styles.container} edges={['top', 'bottom', 'left', 'right']}>
+    <QuestionFlowLayout onBack={() => router.back()} backLabel="뒤로가기" backDisabled={loading}
+      footer={<FlowNextButton label="매장 확인" onPress={() => void checkInvite(inviteInput)} loading={loading}
+        disabled={inviteChars(inviteInput).length !== INVITE_LENGTH} />}>
+      <QuestionBlock first title="참여코드를 알려 주세요" description="관리자에게 받은 16자리 코드예요." state="active">
+        <UnderlineInput label="참여코드" value={inviteInput} editable={!loading} autoFocus autoCorrect={false} autoCapitalize="characters"
+          placeholder="1234-ABCD-5678-EF90" maxLength={INVITE_LENGTH + 3} returnKeyType="done"
+          onSubmitEditing={() => { if (inviteChars(inviteInput).length === INVITE_LENGTH) void checkInvite(inviteInput); }}
+          onChangeText={text => { setError(null); setInviteInput(formatInviteCode(inviteChars(text))); }} />
+        {error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
+      </QuestionBlock>
+    </QuestionFlowLayout>
   </SafeAreaView>;
 
   const footer = <>
@@ -174,7 +182,6 @@ export default function JoinStoreScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.white },
-  content: { padding: Spacing.screenX, paddingTop: 28, paddingBottom: 24, flexGrow: 1 },
   title: { fontFamily: Fonts.wantedBold, fontSize: Type.xl, color: Colors.black, lineHeight: 30 },
   inviteStore: { fontFamily: Fonts.wantedSemiBold, fontSize: Type.sm, color: Colors.action, marginBottom: 4 },
   description: { fontFamily: Fonts.wantedRegular, fontSize: Type.base, color: Colors.gray500, lineHeight: 22, marginTop: 10, marginBottom: 28 },

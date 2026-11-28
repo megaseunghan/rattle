@@ -1,6 +1,6 @@
 import {
   calendarCells, clampProbationEnd, defaultProbationEnd, initialProbationDraft, isStoreDefaultRate, parseRatePercent,
-  probationBelowFloor, probationExample, probationQuickEnd, probationSpanDays, ratePercentOf, shiftMonth,
+  probationBelowFloor, probationExample, probationFloorNotice, probationQuickEnd, probationSpanDays, ratePercentOf, shiftMonth,
 } from '../../../lib/components/join/probationValues';
 
 describe('수습 마지막 날 빠른 칩(달력 개월, 90일 아님)', () => {
@@ -58,6 +58,15 @@ describe('최저임금 90% 안내', () => {
   it('수습 비율을 적용한 시급이 최저임금 90%보다 적으면 알린다', () => {
     expect(probationBelowFloor(part, 0.9, '2026-12-01')).toBe(false);
     expect(probationBelowFloor(part, 0.8, '2026-12-01')).toBe(true);
+  });
+  it('안내 문구에 수습 중 금액과 90% 금액을 적는다(주휴 포함·월급은 금액 없이)', () => {
+    expect(probationFloorNotice(part, 0.9, '2026-12-01')).toBeNull();
+    expect(probationFloorNotice(part, 0.8, '2026-12-01'))
+      .toBe('수습 중 시급 8,256원은 최저임금의 90%(9,288원)보다 적어요. 수습이어도 이보다 적게 주면 위험해요. 그래도 저장할 수 있어요.');
+    expect(probationFloorNotice({ ...part, weeklyRestIncluded: true }, 0.8, '2026-12-01'))
+      .toBe('수습 중 시급 8,256원은 최저임금의 90%보다 적어요. 수습이어도 이보다 적게 주면 위험해요. 그래도 저장할 수 있어요.');
+    expect(probationFloorNotice({ isPart: false, hourlyWage: null, monthlySalary: 2_000_000, weeklyMinutes: 2400, weeklyRestIncluded: null }, 0.8, '2026-12-01'))
+      .toBe('수습 중 월 기본급 1,600,000원은 최저임금의 90%보다 적어요. 수습이어도 이보다 적게 주면 위험해요. 그래도 저장할 수 있어요.');
   });
   it('예시 금액을 보여 준다', () => {
     expect(probationExample({ ...part, hourlyWage: 10_000 }, 0.9)).toBe('시급 10,000원이면 수습 중 9,000원이에요.');

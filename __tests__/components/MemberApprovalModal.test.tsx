@@ -51,17 +51,20 @@ it('관리자가 시트에서 기본급과 계좌를 고쳐 최종 합류 내용
 it.each([null, 0, -1])('정규직 월급 %s이면 필드 안내와 함께 최종 합류를 막는다', base_salary => {
   const choose = jest.fn();
   const screen = render(<MemberApprovalModal profile={{ ...profile, base_salary } as JoinOnboardingProfile} member={member} candidates={[]} busy={false} onChoose={choose} onClose={jest.fn()} />);
-  expect(screen.getByText('월급을 입력해주세요')).toBeTruthy();
+  expect(row(screen, /^월 기본급, 정해 주세요/)).toBeTruthy();
+  // 빨간 오류 문구 대신 줄 값이 '정해 주세요'로 바뀐다(2026-11-28 사용자 결정).
+  expect(screen.queryByText('월급을 입력해주세요')).toBeNull();
+  expect(screen.queryByText(/최저임금 시급/)).toBeNull();
   expect(finalButton(screen).props.accessibilityState.disabled).toBe(true);
   fireEvent.press(finalButton(screen)); expect(choose).not.toHaveBeenCalled();
   editSheet(screen, /^월 기본급/, { '월 기본급': '3,000,000' });
-  expect(screen.queryByText('월급을 입력해주세요')).toBeNull();
+  expect(screen.queryByRole('button', { name: /^월 기본급, 정해 주세요/ })).toBeNull();
   fireEvent.press(finalButton(screen)); expect(choose).toHaveBeenCalledWith({ kind: 'auto' }, expect.objectContaining({ base_salary: 3000000 }));
 });
 it('파트타이머는 시급이 없으면 합류하지 못한다', () => {
   const choose = jest.fn();
   const screen = render(<MemberApprovalModal profile={{ ...partProfile, hourly_wage: null }} member={member} candidates={[]} busy={false} onChoose={choose} onClose={jest.fn()} />);
-  expect(screen.getByText('시급을 입력해주세요')).toBeTruthy(); fireEvent.press(finalButton(screen)); expect(choose).not.toHaveBeenCalled();
+  expect(row(screen, /^시급, 정해 주세요/)).toBeTruthy(); fireEvent.press(finalButton(screen)); expect(choose).not.toHaveBeenCalled();
   editSheet(screen, /^시급/, { '시급': '12,000' }); fireEvent.press(finalButton(screen));
   expect(choose).toHaveBeenCalledWith({ kind: 'auto' }, expect.objectContaining({ employment_type: 'part_time', hourly_wage: 12000, weekly_minutes: 1230, weekly_hours: 20, weekly_rest_included: false }));
 });
@@ -69,7 +72,7 @@ it('근무 형태를 바꾸면 새 형태의 급여 조건을 검증하고 잘�
   const screen = render(<MemberApprovalModal profile={profile} member={member} candidates={[]} busy={false} onChoose={jest.fn()} onClose={jest.fn()} />);
   fireEvent.press(row(screen, /^근무 형태/));
   fireEvent.press(screen.getByRole('radio', { name: '파트타이머' }));
-  expect(screen.getByText('시급을 입력해주세요')).toBeTruthy();
+  expect(row(screen, /^시급, 정해 주세요/)).toBeTruthy();
   expect(finalButton(screen).props.accessibilityState.disabled).toBe(true);
   fireEvent.press(row(screen, /^시급/));
   fireEvent.changeText(screen.getByLabelText('시급'), '0');
@@ -91,7 +94,7 @@ it('재합류에서 기존 급여를 선택하면 빈 신청 급여와 편집 �
   const screen = render(<MemberApprovalModal profile={null} member={member} candidates={[prior]} busy={false} onChoose={choose} onClose={jest.fn()} />);
   expect(screen.getByText(/기존 시급 12,000원/)).toBeTruthy();
   fireEvent.press(screen.getByLabelText('퇴사 직원님의 기존 급여 그대로'));
-  expect(screen.queryByText('월급을 입력해주세요')).toBeNull(); expect(screen.queryByRole('button', { name: /^월 기본급/ })).toBeNull();
+  expect(screen.queryByRole('button', { name: /^월 기본급, 정해 주세요/ })).toBeNull(); expect(screen.queryByRole('button', { name: /^월 기본급/ })).toBeNull();
   expect(screen.queryByRole('button', { name: /^급여 계좌/ })).toBeNull(); expect(screen.queryByRole('button', { name: /^입사일/ })).toBeNull();
   expect(screen.getByText(/기존 직원 정보와 급여 조건을 유지하고 계정만 연결해요/)).toBeTruthy();
   expect(screen.queryByText(/급여 조건 이력은 오늘부터 추가/)).toBeNull();
@@ -103,7 +106,7 @@ it('기존 급여 보존을 해제하면 관리자 신규 입력 검증으로 �
   const choose = jest.fn();
   const screen = render(<MemberApprovalModal profile={null} member={member} candidates={[prior]} busy={false} onChoose={choose} onClose={jest.fn()} />);
   fireEvent.press(screen.getByLabelText('퇴사 직원님의 기존 급여 그대로')); fireEvent.press(screen.getByLabelText('퇴사 직원님의 기존 급여 그대로'));
-  expect(screen.getByText('월급을 입력해주세요')).toBeTruthy(); fireEvent.press(screen.getByText('이 직원으로 최종 합류')); expect(choose).not.toHaveBeenCalled();
+  expect(row(screen, /^월 기본급, 정해 주세요/)).toBeTruthy(); fireEvent.press(screen.getByText('이 직원으로 최종 합류')); expect(choose).not.toHaveBeenCalled();
 });
 it.each([{ wage_condition_valid: false }, { wage_history_id: null }, { has_other_account: true }])('유효하지 않거나 연결할 수 없는 후보는 기존 조건 보존을 선택할 수 없다: %s', change => {
   const screen = render(<MemberApprovalModal profile={null} member={member} candidates={[{ ...prior, ...change }]} busy={false} onChoose={jest.fn()} onClose={jest.fn()} />);
@@ -217,9 +220,13 @@ it('수습 비율이 최저임금 90%보다 적으면 회색으로 안내한다'
   const screen = render(<MemberApprovalModal profile={{ ...partProfile, hourly_wage: 10320, joined_at: '2026-12-01' }} member={member} candidates={[]} busy={false}
     storeDefaults={{ default_probation_months: 3, default_probation_rate: 0.9 }} onChoose={jest.fn()} onClose={jest.fn()} />);
   fireEvent.press(row(screen, /^수습 적용/));
-  expect(screen.queryByText('최저임금의 90%보다 적어요. 수습이어도 이보다 적게 줄 수 없어요.')).toBeNull();
+  const notice = '수습 중 시급 8,256원은 최저임금의 90%(9,288원)보다 적어요. 수습이어도 이보다 적게 주면 위험해요. 그래도 저장할 수 있어요.';
+  expect(screen.queryByText(notice)).toBeNull();
+  expect(screen.getByText('시급 10,320원이면 수습 중 9,288원이에요.')).toBeTruthy();
   fireEvent.changeText(screen.getByLabelText('수습 중 급여 비율'), '80');
-  expect(screen.getByText('최저임금의 90%보다 적어요. 수습이어도 이보다 적게 줄 수 없어요.')).toBeTruthy();
+  expect(screen.getByText(notice)).toBeTruthy();
+  // 안내가 뜨면 예시 줄은 숨긴다(금액이 안내 안에 있어요).
+  expect(screen.queryByText('시급 10,320원이면 수습 중 8,256원이에요.')).toBeNull();
   expect(screen.getByText('1년 미만 계약이거나 단순노무 업무면 수습이어도 급여를 줄일 수 없어요.')).toBeTruthy();
 });
 it('매장 기본 수습이 없으면 수습 없이 보낸다', () => {

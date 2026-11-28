@@ -157,6 +157,8 @@ function Applicant({ member }: { member: StoreMember }) {
 }
 
 const KEEP_EXISTING = '지금 조건 그대로';
+/** 비어 있어 관리자가 정해야 하는 값(빨간 오류 대신 파란 글자, 2026-11-28 사용자 결정). */
+const ASK = '정해 주세요';
 const CHOSEN_TAG = '직원이 고름';
 const UNSURE_TAG = '직원이 잘 모르겠대요';
 
@@ -185,21 +187,19 @@ function ApprovalRows({ draft, touched, hasProfile, incomeAsked, keepProbation, 
     <RowGroup title="급여">
       {row('근무 형태', choiceTitle(EMPLOYMENT_CHOICES, draft.employmentType), 'emp')}
       {part ? <>
-        {row('시급', moneyText(draft.hourlyWage), 'wage', { numeric: true })}
-        {!!wageError && <Text accessibilityRole="alert" style={styles.error}>{wageError}</Text>}
-        {!!minimum && <GrayNotice message={minimum} />}
+        {row('시급', wageError ? ASK : moneyText(draft.hourlyWage), 'wage', { numeric: !wageError, ask: !!wageError })}
+        {!wageError && !!minimum && <GrayNotice message={minimum} />}
         {row('주휴수당', draft.weeklyRest === 'unknown' ? '' : choiceTitle(WEEKLY_REST_CHOICES, draft.weeklyRest), 'wk', { tag: restTag })}
         {row('주 근무시간', formatDuration(draft.weeklyMinutes), 'hours', { numeric: true })}
       </> : <>
-        {row('월 기본급', moneyText(draft.baseSalary), 'salary', { numeric: true })}
-        {!!wageError && <Text accessibilityRole="alert" style={styles.error}>{wageError}</Text>}
-        {!!minimum && <GrayNotice message={minimum} />}
+        {row('월 기본급', wageError ? ASK : moneyText(draft.baseSalary), 'salary', { numeric: !wageError, ask: !!wageError })}
+        {!wageError && !!minimum && <GrayNotice message={minimum} />}
         {row('월 비과세 금액', moneyText(draft.nonTaxable || '0'), 'salary', { numeric: true })}
       </>}
       {row('입사일', draft.joinedAt ? formatKoreanDate(draft.joinedAt) : '', 'joined')}
     </RowGroup>
     <RowGroup title="세금">
-      {row('계약', keepIncome ? KEEP_EXISTING : incomeUnknown ? '정해 주세요' : choiceTitle(INCOME_CHOICES, draft.incomeType), 'inc', { tag: keepIncome ? undefined : incomeTag, ask: !keepIncome && incomeUnknown })}
+      {row('계약', keepIncome ? KEEP_EXISTING : incomeUnknown ? ASK : choiceTitle(INCOME_CHOICES, draft.incomeType), 'inc', { tag: keepIncome ? undefined : incomeTag, ask: !keepIncome && incomeUnknown })}
     </RowGroup>
     <RowGroup title="수습">{row('수습 적용', keepProbation ? KEEP_EXISTING : probationText(probation, storeRate), 'prob')}</RowGroup>
     <RowGroup title="계좌">{row('급여 계좌', accountText(draft.bankName, draft.accountNumber), 'acct', { numeric: false })}</RowGroup>
@@ -219,7 +219,6 @@ const styles = StyleSheet.create({
   whoText: { flex: 1 },
   whoName: { fontFamily: Fonts.wantedBold, fontSize: Type.lg, color: Colors.black },
   whoSub: { marginTop: 2, fontFamily: Fonts.wantedRegular, fontSize: Type.sm, color: Colors.gray500 },
-  error: { marginTop: 6, fontFamily: Fonts.wantedRegular, fontSize: Type.sm, lineHeight: 20, color: Colors.negative },
   bottom: { paddingHorizontal: Spacing.screenX, paddingTop: 12, paddingBottom: 8, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: Colors.gray200, backgroundColor: Colors.white },
   hint: { marginBottom: 10, fontFamily: Fonts.wantedRegular, fontSize: Type.sm, lineHeight: 20, color: Colors.gray600 },
   buttons: { flexDirection: 'row', gap: 8 },

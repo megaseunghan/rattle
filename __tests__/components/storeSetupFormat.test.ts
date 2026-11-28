@@ -59,7 +59,7 @@ describe('수습 비율', () => {
   it('최저임금 90%보다 적으면 막지 않고 굵은 안내를 붙인다', () => {
     const note = probationRateNote('80', 10_320);
     expect(note.text).toBe('예: 시급 10,320원이면 8,256원이에요. ');
-    expect(note.strong).toBe('최저임금의 90%(9,288원)보다 적게 줄 수는 없어요.');
+    expect(note.strong).toBe('최저임금의 90%(9,288원)보다 적게 주면 위험해요.');
     expect(note.tail).toBe(' 합류 승인 때 다시 알려 드릴게요.');
   });
 

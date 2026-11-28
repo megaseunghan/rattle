@@ -48,4 +48,3 @@ export function isBelowProbationFloor(input: MinimumWageInput, minimumHourly: nu
   return isBelowMinimumWage(input, minimumHourly * floor);
 }
 
-export const PROBATION_FLOOR_NOTICE = '최저임금의 90%보다 적어요. 수습이어도 이보다 적게 줄 수 없어요.';

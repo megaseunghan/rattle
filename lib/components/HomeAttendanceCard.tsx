@@ -34,10 +34,10 @@ export function HomeAttendanceCard({ employeeId, employee, active, refreshKey }:
   const now = useMinuteClock(active && working);
   const role = storeRole ? ROLE_LABELS[storeRole] : '역할 확인 중';
   const display = attendanceDisplay(record, now);
-  const name = employee?.name || user?.user_metadata?.full_name || '내 정보';
+  const name: string | null = employee?.name || user?.user_metadata?.full_name || null;
   return <View style={s.card}>
     <Pressable accessibilityRole="button" accessibilityLabel="내 정보 보기" onPress={() => router.push('/mypage')} style={s.identity}>
-      <Text style={s.name} numberOfLines={1}>{name}님</Text>
+      {!!name && <Text style={s.name} numberOfLines={1}>{name}님</Text>}
       <Text style={s.pill}>{role}</Text>
       {employee?.is_probation && <Text style={[s.pill, s.probation]}>수습중</Text>}
     </Pressable>

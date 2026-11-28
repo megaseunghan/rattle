@@ -99,6 +99,25 @@ export function probationBelowFloor(wage: ProbationWageInput, rate: number, date
     : wage.monthlySalary != null && isBelowProbationFloor({ monthlySalary: wage.monthlySalary * rate, weeklyMinutes: wage.weeklyMinutes }, minimum);
 }
 
+/**
+ * 최저임금 90% 안내 문구(확정 시안 join-v9, 2026-11-28 사용자 결정: '줄 수 없어요' 대신 '위험해요').
+ * 막지 않고 안내만 한다. 시급(주휴 별도)이면 금액을 함께 적고, 월급·주휴 포함 시급은 비교 금액이 달라 금액을 빼요.
+ */
+export function probationFloorNotice(wage: ProbationWageInput, rate: number, date: string): string | null {
+  if (!probationBelowFloor(wage, rate, date)) return null;
+  const tail = '수습이어도 이보다 적게 주면 위험해요. 그래도 저장할 수 있어요.';
+  if (wage.isPart && wage.hourlyWage != null && wage.weeklyRestIncluded !== true) {
+    const floor = Math.ceil(minimumWageFor(date) * PROBATION_FLOOR_RATE);
+    return `수습 중 시급 ${wonText(wage.hourlyWage * rate)}은 최저임금의 90%(${wonText(floor)})보다 적어요. ${tail}`;
+  }
+  const label = wage.isPart ? '시급' : '월 기본급';
+  const base = wage.isPart ? wage.hourlyWage : wage.monthlySalary;
+  return `수습 중 ${label} ${wonText((base ?? 0) * rate)}은 최저임금의 90%보다 적어요. ${tail}`;
+}
+
+const PROBATION_FLOOR_RATE = 0.9;
+function wonText(value: number): string { return `${Math.round(value).toLocaleString('ko-KR')}원`; }
+
 /** 예시 금액 한 줄(‘시급 10,000원이면 수습 중 9,000원이에요.’). */
 export function probationExample(wage: ProbationWageInput, rate: number): string | null {
   const base = wage.isPart ? wage.hourlyWage : wage.monthlySalary;

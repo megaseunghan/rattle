@@ -21,6 +21,17 @@ it('취소되거나 만료된 초대는 온보딩을 열지 않는다', async ()
   expect(mockSubmit).not.toHaveBeenCalled();
 });
 
+it('참여코드는 4자리마다 하이픈을 넣고 16자리가 되어야 매장 확인을 누를 수 있다', () => {
+  render(<JoinStoreScreen />);
+  expect(screen.getByText('참여코드를 알려 주세요')).toBeTruthy();
+  fireEvent.changeText(screen.getByLabelText('참여코드'), 'abcd12');
+  expect(screen.getByLabelText('참여코드').props.value).toBe('ABCD-12');
+  expect(screen.getByRole('button', { name: '매장 확인' }).props.accessibilityState.disabled).toBe(true);
+  fireEvent.changeText(screen.getByLabelText('참여코드'), 'ABCD 1234 abcd 1234 99');
+  expect(screen.getByLabelText('참여코드').props.value).toBe('ABCD-1234-ABCD-1234');
+  expect(screen.getByRole('button', { name: '매장 확인' }).props.accessibilityState.disabled).toBe(false);
+});
+
 const next = () => fireEvent.press(screen.getByRole('button', { name: '다음' }));
 function answer(label: string, value: string) {
   const input = screen.getByLabelText(label);

@@ -5,14 +5,14 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Colors } from '../../../constants/colors';
 import { Fonts } from '../../../constants/fonts';
 import { Radius, Type } from '../../../constants/designTokens';
-import { isIsoDate, maxProbationEnd, PROBATION_FLOOR_NOTICE } from '../../payroll';
+import { isIsoDate, maxProbationEnd } from '../../payroll';
 import { formatKoreanDate } from '../pickers';
 import { FieldSheet } from './FieldSheet';
 import { GrayNotice } from './GrayNotice';
 import { ProbationCalendar } from './ProbationCalendar';
 import { UnderlineInput } from './UnderlineInput';
 import {
-  isStoreDefaultRate, parseRatePercent, PROBATION_QUICK_MONTHS, probationBelowFloor, probationExample, probationQuickEnd,
+  isStoreDefaultRate, parseRatePercent, PROBATION_QUICK_MONTHS, probationExample, probationFloorNotice, probationQuickEnd,
   probationSpanDays, type ProbationDraft, type ProbationMonths, type ProbationWageInput,
 } from './probationValues';
 
@@ -72,7 +72,7 @@ function ProbationDetails({ draft, setDraft, joinedAt, storeMonths, storeRate, w
 }) {
   const max = maxProbationEnd(joinedAt);
   const example = rate != null ? probationExample(wage, rate) : null;
-  const below = rate != null && probationBelowFloor(wage, rate, joinedAt);
+  const notice = rate != null ? probationFloorNotice(wage, rate, joinedAt) : null;
   return <>
     <Text style={styles.label}>수습 마지막 날</Text>
     <View style={styles.endRow}>
@@ -98,7 +98,7 @@ function ProbationDetails({ draft, setDraft, joinedAt, storeMonths, storeRate, w
       selectTextOnFocus trailing={isStoreDefaultRate(draft.ratePercent, storeRate) ? '매장 기본값' : undefined}
       onChangeText={text => setDraft(current => ({ ...current, ratePercent: text.replace(/[^\d.]/g, '') }))} />
     {rate == null ? <Text style={styles.note}>1~100% 사이로 적어 주세요.</Text>
-      : <>{!!example && <Text style={styles.note}>{example}</Text>}{below && <GrayNotice message={PROBATION_FLOOR_NOTICE} />}</>}
+      : notice ? <GrayNotice message={notice} /> : !!example && <Text style={styles.note}>{example}</Text>}
     <View style={styles.reference}><Text style={styles.referenceText}>1년 미만 계약이거나 단순노무 업무면 수습이어도 급여를 줄일 수 없어요.</Text></View>
   </>;
 }
