@@ -1,7 +1,7 @@
 /* design-system: DESIGN.md 「직원 정보 수정(S05)」 — 줄 표시값과 저장 내용(순수 함수). */
 import type { Employee } from '../../../types';
-import { isIsoDate } from '../../payroll';
-import { clampProbationEnd } from '../join/probationValues';
+import { addDays, addMonthsInclusiveEnd, isIsoDate } from '../../payroll';
+import { clampProbationEnd, PROBATION_QUICK_MONTHS, probationSpanDays } from '../join/probationValues';
 import type { ProbationResult } from '../join/ProbationSheet';
 
 export const DEPENDENTS_MIN = 1;
@@ -31,11 +31,23 @@ export function weeklyMinutesPatch(minutes: number): EmployeePatch {
   return { weekly_minutes: minutes, weekly_hours: Math.floor(minutes / 60) };
 }
 
-/** 입사일을 바꾸면 수습 시작일을 따라 옮기고, 마지막 날은 새 입사일부터 3개월 안으로 맞춘다. */
+/**
+ * 입사일을 바꾸면 수습 기간도 같이 옮긴다(사용자 결정 2026-11-28). 1·2·3개월로 정한 기간이면 새 입사일부터 같은 개월 수로,
+ * 달력에서 고른 날이면 같은 일수로 옮긴다. 그래도 새 입사일부터 3개월 안으로 맞춘다.
+ */
 export function joinedAtPatch(employee: Employee, joinedAt: string): EmployeePatch {
   if (!employee.is_probation) return { joined_at: joinedAt };
-  const end = employee.probation_ends_on && isIsoDate(employee.probation_ends_on) ? clampProbationEnd(employee.probation_ends_on, joinedAt) : null;
-  return { joined_at: joinedAt, probation_started_at: joinedAt, probation_ends_on: end };
+  return { joined_at: joinedAt, probation_started_at: joinedAt, probation_ends_on: movedProbationEnd(employee, joinedAt) };
+}
+
+function movedProbationEnd(employee: Employee, joinedAt: string): string | null {
+  const end = employee.probation_ends_on;
+  if (!end || !isIsoDate(end)) return null;
+  const start = employee.probation_started_at ?? employee.joined_at;
+  if (!start || !isIsoDate(start) || end < start) return clampProbationEnd(end, joinedAt);
+  const months = PROBATION_QUICK_MONTHS.find(n => addMonthsInclusiveEnd(start, n) === end);
+  const moved = months ? addMonthsInclusiveEnd(joinedAt, months) : addDays(joinedAt, probationSpanDays(start, end) - 1);
+  return clampProbationEnd(moved, joinedAt);
 }
 
 export function probationPatch(joinedAt: string | null, value: ProbationResult): EmployeePatch {

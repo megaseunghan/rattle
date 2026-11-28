@@ -22,10 +22,20 @@ describe('직원 정보 저장 내용', () => {
   it('주 근무시간은 분과 호환용 정수 시간(내림)을 같이 보낸다', () => {
     expect(weeklyMinutesPatch(1230)).toEqual({ weekly_minutes: 1230, weekly_hours: 20 });
   });
-  it('수습 중 입사일을 바꾸면 시작일을 옮기고 마지막 날을 새 3개월 안으로 맞춘다', () => {
+  it('수습 중 입사일을 바꾸면 수습 기간도 같은 길이로 함께 옮긴다', () => {
     expect(joinedAtPatch(base, '2026-12-01')).toEqual({ joined_at: '2026-12-01' });
+    const probation = { ...base, is_probation: true, joined_at: '2026-11-01', probation_started_at: '2026-11-01' };
+    // 3개월(11/1~1/31) → 12/1부터 3개월(~2/28)
+    expect(joinedAtPatch({ ...probation, probation_ends_on: '2027-01-31' }, '2026-12-01'))
+      .toEqual({ joined_at: '2026-12-01', probation_started_at: '2026-12-01', probation_ends_on: '2027-02-28' });
+    // 1개월(11/1~11/30) → 입사일을 앞당겨도 1개월(10/15~11/14)
+    expect(joinedAtPatch({ ...probation, probation_ends_on: '2026-11-30' }, '2026-10-15').probation_ends_on).toBe('2026-11-14');
+    // 달력에서 고른 45일(11/1~12/15) → 12/1부터 45일(~2027-01-14)
+    expect(joinedAtPatch({ ...probation, probation_ends_on: '2026-12-15' }, '2026-12-01').probation_ends_on).toBe('2027-01-14');
+  });
+  it('예전 수습 시작일을 모르면 새 입사일부터 3개월 안으로만 맞춘다', () => {
     const probation = { ...base, is_probation: true, probation_ends_on: '2027-03-31' };
-    expect(joinedAtPatch(probation, '2026-12-01')).toEqual({ joined_at: '2026-12-01', probation_started_at: '2026-12-01', probation_ends_on: '2027-02-28' });
+    expect(joinedAtPatch(probation, '2026-12-01').probation_ends_on).toBe('2027-02-28');
     expect(joinedAtPatch({ ...probation, probation_ends_on: '2026-11-30' }, '2026-12-01').probation_ends_on).toBe('2026-12-01');
   });
   it('수습을 끄면 기간·비율을 비우고, 켜면 입사일부터 시작한다', () => {
