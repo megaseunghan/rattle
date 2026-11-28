@@ -36,6 +36,7 @@ export function parseWeeklyMinutes(hours: string, minutes: string): number | nul
   const h = Number(hours.trim() || '0'), m = Number(minutes.trim() || '0');
   if (m >= 60 || m % 10 !== 0) throw new UserFacingError('주 근무시간의 분은 0~50분, 10분 단위로 입력해 주세요.');
   const total = h * 60 + m;
+  if (total === 0) throw new UserFacingError('주 근무시간을 10분 이상으로 입력해 주세요. 모르면 비워 두세요.');
   if (total > 168 * 60) throw new UserFacingError('주 근무시간은 168시간을 넘을 수 없어요.');
   return total;
 }

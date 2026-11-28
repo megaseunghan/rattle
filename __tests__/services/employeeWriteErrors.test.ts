@@ -13,3 +13,7 @@ it('잘못된 계좌번호 거절도 안내 문구로 바꾼다', async () => {
   mockSingle.mockResolvedValueOnce({ data: null, error: { message: 'ACCOUNT_NUMBER_INVALID' } });
   await expect(updateEmployee('e', { account_number: '12' } as never)).rejects.toThrow('계좌번호를 숫자 6~30자리로 입력해 주세요.');
 });
+it('주 근무시간 0분 거절도 안내 문구로 바꾼다', async () => {
+  mockSingle.mockResolvedValueOnce({ data: null, error: { message: 'new row for relation "employees" violates check constraint "employees_weekly_minutes_positive_check"' } });
+  await expect(updateEmployee('e', { weekly_minutes: 0 } as never)).rejects.toThrow('주 근무시간을 10분 이상으로 골라 주세요.');
+});

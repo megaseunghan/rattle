@@ -6,6 +6,7 @@ describe('직원 급여 계산 입력', () => {
     expect(parseWeeklyMinutes('14', '50')).toBe(890);
     expect(() => parseWeeklyMinutes('14', '55')).toThrow('10분 단위');
     expect(() => parseWeeklyMinutes('169', '0')).toThrow('168시간');
+    expect(() => parseWeeklyMinutes('0', '0')).toThrow('10분 이상');
   });
   it('수습은 입사일 이후, 3개월 이내만 받는다', () => {
     const form = { ...EMPTY_PAYROLL_FIELDS, is_probation: true, probation_ends_on: '2026-04-30' };

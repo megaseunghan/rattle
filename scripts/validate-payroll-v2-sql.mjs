@@ -248,6 +248,19 @@ check(payMeta, [{ prosecdef: true, cfg: '{"search_path=pg_catalog, public, pg_te
 await rejects(db.exec(checksMigration), 'STORE_FILL_CHECKS_BASE_CHANGED', 'server checks guard on rerun');
 await db.exec('ROLLBACK');
 
+// 9c) 20261128130000: 주 근무시간 0분은 서버에서도 거절한다(NULL은 허용).
+//     이 축약 스키마의 합류 신청 표에는 132000의 weekly_minutes 열이 없어 먼저 더한다(원격에는 이미 있음).
+await db.exec('ALTER TABLE public.store_join_profiles ADD COLUMN weekly_minutes integer');
+const minutesMigration = await migration('20261128130000_weekly_minutes_positive.sql');
+await db.exec(minutesMigration);
+await rejects(db.query('UPDATE public.employees SET weekly_minutes=0 WHERE id=$1', [part]), 'employees_weekly_minutes_positive_check', 'employee 0 weekly minutes rejected');
+await db.query('UPDATE public.employees SET weekly_minutes=NULL WHERE id=$1', [part]);
+await db.query('UPDATE public.employees SET weekly_minutes=10 WHERE id=$1', [part]);
+check((await db.query('SELECT weekly_minutes FROM public.employees WHERE id=$1', [part])).rows, [{ weekly_minutes: 10 }], 'employee null and 10 minutes allowed');
+await rejects(db.query('UPDATE public.store_join_profiles SET weekly_minutes=0 WHERE member_id=$1', [member]), 'store_join_profiles_weekly_minutes_positive_check', 'join profile 0 weekly minutes rejected');
+await db.exec(minutesMigration);
+check((await db.query("SELECT count(*)::int AS n FROM pg_constraint WHERE conname LIKE '%weekly_minutes_positive_check'")).rows, [{ n: 2 }], 'rerun keeps one constraint each');
+
 // 10) 매장 삭제 연쇄: 지급된 일용 기록이 있어도 매장을 지우면 함께 지워진다.
 await db.query('DELETE FROM public.payroll WHERE store_id=$1', [store]);
 await db.query('DELETE FROM public.store_join_profiles WHERE store_id=$1', [store]);

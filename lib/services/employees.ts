@@ -11,6 +11,9 @@ function employeeWriteError(error: { message: string }): Error {
   if (error.message.includes('PROBATION_END_OUT_OF_RANGE')) {
     return new UserFacingError('수습 마지막 날은 입사일부터 3개월 안에서 골라 주세요.');
   }
+  if (error.message.includes('weekly_minutes_positive_check')) {
+    return new UserFacingError('주 근무시간을 10분 이상으로 골라 주세요.');
+  }
   if (error.message.includes('ACCOUNT_NUMBER_INVALID')) {
     return new UserFacingError('계좌번호를 숫자 6~30자리로 입력해 주세요.');
   }
