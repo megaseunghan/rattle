@@ -113,7 +113,7 @@ export function HomeProfitSection({ active, refreshKey, onOpenPayroll }: Props) 
       {showPayrollLink && onOpenPayroll && <Pressable accessibilityRole="button" onPress={onOpenPayroll} style={styles.link}>
         <Text style={styles.action}>확인할 직원 보기 →</Text>
       </Pressable>}
-      {canManageStore && bar && !(data.error && !data.bars.some(item => item.values)) && <ProfitDetail {...(period === 'week' ? { kind: 'unavailable' as const, message: '주별 세부는 월이나 연도에서 볼 수 있어요' }
+      {canManageStore && bar && !detail.denied && !(data.error && !data.bars.some(item => item.values)) && <ProfitDetail {...(period === 'week' ? { kind: 'unavailable' as const, message: '주별 세부는 월이나 연도에서 볼 수 있어요' }
         : detail.error ? { kind: 'error' as const, onRetry: () => { void detail.refetch(); } }
         : detail.sources && bar ? { kind: 'ready' as const, breakdown: buildBreakdown(detail.sources, metric), periodName: bar.name }
         : { kind: 'loading' as const })} />}

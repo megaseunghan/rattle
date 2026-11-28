@@ -50,6 +50,8 @@ export function useHomeProfitDetail(active: boolean, months: readonly string[]) 
   }, queryClient);
   const denied = isAccessDenied(query.error);
   return {
+    // 서버가 상세 손익 열람을 거절하면(권한이 바뀐 직후 등) 세부를 그리지 않는다. 불러오는 중으로 남겨 두지 않는다.
+    denied: enabled && denied,
     sources: denied ? undefined : query.data,
     loading: enabled && query.isPending && query.fetchStatus !== 'idle',
     error: enabled && query.isError && !denied,
