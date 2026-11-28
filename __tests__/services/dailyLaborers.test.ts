@@ -166,3 +166,17 @@ describe('지급일은 근무일 이후', () => {
     await expect(recordDailyLaborPayment('s', 'l', [worked('a', '2026-10-24')], '2026-10-24', 'cash')).rejects.toThrow('마지막 날 이후로');
   });
 });
+
+describe('근무일은 오늘 이후 불가', () => {
+  it('미래 근무일은 보내지 않는다', async () => {
+    jest.useFakeTimers({ now: new Date('2026-11-28T03:00:00Z'), doNotFake: ['nextTick', 'setImmediate'] });
+    try {
+      await expect(saveDailyLaborEntry('s', { laborer_id: 'l', work_date: '2026-11-29', daily_wage: 100_000 })).rejects.toThrow('오늘 이후 날짜는 근무일로');
+      expect(supabase.from).not.toHaveBeenCalled();
+    } finally { jest.useRealTimers(); }
+  });
+  it('서버가 미래 근무일로 거절해도 같은 안내를 보여 준다', async () => {
+    query(null, { code: '22023', message: 'DAILY_LABOR_FUTURE_WORK_DATE' });
+    await expect(saveDailyLaborEntry('s', { laborer_id: 'l', work_date: '2026-10-03', daily_wage: 100_000 })).rejects.toThrow('오늘 이후 날짜는 근무일로');
+  });
+});

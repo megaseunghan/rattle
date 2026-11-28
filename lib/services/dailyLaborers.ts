@@ -29,6 +29,7 @@ export interface DailyLaborEntryInput {
 const CHANGED = '다른 곳에서 내용이 바뀌었어요. 다시 불러온 뒤 확인해 주세요.';
 const UNKNOWN_RESULT = '저장됐는지 확인하지 못했어요. 다시 불러온 뒤 확인해 주세요.';
 const PAID_BEFORE_WORK = '지급일은 고른 근무일 중 마지막 날 이후로 골라 주세요.';
+const FUTURE_WORK_DATE = '오늘 이후 날짜는 근무일로 고를 수 없어요.';
 
 function fail(error: { code?: string; message?: string }): never {
   if (error.code === '23505') throw new UserFacingError('그날 근무 기록이 이미 있어요. 기존 기록을 고쳐 주세요.');
@@ -36,6 +37,7 @@ function fail(error: { code?: string; message?: string }): never {
   if (error.message?.includes('DAILY_LABOR_PAID_LOCKED')) throw new UserFacingError('지급 완료한 기록은 고치거나 지울 수 없어요. 먼저 지급 대기로 되돌려 주세요.');
   if (error.code === '40001' || error.message?.includes('DAILY_LABOR_PAYMENT_CHANGED')) throw new UserFacingError(CHANGED);
   if (error.message?.includes('DAILY_LABOR_PAID_BEFORE_WORK')) throw new UserFacingError(PAID_BEFORE_WORK);
+  if (error.message?.includes('DAILY_LABOR_FUTURE_WORK_DATE')) throw new UserFacingError(FUTURE_WORK_DATE);
   // 서버가 코드를 주지 않은 실패(연결 끊김·응답 유실·JSON 아닌 5xx)는 저장됐는지 알 수 없다. 실패로 단정하지 않는다.
   if (!error.code) throw new UserFacingError(UNKNOWN_RESULT);
   throw new UserFacingError('저장하지 못했어요. 입력값과 연결 상태를 확인하고 다시 시도해 주세요.');
@@ -189,6 +191,8 @@ export async function getDailyLaborPayments(storeId: string, paymentIds: string[
 /** 근무 기록 저장. 지급한 기록은 금액을 바꿀 수 없다(서버도 막는다). 금액이 그대로면 저장 당시 공제·계산 버전을 유지한다. */
 export async function saveDailyLaborEntry(storeId: string, input: DailyLaborEntryInput, previous?: DailyLaborEntry): Promise<DailyLaborEntry> {
   const calculated = calculateDailyLaborEntry(input);
+  // 근무일은 오늘(한국 날짜) 이후 불가. 서버도 같은 기준으로 막는다. 근무일을 바꾸지 않는 수정은 검사하지 않는다.
+  if ((!previous || previous.work_date !== calculated.work_date) && calculated.work_date > koreanDate()) throw new UserFacingError(FUTURE_WORK_DATE);
   const amountChanged = previous && (previous.daily_wage !== calculated.daily_wage || previous.extra_pay !== calculated.extra_pay);
   if (previous?.payment_id && amountChanged) throw new UserFacingError('지급한 기록은 금액을 고칠 수 없어요. 지급을 취소한 뒤 고쳐 주세요.');
   const row = previous && !amountChanged
