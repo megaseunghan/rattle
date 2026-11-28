@@ -22,10 +22,35 @@ export interface Store {
   cogs_ratio_target?: number;
   /** 매장 기본 수습 기간. 둘 다 null이면 '없음'. 직원별 기간은 합류 승인 때 정한다. */
   default_probation_months?: 1 | 2 | 3 | null;
-  default_probation_days?: number | null;
+  /** 매장 수습 기본 비율(0~1, 기본 0.9). 직원 비율이 없을 때 저장 시점에 채운다 */
+  default_probation_rate?: number | null;
   /** 산재보험 사업종류(업종 요율 표 코드). 마저 채우기 4대보험 묶음에서 고른다. null이면 손익에 '산재보험 미포함'. */
   industrial_accident_industry?: string | null;
+  /** 24시간 영업. true면 closing_time은 하루 매출을 나누는 시각이다. */
+  is_open_24h?: boolean;
+  /** 마저 채우기(20261127133000). null = 아직 안 정함. 날짜 0 = 말일(STORE_LAST_DAY). */
+  payroll_close_day?: number | null;
+  /** 지급일이 마감 달 기준 같은 달(0)·다음 달(1) */
+  payday_month_offset?: 0 | 1 | null;
+  payday_day?: number | null;
+  payday_holiday_rule?: PaydayHolidayRule | null;
+  headcount_class?: HeadcountClass | null;
+  business_entity_type?: BusinessEntityType | null;
+  vat_type?: VatType | null;
+  social_insurance_enrolled?: boolean | null;
 }
+
+/** 급여 날짜의 말일 표시값(stores.payroll_close_day·payday_day = 0). */
+export const STORE_LAST_DAY = 0;
+export type PaydayHolidayRule = 'before' | 'same' | 'after';
+export type HeadcountClass = 'five_or_more' | 'under_five' | 'unknown';
+export type BusinessEntityType = 'individual' | 'corporation';
+export type VatType = 'general' | 'simplified';
+
+/** 마저 채우기에서 고치는 매장 칸(사장님만). */
+export type StoreFillPatch = Partial<Pick<Store,
+  'payroll_close_day' | 'payday_month_offset' | 'payday_day' | 'payday_holiday_rule' | 'headcount_class'
+  | 'business_entity_type' | 'vat_type' | 'business_number' | 'social_insurance_enrolled' | 'industrial_accident_industry'>>;
 
 /** 매장별 관리 항목의 ID는 이름 변경 후에도 유지한다. */
 export interface StoreTaxonomy {
@@ -229,15 +254,34 @@ export type MemberApprovalChoice =
   | { kind: 'rehire'; employeeId: string }
   | { kind: 'new' };
 
+/** 합류 신청의 계약 선택. 'unknown'(잘 모르겠어요)은 신청에서만 쓰고, 최종 합류 때 관리자가 정해야 한다. */
+export type JoinIncomeType = IncomeType | 'unknown';
+
 export interface JoinOnboardingInput {
   employment_type: 'regular' | 'part_time';
   hourly_wage: number | null;
+  /** @deprecated weekly_minutes를 쓴다. 서버가 분에서 시간(버림)을 채운다. */
   weekly_hours: number | null;
   base_salary: number;
   non_taxable: number;
   joined_at: string;
   bank_name: string;
   account_number: string;
+  /** 20261127132000부터. 비우면(이전 앱) 근로자로 본다. */
+  income_type?: JoinIncomeType | null;
+  /** 주 근무시간(분, 10분 단위, 파트타이머만). */
+  weekly_minutes?: number | null;
+  /** 시급에 주휴수당 포함(파트타이머만). null = 잘 모르겠어요 */
+  weekly_rest_included?: boolean | null;
+}
+
+/** 최종 합류 때 관리자가 정하는 수습(합류 승인 수습 시트). 키가 없으면 수습을 바꾸지 않는다(이전 앱). */
+export interface JoinProbationReview {
+  is_probation: boolean;
+  /** 'YYYY-MM-DD'. 입사일 ~ 입사일부터 3개월의 마지막 날 */
+  probation_ends_on: string | null;
+  /** 0 초과 1 이하. null이면 매장 기본값 */
+  probation_rate: number | null;
 }
 
 /** 재합류에서만 사용. 전체 조건 입력과 섞지 않고 조회한 이력 ID를 전달한다. */
@@ -245,7 +289,7 @@ export interface PreserveJoinOnboardingWage {
   preserve_existing_wage: true;
   wage_history_id: string;
 }
-export type JoinOnboardingReview = JoinOnboardingInput | PreserveJoinOnboardingWage;
+export type JoinOnboardingReview = (JoinOnboardingInput & Partial<JoinProbationReview>) | PreserveJoinOnboardingWage;
 
 export interface JoinOnboardingProfile extends JoinOnboardingInput {
   member_id: string;
@@ -284,7 +328,9 @@ export interface Employee {
   account_number: string | null;
   /** 계좌번호 끝 4자리(서버 생성 열) */
   account_last4?: string | null;
-  is_probation: boolean;               // 사장님이 수습으로 표시한 직원만 수습 감액
+  is_probation: boolean;
+  /** 수습 지급 비율(0~1). 수습 직원은 저장 때 매장 기본값으로 채워진다. null = 기본 90% */
+  probation_rate?: number | null;               // 사장님이 수습으로 표시한 직원만 수습 감액
   probation_started_at: string | null; // 수습 시작일(없으면 입사일)
   probation_ends_on: string | null;    // 수습 마지막 날(포함). is_probation이어도 없으면 감액하지 않는다
   /** @deprecated 2026-v2부터 계산에 쓰지 않는다(수습 중 퇴사 80% 규칙 제거). */
@@ -889,16 +935,24 @@ export interface DailyLaborEntry {
 }
 
 /** 일용근로자 지급 묶음. 소득세 1,000원 미만 미징수는 묶음 합계 기준. */
+/** 일용 지급 방법. 앱은 송금하지 않고 지급 상태만 기록한다. */
+export type DailyLaborPaymentMethod = 'transfer' | 'cash';
+
 export interface DailyLaborPayment {
   id: string;
   store_id: string;
   laborer_id: string;
   paid_on: string;
+  payment_method: DailyLaborPaymentMethod;
   gross: number;
   income_tax: number;
   local_income_tax: number;
   employment_insurance: number;
   net_pay: number;
+  /** 앱이 계산한 예상 공제(사용자가 고친 실제 값은 income_tax 등) */
+  estimated_income_tax?: number | null;
+  estimated_local_income_tax?: number | null;
+  estimated_employment_insurance?: number | null;
   calculation_version: string;
   canceled_at: string | null;
   created_at: string;

@@ -38,7 +38,7 @@ export function calculateNetPayFromDeductions(
 }
 
 // ─── 수습 계수 (실지급 기준) ─────────────────────────────
-// 사장님이 수습으로 표시한 직원에게만, 계산 대상 날짜 기준으로 90%를 적용한다(수습 중 퇴사 80% 규칙은 2026-v2에서 제거).
+// 사장님이 수습으로 표시한 직원에게만, 계산 대상 날짜 기준으로 직원 수습 비율(기본 90%)을 적용한다(수습 중 퇴사 80% 규칙은 2026-v2에서 제거).
 export function probationFactor(employee: ProbationEmployee, yearMonth: string): number {
   return monthProbationFactor(employee, yearMonth);
 }

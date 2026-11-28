@@ -2,7 +2,7 @@ import {
   addMonthsInclusiveEnd, comparableHourly, dailyWorkerPay, deductionMode, employeeInsurance, employerBurden,
   estimateWeeklyRest, freelancerWithholding, insuranceRatesFor, isBelowMinimumWage, isProbationOn,
   monthProbationFactor, PayrollStandardMissingError, premium, probationEndDate, type RateTables,
-  dailyAssessedTax, dailyPaymentPay, monthWeeklyRest,
+  dailyAssessedTax, dailyPaymentPay, monthWeeklyRest, maxProbationEnd, addDays,
 } from '../../lib/payroll';
 
 const tables: RateTables = {
@@ -31,13 +31,19 @@ describe('수습', () => {
     // 5월: 14일 수습, 17일 정상
     expect(monthProbationFactor(base, '2026-05')).toBeCloseTo((14 * 0.9 + 17) / 31, 12);
   });
-  it('기간 끝 날짜: n개월은 전날까지, 일 단위는 시작일 포함', () => {
+  it('기간 끝 날짜: n개월 뒤 같은 날의 전날, 같은 날이 없으면 그 달 말일', () => {
     expect(addMonthsInclusiveEnd('2026-03-15', 1)).toBe('2026-04-14');
     expect(addMonthsInclusiveEnd('2026-01-31', 1)).toBe('2026-02-28'); // 같은 날이 없으면 그 달 말일(민법 160조③)
     expect(probationEndDate('2026-03-01', { kind: 'months', months: 3 })).toBe('2026-05-31');
-    expect(probationEndDate('2026-03-01', { kind: 'days', days: 61 })).toBe('2026-04-30');
     expect(probationEndDate('2026-03-01', { kind: 'none' })).toBeNull();
-    expect(() => probationEndDate('2026-03-01', { kind: 'days', days: 91 })).toThrow();
+    // 3개월은 입사일에 따라 89~92일
+    expect(maxProbationEnd('2026-06-01')).toBe('2026-08-31');
+    expect(maxProbationEnd('2026-12-01')).toBe('2027-02-28');
+    expect(addMonthsInclusiveEnd('2028-01-31', 1)).toBe('2028-02-29');
+    // 기존 자료 이전 규칙(입사일 포함 61일)은 항상 3개월 안
+    for (const start of ['2026-01-01', '2026-11-30', '2026-12-01', '2027-02-01']) {
+      expect(addDays(start, 60) <= maxProbationEnd(start)).toBe(true);
+    }
   });
 });
 
@@ -151,5 +157,24 @@ describe('검토 반영(2026-11-27)', () => {
     const days = ['2026-09-29', '2026-09-30', '2026-10-01', '2026-10-02', '2026-10-03', '2026-10-05', '2026-10-06', '2026-10-07', '2026-10-08', '2026-10-09']
       .map(date => ({ date, minutes: 420, hourlyWage: 10_320 }));
     expect(monthWeeklyRest(days.filter(d => d.date >= '2026-10-01'), '2026-10')).toEqual({ amount: Math.round(420 * 10_320 / 60), partialWeeks: 1 });
+  });
+});
+
+describe('수습 비율(매장·직원별, 2026-11-27)', () => {
+  const { probationFactorOn, monthProbationFactor, probationRateOf, isBelowProbationFloor } = jest.requireActual('../../lib/payroll');
+  const base = { is_probation: true, probation_started_at: null, joined_at: '2026-10-01', probation_ends_on: '2026-12-31' };
+  it('직원 비율이 있으면 그 비율, 없거나 이상하면 90%', () => {
+    expect(probationFactorOn({ ...base, probation_rate: 0.95 }, '2026-10-05')).toBe(0.95);
+    expect(probationFactorOn({ ...base, probation_rate: '0.9500' }, '2026-10-05')).toBe(0.95);
+    expect(probationFactorOn({ ...base, probation_rate: null }, '2026-10-05')).toBe(0.9);
+    expect(probationRateOf({ probation_rate: 1.5 })).toBe(0.9);
+    expect(probationFactorOn({ ...base, probation_rate: 0.95 }, '2027-01-01')).toBe(1);
+  });
+  it('월 계수도 직원 비율로 계산한다', () => {
+    expect(monthProbationFactor({ ...base, probation_rate: 0.95 }, '2026-10')).toBeCloseTo(0.95, 10);
+  });
+  it('수습 적용 후 최저임금의 90%보다 적으면 안내 대상', () => {
+    expect(isBelowProbationFloor({ hourlyWage: 10_320 * 0.85 }, 10_320)).toBe(true);
+    expect(isBelowProbationFloor({ hourlyWage: 10_320 * 0.9 }, 10_320)).toBe(false);
   });
 });

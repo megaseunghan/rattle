@@ -39,3 +39,13 @@ export function isBelowMinimumWage(input: MinimumWageInput, minimumHourly: numbe
   const value = comparableHourly(input);
   return value != null && value + 1e-9 < minimumHourly;
 }
+
+/**
+ * 수습 비율을 적용한 금액이 최저임금의 90%보다 적은지(최저임금법 시행령 3조). 막지 않고 회색 안내에만 쓴다.
+ * input은 수습 비율을 적용한 뒤의 시급·월급이다.
+ */
+export function isBelowProbationFloor(input: MinimumWageInput, minimumHourly: number, floor = 0.9): boolean {
+  return isBelowMinimumWage(input, minimumHourly * floor);
+}
+
+export const PROBATION_FLOOR_NOTICE = '최저임금의 90%보다 적어요. 수습이어도 이보다 적게 줄 수 없어요.';

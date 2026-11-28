@@ -1,5 +1,5 @@
 // Local PGlite only: no environment credentials or remote writes. QA-PAYROLL-V2-20261127.
-// 급여 계산 2026-v2 마이그레이션 6개(20261127120000~125000)를 축약 스키마에 적용해 확인한다.
+// 급여 계산 2026-v2 마이그레이션 8개(20261127120000~131000)를 축약 스키마에 적용해 확인한다.
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { PGlite } from '@electric-sql/pglite';
@@ -70,7 +70,8 @@ await db.query(`INSERT INTO public.employees(id, store_id, joined_at, employment
 
 for (const file of ['20261127120000_payroll_v2_employee_fields.sql', '20261127121000_daily_laborers.sql',
   '20261127122000_payroll_v2_labor_read_models.sql', '20261127123000_industrial_accident_rates.sql',
-  '20261127124000_part_time_probation_daily_work.sql', '20261127125000_account_number_encryption.sql']) await db.exec(await migration(file));
+  '20261127124000_part_time_probation_daily_work.sql', '20261127125000_account_number_encryption.sql',
+  '20261127130000_probation_rate.sql', '20261127131000_daily_labor_payment_method.sql']) await db.exec(await migration(file));
 
 // 1) 백필: 근로자 기본값, 시간→분, 수습 표시 직원만 61일.
 const rows = (await db.query('SELECT id, income_type, weekly_minutes, probation_ends_on::text FROM public.employees ORDER BY id')).rows;
@@ -81,7 +82,6 @@ check((await db.query('SELECT weekly_minutes FROM public.employees WHERE id=$1',
 await db.query('UPDATE public.employees SET weekly_minutes=950 WHERE id=$1', [part]);
 check((await db.query('SELECT weekly_minutes FROM public.employees WHERE id=$1', [part])).rows[0].weekly_minutes, 950, 'explicit minutes kept');
 await rejects(db.query("UPDATE public.employees SET income_type='daily' WHERE id=$1", [part]), 'employees_income_type_check', 'income type check');
-await rejects(db.query('UPDATE public.stores SET default_probation_months=1, default_probation_days=10 WHERE id=$1', [store]), 'stores_default_probation_check', 'probation one-of');
 
 // 3) 일용근로자: 관리자만, 매장 일치, 합계·지급 일관성.
 const [laborer] = await as(owner, "INSERT INTO public.daily_laborers(store_id,name,weekday_wage) VALUES ($1,'QA 일용',150000) RETURNING id, revision", [store]);
@@ -98,12 +98,15 @@ await rejects(as(owner, 'UPDATE public.daily_labor_entries SET payment_id=gen_ra
 await rejects(as(owner, 'INSERT INTO public.daily_labor_payments(store_id,laborer_id,paid_on,gross,income_tax,local_income_tax,employment_insurance,net_pay,calculation_version) VALUES ($1,$2,$3,1,0,0,0,1,$4)',
   [store, laborer.id, '2026-10-04', 'x']), 'permission denied', 'payments not writable directly');
 // 지급 묶음: 남이 지급 처리 불가, 금액 합계는 서버가 정한다, 지급된 기록은 금액 수정·삭제 불가, 다시 지급 불가.
-const payArgs = [store, laborer.id, [entry.id], '2026-10-04', 0, 0, 1800, '2026-v2'];
-const paySql = 'SELECT public.record_daily_labor_payment($1,$2,$3::uuid[],$4::date,$5,$6,$7,$8) AS id';
+// 지급 완료 기록: 지급 방법 + 사용자가 고친 실제 공제(예상값은 따로 남긴다). 앱은 송금하지 않는다.
+const payArgs = [store, laborer.id, [entry.id], '2026-10-04', 'cash', 0, 0, 1800, 0, 0, 1800, '2026-v2'];
+const paySql = 'SELECT public.record_daily_labor_payment($1,$2,$3::uuid[],$4::date,$5,$6,$7,$8,$9,$10,$11,$12) AS id';
+await rejects(as(owner, paySql, [store, laborer.id, [entry.id], '2026-10-04', 'card', 0, 0, 0, 0, 0, 0, '2026-v2']), 'DAILY_LABOR_PAYMENT_INVALID', 'payment method must be transfer/cash');
 await rejects(as(stranger, paySql, payArgs), 'DAILY_LABOR_FORBIDDEN', 'stranger cannot pay');
 const [{ id: paymentId }] = await as(owner, paySql, payArgs);
 const [payment] = await as(owner, 'SELECT gross, net_pay FROM public.daily_labor_payments WHERE id=$1', [paymentId]);
 check([payment.gross, payment.net_pay], [200000, 198200], 'payment totals from entries');
+check((await as(owner, 'SELECT payment_method, estimated_employment_insurance FROM public.daily_labor_payments WHERE id=$1', [paymentId]))[0], { payment_method: 'cash', estimated_employment_insurance: 1800 }, 'method and estimate stored');
 await rejects(as(owner, paySql, payArgs), 'DAILY_LABOR_PAYMENT_CHANGED', 'cannot pay twice');
 await rejects(as(owner, 'UPDATE public.daily_labor_entries SET extra_pay=0 WHERE id=$1', [entry.id]), 'DAILY_LABOR_PAID_LOCKED', 'paid amount locked');
 await rejects(as(owner, 'DELETE FROM public.daily_labor_entries WHERE id=$1', [entry.id]), 'DAILY_LABOR_PAID_LOCKED', 'paid delete locked');
@@ -112,6 +115,10 @@ check(memo.revision, 2, 'revision bump (payment link + memo)');
 await as(owner, 'SELECT public.cancel_daily_labor_payment($1,$2)', [store, paymentId]);
 check((await as(owner, 'SELECT payment_id FROM public.daily_labor_entries WHERE id=$1', [entry.id]))[0].payment_id, null, 'cancel unlinks');
 check((await as(owner, 'SELECT canceled_at IS NOT NULL AS c FROM public.daily_labor_payments WHERE id=$1', [paymentId]))[0].c, true, 'cancel keeps record');
+// 되돌린 뒤 사용자가 공제를 고쳐 다시 완료: 고친 값 그대로 저장하고 예상값은 따로 남는다.
+const [{ id: editedId }] = await as(owner, paySql, [store, laborer.id, [entry.id], '2026-10-05', 'transfer', 1000, 100, 1800, 0, 0, 1800, '2026-v2']);
+check((await as(owner, 'SELECT income_tax, estimated_income_tax, net_pay FROM public.daily_labor_payments WHERE id=$1', [editedId]))[0], { income_tax: 1000, estimated_income_tax: 0, net_pay: 197100 }, 'edited deductions saved as entered');
+await as(owner, 'SELECT public.cancel_daily_labor_payment($1,$2)', [store, editedId]);
 await as(owner, paySql, payArgs);  // 다시 지급(매장 삭제 연쇄 확인용으로 지급 상태를 남긴다)
 
 // 4) 손익 함수: 수습 표시 직원만 날짜별 90%, 일용 세전 합계 포함.
@@ -120,6 +127,13 @@ await db.query(`DELETE FROM public.employees WHERE id=$1`, [part]);
 const [summary] = await as(owner, "SELECT labor_cost::numeric FROM public.get_financial_summaries_v2(ARRAY[$1]::uuid[], ARRAY['2026-10'], true)", [store]);
 // 정규직 3,000,000(중도퇴사 80% 없음) + 수습 직원 10월 전체 수습(9-16~11-15) 2,700,000 + 일용 200,000
 check(Number(summary.labor_cost), 3000000 + 2700000 + 200000, 'summary probation + daily laborers');
+// 수습 비율: 기존 수습 직원은 0.9로 채워지고, 직원 비율을 바꾸면 그 비율로 계산한다.
+check((await db.query('SELECT probation_rate::text FROM public.employees WHERE id=$1', [probe])).rows[0].probation_rate, '0.9000', 'existing probation rate backfilled');
+await db.query('UPDATE public.employees SET probation_rate=0.95 WHERE id=$1', [probe]);
+const [rate95] = await as(owner, "SELECT labor_cost::numeric FROM public.get_financial_summaries_v2(ARRAY[$1]::uuid[], ARRAY['2026-10'], true)", [store]);
+check(Number(rate95.labor_cost), 3000000 + 2850000 + 200000, 'employee probation rate 95%');
+check((await as(owner, "SELECT public.get_daily_labor_sources($1,'2026-10') AS s", [store]))[0].s.employees.find(e => e.id === probe).probation_rate, 0.95, 'labor sources probation rate');
+await db.query('UPDATE public.employees SET probation_rate=0.9 WHERE id=$1', [probe]);
 // 수습 표시를 끄면 감액하지 않는다.
 await db.query('UPDATE public.employees SET is_probation=false WHERE id=$1', [probe]);
 const [unflagged] = await as(owner, "SELECT labor_cost::numeric FROM public.get_financial_summaries_v2(ARRAY[$1]::uuid[], ARRAY['2026-10'], true)", [store]);
@@ -153,6 +167,23 @@ const dwSql = `INSERT INTO public.payroll_daily_work(store_id,employee_id,work_d
 await db.exec('CREATE UNIQUE INDEX ON public.payroll_daily_work(employee_id, work_date)');
 const [inProbation] = (await db.query(dwSql, [store, part, '2026-10-05', 240, 12000])).rows;
 check([Number(inProbation.applied_hourly_wage), Number(inProbation.gross)], [10800, 43200], 'probation day 90%');
+// 매장 기본값 95%면 새 수습 직원 비율이 95%로 채워지고, 일별 근무도 95%로 계산한다. 이후 매장값을 바꿔도 직원 비율은 그대로.
+const part95 = '00000000-0000-4000-8000-000000000023';
+await db.query('UPDATE public.stores SET default_probation_rate=0.95 WHERE id=$1', [store]);
+await db.query(`INSERT INTO public.employees(id, store_id, joined_at, employment_type, is_probation, probation_ends_on) VALUES ($1,$2,'2026-10-01','part_time',true,'2026-12-31')`, [part95, store]);
+await db.query('UPDATE public.stores SET default_probation_rate=0.9 WHERE id=$1', [store]);
+check((await db.query('SELECT probation_rate::text FROM public.employees WHERE id=$1', [part95])).rows[0].probation_rate, '0.9500', 'store default fills employee rate');
+const [day95] = (await db.query(dwSql, [store, part95, '2026-10-05', 240, 12000])).rows;
+check(Number(day95.gross), 45600, 'daily work uses employee rate 95%');
+await rejects(db.query('UPDATE public.stores SET default_probation_rate=1.2 WHERE id=$1', [store]), 'stores_default_probation_rate_check', 'rate range');
+// 수습 기간은 개월 단위(일 단위 열 없음), 직원 마지막 날은 시작일 + 3개월 안.
+await rejects(db.query('UPDATE public.stores SET default_probation_months=4 WHERE id=$1', [store]), 'stores_default_probation_months_check', 'months 1-3');
+check((await db.query("SELECT count(*)::int n FROM information_schema.columns WHERE table_name='stores' AND column_name='default_probation_days'")).rows[0].n, 0, 'day-based store default removed');
+check((await db.query("SELECT private.probation_max_end('2026-06-01')::text a, private.probation_max_end('2026-12-01')::text b, private.probation_max_end('2028-01-31')::text c, private.probation_max_end('2026-11-30')::text d")).rows[0],
+  { a: '2026-08-31', b: '2027-02-28', c: '2028-04-30', d: '2027-02-28' }, 'max end matches app');
+await db.query("UPDATE public.employees SET probation_ends_on='2026-12-31' WHERE id=$1", [part95]);  // 10-01 + 3개월 = 12-31 (경계 허용)
+await rejects(db.query("UPDATE public.employees SET probation_ends_on='2027-01-01' WHERE id=$1", [part95]), 'PROBATION_END_OUT_OF_RANGE', 'over 3 months blocked');
+await rejects(db.query("UPDATE public.employees SET probation_ends_on='2026-09-30' WHERE id=$1", [part95]), 'PROBATION_END_OUT_OF_RANGE', 'before start blocked');
 const [afterProbation] = (await db.query(dwSql, [store, part, '2027-01-05', 240, 12000])).rows;
 check(Number(afterProbation.gross), 48000, 'after probation 100%');
 const upsert = `INSERT INTO public.payroll_daily_work(store_id,employee_id,work_date,worked_minutes,applied_hourly_wage,gross,status) VALUES ($1,$2,'2026-10-05',300,10800,54000,'pending')

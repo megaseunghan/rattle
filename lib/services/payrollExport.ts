@@ -47,7 +47,7 @@ export function buildPayrollCsv(sources: PayrollExportSources): string {
   const paidOn = new Map(sources.laborPayments.map(p => [p.id, p.paid_on]));
   for (const l of [...sources.laborEntries].sort((a, b) => a.work_date.localeCompare(b.work_date))) {
     rows.push(['일용 근무', laborer.get(l.laborer_id) ?? '삭제된 명단', '일용', '일용근로자', l.work_date.slice(0, 7), l.work_date, '', '', l.gross,
-      '', '', '', '', '', '', '', '', '', l.payment_id ? `지급 ${paidOn.get(l.payment_id) ?? ''}` : '미지급', l.calculation_version]);
+      '', '', '', '', '', '', '', '', '', l.payment_id ? `지급 완료 ${paidOn.get(l.payment_id) ?? ''}` : '지급 대기', l.calculation_version]);
   }
   // 소득세·지방소득세는 지급 묶음 합계로 정하므로 지급 행에 적는다(취소한 지급은 제외).
   for (const p of [...sources.laborPayments].filter(p => !p.canceled_at).sort((a, b) => a.paid_on.localeCompare(b.paid_on))) {
